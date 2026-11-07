@@ -147,7 +147,7 @@
 
   /* Modelos de CHAT confiables de Pollinations (la lista del servicio también trae filtros de seguridad como «qwen3guard», audio,
      imágenes y modelos de pago: si se elegía uno de esos, la IA contestaba «Safety: Safe» o nada). */
-  const VX_TEXT = ['openai', 'mistral', 'gemini', 'deepseek', 'openai-fast'], VX_VIS = ['openai', 'gemini', 'openai-fast'], VX_CODE = ['qwen-coder', 'openai', 'deepseek', 'mistral'];
+  const VX_TEXT = ['openai', 'mistral', 'gemini', 'deepseek', 'openai-fast'], VX_VIS = ['openai', 'gemini', 'openai-fast'], VX_CODE = ['openai', 'qwen-coder', 'deepseek', 'mistral'];
   const VX_VISION = new Set(VX_VIS), NOT_CHAT = /guard|moderat|safety|embed|rerank|audio|tts|whisper|transcri|speech|image|video|vision-only|midijourney|roblox|rtist|unity/i;
   function pickVx(list, o) {
     const pref = o.code ? VX_CODE : o.needVision ? VX_VIS : VX_TEXT, names = new Set(); for (const x of list || []) { names.add(x.name); for (const a of x.aliases || []) names.add(a); }
@@ -161,11 +161,18 @@
     if (Date.now() < vxDown) throw new LLMError('Servidor de IA no disponible', 'nokey');
     if (!vxModels || Date.now() - vxModels.t > 30 * 6e4) { try { const r = await fetchT(VX + '/ai/models', {}, 7000); if (r.status === 503) { vxDown = Date.now() + 10 * 6e4; throw new LLMError('El servidor aún no tiene la clave', 'nokey'); } if (r.ok) { const j = await r.json(); const arr = Array.isArray(j) ? j : Array.isArray(j && j.data) ? j.data : []; vxModels = {t: Date.now(), list: arr.map(x => typeof x === 'string' ? {name: x} : {name: x.name || x.id, aliases: Array.isArray(x.aliases) ? x.aliases : [], vision: x.vision === true || (Array.isArray(x.input_modalities) && x.input_modalities.includes('image')), description: x.description})}; } } catch (e) { if (e.kind === 'nokey') throw e; } }
     const list = (vxModels && vxModels.list.length) ? vxModels.list : [];
-    const img = hasImage(messages), cand = pickVx(list, {needVision: o.needVision || img, code: o.purpose === 'code'}), t0 = Date.now(); let last;
-    for (const m of cand) {
-      if (Date.now() - t0 > 70000) break; const vis = VX_VISION.has(m);
-      try { const text = await openaiCall(VX + '/ai', '', m, img && !vis ? stripImages(messages) : messages, Object.assign({}, o, {timeout: Math.min(o.timeout || 50000, 80000 - (Date.now() - t0))})); if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); return {text, model: m + ' · servidor VORTEX', image: img && vis}; }
-      catch (e) { last = e; if (e.status === 503) { vxDown = Date.now() + 10 * 6e4; break; } if (e.kind === 'network') break; if (o.signal && o.signal.aborted) throw e; if (e.kind === 'rate') await sleep(2000); }
+    const img = hasImage(messages), code = o.purpose === 'code', cand = pickVx(list, {needVision: o.needVision || img, code}), end = o.deadline || (Date.now() + (code ? 150000 : 75000)); let last;
+    const left = () => end - Date.now(), say = t => { try { o.onProgress && o.onProgress({text: t}); } catch {} };
+    const tryOne = async (m, msgs, cap) => { const text = await openaiCall(VX + '/ai', '', m, msgs, Object.assign({}, o, {timeout: Math.max(5000, Math.min(cap, left())), idle: code ? 45000 : 30000})); if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); return text; };
+    for (const [i, m] of cand.entries()) {
+      if (left() < 8000 || (o.signal && o.signal.aborted)) break; const vis = VX_VISION.has(m);
+      if (i) say('Probando otro modelo de IA…');
+      try { const text = await tryOne(m, img && !vis ? stripImages(messages) : messages, code ? 100000 : (img ? 35000 : 45000)); return {text, model: m + ' · servidor VORTEX', image: img && vis}; }
+      catch (e) { last = e; if (e.status === 503) { vxDown = Date.now() + 10 * 6e4; break; } if (e.kind === 'network') break; if (o.signal && o.signal.aborted) throw e; if (img) break; if (e.kind === 'rate') await sleep(1500); } // con imagen: no insistir, pasar a solo datos
+    }
+    if (img && left() > 8000 && !(last && (last.status === 503 || last.kind === 'network'))) { // la imagen no pasó (modelo sin visión o sin créditos para imágenes): analiza con los datos del gráfico
+      say('Analizando con los datos de tu gráfico…');
+      for (const m of ['openai', 'mistral']) { if (left() < 6000) break; try { const text = await tryOne(m, stripImages(messages), 40000); return {text, model: m + ' · servidor VORTEX', image: false}; } catch (e) { last = e; if (e.kind === 'network') break; } }
     }
     throw last || new LLMError('El servidor de IA no respondió.', 'server');
   }
@@ -204,8 +211,11 @@
       if (prov === 'compat') return await chatCompat(messages, o, cfg);
       if (prov === 'webllm') return await chatWebllm(messages, o);
       if (typeof document !== 'undefined') { // en la app: 1) tu servidor VORTEX, 2) Pollinations directo con la clave de la app, 3) servicio antiguo sin clave
-        try { return await chatVortex(messages, o); } catch (e) { if (o.signal && o.signal.aborted) throw e; }
-        try { return await chatFree(messages, o, Object.assign({}, cfg, {pkey: cfg.pkey || POLLEN_KEY})); } catch (e) { if (o.signal && o.signal.aborted) throw e; }
+        const end = Date.now() + (o.purpose === 'code' ? 150000 : 75000), oo = Object.assign({}, o, {deadline: end}); // nunca más de ~75 s (2½ min para código) en total
+        let lastE; try { return await chatVortex(messages, oo); } catch (e) { lastE = e; if (o.signal && o.signal.aborted) throw e; }
+        if (end - Date.now() > 20000) { try { return await chatFree(messages, Object.assign({}, oo, {budget: end - Date.now()}), Object.assign({}, cfg, {pkey: cfg.pkey || POLLEN_KEY})); } catch (e) { lastE = e; if (o.signal && o.signal.aborted) throw e; } }
+        if (end - Date.now() > 20000) return await chatFree(messages, Object.assign({}, oo, {budget: end - Date.now()}), cfg);
+        throw lastE || new LLMError('La IA no respondió a tiempo.', 'abort');
       }
       return await chatFree(messages, o, cfg);
     } catch (e) { if (e instanceof LLMError) { e.message = friendly(e) + (e.kind === 'model' || e.kind === 'server' || e.kind === 'other' ? ' (' + String(e.message).slice(0, 120) + ')' : ''); throw e; } throw new LLMError(String(e && e.message || e), 'other'); }

@@ -128,7 +128,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     const b = bubble('bot', note('Analizando…'), 'typing');
     try {
       const r = await callLLM(msgs, {purpose: 'vision', needVision: !!cap, maxTokens: 700}, b); b.classList.remove('typing');
-      b.insertAdjacentHTML('beforeend', note(cap ? (r.image ? 'La IA recibió la captura del gráfico junto con los datos.' : 'Este modelo no lee imágenes: analizó los datos numéricos de tus velas e indicadores (la captura no se pudo usar).') : 'No se pudo tomar la captura (abre la pestaña Gráfico primero): analizó solo los datos numéricos.') + note('Modelo: ' + r.model));
+      b.insertAdjacentHTML('beforeend', note(cap ? (r.image ? 'La IA recibió la captura del gráfico junto con los datos.' : 'La captura no se pudo usar en este momento: la IA analizó los datos reales de tus velas e indicadores.') : 'No se pudo tomar la captura (abre la pestaña Gráfico primero): analizó solo los datos numéricos.') + note('Modelo: ' + r.model));
       st.chart.hist.push({role: 'user', content: msgs[1].content, text: prompt, hidden: true}, {role: 'assistant', content: r.text, text: r.text});
     } catch (e) { b.classList.remove('typing'); b.innerHTML = md('**No pude consultar el modelo de IA.** ' + LLM.friendly(e) + '\n\nTe dejo el análisis local por reglas:\n\n' + AI.answerLocal('Analiza el gráfico', ctx, g.extra)); }
     setBusy(false);
