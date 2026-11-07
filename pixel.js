@@ -1,0 +1,201 @@
+/* NEXUS PIXEL · avatar de trading que vive flotando en tu gráfico (PC y celular).
+   Toca el botón del robot (abajo a la derecha del gráfico): sale volando desde un lado y te saluda. Pídele en español
+   «dibújame el canal», «marca soportes y resistencias», «el rango», «tendencia», «fibonacci», «línea en 65000» o «borra lo tuyo»:
+   calcula los niveles con las velas que ves y vuela hasta el gráfico a trazarlos con su lápiz. Los dibujos quedan como los tuyos
+   (se guardan en tu cuenta, los puedes mover o borrar; Ctrl+Z también funciona). Las preguntas libres las responde la IA de VORTEX
+   (llm.js); si la IA no responde, igual dibuja lo que entiende. Arrastra al robot de lado a lado para girarlo 360°, tócalo para
+   que salude y arrastra la barra de su globo para cambiarlo de lugar. El modelo 3D (pixel-model.js + three.js) solo se descarga al abrirlo. */
+(function () {
+  'use strict';
+  if (/[?&]pane=/.test(location.search)) return;
+  const D = window.NexusPixelDraw, area = document.getElementById('chartArea'); if (!D || !area) return;
+  const H = () => window.CCT_pixel, LLM = () => window.CCTLLM;
+  const KEY = 'cct_pixel_v1', ls = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } })(), store = () => { try { localStorage.setItem(KEY, JSON.stringify(ls)); } catch {} };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  const sleep = ms => new Promise(r => setTimeout(r, ms)), clamp = (v, a, b) => Math.max(a, Math.min(b, v)), mobile = () => innerWidth < 1024;
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── DOM ── */
+  const fab = document.createElement('button'); fab.type = 'button'; fab.className = 'px-fab'; fab.title = 'Nexus Pixel · tu avatar de trading'; fab.setAttribute('aria-label', 'Abrir a Nexus Pixel');
+  fab.innerHTML = `<svg viewBox="0 0 40 40" aria-hidden="true"><path class="px-fab-h" d="M20 5c8.6 0 14.5 5.6 14.5 13.6 0 7.4-5.6 12.4-14.5 12.4S5.5 26 5.5 18.6C5.5 10.6 11.4 5 20 5z"/><path class="px-fab-v" d="M10 13.5c3-3.2 17-3.2 20 0 1.8 2 1.8 7.4 0 9.4-3 3-17 3-20 0-1.8-2-1.8-7.4 0-9.4z"/><path class="px-fab-l" d="M14.6 14.2h2.4l3 6.4 3-6.4h2.4l-4.8 9.4h-1.2z"/><circle class="px-fab-r" cx="5.6" cy="18.5" r="2.6"/><circle class="px-fab-r" cx="34.4" cy="18.5" r="2.6"/></svg>`;
+  const ink = document.createElement('canvas'); ink.className = 'px-ink'; ink.setAttribute('aria-hidden', 'true');
+  const av = document.createElement('div'); av.className = 'px-av'; av.hidden = true; av.innerHTML = '<canvas class="px-cv" aria-label="Nexus Pixel: arrástralo de lado a lado para girarlo; tócalo para que salude"></canvas><span class="px-spin" aria-hidden="true"></span>';
+  const bub = document.createElement('div'); bub.className = 'px-bub'; bub.hidden = true; bub.setAttribute('role', 'dialog'); bub.setAttribute('aria-label', 'Nexus Pixel');
+  bub.innerHTML = `<div class="px-hd" title="Arrastra para moverlo"><span class="px-dot"></span><b>Nexus Pixel</b><small class="px-st">IA de VORTEX</small><button type="button" class="px-x" data-px="close" aria-label="Despedir a Nexus Pixel">&times;</button></div>
+    <div class="px-msg" aria-live="polite"></div>
+    <div class="px-chips">${[['Canal', 'Dibújame el canal'], ['Rango', 'Marca el rango'], ['Soportes y resistencias', 'Marca soportes y resistencias'], ['Tendencia', 'Traza la línea de tendencia'], ['Fibonacci', 'Pon Fibonacci'], ['Análisis completo', 'Análisis completo'], ['Borrar lo mío', 'Borra lo que dibujaste']].map(([t, q]) => `<button type="button" data-q="${esc(q)}">${t}</button>`).join('')}</div>
+    <form class="px-in"><input type="text" placeholder="Pídeme algo: «dibuja el canal»…" autocomplete="off" enterkeyhint="send" aria-label="Escríbele a Nexus Pixel"><button type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></form>`;
+  area.append(ink, av, bub, fab);
+  const cv = av.querySelector('.px-cv'), msg = bub.querySelector('.px-msg'), input = bub.querySelector('input'), st = bub.querySelector('.px-st');
+
+  /* ── estado ── */
+  let M = null, loading = null, open = false, busy = false, pos = {x: 0, y: 0}, lastAct = Date.now(), hist = [], typer = 0;
+  const AV = () => mobile() ? {w: 112, h: 132} : {w: 150, h: 176};
+  const AW = () => area.clientWidth, AH = () => area.clientHeight;
+  function home() {
+    const s = AV(), p = H() && H().plot(), right = p ? p.right : AW() - 60, bottom = p ? p.top + p.h : AH() - 40;
+    const h = ls.home; if (h && Number.isFinite(h.rx) && Number.isFinite(h.by)) return {x: clamp(AW() - h.rx - s.w, 0, AW() - s.w), y: clamp(AH() - h.by - s.h, 0, AH() - s.h)};
+    return {x: clamp(right - s.w - 6, 0, AW() - s.w), y: clamp(bottom - s.h - (mobile() ? 10 : 18), 0, AH() - s.h)};
+  }
+  function place(x, y) { const s = AV(); pos = {x, y}; av.style.width = s.w + 'px'; av.style.height = s.h + 'px'; av.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0)`; if (!bub.hidden) placeBubble(); }
+  function placeBubble() { // a la izquierda del robot; si no cabe, a la derecha; si tampoco, arriba (o abajo)
+    const s = AV(), bw = Math.min(mobile() ? 260 : 300, AW() - 16); bub.style.width = bw + 'px'; const bh = bub.offsetHeight || 180;
+    let x, y, side;
+    if (pos.x - bw + 14 >= 8) { x = pos.x - bw + 14; y = pos.y + s.h * .1; side = 'l'; }
+    else if (pos.x + s.w - 10 + bw <= AW() - 8) { x = pos.x + s.w - 10; y = pos.y + s.h * .1; side = 'r'; }
+    else { x = pos.x + s.w / 2 - bw / 2; y = pos.y - bh + 4; side = 't'; if (y < 6) { y = pos.y + s.h - 4; side = 'b'; } }
+    bub.style.transform = `translate3d(${clamp(x, 8, AW() - bw - 8).toFixed(0)}px,${clamp(y, 6, AH() - bh - 6).toFixed(0)}px,0)`; bub.dataset.side = side;
+  }
+  const ease = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+  function flyTo(x, y, ms) {
+    const s = AV(); x = clamp(x, -s.w * .25, AW() - s.w * .75); y = clamp(y, -s.h * .2, AH() - s.h * .8);
+    const x0 = pos.x, y0 = pos.y, dist = Math.hypot(x - x0, y - y0); ms = ms || clamp(dist * 1.6, 260, 1100); if (REDUCED) ms = 1;
+    const far = dist > 90, prev = M ? M.pose : 'idle'; if (M && far) { M.setPose('fly'); M.setYaw(x > x0 ? .55 : -.55); }
+    return new Promise(res => { const t0 = performance.now(); let lx = x0, ly = y0;
+      const step = now => { const k = Math.min(1, (now - t0) / ms), e = ease(k), nx = x0 + (x - x0) * e, ny = y0 + (y - y0) * e - Math.sin(k * Math.PI) * Math.min(60, dist * .12); if (M) M.setVel((nx - lx) * 12, (ny - ly) * 12); lx = nx; ly = ny; place(nx, ny);
+        if (k < 1) requestAnimationFrame(step); else { if (M) { M.setVel(0, 0); M.setYaw(0); if (far) M.setPose(prev === 'fly' ? 'idle' : prev); } res(); } };
+      requestAnimationFrame(step); });
+  }
+
+  /* ── globo de texto ── */
+  function say(text, opts = {}) {
+    clearInterval(typer); bub.hidden = false; placeBubble(); bub.classList.toggle('busy', !!opts.busy);
+    if (REDUCED || opts.instant) { msg.textContent = text; placeBubble(); return; }
+    let i = 0; msg.textContent = ''; typer = setInterval(() => { i += 2; msg.textContent = text.slice(0, i); if (i % 12 === 0) placeBubble(); if (i >= text.length) { clearInterval(typer); placeBubble(); } }, 16);
+  }
+  const status = t => { st.textContent = t; };
+  const mood = (e, p) => { if (!M) return; if (e) M.setExpr(e); if (p) M.setPose(p); };
+
+  /* ── tinta: el trazo que sale de su lápiz ── */
+  let inkCtx = null;
+  function sizeInk() { const d = Math.min(2, devicePixelRatio || 1); ink.width = Math.round(AW() * d); ink.height = Math.round(AH() * d); inkCtx = ink.getContext('2d'); inkCtx.setTransform(d, 0, 0, d, 0, 0); }
+  function segsOf(d) { // el dibujo como tramos de pantalla (funciones: si mueves el gráfico mientras dibuja, el trazo lo sigue)
+    const S = pt => () => H().toScreen(pt), pl = () => H().plot();
+    if (d.type === 'horizontal') return [[() => ({x: pl().left, y: H().toScreen(d.a).y}), () => ({x: pl().right, y: H().toScreen(d.a).y})]];
+    if (d.type === 'trend') return [[S(d.a), S(d.b)]];
+    if (d.type === 'rect') { const c1 = {t: d.b.t, p: d.a.p}, c2 = {t: d.a.t, p: d.b.p}; return [[S(d.a), S(c1)], [S(c1), S(d.b)], [S(d.b), S(c2)], [S(c2), S(d.a)]]; }
+    if (d.type === 'channel') { const off = d.c.p - (d.a.p + (d.b.p - d.a.p) * (d.c.t - d.a.t) / ((d.b.t - d.a.t) || 1)); return [[S(d.a), S(d.b)], [S({t: d.a.t, p: d.a.p + off}), S({t: d.b.t, p: d.b.p + off})]]; }
+    if (d.type === 'fib') { const out = [[S(d.a), S(d.b)]]; for (const lv of [0, .236, .382, .5, .618, .786, 1]) { const p = d.b.p - (d.b.p - d.a.p) * lv, t = Math.min(d.a.t, d.b.t); out.push([() => ({x: H().toScreen({t, p}).x, y: H().toScreen({t, p}).y}), () => ({x: pl().right, y: H().toScreen({t, p}).y})]); } return out; }
+    return [];
+  }
+  async function drawAnimated(d) {
+    const segs = segsOf(d); if (!segs.length || !H()) return;
+    const col = d.col || '#a78bfa', s = AV(); sizeInk();
+    const first = segs[0][0](), hand0 = M ? M.handScreen() : {x: s.w * .8, y: s.h * .55};
+    mood('focused', 'point'); await flyTo(first.x - hand0.x, first.y - hand0.y); mood('focused', 'draw');
+    const done = [];
+    for (const [fa, fb] of segs) {
+      const a0 = fa(), b0 = fb(), len = Math.hypot(b0.x - a0.x, b0.y - a0.y), ms = REDUCED ? 1 : clamp(len * 1.15, 220, 900), t0 = performance.now();
+      await new Promise(res => { const step = now => {
+        const k = Math.min(1, (now - t0) / ms), e = k < 1 ? 1 - Math.pow(1 - k, 2) : 1, a = fa(), b = fb(), tip = {x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e};
+        inkCtx.clearRect(0, 0, AW(), AH()); inkCtx.save(); { const pl = H().plot(); inkCtx.beginPath(); inkCtx.rect(pl.left, pl.top, pl.right - pl.left, pl.h); inkCtx.clip(); } inkCtx.lineCap = 'round'; inkCtx.strokeStyle = col; inkCtx.shadowColor = col; inkCtx.shadowBlur = 14; inkCtx.lineWidth = 2.4;
+        for (const [ga, gb] of done) { const p = ga(), q = gb(); inkCtx.beginPath(); inkCtx.moveTo(p.x, p.y); inkCtx.lineTo(q.x, q.y); inkCtx.stroke(); }
+        inkCtx.beginPath(); inkCtx.moveTo(a.x, a.y); inkCtx.lineTo(tip.x, tip.y); inkCtx.stroke();
+        inkCtx.shadowBlur = 22; inkCtx.fillStyle = '#fff'; inkCtx.beginPath(); inkCtx.arc(tip.x, tip.y, 3.2, 0, 7); inkCtx.fill(); // chispa en la punta del lápiz
+        inkCtx.restore();
+        const h = M ? M.handScreen() : hand0; place(tip.x - h.x, tip.y - h.y); if (M) M.setVel((b.x - a.x) / ms * 30, (b.y - a.y) / ms * 30);
+        if (k < 1) requestAnimationFrame(step); else res(); };
+        requestAnimationFrame(step); });
+      done.push([fa, fb]);
+    }
+    H().add([d]); // queda como dibujo real del gráfico
+    ink.classList.add('fade'); await sleep(260); inkCtx.clearRect(0, 0, AW(), AH()); ink.classList.remove('fade'); if (M) M.setVel(0, 0);
+  }
+
+  /* ── acciones ── */
+  async function perform(acts, intro) {
+    const h = H(); if (!h || !h.ready()) { say('Abre el gráfico y espera a que carguen las velas; luego te dibujo lo que quieras.'); return; }
+    if (acts.some(a => a.do === 'clear')) { mood('wink', 'fly'); bub.hidden = true; const p = h.plot(); await flyTo(p.left, pos.y, 700); const n = h.clearMine(); await flyTo(home().x, home().y); mood('happy', 'thumbs'); say(n ? `Listo, borré ${n} dibujo${n === 1 ? '' : 's'} mío${n === 1 ? '' : 's'}. Los tuyos siguen ahí.` : 'No tenía dibujos míos en este gráfico.'); setTimeout(() => mood('neutral', 'idle'), 1800); return; }
+    const cs = h.visible(); if (cs.length < 20) { mood('thinking', 'think'); say('Veo muy pocas velas en pantalla. Aleja un poco el gráfico (pellizca o usa la rueda) y vuelvo a intentarlo.'); return; }
+    mood('analyzing', 'think'); say(intro ? intro : 'Analizando tus velas…', {busy: true}); await sleep(REDUCED ? 0 : 750);
+    bub.hidden = true; const texts = [];
+    for (const a of acts.slice(0, 4)) { const r = D.build(a.do, cs, a.price); texts.push(r.text); for (const d of r.drawings) await drawAnimated(d); }
+    const hm = home(); await flyTo(hm.x, hm.y); mood('happy', 'thumbs');
+    say(((intro ? intro + ' ' : '') + texts.filter(Boolean).join(' ')).trim() || 'Listo.'); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2200);
+  }
+  const SYS = `Eres NEXUS PIXEL, el avatar asistente de trading de VORTEX (by Nova Nexus): un robot amable que flota sobre el gráfico del usuario y puede dibujar en él.
+Habla en español, breve (máximo 3 frases), claro y con buena onda, sin prometer ganancias (no es asesoría financiera).
+Responde SOLO con un objeto JSON: {"reply":"tu respuesta","actions":[...]}
+Acciones posibles (úsalas cuando el usuario pida dibujar o cuando un dibujo ayude a explicar): {"do":"channel"} canal, {"do":"range"} rango/consolidación, {"do":"sr"} soportes y resistencias, {"do":"trend"} línea de tendencia, {"do":"fib"} Fibonacci, {"do":"hline","price":NUMERO} línea horizontal en un precio, {"do":"clear"} borrar tus dibujos.
+Los niveles los calcula la app con las velas reales: no inventes precios. Si no hace falta dibujar, deja "actions":[].`;
+  function context() {
+    const h = H(); if (!h) return {}; const cs = h.visible(), o = {simbolo: h.symbol(), temporalidad: h.interval(), ultimo: h.last(), velasEnPantalla: cs.length};
+    if (cs.length) { o.maximoVisible = Math.max(...cs.map(c => c.h)); o.minimoVisible = Math.min(...cs.map(c => c.l)); o.cambioVisiblePct = +((cs[cs.length - 1].c / cs[0].o - 1) * 100).toFixed(2); }
+    try { const c = window.CCT_getAIContext && window.CCT_getAIContext(); if (c) o.indicadores = JSON.stringify(c).slice(0, 1800); } catch {}
+    return o;
+  }
+  async function llmAsk(text) {
+    const L = LLM(); if (!L || !L.chat) throw new Error('sin IA');
+    const msgs = [{role: 'system', content: SYS}, ...hist.slice(-6), {role: 'user', content: `${text}\n\nDATOS DEL GRÁFICO (JSON): ${JSON.stringify(context())}`}];
+    const r = await Promise.race([L.chat(msgs, {purpose: 'text', maxTokens: 380}), sleep(28000).then(() => { throw new Error('La IA tardó demasiado'); })]);
+    const raw = String(r && r.text || ''), m = raw.match(/\{[\s\S]*\}/); let j = null; try { j = m ? JSON.parse(m[0]) : null; } catch {}
+    const reply = j && typeof j.reply === 'string' ? j.reply : raw.replace(/```[\s\S]*?```/g, '').trim();
+    const ok = ['channel', 'range', 'sr', 'trend', 'fib', 'hline', 'clear'], actions = (j && Array.isArray(j.actions) ? j.actions : []).filter(a => a && ok.includes(a.do) && (a.do !== 'hline' || (Number.isFinite(+a.price) && +a.price > 0))).map(a => a.do === 'hline' ? {do: 'hline', price: +a.price} : {do: a.do});
+    hist.push({role: 'user', content: text}, {role: 'assistant', content: reply}); if (hist.length > 12) hist.splice(0, hist.length - 12);
+    return {reply: reply.slice(0, 600), actions};
+  }
+  async function ask(text) {
+    text = String(text || '').trim(); if (!text || busy) return; busy = true; wake(); input.value = ''; bub.classList.add('working');
+    try {
+      const acts = D.parse(text);
+      if (acts.length) await perform(acts);
+      else {
+        mood('thinking', 'think'); say('Déjame pensarlo…', {busy: true}); status('pensando…');
+        try { const r = await llmAsk(text); status('IA de VORTEX'); if (r.actions.length) await perform(r.actions, r.reply); else { mood('happy', 'idle'); say(r.reply || 'Mmm, no tengo una respuesta clara. ¿Quieres que te dibuje soportes, el canal o el rango?'); } }
+        catch { status('sin conexión a la IA'); mood('surprised', 'idle'); say('No pude hablar con la IA ahorita, pero sí puedo dibujarte: canal, rango, soportes y resistencias, tendencia, Fibonacci o una línea en el precio que me digas.'); }
+      }
+    } catch (e) { console.warn('Nexus Pixel', e); try { inkCtx && inkCtx.clearRect(0, 0, AW(), AH()); } catch {} mood('surprised', 'idle'); const h = home(); place(h.x, h.y); say('Uy, algo falló mientras dibujaba. Inténtalo otra vez.'); } finally { busy = false; bub.classList.remove('working'); lastAct = Date.now(); }
+  }
+
+  /* ── abrir / cerrar ── */
+  async function ensureModel() {
+    if (M) return M; if (loading) return loading;
+    av.classList.add('loading');
+    loading = import('./pixel-model.js').then(mod => { M = mod.create(cv); av.classList.remove('loading'); return M; })
+      .catch(e => { av.classList.remove('loading'); loading = null; throw e; });
+    return loading;
+  }
+  async function show(greet) {
+    if (open) return; open = true; ls.open = true; store(); fab.classList.add('on'); fab.setAttribute('aria-label', 'Nexus Pixel está activo');
+    const s = AV(); place(AW() + 10, home().y - 30); av.hidden = false;
+    try { await ensureModel(); } catch { av.hidden = true; open = false; fab.classList.remove('on'); try { window.CCT_bot && window.CCT_bot.toast('No se pudo cargar a Nexus Pixel. Revisa tu conexión.'); } catch {} return; }
+    mood('happy', 'fly'); const h = home(); await flyTo(h.x, h.y, greet ? 1000 : 500);
+    if (greet) { mood('happy', 'wave'); say(`¡Hola! Soy Nexus Pixel. Pídeme que te dibuje el canal, el rango, soportes y resistencias… o pregúntame lo que quieras de ${H() ? H().symbol() : 'tu gráfico'}.`); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2400); }
+    else { mood('neutral', 'idle'); say('Aquí sigo. ¿Qué te dibujo?', {instant: true}); }
+    lastAct = Date.now();
+  }
+  async function hide() {
+    if (!open) return; open = false; ls.open = false; store(); bub.hidden = true; mood('wink', 'wave'); await sleep(REDUCED ? 0 : 450); mood('happy', 'fly'); await flyTo(AW() + 20, pos.y - 40, 650);
+    av.hidden = true; fab.classList.remove('on'); fab.setAttribute('aria-label', 'Abrir a Nexus Pixel'); if (M) M.pause(true);
+  }
+  fab.addEventListener('click', () => { if (open) { if (bub.hidden) { bub.hidden = false; placeBubble(); input.focus({preventScroll: true}); } else hide(); } else show(true); });
+  bub.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (q) { ask(q.dataset.q); return; } if (e.target.closest('[data-px=close]')) hide(); });
+  bub.querySelector('form').addEventListener('submit', e => { e.preventDefault(); ask(input.value); });
+  input.addEventListener('keydown', e => e.stopPropagation()); // que las teclas no muevan el gráfico mientras escribes
+
+  /* ── tocar, girar 360° y mover ── */
+  let drag = null, taps = 0, tapT = 0;
+  cv.addEventListener('pointerdown', e => { e.stopPropagation(); wake(); drag = {x: e.clientX, y: e.clientY, moved: 0, id: e.pointerId}; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => { if (!drag || !M) return; const dx = e.clientX - drag.x; drag.moved += Math.abs(dx); drag.x = e.clientX; M.addYaw(dx * .018); });
+  const endDrag = () => { if (!drag) return; const tap = drag.moved < 6; drag = null;
+    if (!M) return; if (tap) { const now = Date.now(); taps = now - tapT < 320 ? taps + 1 : 1; tapT = now; if (taps >= 2) { mood('excited', 'celebrate'); setTimeout(() => mood('neutral', 'idle'), 1600); } else { mood(['happy', 'wink', 'love', 'excited'][Math.floor(Math.random() * 4)], 'wave'); if (bub.hidden) { bub.hidden = false; placeBubble(); } setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 1500); } }
+    else setTimeout(() => { if (!drag && M) M.setYaw(Math.round(M.yaw / (Math.PI * 2)) * Math.PI * 2); }, 2200); };
+  cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+  const hd = bub.querySelector('.px-hd'); let mv = null;
+  hd.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; e.stopPropagation(); mv = {x: e.clientX, y: e.clientY, px: pos.x, py: pos.y}; hd.setPointerCapture(e.pointerId); });
+  hd.addEventListener('pointermove', e => { if (!mv) return; const s = AV(); place(clamp(mv.px + e.clientX - mv.x, 0, AW() - s.w), clamp(mv.py + e.clientY - mv.y, 0, AH() - s.h)); });
+  const endMv = () => { if (!mv) return; mv = null; const s = AV(); ls.home = {rx: AW() - pos.x - s.w, by: AH() - pos.y - s.h}; store(); };
+  hd.addEventListener('pointerup', endMv); hd.addEventListener('pointercancel', endMv);
+  for (const el of [av, bub, fab]) for (const ev of ['pointerdown', 'wheel', 'touchstart', 'contextmenu']) el.addEventListener(ev, e => e.stopPropagation(), {passive: ev !== 'contextmenu'}); // tocar al avatar no mueve el gráfico
+
+  /* ── descanso, visibilidad y tamaño ── */
+  function wake() { lastAct = Date.now(); if (M && M.expr === 'sleep') mood('surprised', 'idle'), setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 900); }
+  setInterval(() => {
+    if (!M || !open) return; const vis = !document.hidden && (!H() || H().onChart()) && area.offsetWidth > 0; M.pause(!vis);
+    if (vis && !busy && Date.now() - lastAct > 90000 && M.expr !== 'sleep') mood('sleep', 'idle');
+  }, 1000);
+  addEventListener('resize', () => { if (!open || busy) return; const h = home(); place(h.x, h.y); });
+  if (window.ResizeObserver) new ResizeObserver(() => { if (open && !busy && !mv) { const h = home(); place(h.x, h.y); } }).observe(area);
+  if (ls.open) setTimeout(() => { if (H() && H().onChart() && area.offsetWidth) show(false); else { const t = setInterval(() => { if (H() && H().onChart() && area.offsetWidth) { clearInterval(t); show(false); } }, 1500); } }, 1800);
+  window.NexusPixel = {show, hide, ask, get open() { return open; }};
+})();

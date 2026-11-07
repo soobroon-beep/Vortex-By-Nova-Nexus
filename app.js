@@ -4953,6 +4953,18 @@ window.CCT_getMarketSnapshot = async function (n) {
   return popAll.slice(0, n || 25).map(t => ({symbol: base(t.symbol), price: +t.lastPrice, chg24h: +t.priceChangePercent, volUsd: +t.quoteVolume}));
 };
 /* ───────── Contexto para la IA: lo que el usuario ve en el gráfico ───────── */
+/* ───────── Puente para NEXUS PIXEL (pixel.js): leer las velas en pantalla, convertir tiempo/precio a píxeles y dibujar en el gráfico ───────── */
+window.CCT_pixel = {
+  ready: () => !!(geo && candles.length && currentView === 'chartView'),
+  visible() { if (!geo || !candles.length) return []; const a = Math.max(0, Math.floor(geo.start)), b = Math.min(candles.length - 1, Math.ceil(geo.end)); return candles.slice(a, b + 1); },
+  offset() { const cv = $('#priceCanvas'), ar = $('#chartArea'); if (!cv || !ar) return {x: 0, y: 0}; const r1 = cv.getBoundingClientRect(), r2 = ar.getBoundingClientRect(); return {x: r1.left - r2.left, y: r1.top - r2.top}; },
+  toScreen(pt) { if (!geo) return null; const o = this.offset(), q = px(pt); return {x: q.x + o.x, y: q.y + o.y}; }, // en píxeles de #chartArea
+  plot() { if (!geo) return null; const o = this.offset(); return {left: geo.left + o.x, top: geo.plotTop + o.y, w: geo.plotW, h: geo.plotH, right: geo.w - geo.right + o.x}; },
+  add(ds) { if (!ds || !ds.length) return 0; snapDraw(); setDrawings([...getDrawings(), ...ds.map(d => ({...d, id: newDrawId(), pix: 1}))]); updateDrawUI(); render(); return ds.length; },
+  clearMine() { const a = getDrawings(), keep = a.filter(d => !d.pix); if (keep.length === a.length) return 0; snapDraw(); setDrawings(keep); selectedId = null; updateDrawUI(); render(); return a.length - keep.length; },
+  symbol: () => symOf(state.symbol), interval: () => state.interval, last: () => candles.length ? candles[candles.length - 1].c : null, fmt: v => fmt(v),
+  onChart: () => currentView === 'chartView'
+};
 window.CCT_getAIContext = function () {
   const n = candles.length; if (n < 30) return null;
   const lastV = a => { if (!a) return null; for (let i = a.length - 1; i >= 0; i--) if (a[i] != null && Number.isFinite(a[i])) return a[i]; return null; };
