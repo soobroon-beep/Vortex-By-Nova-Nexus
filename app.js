@@ -162,7 +162,7 @@ function sanPixel(x) {
   return {nombre: txt(q.nombre, 30), estilo: pick('estilo', 'intradía'), riesgo: pick('riesgo', 'moderado'), tono: pick('tono', 'corto y directo'), trato: pick('trato', 'amigable'), color: pick('color', 'purple'),
     tfs: Array.isArray(q.tfs) ? q.tfs.filter(t => INTERVALS.includes(t)).slice(0, 6) : [], reglas: txt(q.reglas, 1500), notas: txt(q.notas, 1000),
     sr: Math.max(1, Math.min(5, Math.round(+q.sr) || 3)), colSup: hex(q.colSup), colRes: hex(q.colRes),
-    completo: Array.isArray(q.completo) && q.completo.filter(k => PIX_OPT.completo.includes(k)).length ? q.completo.filter(k => PIX_OPT.completo.includes(k)) : ['sr', 'trend', 'channel'], at: +q.at || 0};
+    tips: q.tips !== false, completo: Array.isArray(q.completo) && q.completo.filter(k => PIX_OPT.completo.includes(k)).length ? q.completo.filter(k => PIX_OPT.completo.includes(k)) : ['sr', 'trend', 'channel'], at: +q.at || 0};
 }
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
@@ -4974,7 +4974,22 @@ window.CCT_pixel = {
   clearMine() { const a = getDrawings(), keep = a.filter(d => !d.pix); if (keep.length === a.length) return 0; snapDraw(); setDrawings(keep); selectedId = null; updateDrawUI(); render(); return a.length - keep.length; },
   symbol: () => symOf(state.symbol), interval: () => state.interval, last: () => candles.length ? candles[candles.length - 1].c : null, fmt: v => fmt(v),
   onChart: () => currentView === 'chartView',
-  cfg: () => sanPixel(state.pixel), opts: PIX_OPT, intervals: () => INTERVALS.slice(),
+  /* Pixel en TODA la app: en qué sección estás, ir a otra, buscar herramientas, abrir monedas y crear alertas */
+  view: () => currentView, desktop: () => isDesktop(), side: () => document.body.dataset.side || 'watchView',
+  go(v) { if (isDesktop()) { if (v === 'chartView') return; const b = document.querySelector(`.right-rail [data-side="${v}"]`); if (b) b.click(); else setSide(v); } else { const b = document.querySelector(`.bottom-nav [data-view="${v}"]`); if (b) b.click(); else switchView(v); } },
+  tools: () => TOOL_GROUPS.flatMap(gr => gr.tools.map(t => ({k: t[0], t: t[1], d: t[2], g: gr.name, gid: gr.id}))),
+  pickTool: k => { switchView('chartView'); pickTool(k); },
+  openSymbol(sym, itv) { if (itv && INTERVALS.includes(itv)) { state.interval = itv; renderFrames(); } if (!state.symbols.includes(sym)) { state.symbols.push(sym); save(); renderWatch(); } selectSymbol(sym); },
+  async price(sym) { let p = curPrice(sym); if (!Number.isFinite(p)) { try { p = +(await getJSON(`${API}/ticker/price?symbol=${sym}`)).price; } catch {} } return Number.isFinite(p) ? p : null; },
+  current: () => symOf(state.symbol), symbols: () => state.symbols.slice(),
+  addAlert(f) { // misma lógica que el diálogo de crear alerta
+    const a = {id: 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), symbol: f.symbol, on: true, created: Date.now(), firedAt: 0, firedPrice: null, price: f.price, dir: f.dir, note: String(f.note || '').slice(0, 140), notify: ['app', 'discord', 'both'].includes(f.notify) ? f.notify : 'app'};
+    if (f.cond === 'up' || f.cond === 'down') a.cond = f.cond; if (f.repeat === 'every') a.repeat = 'every'; if (f.exp > Date.now()) a.exp = f.exp;
+    if (!sanAlert(a)) return null; state.alerts.unshift(a); alertPrice[f.symbol] = f.last; save(); renderAlerts(); scheduleRender(); try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {} return a;
+  },
+  removeAlert(id) { const n = state.alerts.length; state.alerts = state.alerts.filter(a => a.id !== id); if (state.alerts.length !== n) { save(); renderAlerts(); scheduleRender(); return true; } return false; },
+  alerts: () => state.alerts.map(a => ({symbol: a.symbol, price: a.price, dir: a.dir, cond: a.cond, on: a.on, kind: a.kind, label: a.label, note: a.note})),
+    cfg: () => sanPixel(state.pixel), opts: PIX_OPT, intervals: () => INTERVALS.slice(),
   setCfg(c) { state.pixel = sanPixel(Object.assign({}, c, {at: Date.now()})); save(); try { window.dispatchEvent(new CustomEvent('cct-pixel-cfg', {detail: state.pixel})); } catch {} return state.pixel; }
 };
 window.CCT_getAIContext = function () {

@@ -87,5 +87,5 @@
     paint(); if (!st.rows.length || Date.now() - st.at > 120e3 || st.tfDone !== st.tf) { st.tfDone = st.tf; scan(); }
   }
   document.addEventListener('click', e => { if (e.target.closest('#scrOpen, [data-side="screenerView"], [data-view="screenerView"]')) open(); });
-  window.CCTScreener = {signalOf, kindOf, open, sortRows, SIG_BARS};
+  window.CCTScreener = {signalOf, kindOf, open, sortRows, SIG_BARS, rows: () => st.rows.slice(), tf: () => st.tf, busy: () => !!st.busy};
 })();

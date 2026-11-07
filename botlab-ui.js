@@ -639,7 +639,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const rb = $('#rrBotLab'); rb && rb.addEventListener('click', open);
     paperTick(); setInterval(() => { if (!document.hidden) paperTick(); }, 60000);
     setTimeout(pullCloud, 2500);
-    window.CCTBotLabUI = {mergeServer, mergePaper, state: () => S, open: id => ACT.open({dataset: {id}}), runBot, newBot, store: s => { S = s; save(); render(); }};
+    window.CCTBotLabUI = {nl: text => { view = 'nl'; nlView(); setTimeout(() => nlSend(text), 50); }, mergeServer, mergePaper, state: () => S, open: id => ACT.open({dataset: {id}}), runBot, newBot, store: s => { S = s; save(); render(); }};
   }
   // La vista de lista usa las vistas «nl» como subvista de «new»
   const _render = render; render = function () { if (view === 'ind') { stopReplayIf(); indView(); document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches); return; } if (view === 'nl') { stopReplayIf(); nlView(); document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches); return; } _render(); };

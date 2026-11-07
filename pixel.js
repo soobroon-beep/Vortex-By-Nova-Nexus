@@ -1,4 +1,6 @@
-/* NEXUS PIXEL · avatar de trading que vive flotando en tu gráfico (PC y celular).
+/* NEXUS PIXEL · tu asistente en TODA la app (PC y celular): se asoma escondido en cualquier sección y, al tocarlo, sale volando.
+   En el gráfico dibuja; en Noticias resume; en el Screener elige las mejores entradas; en Alertas las crea; en Lens y en todo lo demás
+   te explica y te enseña dónde está cada cosa («no encuentro Fibonacci»). Lo de abajo describe la parte del gráfico:
    Toca el botón del robot (abajo a la derecha del gráfico): sale volando desde un lado y te saluda. Pídele en español
    «dibújame el canal», «marca soportes y resistencias», «el rango», «tendencia», «fibonacci», «línea en 65000» o «borra lo tuyo»:
    calcula los niveles con las velas que ves y vuela hasta el gráfico a trazarlos con su lápiz. Los dibujos quedan como los tuyos
@@ -40,31 +42,43 @@
     <div class="px-msg" aria-live="polite"></div>
     <div class="px-chips">${[['Canal', 'Dibújame el canal'], ['Rango', 'Marca el rango'], ['Soportes y resistencias', 'Marca soportes y resistencias'], ['Tendencia', 'Traza la línea de tendencia'], ['Fibonacci', 'Pon Fibonacci'], ['Análisis completo', 'Análisis completo'], ['Borrar lo mío', 'Borra lo que dibujaste']].map(([t, q]) => `<button type="button" data-q="${esc(q)}">${t}</button>`).join('')}</div>
     <form class="px-in"><input type="text" placeholder="Pídeme algo: «dibuja el canal»…" autocomplete="off" enterkeyhint="send" aria-label="Escríbele a Nexus Pixel"><button type="button" class="px-mic" aria-label="Hablarle a Nexus Pixel" title="Háblale"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button><button type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></form>`;
-  area.append(ink, av, bub, fab);
+  const layer = document.createElement('div'); layer.className = 'px-layer'; layer.append(av, bub, fab); (document.getElementById('app') || document.body).appendChild(layer); area.appendChild(ink); // capa sobre toda la app; la tinta sigue dentro del gráfico
+  const tip = document.createElement('button'); tip.type = 'button'; tip.className = 'px-tip'; tip.hidden = true; layer.appendChild(tip);
   const cv = av.querySelector('.px-cv'), msg = bub.querySelector('.px-msg'), input = bub.querySelector('input'), st = bub.querySelector('.px-st');
 
   /* ── estado ── */
   let M = null, loading = null, open = false, busy = false, pos = {x: 0, y: 0}, lastAct = Date.now(), hist = [], typer = 0;
   const AV = () => mobile() ? {w: 112, h: 132} : {w: 150, h: 176};
-  const AW = () => area.clientWidth, AH = () => area.clientHeight;
+  const AW = () => layer.clientWidth || innerWidth, AH = () => layer.clientHeight || innerHeight;
+  const ao = () => { const r = area.getBoundingClientRect(), l = layer.getBoundingClientRect(); return {x: r.left - l.left, y: r.top - l.top, w: r.width, h: r.height}; }; // gráfico → capa
+  const IW = () => area.clientWidth, IH = () => area.clientHeight; // tamaño del lienzo de tinta (dentro del gráfico)
+  const V2 = q => { const o = ao(); return {x: q.x + o.x, y: q.y + o.y}; };
+  const onChart = () => !!(H() && (H().desktop() || H().view() === 'chartView'));
+  const section = () => { const h = H(); if (!h) return 'chartView'; return h.desktop() ? h.side() : h.view(); }; // lo que tienes abierto (en PC: el panel derecho; el gráfico siempre se ve)
+  const navH = () => { const n = document.querySelector('.bottom-nav'); return n && n.offsetParent ? n.getBoundingClientRect().height : 0; };
   function home() {
-    const s = AV(), p = H() && H().plot(), right = p ? p.right : AW() - 60, bottom = p ? p.top + p.h : AH() - 40;
-    const h = ls.home; if (h && Number.isFinite(h.rx) && Number.isFinite(h.by)) return {x: clamp(AW() - h.rx - s.w, 0, AW() - s.w), y: clamp(AH() - h.by - s.h, 0, AH() - s.h)};
-    return {x: clamp(right - s.w - 6, 0, AW() - s.w), y: clamp(bottom - s.h - (mobile() ? 10 : 18), 0, AH() - s.h)};
+    const s = AV(), h = ls.home2; if (h && Number.isFinite(h.rx) && Number.isFinite(h.by)) return {x: clamp(AW() - h.rx - s.w, 0, AW() - s.w), y: clamp(AH() - h.by - s.h, 0, AH() - s.h)};
+    if (onChart() && area.offsetWidth) { const o = ao(), p = H() && H().plot(), right = p ? p.right + o.x : o.x + o.w - 60, bottom = p ? p.top + p.h + o.y : o.y + o.h - 40; return {x: clamp(right - s.w - 6, 0, AW() - s.w), y: clamp(bottom - s.h - (mobile() ? 10 : 18), 0, AH() - s.h)}; }
+    return {x: AW() - s.w - 8, y: clamp(AH() - navH() - s.h - 10, 0, AH() - s.h)}; // otras secciones del celular: abajo a la derecha, sobre el dock
   }
-  function peekSpot() { const r = fab.getBoundingClientRect(), a = area.getBoundingClientRect(); return r.width ? {x: r.left - a.left + r.width / 2, y: r.top - a.top} : {x: AW() - 90, y: AH() - 40}; }
+  function placePeek() { // escondido: en el gráfico (PC) o sobre el dock (celular)
+    const w = fab.offsetWidth || 54, hgt = fab.offsetHeight || 40;
+    if (H() && H().desktop() && area.offsetWidth) { const o = ao(); fab.style.left = (o.x + o.w - 132 - w) + 'px'; fab.style.top = (o.y + o.h - hgt) + 'px'; }
+    else { fab.style.left = (AW() - 70 - w) + 'px'; fab.style.top = (AH() - navH() - hgt) + 'px'; }
+  }
+  function peekSpot() { const r = fab.getBoundingClientRect(), l = layer.getBoundingClientRect(); return r.width ? {x: r.left - l.left + r.width / 2, y: r.top - l.top} : {x: AW() - 90, y: AH() - 40}; }
   function place(x, y) { const s = AV(); pos = {x, y}; av.style.width = s.w + 'px'; av.style.height = s.h + 'px'; av.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0)`; if (!bub.hidden) placeBubble(); }
   function placeBubble() { // a la izquierda del robot; si no cabe, a la derecha; si tampoco, arriba (o abajo)
-    const s = AV(), bw = Math.min(mobile() ? 260 : 300, AW() - 16); bub.style.width = bw + 'px'; const bh = bub.offsetHeight || 180;
+    const s = AV(), lg = bub.classList.contains('long'), bw = Math.min(lg ? (mobile() ? 380 : 400) : (mobile() ? 260 : 300), AW() - 16); bub.style.width = bw + 'px'; const bh = bub.offsetHeight || 180;
     let x, y, side;
     if (pos.x - bw + 14 >= 8) { x = pos.x - bw + 14; y = pos.y + s.h * .1; side = 'l'; }
     else if (pos.x + s.w - 10 + bw <= AW() - 8) { x = pos.x + s.w - 10; y = pos.y + s.h * .1; side = 'r'; }
     else { x = pos.x + s.w / 2 - bw / 2; y = pos.y - bh + 4; side = 't'; if (y < 6) { y = pos.y + s.h - 4; side = 'b'; } }
-    bub.style.transform = `translate3d(${clamp(x, 8, AW() - bw - 8).toFixed(0)}px,${clamp(y, 6, AH() - bh - 6).toFixed(0)}px,0)`; bub.dataset.side = side;
+    bub.style.transform = `translate3d(${clamp(x, 8, AW() - bw - 8).toFixed(0)}px,${clamp(y, 6, AH() - navH() - bh - 6).toFixed(0)}px,0)`; bub.dataset.side = side; // nunca encima del dock
   }
   const ease = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
   function flyTo(x, y, ms) {
-    const s = AV(); x = clamp(x, -s.w * .25, AW() - s.w * .75); y = clamp(y, -s.h * .2, AH() - s.h * .8);
+    const s = AV(); x = clamp(x, -s.w * .25, AW() - s.w * .75); y = clamp(y, -s.h * .2, AH() - s.h * .2);
     const x0 = pos.x, y0 = pos.y, dist = Math.hypot(x - x0, y - y0); ms = ms || clamp(dist * 1.6, 260, 1100); if (REDUCED) ms = 1;
     const far = dist > 90, prev = M ? M.pose : 'idle'; if (M && far) { M.setPose('fly'); M.setYaw(x > x0 ? .55 : -.55); }
     return new Promise(res => { const t0 = performance.now(); let lx = x0, ly = y0;
@@ -84,7 +98,7 @@
 
   /* ── tinta: el trazo que sale de su lápiz ── */
   let inkCtx = null;
-  function sizeInk() { const d = Math.min(2, devicePixelRatio || 1); ink.width = Math.round(AW() * d); ink.height = Math.round(AH() * d); inkCtx = ink.getContext('2d'); inkCtx.setTransform(d, 0, 0, d, 0, 0); }
+  function sizeInk() { const d = Math.min(2, devicePixelRatio || 1); ink.width = Math.round(IW() * d); ink.height = Math.round(IH() * d); inkCtx = ink.getContext('2d'); inkCtx.setTransform(d, 0, 0, d, 0, 0); }
   function segsOf(d) { // el dibujo como tramos de pantalla (funciones: si mueves el gráfico mientras dibuja, el trazo lo sigue)
     const S = pt => () => H().toScreen(pt), pl = () => H().plot();
     if (d.type === 'horizontal') return [[() => ({x: pl().left, y: H().toScreen(d.a).y}), () => ({x: pl().right, y: H().toScreen(d.a).y})]];
@@ -98,30 +112,31 @@
     const segs = segsOf(d); if (!segs.length || !H()) return;
     const col = d.col || '#a78bfa', s = AV(); sizeInk();
     const first = segs[0][0](), hand0 = M ? M.handScreen() : {x: s.w * .8, y: s.h * .55};
-    mood('focused', 'point'); await flyTo(first.x - hand0.x, first.y - hand0.y); mood('focused', 'draw');
+    mood('focused', 'point'); { const f = V2(first); await flyTo(f.x - hand0.x, f.y - hand0.y); } mood('focused', 'draw');
     const done = [];
     for (const [fa, fb] of segs) {
       const a0 = fa(), b0 = fb(), len = Math.hypot(b0.x - a0.x, b0.y - a0.y), ms = REDUCED ? 1 : clamp(len * 1.15, 220, 900), t0 = performance.now();
       await new Promise(res => { const step = now => {
         const k = Math.min(1, (now - t0) / ms), e = k < 1 ? 1 - Math.pow(1 - k, 2) : 1, a = fa(), b = fb(), tip = {x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e};
-        inkCtx.clearRect(0, 0, AW(), AH()); inkCtx.save(); { const pl = H().plot(); inkCtx.beginPath(); inkCtx.rect(pl.left, pl.top, pl.right - pl.left, pl.h); inkCtx.clip(); } inkCtx.lineCap = 'round'; inkCtx.strokeStyle = col; inkCtx.shadowColor = col; inkCtx.shadowBlur = 14; inkCtx.lineWidth = 2.4;
+        inkCtx.clearRect(0, 0, IW(), IH()); inkCtx.save(); { const pl = H().plot(); inkCtx.beginPath(); inkCtx.rect(pl.left, pl.top, pl.right - pl.left, pl.h); inkCtx.clip(); } inkCtx.lineCap = 'round'; inkCtx.strokeStyle = col; inkCtx.shadowColor = col; inkCtx.shadowBlur = 14; inkCtx.lineWidth = 2.4;
         for (const [ga, gb] of done) { const p = ga(), q = gb(); inkCtx.beginPath(); inkCtx.moveTo(p.x, p.y); inkCtx.lineTo(q.x, q.y); inkCtx.stroke(); }
         inkCtx.beginPath(); inkCtx.moveTo(a.x, a.y); inkCtx.lineTo(tip.x, tip.y); inkCtx.stroke();
         inkCtx.shadowBlur = 22; inkCtx.fillStyle = '#fff'; inkCtx.beginPath(); inkCtx.arc(tip.x, tip.y, 3.2, 0, 7); inkCtx.fill(); // chispa en la punta del lápiz
         inkCtx.restore();
-        const h = M ? M.handScreen() : hand0; place(tip.x - h.x, tip.y - h.y); if (M) M.setVel((b.x - a.x) / ms * 30, (b.y - a.y) / ms * 30);
+        const h = M ? M.handScreen() : hand0, tv = V2(tip); place(tv.x - h.x, tv.y - h.y); if (M) M.setVel((b.x - a.x) / ms * 30, (b.y - a.y) / ms * 30);
         if (k < 1) requestAnimationFrame(step); else res(); };
         requestAnimationFrame(step); });
       done.push([fa, fb]);
     }
     H().add([d]); // queda como dibujo real del gráfico
-    ink.classList.add('fade'); await sleep(260); inkCtx.clearRect(0, 0, AW(), AH()); ink.classList.remove('fade'); if (M) M.setVel(0, 0);
+    ink.classList.add('fade'); await sleep(260); inkCtx.clearRect(0, 0, IW(), IH()); ink.classList.remove('fade'); if (M) M.setVel(0, 0);
   }
 
   /* ── acciones ── */
   async function perform(acts, intro) {
-    const h = H(); if (!h || !h.ready()) { say('Abre el gráfico y espera a que carguen las velas; luego te dibujo lo que quieras.'); return; }
-    if (acts.some(a => a.do === 'clear')) { mood('wink', 'fly'); bub.hidden = true; const p = h.plot(); await flyTo(p.left, pos.y, 700); const n = h.clearMine(); await flyTo(home().x, home().y); mood('happy', 'thumbs'); say(n ? `Listo, borré ${n} dibujo${n === 1 ? '' : 's'} mío${n === 1 ? '' : 's'}. Los tuyos siguen ahí.` : 'No tenía dibujos míos en este gráfico.'); setTimeout(() => mood('neutral', 'idle'), 1800); return; }
+    let h = H(); if (h && !onChart()) { say('Vamos al gráfico…', {busy: true}); h.go('chartView'); await sleep(900); const hm = home(); await flyTo(hm.x, hm.y, 500); }
+    h = H(); if (!h || !h.ready()) { say('Abre el gráfico y espera a que carguen las velas; luego te dibujo lo que quieras.'); return; }
+    if (acts.some(a => a.do === 'clear')) { mood('wink', 'fly'); bub.hidden = true; const p = h.plot(); await flyTo(V2({x: p.left, y: 0}).x, pos.y, 700); const n = h.clearMine(); await flyTo(home().x, home().y); mood('happy', 'thumbs'); say(n ? `Listo, borré ${n} dibujo${n === 1 ? '' : 's'} mío${n === 1 ? '' : 's'}. Los tuyos siguen ahí.` : 'No tenía dibujos míos en este gráfico.'); setTimeout(() => mood('neutral', 'idle'), 1800); return; }
     const cs = h.visible(); if (cs.length < 20) { mood('thinking', 'think'); say('Veo muy pocas velas en pantalla. Aleja un poco el gráfico (pellizca o usa la rueda) y vuelvo a intentarlo.'); return; }
     mood('analyzing', 'think'); say(intro ? intro : 'Analizando tus velas…', {busy: true}); await sleep(REDUCED ? 0 : 750);
     bub.hidden = true; const texts = [];
@@ -161,8 +176,9 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     return {reply: reply.slice(0, 600), actions};
   }
   async function ask(text) {
-    text = String(text || '').trim(); if (!text || busy) return; busy = true; wake(); input.value = ''; bub.classList.add('working');
+    text = String(text || '').trim(); if (!text || busy) return; busy = true; wake(); input.value = ''; bub.classList.add('working'); big(false);
     try {
+      if (await routeApp(text)) return;
       const acts = D.parse(text);
       if (acts.length) await perform(acts);
       else {
@@ -170,8 +186,184 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
         try { const r = await llmAsk(text); status('IA de VORTEX'); if (r.actions.length) await perform(r.actions, r.reply); else { mood('happy', 'idle'); say(r.reply || 'Mmm, no tengo una respuesta clara. ¿Quieres que te dibuje soportes, el canal o el rango?'); } }
         catch { status('sin conexión a la IA'); mood('surprised', 'idle'); say('No pude hablar con la IA ahorita, pero sí puedo dibujarte: canal, rango, soportes y resistencias, tendencia, Fibonacci o una línea en el precio que me digas.'); }
       }
-    } catch (e) { console.warn('Nexus Pixel', e); try { inkCtx && inkCtx.clearRect(0, 0, AW(), AH()); } catch {} mood('surprised', 'idle'); const h = home(); place(h.x, h.y); say('Uy, algo falló mientras dibujaba. Inténtalo otra vez.'); } finally { busy = false; bub.classList.remove('working'); lastAct = Date.now(); }
+    } catch (e) { console.warn('Nexus Pixel', e); try { inkCtx && inkCtx.clearRect(0, 0, IW(), IH()); } catch {} mood('surprised', 'idle'); const h = home(); place(h.x, h.y); say('Uy, algo falló mientras dibujaba. Inténtalo otra vez.'); } finally { busy = false; bub.classList.remove('working'); lastAct = Date.now(); }
   }
+
+  /* ════════ Pixel en toda la app: habilidades por sección ════════ */
+  const NAMES = {chartView: 'Gráfico', watchView: 'Mi seguimiento', newsView: 'Noticias', screenerView: 'Screener', alertsView: 'Alertas', aiView: 'IA', lensView: 'Nexus Lens', botLabView: 'Nova Bot Lab', discordView: 'Discord', settingsView: 'Configuración'};
+  const nrm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const CHIPS = {
+    chartView: [['Canal', 'Dibújame el canal'], ['Rango', 'Marca el rango'], ['Soportes y resistencias', 'Marca soportes y resistencias'], ['Tendencia', 'Traza la línea de tendencia'], ['Fibonacci', 'Pon Fibonacci'], ['Análisis completo', 'Análisis completo'], ['Borrar lo mío', 'Borra lo que dibujaste']],
+    newsView: [['Resume las noticias', 'Resume las noticias'], ['¿Qué mueve al mercado?', '¿Qué está moviendo al mercado hoy?'], ['¿Algo de BTC?', '¿Hay noticias importantes de Bitcoin?']],
+    screenerView: [['Mejor entrada', '¿Cuál tiene la mejor entrada del screener?'], ['Mejores LONG', '¿Cuáles son las mejores señales LONG del screener?'], ['Mejores SHORT', '¿Cuáles son las mejores señales SHORT del screener?'], ['Más confluencias', '¿Cuál tiene más confluencias para entrar?']],
+    alertsView: [['Crear una alerta', 'Quiero crear una alerta'], ['Mis alertas', '¿Qué alertas tengo activas?'], ['¿Cómo funcionan?', '¿Cómo funcionan las alertas?']],
+    lensView: [['¿Qué lleno aquí?', '¿Qué tengo que llenar aquí?'], ['¿Dónde saco mi API key?', '¿Dónde encuentro mi API key de BingX?'], ['¿Es seguro?', '¿Es seguro poner mis datos aquí?']],
+    botLabView: [['Ayúdame a crear un bot', 'Ayúdame a crear un bot'], ['Consejos', 'Dame consejos para mejorar mis bots'], ['¿Cómo empiezo?', '¿Cómo empiezo con Nova Bot Lab?']],
+    watchView: [['¿Cuál se mueve más?', '¿Cuál de mi seguimiento se está moviendo más?'], ['Añadir una cripto', '¿Cómo añado una criptomoneda?'], ['Ordenar mi lista', '¿Cómo ordeno mi lista en secciones?']],
+    aiView: [['¿Qué puedes hacer?', '¿Qué puedes hacer en cada sección?'], ['Analiza mi gráfico', 'Análisis completo']],
+    settingsView: [['¿Dónde cambio el tema?', '¿Dónde cambio el tema?'], ['Instalar la app', '¿Cómo instalo la app en mi celular?'], ['Avisos con app cerrada', '¿Dónde activo los avisos con la app cerrada?']],
+    discordView: [['¿Cómo conecto mi canal?', '¿Cómo conecto mi canal de Discord?']]
+  };
+  const GENERIC = [['¿Dónde está…?', '¿Dónde encuentro la herramienta de Fibonacci?'], ['¿Qué puedes hacer?', '¿Qué puedes hacer aquí?']];
+  function setChips() { const sec0 = section(); input.placeholder = sec0 === 'chartView' ? 'Pídeme algo: «dibuja el canal»…' : sec0 === 'alertsView' ? 'Ej.: avísame si BTC pasa 70 mil…' : sec0 === 'screenerView' ? '¿Cuál tiene la mejor entrada?…' : 'Pregúntame o pídeme algo…';
+    const sec = sec0, c = H() && H().desktop() && sec !== 'chartView' ? [...(CHIPS[sec] || []), ...CHIPS.chartView.slice(0, 3)] : (CHIPS[sec] || GENERIC); bub.querySelector('.px-chips').innerHTML = c.map(([t, q]) => `<button type="button" data-q="${esc(q)}">${esc(t)}</button>`).join(''); }
+  function screenText(sec) { const el = document.getElementById(sec); if (!el) return ''; return el.innerText.replace(/\n{2,}/g, '\n').slice(0, 2600); }
+
+  /* ── señalar en pantalla (buscar herramientas y botones) ── */
+  function spot(el, ms = 4200) { if (!el) return; el.classList.add('px-spot'); try { el.scrollIntoView({block: 'center', behavior: REDUCED ? 'auto' : 'smooth'}); } catch {} setTimeout(() => el.classList.remove('px-spot'), ms); }
+  async function pointAt(el) {
+    if (!el) return; await sleep(350); const r = el.getBoundingClientRect(), l = layer.getBoundingClientRect(), s = AV(); if (!r.width) return;
+    const tx = r.left - l.left + r.width / 2, ty = r.top - l.top + r.height / 2, left = tx > AW() / 2, x = clamp(left ? tx - s.w - 16 : tx + 16, 0, AW() - s.w), y = clamp(ty - s.h * .45, 0, AH() - s.h);
+    mood('excited', 'point'); M && M.setYaw(left ? .5 : -.5); await flyTo(x, y, 700); spot(el); setTimeout(() => { if (M) M.setYaw(0); }, 2400);
+  }
+  const PLACES = [ // [palabras, nombre, sección, selector PC, selector celular, explicación]
+    [/indicador/, 'Indicadores', 'chartView', '[data-panel="indicators"]', '[data-panel="indicators"]', 'Ahí agregas EMA, RSI, Bollinger, tus scripts Pine y Nova Nexus.'],
+    [/plantilla|diseno guardad/, 'Plantilla', 'chartView', '#designsBtn', '#designsBtn', 'Guarda y aplica la configuración completa de tu gráfico.'],
+    [/temporalidad|marco de tiempo|timeframe|1h|4h/, 'Temporalidades', 'chartView', '#timeframes', '#tfBtn', 'Cambia entre 1m, 5m, 1h, 4h, 1D…'],
+    [/tipo de vela|velas heikin|heikin|linea de precio/, 'Tipo de vela', 'chartView', '#ctypeBtn', '#moreBtn', 'Velas, Heikin Ashi, línea y más.'],
+    [/dividir|varios graficos|2 graficos|layout/, 'Dividir el gráfico', 'chartView', '#layoutBtn', '#moreBtn', 'Hasta 5 gráficos a la vez.'],
+    [/deshacer/, 'Deshacer', 'chartView', '#undoDraw', '#undoDraw', 'Regresa tu último dibujo.'],
+    [/cambiar (de )?(moneda|cripto)|buscar (una )?(moneda|cripto)|otro exchange|bingx|bybit/, 'Buscar activo', 'chartView', '#symbolButton', '#symbolButton', 'Busca cualquier cripto y elige el exchange.'],
+    [/anadir|agregar (una )?(cripto|moneda)|seguimiento/, 'Añadir a Mi seguimiento', 'watchView', '#addAsset', '#addAsset', 'Agrega criptos de cualquier exchange.'],
+    [/crear (una )?alerta|nueva alerta/, 'Crear alerta', 'alertsView', '#alAdd', '#alAdd', 'O dímelo a mí: «avísame si BTC pasa 70 mil».'],
+    [/alerta/, 'Alertas', 'alertsView', '[data-side="alertsView"]', '#topAlertsBtn', 'Tus alertas de precio y de indicador.'],
+    [/avisos con la app cerrada|app cerrada|notificacion/, 'Avisos con la app cerrada', 'alertsView', '[data-altab="how"]', '[data-altab="how"]', 'En «Cómo te aviso».'],
+    [/calendario/, 'Calendario económico', 'newsView', '[data-nw-tab="cal"]', '[data-nw-tab="cal"]', 'Eventos pasados, de hoy y futuros.'],
+    [/noticia/, 'Noticias', 'newsView', '[data-side="newsView"]', '.bottom-nav [data-view="newsView"]', 'Cripto y bolsa en español.'],
+    [/screener|senales/, 'Screener', 'screenerView', '[data-side="screenerView"]', '.bottom-nav [data-view="screenerView"]', 'Señales de Nova Nexus en el top de criptos.'],
+    [/lens|mi cuenta de bingx|mis operaciones/, 'Nexus Lens', 'lensView', '[data-side="lensView"]', '.bottom-nav [data-view="lensView"]', 'Tu cuenta, trades abiertos y operaciones.'],
+    [/bot lab|crear (un )?bot|backtest|paper/, 'Nova Bot Lab', 'botLabView', '#rrBotLab', null, 'Crea, prueba y simula bots (versión de PC).'],
+    [/discord/, 'Discord', 'discordView', '#rrDiscord', '#dcOpenFromSettings', 'Únete a Nova Nexus y manda tus avisos a tu canal.'],
+    [/tema|modo oscuro|modo claro/, 'Tema claro/oscuro', null, '#rrTheme', '#themeBtn', 'Cambia entre claro y oscuro.'],
+    [/preferencia|zona horaria|formato|decimales/, 'Preferencias', 'settingsView', '#setPrefs', '#setPrefs', 'Hora, fecha y formato de precios.'],
+    [/instalar|icono de la app/, 'Instalar la app', 'settingsView', '#appInstall', '#appInstall', 'Elige el ícono e instálala en tu celular.'],
+    [/iniciar sesion|cuenta de google|login/, 'Iniciar sesión', null, '#rrAccount', '#accountBtn', 'Con Google: tu configuración viaja a todos tus dispositivos.'],
+    [/saldo/, 'Saldo de la cuenta', null, '[data-acct-open]', '[data-acct-open]', 'La barra que te anima a usar stop loss.'],
+    [/configuracion|ajustes/, 'Configuración', 'settingsView', '[data-side="settingsView"]', '#settingsBtn', 'Cuenta, avisos, preferencias, app y datos.'],
+    [/\bia\b|briefing|laboratorio/, 'IA', 'aiView', '[data-side="aiView"]', '.bottom-nav [data-view="aiView"]', 'Analizar gráfico, Briefing del día y Laboratorio de indicadores.']
+  ];
+  async function findThing(t) {
+    const h = H(), q = nrm(t), tools = h.tools(), desk = h.desktop();
+    const tool = tools.find(x => q.includes(nrm(x.t)) || (/fibo/.test(q) && /fibonacci/i.test(x.t) && !/tiempo|abanico|circul|extension|canal|espiral|cuña/i.test(x.t)) || (/pincel|dibujar a mano/.test(q) && x.k === 'brush') || (/long|short/.test(q) && x.k === (q.includes('short') ? 'short' : 'long')) || (/texto/.test(q) && x.k === 'text'));
+    if (tool) {
+      h.go('chartView'); await sleep(desk ? 250 : 600); let el = null;
+      if (desk) el = document.querySelector(`#toolRail [data-group="${tool.gid}"]`); // solo la señala: no la activa hasta que digas «Sí, actívala»
+      else { const b = document.querySelector('[data-panel="tools"]'); if (b) { b.click(); await sleep(450); el = document.querySelector(`.sheet-item[data-tool="${tool.k}"]`); } }
+      await pointAt(el); mood('happy', 'point');
+      say(`¡Aquí está «${tool.t}»! Está en el grupo ${tool.g}${desk ? ' de la barra de la izquierda (el botón que brilla; toca su flechita para ver todo el grupo)' : ', dentro de «Dibujar»'}. ${tool.d}. ¿La activo?`); setChipsCustom([['Sí, actívala', '__tool:' + tool.k], ['Gracias', 'gracias']]); return true;
+    }
+    const pl = PLACES.find(x => x[0].test(q)); if (!pl) return false;
+    const [, name, sec, selD, selM, why] = pl, sel = desk ? selD : selM;
+    if (!sel) { say(`${name} está en la versión de PC: ${why}`); return true; }
+    if (sec && !(desk && sec === 'chartView')) { const host = sec === 'chartView' ? 'chartView' : sec; if (!document.querySelector(sel) || !document.querySelector(sel).offsetParent) { h.go(host); await sleep(650); } }
+    let el = document.querySelector(sel); if (el && !el.offsetParent && !desk && sel === '#moreBtn') el = document.querySelector('#moreBtn');
+    await pointAt(el); mood('happy', 'point'); say(`Aquí está: ${name}. ${why}`); return true;
+  }
+  function setChipsCustom(list) { bub.querySelector('.px-chips').innerHTML = list.map(([t, q]) => `<button type="button" data-q="${esc(q)}">${esc(t)}</button>`).join(''); }
+
+  /* ── IA con el contexto de la sección ── */
+  const SYS_APP = `Eres NEXUS PIXEL, el asistente amigable de VORTEX (by Nova Nexus), una app de trading cripto. Vives en toda la app y ayudas en cada sección.
+Secciones: Gráfico (velas, indicadores, dibujos; tú puedes dibujar), Mi seguimiento (lista de criptos), Noticias (cripto y bolsa en español + Calendario económico), Screener (señales LONG/SHORT/RANGO de Nova Nexus; edad = velas desde que salió), Alertas (de precio y de indicador; avisos con la app cerrada y a Discord), IA (Analizar gráfico, Briefing del día, Laboratorio de indicadores), Nexus Lens (ver tu cuenta de BingX: saldo, trades abiertos, historial; usa API key de SOLO LECTURA de BingX), Nova Bot Lab (PC: crear bots en español o constructor visual, backtest, paper trading, riesgo), Discord, Configuración.
+Habla en español, claro, breve y con buena onda. No prometas ganancias (no es asesoría financiera). Usa SOLO los datos que te dan; si falta algo, dilo.`;
+  async function llmText(sys, user, maxTokens = 650) {
+    const L = LLM(); if (!L || !L.chat) throw new Error('sin IA');
+    const r = await Promise.race([L.chat([{role: 'system', content: sys + profile()}, ...hist.slice(-4), {role: 'user', content: user}], {purpose: 'text', maxTokens}), sleep(60000).then(() => { throw new Error('tarde'); })]);
+    const t = String(r && r.text || '').replace(/```[\s\S]*?```/g, '').trim(); hist.push({role: 'user', content: user.slice(0, 300)}, {role: 'assistant', content: t.slice(0, 600)}); if (hist.length > 12) hist.splice(0, hist.length - 12); return t;
+  }
+  const big = on => { bub.classList.toggle('long', !!on); if (!bub.hidden) placeBubble(); };
+
+  async function skillNews(t) {
+    const items = (window.CCTNews && CCTNews.items() || []).filter(n => n && n.title).sort((a, b) => (b.t || 0) - (a.t || 0)).slice(0, 30);
+    if (!items.length) { H().go('newsView'); say('Aún no cargan las noticias. Dame unos segundos y vuelve a pedírmelo.'); return; }
+    mood('analyzing', 'think'); say('Leyendo las noticias…', {busy: true});
+    const list = items.map(n => `- [${n.t ? new Date(n.t).toLocaleString('es', {hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'}) : ''}] ${n.title}${n.src ? ' (' + n.src + ')' : ''}${n.desc ? ' — ' + String(n.desc).slice(0, 140) : ''}`).join('\n');
+    try { const r = await llmText(SYS_APP + '\nTAREA: resume las noticias que te paso. Máximo 8 viñetas cortas con lo más importante para cripto y bolsa, indicando si es positivo o negativo para el mercado, y al final 1 frase con el sentimiento general.', `${t}\n\nNOTICIAS RECIENTES:\n${list}`, 750); big(true); mood('happy', 'idle'); say(r); }
+    catch { big(true); mood('surprised', 'idle'); say('No pude hablar con la IA, pero estos son los titulares más nuevos:\n' + items.slice(0, 6).map(n => '• ' + n.title).join('\n')); }
+  }
+  async function skillScreener(t) {
+    const S = window.CCTScreener; let rows = S ? S.rows() : []; if (section() !== 'screenerView') { H().go('screenerView'); await sleep(700); }
+    if (!rows.filter(r => r.sig).length) { if (S && S.open) S.open(); mood('analyzing', 'think'); say('Estoy escaneando las criptos del Screener…', {busy: true}); for (let i = 0; i < 30 && !(S.rows().filter(r => r.sig).length && !S.busy()); i++) await sleep(1000); rows = S.rows(); }
+    const sig = rows.filter(r => r.sig); if (!sig.length) { mood('thinking', 'idle'); say('Ahorita ninguna moneda del Screener tiene señal en esta temporalidad. Prueba otra (por ejemplo 15m o 4h) y te digo.'); return; }
+    const q = nrm(t), want = /short|venta/.test(q) ? 'sell' : /long|compra/.test(q) ? 'buy' : '';
+    const rank = sig.filter(r => !want || r.sig.side === want).map(r => ({r, sc: r.sig.score * 2 + (r.sig.div ? 2 : 0) - r.sig.ago * .6 + (r.sig.range ? -1.5 : 0)})).sort((a, b) => b.sc - a.sc).slice(0, 8);
+    if (!rank.length) { say(`No hay señales ${want === 'sell' ? 'SHORT' : 'LONG'} ahorita en el Screener.`); return; }
+    const tf = S.tf() || '1h', rowsTxt = rank.map(({r}) => `${r.symbol}: ${r.sig.range ? 'RANGO' : r.sig.side === 'buy' ? 'LONG' : 'SHORT'}, puntaje ${r.sig.score}/5${r.sig.div ? ', con divergencia' : ''}, salió hace ${r.sig.ago} velas (vigente ${r.sig.left} más), cambio 24h ${r.chg != null ? (+r.chg).toFixed(2) + '%' : '—'}, precio ${r.price}`).join('\n');
+    mood('analyzing', 'think'); say('Comparando las señales…', {busy: true});
+    const best = rank[0].r;
+    try { const r = await llmText(SYS_APP + '\nTAREA: eres analista del Screener de Nova Nexus. Con las señales que te paso (ya ordenadas por calidad: puntaje alto, divergencia y señal reciente = mejor), elige la(s) mejor(es) entrada(s) para lo que pide el usuario, explica en 1 línea cada una por qué (confluencias: puntaje, divergencia, qué tan reciente, momentum de 24h) y menciona riesgos. Máximo 6 viñetas. Recomienda confirmar en el gráfico.', `${t}\n\nSEÑALES DEL SCREENER (${tf}):\n${rowsTxt}`, 650); big(true); mood('happy', 'thumbs'); say(r); }
+    catch { big(true); mood('happy', 'thumbs'); say('Las mejores señales ahorita (por puntaje, divergencia y qué tan recientes):\n' + rank.slice(0, 5).map(({r}, i) => `${i + 1}. ${r.symbol.replace(/USDT$/, '')} · ${r.sig.side === 'buy' ? 'LONG' : 'SHORT'} · ${r.sig.score}/5${r.sig.div ? ' · div' : ''} · hace ${r.sig.ago} velas`).join('\n')); }
+    setChipsCustom([[`Ver ${best.symbol.replace(/USDT$/, '')} en el gráfico`, '__open:' + best.symbol + ':' + tf], ...CHIPS.screenerView.slice(1, 3)]);
+  }
+  const COINS = {bitcoin: 'BTC', btc: 'BTC', ethereum: 'ETH', eth: 'ETH', ether: 'ETH', solana: 'SOL', sol: 'SOL', xrp: 'XRP', ripple: 'XRP', bnb: 'BNB', doge: 'DOGE', dogecoin: 'DOGE', ada: 'ADA', cardano: 'ADA', pepe: 'PEPE', sui: 'SUI', link: 'LINK', avax: 'AVAX', ton: 'TON', trx: 'TRX', shib: 'SHIB', ltc: 'LTC', dot: 'DOT', near: 'NEAR', apt: 'APT', arb: 'ARB', op: 'OP', wif: 'WIF', bonk: 'BONK', qnt: 'QNT'};
+  function numIn(s) { const m = s.match(/(\d[\d.,]*)\s*(k|mil|m\b|millones?)?/); if (!m) return null; let raw = m[1].replace(/[.,]$/, ''); let v = /^\d{1,3}([.,]\d{3})+$/.test(raw) ? +raw.replace(/[.,]/g, '') : +raw.replace(',', '.'); if (m[2] === 'k' || m[2] === 'mil') v *= 1000; else if (m[2] === 'm' || /^millon/.test(m[2] || '')) v *= 1e6; return Number.isFinite(v) && v > 0 ? v : null; }
+  async function skillAlert(t) {
+    const h = H(), q = nrm(t); let base = null; for (const w of q.split(/[^a-z0-9]+/)) { if (COINS[w]) { base = COINS[w]; break; } const up = w.toUpperCase(); if (/^[A-Z0-9]{2,10}$/.test(up) && h.symbols().some(x => x === up + 'USDT')) { base = up; break; } }
+    const sym = (base ? base + 'USDT' : (h.current() || 'BTCUSDT').replace(/[-_]/g, '').replace(/@.*/, '')); if (!/^[A-Z0-9]{3,20}$/.test(sym)) { say('Dime de qué cripto quieres la alerta (por ejemplo «avísame si BTC pasa 70 mil»).'); return; }
+    const last = await h.price(sym); const pct = q.match(/(\d+(?:[.,]\d+)?)\s*(%|por ?ciento)/); let price = null;
+    if (pct && last) { const k = +pct[1].replace(',', '.') / 100; price = /baj|caig|cae|abajo|desplom|pierd/.test(q) ? last * (1 - k) : last * (1 + k); }
+    else { const rest = q.replace(/\b(btc|eth|sol|usdt)\b/g, ' '); price = numIn(rest); }
+    if (!price) { h.go('alertsView'); await sleep(500); say(`¿En qué precio pongo la alerta de ${sym.replace(/USDT$/, '')}? ${last ? 'Ahorita está en ' + h.fmt(last) + '.' : ''} Dime por ejemplo «avísame si llega a ${last ? h.fmt(Math.round(last * 1.03)) : '70000'}».`); return; }
+    if (!last) { say('No pude leer el precio actual; revisa tu conexión e inténtalo otra vez.'); return; }
+    const dir = price > last ? 'up' : 'down', cond = /cruce|cruza/.test(q) ? null : (/(sube|suba|arriba|supere|rompa|pase|pasa|mayor)/.test(q) && dir === 'up') ? 'up' : (/(baje|baja|abajo|caiga|pierda|menor|debajo)/.test(q) && dir === 'down') ? 'down' : null;
+    const a = h.addAlert({symbol: sym, price, dir, cond, last, repeat: /siempre|cada vez|todas las veces/.test(q) ? 'every' : 'once', notify: /discord/.test(q) ? (/app|celular|ambos|tambien/.test(q) ? 'both' : 'discord') : 'app', note: 'Creada con Nexus Pixel'});
+    if (!a) { say('No pude crear esa alerta. Revisa el precio y la cripto.'); return; }
+    h.go('alertsView'); await sleep(500); mood('happy', 'thumbs');
+    say(`¡Listo! Te aviso cuando ${sym.replace(/USDT$/, '')} ${dir === 'up' ? 'suba a' : 'baje a'} ${h.fmt(price)} (ahora ${h.fmt(last)})${a.repeat === 'every' ? ', cada vez que pase' : ', una vez'}${a.notify !== 'app' ? ', también en Discord' : ''}.`);
+    setChipsCustom([['Deshacer', '__undoalert:' + a.id], ['Otra alerta', 'Quiero crear otra alerta']]);
+  }
+  async function skillLens(t) {
+    const fr = document.getElementById('lensFrame'); let txt = ''; try { txt = fr && fr.contentDocument ? fr.contentDocument.body.innerText.replace(/\n{2,}/g, '\n').slice(0, 3000) : ''; } catch {}
+    mood('thinking', 'think'); say('Déjame ver la pantalla de Nexus Lens…', {busy: true});
+    try { const r = await llmText(SYS_APP + '\nTAREA: ayuda con Nexus Lens. Explica qué llenar y dónde conseguir cada dato. Para BingX: Perfil → Gestión de API → Crear API, permiso SOLO de lectura (nunca retiros ni trading), copia API Key y Secret Key; la firma se hace en el dispositivo del usuario. Si piden «Proxy URL», es el Worker de Cloudflare que reenvía las consultas de lectura. Responde en pasos cortos.', `${t}\n\nLO QUE SE VE EN NEXUS LENS:\n${txt || '(no se pudo leer la pantalla)'}`, 600); big(true); mood('happy', 'idle'); say(r); }
+    catch { big(true); say('Para Nexus Lens necesitas tu API Key y Secret Key de BingX con permiso SOLO de lectura: en BingX ve a Perfil → Gestión de API → Crear API, marca solo lectura y copia las dos claves aquí. Nunca actives retiros.'); }
+  }
+  async function skillBot(t) {
+    const h = H(), B = window.CCTBotLabUI, bots = B ? (B.state().bots || []).filter(b => b.status !== 'archived').map(b => { const r = (b.runs || [])[b.runs.length - 1]; return `${b.name} (${b.status})${r && r.metrics ? `: ${r.metrics.n} op., ${r.metrics.retPct != null ? (+r.metrics.retPct).toFixed(1) : '—'}%, aciertos ${r.metrics.winRate != null ? (+r.metrics.winRate).toFixed(0) : '—'}%, caída ${r.metrics.maxDDPct != null ? (+r.metrics.maxDDPct).toFixed(1) : '—'}%` : ''}`; }) : [];
+    mood('thinking', 'think'); say('Pensando en tu bot…', {busy: true});
+    const create = /crea|hazme|arma|construy/.test(nrm(t)) && t.length > 25;
+    try {
+      const r = await llmText(SYS_APP + '\nTAREA: ayuda a crear o mejorar bots de trading en Nova Bot Lab. Si el usuario describe una estrategia, conviértela en una descripción clara para el bot (activo, temporalidad, condiciones de entrada y salida, stop loss y take profit) y da 2-3 consejos de riesgo. Si pide consejos, revisa sus bots (si hay datos) y sugiere mejoras concretas. Recomienda backtest y paper trading antes de dinero real. Máximo 8 viñetas.', `${t}\n\nMIS BOTS:\n${bots.join('\n') || '(aún no tiene bots)'}`, 700);
+      big(true); mood('happy', 'idle'); say(r);
+    } catch { big(true); say('Para un buen bot: define activo y temporalidad, una condición clara de entrada (p. ej. cruce de EMA + RSI), stop loss y take profit, y riesgo de 1% por operación. Pruébalo con backtest y luego en paper trading antes de usar dinero real.'); }
+    if (h.desktop()) setChipsCustom([...(create ? [['Crear este bot en Bot Lab', '__bot:' + t.slice(0, 400)]] : []), ['Abrir Nova Bot Lab', '__go:botLabView'], ['Consejos', 'Dame consejos para mejorar mis bots']]);
+    else setChipsCustom([['¿Dónde está Bot Lab?', '¿Dónde encuentro Nova Bot Lab?']]);
+  }
+  async function skillGeneral(t) {
+    const sec = section(); mood('thinking', 'think'); say('Déjame pensarlo…', {busy: true});
+    const extra = sec === 'alertsView' ? '\nMIS ALERTAS: ' + JSON.stringify(H().alerts().slice(0, 15)) : '';
+    try { const r = await llmText(SYS_APP + `\nEl usuario está en la sección «${NAMES[sec] || sec}». Responde lo que pregunta usando lo que se ve en su pantalla. Si pregunta dónde está algo, dile exactamente el botón y la sección.`, `${t}\n\nLO QUE SE VE EN SU PANTALLA (${NAMES[sec] || sec}):\n${screenText(sec)}${extra}`, 550); big(r.length > 260); mood('happy', 'idle'); say(r); }
+    catch { mood('surprised', 'idle'); say('No pude hablar con la IA ahorita. Pero puedo enseñarte dónde está cada cosa: pregúntame «¿dónde está…?».'); }
+  }
+  /* A qué habilidad va cada pedido */
+  async function routeApp(text) {
+    const q = nrm(text), sec = section();
+    if (text.startsWith('__')) { const [k, a, b] = text.split(':'); const h = H();
+      if (k === '__tool') { h.pickTool(a); say('Listo, ya está activa. Toca el gráfico para empezar.'); return true; }
+      if (k === '__open') { h.openSymbol(a, b); h.go('chartView'); say(`Abrí ${a.replace(/USDT$/, '')} en ${b}. ¿Te dibujo soportes y resistencias?`); setChips(); return true; }
+      if (k === '__undoalert') { say(h.removeAlert(a) ? 'Listo, quité esa alerta.' : 'Esa alerta ya no existe.'); setChips(); return true; }
+      if (k === '__go') { h.go(a); setTimeout(setChips, 700); say(`Abrí ${NAMES[a] || a}.`); return true; }
+      if (k === '__bot') { h.go('botLabView'); await sleep(500); if (window.CCTBotLabUI && CCTBotLabUI.nl) CCTBotLabUI.nl(text.slice(6)); say('Listo: en Nova Bot Lab la IA está convirtiendo tu estrategia en reglas. Revísalas y pruébala con el backtest.'); return true; }
+      return true; }
+    if (/^(gracias|ok|va|sale|listo)\b/.test(q)) { mood('love', 'wave'); say('¡Para eso estoy! 💜'.replace(' 💜', '')); return true; }
+    if (/(donde|no encuentro|como (abro|pongo|activo|uso|cambio|encuentro)|muestrame|ensename|ubica)/.test(q) && await findThing(text)) return true;
+    if (/(alerta|avisame|avisa(me)? (si|cuando)|notificame)/.test(q) && /(\d|%|crea|pon|hazme|quiero)/.test(q)) { await skillAlert(text); return true; }
+    if (/noticia|resum|que (esta )?pasa|que mueve|mercado hoy|titulares/.test(q) && (sec === 'newsView' || /noticia|titular/.test(q))) { await skillNews(text); return true; }
+    if ((sec === 'screenerView' && /(mejor|entrada|long|short|confluencia|senal|cual|analiza)/.test(q)) || /screener/.test(q)) { await skillScreener(text); return true; }
+    if (/\bbots?\b|estrategia automat|bot lab/.test(q) && !/screener/.test(q)) { await skillBot(text); return true; }
+    if (/nexus lens|api key|secret key/.test(q) || (sec === 'lensView' && !D.parse(text).length)) { await skillLens(text); return true; }
+    if (sec !== 'chartView' && !D.parse(text).length && (!(H() && H().desktop()) || !/grafic|vela|indicador|\bema\b|rsi|soporte|resistencia|precio|tendencia|dibuj|entrar|long|short/.test(q))) { await skillGeneral(text); return true; }
+    return false;
+  }
+
+  /* ── se asoma de vez en cuando con una sugerencia de la sección (máximo una por sección al día) ── */
+  const TIPS = {newsView: ['¿Te resumo las noticias?', 'Resume las noticias'], screenerView: ['¿Te digo cuál tiene la mejor entrada?', '¿Cuál tiene la mejor entrada del screener?'], alertsView: ['¿Te ayudo a crear una alerta?', 'Quiero crear una alerta'], lensView: ['¿Te explico qué llenar aquí?', '¿Qué tengo que llenar aquí?'], botLabView: ['¿Armamos un bot juntos?', 'Ayúdame a crear un bot'], chartView: ['¿Te dibujo soportes y resistencias?', 'Marca soportes y resistencias'], watchView: ['¿Te digo cuál se mueve más?', '¿Cuál de mi seguimiento se está moviendo más?']};
+  let lastSec = '', lastTip = 0, tipTimer = 0;
+  function maybeTip(sec) {
+    if (open || busy || CFG().tips === false || !TIPS[sec] || Date.now() - lastTip < 90000) return; const day = new Date().toDateString(); ls.tips = ls.tips || {}; if (ls.tips[sec] === day) return;
+    clearTimeout(tipTimer); tipTimer = setTimeout(() => { if (open || section() !== sec) return; ls.tips[sec] = day; store(); lastTip = Date.now(); tip.textContent = TIPS[sec][0]; tip.dataset.q = TIPS[sec][1]; tip.hidden = false; const r = fab.getBoundingClientRect(), l = layer.getBoundingClientRect(); tip.style.left = clamp(r.left - l.left + r.width / 2 - 110, 8, AW() - 228) + 'px'; tip.style.top = (r.top - l.top - 46) + 'px'; fab.classList.add('peek-up'); setTimeout(() => { tip.hidden = true; fab.classList.remove('peek-up'); }, 6500); }, 2500);
+  }
+  tip.addEventListener('click', async () => { const q = tip.dataset.q; tip.hidden = true; fab.classList.remove('peek-up'); await show(false); ask(q); });
+  setInterval(() => { const sec = section(); if (sec !== lastSec) { lastSec = sec; placePeek(); if (open) { setChips(); if (!busy) { const h = home(); flyTo(h.x, h.y, 500); } } else maybeTip(sec); } }, 1200);
 
   /* ── abrir / cerrar ── */
   async function ensureModel() {
@@ -183,15 +375,16 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
   }
   async function show(greet) {
     if (open) return; open = true; ls.open = true; store(); fab.classList.add('on'); fab.setAttribute('aria-label', 'Nexus Pixel está activo');
-    const s = AV(), pk = peekSpot(); place(pk.x - s.w / 2, AH() + 4); av.hidden = false; fab.classList.add('out'); // sale desde donde se estaba asomando
+    const s = AV(), pk = peekSpot(); place(pk.x - s.w / 2, pk.y + 30); av.hidden = false; fab.classList.add('out'); // sale desde donde se estaba asomando
     try { await ensureModel(); } catch { av.hidden = true; open = false; fab.classList.remove('on', 'out'); try { window.CCT_bot && window.CCT_bot.toast('No se pudo cargar a Nexus Pixel. Revisa tu conexión.'); } catch {} return; }
     mood('excited', 'fly'); const h = home(); await flyTo(h.x, h.y, greet ? 1000 : 500);
-    if (greet) { mood('happy', 'wave'); say(`¡Hola${CFG().nombre ? ', ' + CFG().nombre : ''}! Soy Nexus Pixel. Pídeme que te dibuje el canal, el rango, soportes y resistencias… o pregúntame lo que quieras de ${H() ? H().symbol() : 'tu gráfico'}.`); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2400); }
+    setChips(); const sec = section(), G = {newsView: 'Te puedo resumir las noticias o decirte qué mueve al mercado.', screenerView: 'Te digo cuál tiene la mejor entrada, las mejores LONG o SHORT y cuál tiene más confluencias.', alertsView: 'Dime qué alerta quieres, por ejemplo «avísame si BTC pasa 70 mil», y yo la creo.', lensView: 'Te explico qué llenar y dónde sacar tus datos de BingX.', botLabView: 'Armemos juntos un bot o te doy consejos para mejorar los tuyos.', watchView: 'Te digo cuál se mueve más o te enseño dónde está cada cosa.', aiView: 'Te ayudo en toda la app: pregúntame dónde está algo o qué puedo hacer en cada sección.', settingsView: 'Pregúntame dónde se configura cualquier cosa.'};
+    if (greet) { mood('happy', 'wave'); say(`¡Hola${CFG().nombre ? ', ' + CFG().nombre : ''}! Soy Nexus Pixel. ${G[sec] && !(H() && H().desktop()) ? G[sec] : 'Pídeme que te dibuje el canal, el rango, soportes y resistencias… o pregúntame lo que quieras de ' + (H() ? H().symbol() : 'tu gráfico') + '.' + (G[sec] && H() && H().desktop() ? ' ' + G[sec] : '')}`); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2400); }
     else { mood('neutral', 'idle'); say('Aquí sigo. ¿Qué te dibujo?', {instant: true}); }
     lastAct = Date.now();
   }
   async function hide() {
-    if (!open) return; stopMic(); open = false; ls.open = false; store(); bub.hidden = true; mood('wink', 'wave'); await sleep(REDUCED ? 0 : 450); mood('happy', 'fly'); { const s = AV(), pk = peekSpot(); await flyTo(pk.x - s.w / 2, AH() - s.h * .35, 600); await flyTo(pk.x - s.w / 2, AH() + 6, 260); }
+    if (!open) return; stopMic(); open = false; ls.open = false; store(); bub.hidden = true; mood('wink', 'wave'); await sleep(REDUCED ? 0 : 450); mood('happy', 'fly'); { const s = AV(), pk = peekSpot(); await flyTo(pk.x - s.w / 2, pk.y - s.h * .6, 600); await flyTo(pk.x - s.w / 2, pk.y + 20, 260); }
     av.hidden = true; fab.classList.remove('on', 'out'); fab.setAttribute('aria-label', 'Abrir a Nexus Pixel'); if (M) M.pause(true);
   }
   fab.addEventListener('click', () => { if (open) { if (bub.hidden) { bub.hidden = false; placeBubble(); input.focus({preventScroll: true}); } else hide(); } else show(true); });
@@ -225,19 +418,20 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
   const hd = bub.querySelector('.px-hd'); let mv = null;
   hd.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; e.stopPropagation(); mv = {x: e.clientX, y: e.clientY, px: pos.x, py: pos.y}; hd.setPointerCapture(e.pointerId); });
   hd.addEventListener('pointermove', e => { if (!mv) return; const s = AV(); place(clamp(mv.px + e.clientX - mv.x, 0, AW() - s.w), clamp(mv.py + e.clientY - mv.y, 0, AH() - s.h)); });
-  const endMv = () => { if (!mv) return; mv = null; const s = AV(); ls.home = {rx: AW() - pos.x - s.w, by: AH() - pos.y - s.h}; store(); };
+  const endMv = () => { if (!mv) return; mv = null; const s = AV(); ls.home2 = {rx: AW() - pos.x - s.w, by: AH() - pos.y - s.h}; store(); };
   hd.addEventListener('pointerup', endMv); hd.addEventListener('pointercancel', endMv);
   for (const el of [av, bub, fab]) for (const ev of ['pointerdown', 'wheel', 'touchstart', 'contextmenu']) el.addEventListener(ev, e => e.stopPropagation(), {passive: ev !== 'contextmenu'}); // tocar al avatar no mueve el gráfico
 
   /* ── descanso, visibilidad y tamaño ── */
   function wake() { lastAct = Date.now(); if (M && M.expr === 'sleep') mood('surprised', 'idle'), setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 900); }
   setInterval(() => {
-    if (!M || !open) return; const vis = !document.hidden && (!H() || H().onChart()) && area.offsetWidth > 0; M.pause(!vis);
+    if (!M || !open) return; const vis = !document.hidden; M.pause(!vis);
     if (vis && !busy && Date.now() - lastAct > 90000 && M.expr !== 'sleep') mood('sleep', 'idle');
   }, 1000);
   addEventListener('resize', () => { if (!open || busy) return; const h = home(); place(h.x, h.y); });
-  if (window.ResizeObserver) new ResizeObserver(() => { if (open && !busy && !mv) { const h = home(); place(h.x, h.y); } }).observe(area);
-  if (ls.open) setTimeout(() => { if (H() && H().onChart() && area.offsetWidth) show(false); else { const t = setInterval(() => { if (H() && H().onChart() && area.offsetWidth) { clearInterval(t); show(false); } }, 1500); } }, 1800);
+  if (window.ResizeObserver) { const ro = new ResizeObserver(() => { placePeek(); if (open && !busy && !mv) { const h = home(); place(h.x, h.y); } }); ro.observe(area); ro.observe(layer); }
+  addEventListener('resize', placePeek); setTimeout(placePeek, 300);
+  if (ls.open) setTimeout(() => show(false), 1800);
   addEventListener('cct-pixel-cfg', () => { try { if (M) M.setColor(CFG().color || 'purple'); } catch {} });
   window.NexusPixel = {show, hide, ask, get open() { return open; }};
 })();
