@@ -773,3 +773,14 @@ body.botlab-wide #botLabView{grid-column:2/4;grid-row:1;z-index:5;background:var
 .light .aiv-pixel .aivp-txt b{color:transparent}
 @media(prefers-reduced-motion:reduce){.aiv-pixel::before,.aivp-glow,.aivp-bot,.aivp-sp{animation:none!important}}
 .aiv-srv{border:1px solid rgba(180,107,255,.35);background:rgba(180,107,255,.08);border-radius:14px;padding:12px;margin:2px 0 12px}.aiv-srv>b{display:block;font-size:13px}.aiv-srv>small{display:block;font-size:11.5px;color:var(--muted);margin:3px 0 8px}.aiv-srv>small.ok{color:#20bf9f}.aiv-srv>small.err{color:#f06b79}
+
+/* Botón de Nexus Pixel más compacto (mismo tamaño que las demás tarjetas de la IA) */
+.aiv-pixel{padding:12px 14px 12px 10px;gap:10px}
+.aivp-bot{flex:0 0 52px;height:48px}.aivp-bot .nph{width:52px;height:48px}
+.aivp-sp.s1{top:0;right:0}.aivp-sp.s3{top:16px;left:-3px}
+.aivp-txt em{font-size:9px;padding:2px 7px;margin-bottom:3px}
+.aiv-pixel .aivp-txt b{font-size:15px;margin-bottom:2px}
+.aiv-pixel .aivp-txt small{font-size:12px;line-height:1.4}
+.aivp-go{margin-top:6px;padding:5px 10px;font-size:11px}
+.aivp-glow{width:120px;height:120px;left:-30px;top:-40px}
+.aiv-pixel>.aivp-bot{flex:0 0 52px!important;width:52px;min-width:0}.aiv-pixel>.aivp-txt{flex:1 1 auto!important;min-width:0}
