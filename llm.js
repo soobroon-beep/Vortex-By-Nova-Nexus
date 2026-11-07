@@ -249,6 +249,8 @@ FORMATO DE RESPUESTA: primero 2-4 líneas en español explicando qué hace y có
     return out;
   }
 
+  // Libera el espacio del modelo de navegador (cientos de MB) que se descargaba antes por defecto, si no lo elegiste tú
+  try { if (typeof caches !== 'undefined' && typeof document !== 'undefined' && !load().webllmOptIn) setTimeout(() => caches.keys().then(ks => ks.filter(k => /^webllm\//.test(k)).forEach(k => caches.delete(k))).catch(() => {}), 4000); } catch {}
   const api = {pickVx, looksBad, serverStatus, serverSetKey, resetCache: () => { freeCache = null; }, LLMError, load, save, chat, freeModels, pickFree, supportsVision, imageMessage, hasImage, stripImages, extractCode, stripCode, applyPatch, friendly, providerLabel, PINE_GUIDE, signalMetrics, WEBLLM_MODELS, FREE_URL};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTLLM = api;
