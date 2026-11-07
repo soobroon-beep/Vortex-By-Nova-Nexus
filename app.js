@@ -4917,7 +4917,7 @@ window.CCT_ai = {
       if (hidden) { view.classList.add('active'); view.style.cssText = css + `;position:fixed!important;left:-10000px!important;top:0!important;width:${Math.max(320, innerWidth)}px!important;height:${Math.max(460, innerHeight - 130)}px!important;visibility:visible!important;pointer-events:none!important;z-index:-1`; }
       currentView = 'chartView'; renderCore();
       if (!cv.width || !cv.height || !cv.getBoundingClientRect().width) return null;
-      const k = Math.min(1, (maxW || 1100) / cv.width), w = Math.round(cv.width * k), h = Math.round(cv.height * k), o = document.createElement('canvas'); o.width = w; o.height = h;
+      const k = Math.min(1, (maxW || 1100) / cv.width, (maxW || 1100) * 1.1 / cv.height), w = Math.round(cv.width * k), h = Math.round(cv.height * k), o = document.createElement('canvas'); o.width = w; o.height = h;
       const g2 = o.getContext('2d'), bg = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#0b0e11'; g2.fillStyle = bg; g2.fillRect(0, 0, w, h); g2.drawImage(cv, 0, 0, w, h);
       return {url: o.toDataURL('image/jpeg', .82), w, h, symbol: symOf(state.symbol), interval: state.interval, at: Date.now()};
     } catch { return null; }

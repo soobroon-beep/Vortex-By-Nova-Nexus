@@ -38,8 +38,9 @@
     return st.calendar;
   }
   async function gather(withMarket, nMarket, noCtx) {
-    const ctx = !noCtx && window.CCT_getAIContext && window.CCT_getAIContext(), news = window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [], cal = await loadCalendar();
-    let market = []; if (withMarket && window.CCT_getMarketSnapshot) { try { market = await window.CCT_getMarketSnapshot(nMarket); } catch {} }
+    const within = (p, ms, dflt) => Promise.race([p, new Promise(r => setTimeout(() => r(dflt), ms))]); // con mala señal (celular) nada se queda esperando
+    const ctx = !noCtx && window.CCT_getAIContext && window.CCT_getAIContext(), news = window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [], cal = await within(loadCalendar(), 6000, st.calendar);
+    let market = []; if (withMarket && window.CCT_getMarketSnapshot) { try { market = (await within(window.CCT_getMarketSnapshot(nMarket), 8000, [])) || []; } catch {} }
     return {ctx, extra: {news, calendar: cal || [], market, now: Date.now()}};
   }
 
@@ -100,10 +101,11 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
   function home() {
     st.view = 'home';
     root.innerHTML = head('Asistente IA', LLM.providerLabel()) + `<div class="aiv-cards">
+      <button class="aiv-card aiv-pixel" data-act="pixel"><span class="aivp-glow" aria-hidden="true"></span><span class="aivp-bot" aria-hidden="true">${window.NexusPixelHead ? window.NexusPixelHead('v') : ''}<i class="aivp-sp s1"></i><i class="aivp-sp s2"></i><i class="aivp-sp s3"></i></span><span class="aivp-txt"><em>Tu bot amigo</em><b>Nexus Pixel</b><small>Llámalo a tu gráfico: platica contigo, te explica el mercado y te dibuja canales, rangos y soportes en vivo.</small><span class="aivp-go">¡Hola, Pixel! <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg></span></span></button>
       <button class="aiv-card" data-act="chart">${ICONS.chart}<span><b>Analizar gráfico con IA</b><small>Toma una captura de tu gráfico (con indicadores y dibujos), marca soportes y resistencias, y puedes seguir preguntándole.</small></span></button>
       <button class="aiv-card" data-act="brief">${ICONS.brief}<span><b>Briefing del día</b><small>Resumen corto de eventos importantes, noticias, novedades de IA, criptos más sonadas y la opinión de la IA sobre el mercado.</small></span></button>
       <button class="aiv-card" data-act="lab">${ICONS.lab}<span><b>Laboratorio de indicadores IA</b><small>Describe un indicador con tus palabras; la IA lo programa, lo valida y lo prueba en tu gráfico.</small></span></button>
-    </div><p class="aiv-foot">Análisis y briefing: modelos abiertos gratuitos · Laboratorio: modelo en tu navegador · sin clave de Claude. Análisis educativo, no asesoría financiera.</p>`;
+    </div><p class="aiv-foot">Análisis y briefing: modelos abiertos gratuitos · Laboratorio: modelo en tu navegador en PC (en el celular usa el servicio gratuito) · sin clave de Claude. Análisis educativo, no asesoría financiera.</p>`;
   }
 
   /* ───────── 1 · Analizar gráfico ───────── */
@@ -268,6 +270,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     root.innerHTML = head('Ajustes de la IA', 'Proveedor del modelo') + `<div class="aiv-cfg">
       <label>Proveedor<select id="cfProv"><option value="free">Gratis · modelos abiertos (sin clave)</option><option value="compat">Mi servidor / Ollama / servicio con clave gratuita</option><option value="webllm">En mi navegador (WebLLM, experimental)</option></select></label>
       <label>Proveedor del Laboratorio de indicadores (código)<select id="cfLab"><option value="webllm">En mi navegador (WebLLM) — recomendado</option><option value="free">Gratis · modelos abiertos (sin clave)</option><option value="compat">Mi servidor / Ollama</option></select></label>
+      <label>Clave de app de Pollinations (opcional, gratis)<input id="cfPk" value="${esc(c.pkey || '')}" autocomplete="off" spellcheck="false" placeholder="pk_…  (enter.pollinations.ai)"></label><p class="aiv-dim">Si la IA gratuita tarda o no contesta, crea una clave de app <b>pk_</b> gratis en enter.pollinations.ai y pégala aquí: usa su servicio nuevo, más estable. En el celular el Laboratorio usa siempre el servicio gratuito.</p>
       <div id="cfCompat"><label>URL compatible con OpenAI<input id="cfUrl" value="${esc(c.compat.url)}" autocomplete="off" spellcheck="false" placeholder="http://localhost:11434/v1"></label>
         <label>Modelo<input id="cfModel" value="${esc(c.compat.model)}" autocomplete="off" spellcheck="false" placeholder="qwen2.5vl:7b"></label>
         <label>Clave (opcional)<input id="cfKey" type="password" value="${esc(c.compat.key)}" autocomplete="off" placeholder="solo si el servicio la pide"></label>
@@ -278,7 +281,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     $('#cfProv').value = c.provider; $('#cfLab').value = c.lab; const sync = () => { const p = $('#cfProv').value; $('#cfCompat').hidden = p !== 'compat' && $('#cfLab').value !== 'compat'; $('#cfNote').textContent = p === 'free' ? 'Privacidad: tu pregunta, los datos del gráfico y la captura viajan al servicio gratuito de terceros (Pollinations), que usa modelos abiertos. No incluyas nada que no quieras compartir. Es un servicio comunitario: puede ir lento o saturarse.' : p === 'webllm' ? 'El modelo se descarga una vez (cientos de MB) y corre en tu equipo con WebGPU: nada sale de tu navegador. Necesita Chrome/Edge de escritorio reciente y buena memoria gráfica. Es experimental.' : 'Los datos van solo a la URL que indiques (si es tu computadora, no salen de ella). La clave se guarda solo en este navegador.'; };
     $('#cfProv').onchange = sync; $('#cfLab').onchange = sync; sync();
   }
-  function readCfg() { return {provider: $('#cfProv').value, lab: $('#cfLab').value, compat: {url: $('#cfUrl').value.trim(), key: $('#cfKey').value.trim(), model: $('#cfModel').value.trim(), vision: $('#cfVis').checked}}; }
+  function readCfg() { return {provider: $('#cfProv').value, lab: $('#cfLab').value, pkey: ($('#cfPk') ? $('#cfPk').value.trim() : ''), compat: {url: $('#cfUrl').value.trim(), key: $('#cfKey').value.trim(), model: $('#cfModel').value.trim(), vision: $('#cfVis').checked}}; }
 
   /* ───────── Eventos ───────── */
   function onClick(e) {
@@ -289,6 +292,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
       if (t.dataset.sv === 'tog') { A.toggle(id, !x.on); renderSaved(); } else if (t.dataset.sv === 'del') { if (confirm(`¿Eliminar el indicador «${x.name}»?`)) { A.remove(id); if (L.sid === id) { L.sid = null; L.code = ''; L.res = null; } renderTail(); renderSaved(); } }
       else { L.code = x.code; L.sid = id; L.res = null; L.req = ''; L.hist = []; addMsg('bot', md(`Editando **${x.name}**. Dime qué quieres cambiar.`)); renderTail(); const i = $('#labIn'); if (i) i.focus(); } return; }
     const a = t.dataset.act, L = st.lab, A = window.CCT_ai;
+    if (a === 'pixel') { if (window.CCT_switchView) window.CCT_switchView('chartView'); setTimeout(() => { if (window.NexusPixel) window.NexusPixel.show(true); }, 350); return; }
     if (a === 'home') home(); else if (a === 'chart') chartView(); else if (a === 'brief') briefView(); else if (a === 'lab') labView(); else if (a === 'cfg') cfgView();
     else if (a === 'reshot') analyzeChart(); else if (a === 'rebrief') makeBrief();
     else if (a === 'try') { if (L.sid && A.list().some(x => x.id === L.sid)) { A.toggle(L.sid, true); } else if (good(L.res)) L.sid = A.tryOnChart(L.code, 'Indicador IA', L.res); renderTail(); }

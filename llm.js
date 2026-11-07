@@ -7,6 +7,7 @@
 (function (root) {
   'use strict';
   const KEY = 'cct_llm_v1', FREE_URL = 'https://text.pollinations.ai/openai', FREE_MODELS = 'https://text.pollinations.ai/models';
+  const GEN_URL = 'https://gen.pollinations.ai/v1/chat/completions', GEN_MODELS = 'https://gen.pollinations.ai/text/models'; // API nueva de Pollinations (con clave de app pk_ gratuita)
   const WEBLLM_CDN = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.79/+esm';
   const WEBLLM_MODELS = {text: 'Qwen2.5-3B-Instruct-q4f16_1-MLC', code: 'Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC', vision: 'Phi-3.5-vision-instruct-q4f16_1-MLC'};
   const OPEN = /mistral|llama|qwen|deepseek|gemma|phi|glm|gpt-oss|kimi|olmo|nemotron|smol|minimax/i;
@@ -24,7 +25,7 @@
     const c = o.compat || {}, ok = x => ['free', 'compat', 'webllm'].includes(x);
     let provider = ok(o.provider) ? o.provider : DEF.provider, lab = ok(o.lab) ? o.lab : null;
     if (!lab) { lab = provider === 'compat' ? 'compat' : DEF.lab; if (provider === 'webllm') provider = 'free'; } // ajustes antiguos: lo general va por el servicio gratuito y el Laboratorio por el modelo en el navegador
-    return {provider, lab, compat: {url: String(c.url || DEF.compat.url).trim(), key: String(c.key || ''), model: String(c.model || DEF.compat.model).trim(), vision: c.vision !== false}};
+    return {provider, lab, pkey: /^pk_[\w-]{6,}$/.test(String(o.pkey || '').trim()) ? String(o.pkey).trim() : '', compat: {url: String(c.url || DEF.compat.url).trim(), key: String(c.key || ''), model: String(c.model || DEF.compat.model).trim(), vision: c.vision !== false}};
   }
   const save = cfg => lsSet(KEY, JSON.stringify(cfg));
 
@@ -84,10 +85,10 @@
     catch (e) { throw new LLMError(e && e.name === 'AbortError' ? 'Tiempo agotado' : 'Sin conexión', e && e.name === 'AbortError' ? 'abort' : 'network'); }
     finally { clearTimeout(t); }
   }
-  async function readStream(r, onToken) { // SSE de la API compatible con OpenAI
+  async function readStream(r, onToken, onChunk) { // SSE de la API compatible con OpenAI
     const rd = r.body.getReader(), dec = new TextDecoder(); let buf = '', out = '';
     for (;;) {
-      const {done, value} = await rd.read(); if (done) break; buf += dec.decode(value, {stream: true});
+      const {done, value} = await rd.read(); if (done) break; if (onChunk) onChunk(); buf += dec.decode(value, {stream: true});
       let i; while ((i = buf.indexOf('\n')) >= 0) {
         const ln = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!ln.startsWith('data:')) continue; const d = ln.slice(5).trim(); if (d === '[DONE]') continue;
         try { const t = textOf(JSON.parse(d)); if (t) { out += t; onToken(out); } } catch {}
@@ -96,16 +97,24 @@
     return out;
   }
   async function openaiCall(url, key, model, messages, o) {
+    /* Límite total y límite de SILENCIO: antes, si el servidor empezaba a responder y luego se quedaba callado, la app esperaba para siempre
+       (el celular se quedaba «trabado»). Ahora se corta y se prueba otro modelo o se usa el análisis local. */
     const body = {model, messages, temperature: o.temperature == null ? .4 : o.temperature, max_tokens: o.maxTokens || 1600, stream: !!o.onToken};
     const headers = {'content-type': 'application/json'}; if (key) headers.authorization = 'Bearer ' + key;
-    const r = await fetchT(url, {method: 'POST', headers, body: JSON.stringify(body)}, o.timeout, o.signal);
-    if (!r.ok) { let m = ''; try { const j = await r.json(); m = (j.error && (j.error.message || j.error)) || j.message || ''; } catch {} throw new LLMError(String(m || 'Error ' + r.status).slice(0, 200), kindOf(r.status), r.status); }
-    const ct = r.headers.get('content-type') || '';
-    let text = ''; if (o.onToken && /event-stream/i.test(ct) && r.body) text = await readStream(r, o.onToken);
-    else { const raw = await r.text(); try { text = textOf(JSON.parse(raw)); } catch { text = raw; } if (text && o.onToken) o.onToken(text); }
-    text = String(text || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-    if (!text) throw new LLMError('El modelo no devolvió texto.', 'server');
-    return text;
+    const ctl = new AbortController(), kill = () => ctl.abort(); let idle = 0; const total = setTimeout(kill, o.timeout || 60000), bump = () => { clearTimeout(idle); idle = setTimeout(kill, o.idle || 25000); };
+    if (o.signal) { if (o.signal.aborted) ctl.abort(); else o.signal.addEventListener('abort', kill, {once: true}); }
+    const cut = e => e instanceof LLMError ? e : new LLMError(ctl.signal.aborted ? 'Tiempo agotado' : 'Sin conexión', ctl.signal.aborted ? 'abort' : 'network');
+    try {
+      bump(); let r; try { r = await fetch(url, {method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal}); } catch (e) { throw cut(e); }
+      if (!r.ok) { let m = ''; try { const j = await r.json(); m = (j.error && (j.error.message || j.error)) || j.message || ''; } catch {} throw new LLMError(String(m || 'Error ' + r.status).slice(0, 200), kindOf(r.status), r.status); }
+      const ct = r.headers.get('content-type') || ''; bump();
+      let text = '';
+      try { if (o.onToken && /event-stream/i.test(ct) && r.body) text = await readStream(r, o.onToken, bump); else { const raw = await r.text(); try { text = textOf(JSON.parse(raw)); } catch { text = raw; } if (text && o.onToken) o.onToken(text); } }
+      catch (e) { throw cut(e); }
+      text = String(text || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      if (!text) throw new LLMError('El modelo no devolvió texto.', 'server');
+      return text;
+    } finally { clearTimeout(total); clearTimeout(idle); }
   }
 
   /* ───────── Proveedor gratuito (Pollinations) ───────── */
@@ -115,12 +124,21 @@
     try { const r = await fetchT(FREE_MODELS, {}, 6000); if (r.ok) { const j = await r.json(); if (Array.isArray(j) && j.length) { freeCache = {t: Date.now(), list: j}; return j; } } } catch {}
     return freeCache ? freeCache.list : [];
   }
-  async function chatFree(messages, o) {
-    const list = await freeModels(), cand = pickFree(list, {needVision: o.needVision || hasImage(messages), code: o.purpose === 'code'}).slice(0, 4), img = hasImage(messages); let last;
-    for (const m of cand) {
+  async function chatFree(messages, o, cfg) {
+    const pk = cfg && cfg.pkey, url = pk ? GEN_URL : FREE_URL;
+    let list = []; if (pk) { try { const r = await fetchT(GEN_MODELS, {headers: {authorization: 'Bearer ' + pk}}, 6000); if (r.ok) { const j = await r.json(); list = Array.isArray(j) ? j : Array.isArray(j && j.data) ? j.data.map(x => ({name: x.id || x.name, vision: x.vision})) : []; } } catch {} }
+    if (!list.length) list = await freeModels();
+    const img = hasImage(messages), cand = pickFree(list, {needVision: o.needVision || img, code: o.purpose === 'code'}).slice(0, 4), t0 = Date.now(), budget = o.budget || 85000; let last;
+    const left = () => budget - (Date.now() - t0);
+    for (const m of cand) { // cada modelo tiene su tiempo; si uno se cuelga, se prueba el siguiente (antes la app se quedaba esperando)
+      if (left() < 8000 || (o.signal && o.signal.aborted)) break;
       const meta = list.find(x => x && x.name === m), vis = supportsVision(m, meta);
-      try { const text = await openaiCall(FREE_URL, '', m, img && !vis ? stripImages(messages) : messages, o); return {text, model: m, image: img && vis}; }
-      catch (e) { last = e; if (e.kind === 'network' || e.kind === 'abort') throw e; if (e.kind === 'rate') await sleep(2500); }
+      try { const text = await openaiCall(url, pk, m, img && !vis ? stripImages(messages) : messages, Object.assign({}, o, {timeout: Math.min(o.timeout || 45000, left())})); return {text, model: m, image: img && vis}; }
+      catch (e) { last = e; if (e.kind === 'network' && !img) throw e; if (o.signal && o.signal.aborted) throw e; if (e.kind === 'rate') await sleep(2000); }
+    }
+    if (img && left() > 10000) { // la captura pudo ser el problema: un intento más solo con los datos
+      const m = pickFree(list, {code: o.purpose === 'code'})[0];
+      try { const text = await openaiCall(url, pk, m, stripImages(messages), Object.assign({}, o, {timeout: Math.min(40000, left())})); return {text, model: m, image: false}; } catch (e) { last = e; }
     }
     throw last || new LLMError('El servicio gratuito no respondió.', 'server');
   }
@@ -151,10 +169,12 @@
     o = o || {}; const cfg = o.cfg || load();
     let prov = o.purpose === 'code' ? cfg.lab : cfg.provider; // el Laboratorio (código) puede usar otro proveedor que el resto
     if (prov === 'webllm' && !(root.navigator && root.navigator.gpu)) prov = cfg.provider === 'webllm' ? 'free' : cfg.provider; // sin WebGPU no puede correr en el navegador
+    const phone = !!(root.matchMedia && (root.matchMedia('(pointer: coarse)').matches && root.matchMedia('(max-width: 1023px)').matches)); // en el celular el modelo del navegador (GB de descarga) dejaba la IA «trabada»
+    if (prov === 'webllm' && phone) prov = cfg.provider === 'webllm' ? 'free' : cfg.provider;
     try {
       if (prov === 'compat') return await chatCompat(messages, o, cfg);
       if (prov === 'webllm') return await chatWebllm(messages, o);
-      return await chatFree(messages, o);
+      return await chatFree(messages, o, cfg);
     } catch (e) { if (e instanceof LLMError) { e.message = friendly(e) + (e.kind === 'model' || e.kind === 'server' || e.kind === 'other' ? ' (' + String(e.message).slice(0, 120) + ')' : ''); throw e; } throw new LLMError(String(e && e.message || e), 'other'); }
   }
   const providerLabel = cfg => (cfg = cfg || load(), cfg.provider === 'compat' ? 'Servidor · ' + cfg.compat.model : cfg.provider === 'webllm' ? 'En tu navegador' : 'Gratis · modelo abierto');

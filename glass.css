@@ -713,10 +713,6 @@ body.botlab-wide #botLabView{grid-column:2/4;grid-row:1;z-index:5;background:var
 @media(prefers-reduced-motion:reduce){.bd-kpi,.bd-card,.bd-hero,.bd-line,.bd-bar i,.bd-dot{animation:none!important;stroke-dashoffset:0}}
 
 /* ───────── NEXUS PIXEL · avatar flotante del gráfico ───────── */
-.px-fab{position:absolute;z-index:8;right:calc(var(--px-r,74px));bottom:calc(var(--px-b,96px));width:44px;height:44px;border-radius:50%;border:1px solid rgba(180,107,255,.45);background:rgba(16,18,34,.55);-webkit-backdrop-filter:blur(10px) saturate(140%);backdrop-filter:blur(10px) saturate(140%);display:grid;place-items:center;cursor:pointer;padding:0;box-shadow:0 6px 20px rgba(0,0,0,.45),0 0 18px rgba(168,85,247,.35);transition:transform .25s cubic-bezier(.3,1.4,.5,1),opacity .25s,box-shadow .25s;animation:pxFloat 3.2s ease-in-out infinite}
-.px-fab svg{width:30px;height:30px}.px-fab-h{fill:#f1f2fa}.px-fab-v{fill:#06070d}.px-fab-l{fill:#e9dcff;filter:drop-shadow(0 0 2px #b46bff)}.px-fab-r{fill:#b46bff;filter:drop-shadow(0 0 3px #b46bff)}
-.px-fab:hover{transform:scale(1.08);box-shadow:0 8px 24px rgba(0,0,0,.5),0 0 26px rgba(168,85,247,.6)}.px-fab:active{transform:scale(.92)}
-.px-fab.on{opacity:.55;animation:none}
 .px-ink{position:absolute;inset:0;width:100%;height:100%;z-index:7;pointer-events:none;transition:opacity .25s}.px-ink.fade{opacity:0}
 .px-av{position:absolute;left:0;top:0;z-index:9;will-change:transform;touch-action:none;filter:drop-shadow(0 10px 18px rgba(0,0,0,.45))}
 .px-cv{width:100%;height:100%;display:block;cursor:grab}.px-cv:active{cursor:grabbing}
@@ -733,10 +729,46 @@ body.botlab-wide #botLabView{grid-column:2/4;grid-row:1;z-index:5;background:var
 .px-in{display:flex;gap:6px}.px-in input{flex:1;min-width:0;height:34px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:var(--text);padding:0 10px;font-size:13px;outline:0}.px-in input:focus{border-color:#b46bff}
 .px-in button{width:34px;height:34px;border:0;border-radius:10px;background:linear-gradient(135deg,#8b5cf6,#b46bff);color:#fff;display:grid;place-items:center;cursor:pointer}
 .light .px-bub{background:rgba(255,255,255,.82);border-color:rgba(124,58,237,.3)}.light .px-chips button{color:#5b21b6}.light .px-in input{background:#f4f2fb}
-@media(max-width:1023px){.px-fab{--px-r:58px;--px-b:48px;width:40px;height:40px}.px-msg{font-size:12.5px;max-height:110px}}
-@keyframes pxFloat{0%,100%{translate:0 0}50%{translate:0 -4px}}
 @keyframes pxSpin{to{transform:rotate(360deg)}}
 @keyframes pxPop{from{opacity:0;scale:.85}to{opacity:1;scale:1}}
 @keyframes pxBlink{50%{opacity:.25}}
 @keyframes pxDots{to{background-position:21px 0}}
-@media(prefers-reduced-motion:reduce){.px-fab,.px-bub{animation:none}}
+/* Nexus Pixel escondido: solo se asoman media cabeza y las antenas desde el borde de abajo del gráfico */
+.px-peek{position:absolute;z-index:8;right:var(--pk-r,132px);bottom:0;width:62px;height:44px;padding:0;border:0;background:none;cursor:pointer;overflow:hidden;-webkit-tap-highlight-color:transparent;transition:opacity .25s}
+.px-peek-in{position:absolute;left:0;right:0;top:4px;display:block;transform:translateY(0);transition:transform .45s cubic-bezier(.3,1.5,.5,1);animation:pkBob 3.4s ease-in-out infinite}
+.px-peek .nph{width:62px;height:57px;display:block;filter:drop-shadow(0 -2px 8px rgba(168,85,247,.45))}
+.px-peek:hover .px-peek-in,.px-peek:focus-visible .px-peek-in{transform:translateY(-6px)}
+.px-peek:active .px-peek-in{transform:translateY(-10px) scale(1.05)}
+.px-peek.out .px-peek-in{transform:translateY(60px);animation:none}
+.px-peek.out{pointer-events:none}
+.nph-ant{transform-box:fill-box}.nph-ant.l{transform-origin:100% 100%;animation:pkAntL 2.6s ease-in-out infinite}.nph-ant.r{transform-origin:0 100%;animation:pkAntR 2.6s ease-in-out infinite .3s}
+.nph-eyes{transform-box:fill-box;transform-origin:center;animation:pkBlink 4.2s infinite,pkLook 9s ease-in-out infinite}
+@keyframes pkBob{0%,100%{translate:0 3px}50%{translate:0 0}}
+@keyframes pkAntL{0%,100%{rotate:0deg}50%{rotate:-9deg}}
+@keyframes pkAntR{0%,100%{rotate:0deg}50%{rotate:9deg}}
+@keyframes pkBlink{0%,92%,100%{scale:1 1}95%{scale:1 .1}}
+@keyframes pkLook{0%,30%,100%{translate:0 0}38%,52%{translate:-7px 0}60%,75%{translate:7px 0}}
+@media(max-width:1023px){.px-peek{--pk-r:70px;width:54px;height:38px}.px-peek .nph{width:54px;height:50px}.px-msg{font-size:12.5px;max-height:110px}}
+@media(prefers-reduced-motion:reduce){.px-peek-in,.nph-ant,.nph-eyes{animation:none!important}}
+
+/* Botón de Nexus Pixel en la IA: tu bot amigo (llamativo y divertido) */
+.aiv-pixel{position:relative;overflow:hidden;align-items:center;gap:12px;padding:16px 16px 16px 12px;border:0!important;background:linear-gradient(135deg,#2a1260 0%,#1a1446 45%,#0d2a4a 100%)!important;box-shadow:0 10px 30px rgba(124,58,237,.35),inset 0 0 0 1px rgba(255,255,255,.08)}
+.aiv-pixel::before{content:'';position:absolute;inset:-2px;border-radius:18px;padding:2px;background:conic-gradient(from var(--pxa,0deg),#b46bff,#4cc3ff,#ff6ec7,#ffd36e,#b46bff);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:pxSpinB 5s linear infinite}
+@property --pxa{syntax:'<angle>';inherits:false;initial-value:0deg}
+@keyframes pxSpinB{to{--pxa:360deg}}
+.aivp-glow{position:absolute;width:180px;height:180px;left:-40px;top:-50px;border-radius:50%;background:radial-gradient(circle,rgba(180,107,255,.55),transparent 65%);filter:blur(6px);animation:pxGlowM 6s ease-in-out infinite;pointer-events:none}
+@keyframes pxGlowM{50%{transform:translate(20px,14px) scale(1.15)}}
+.aivp-bot{position:relative;flex:0 0 78px;height:72px;display:grid;place-items:center;animation:pxHop 2.8s ease-in-out infinite}
+.aivp-bot .nph{width:78px;height:72px;filter:drop-shadow(0 6px 14px rgba(0,0,0,.45)) drop-shadow(0 0 10px rgba(180,107,255,.55))}
+@keyframes pxHop{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-6px) rotate(3deg)}}
+.aivp-sp{position:absolute;width:8px;height:8px;background:#fff;clip-path:polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%);animation:pxTw 2.2s ease-in-out infinite}
+.aivp-sp.s1{top:2px;right:2px;background:#ffd36e}.aivp-sp.s2{bottom:6px;left:0;width:6px;height:6px;background:#4cc3ff;animation-delay:.7s}.aivp-sp.s3{top:24px;left:-4px;width:5px;height:5px;background:#ff6ec7;animation-delay:1.3s}
+@keyframes pxTw{0%,100%{opacity:0;transform:scale(.4) rotate(0)}50%{opacity:1;transform:scale(1) rotate(45deg)}}
+.aivp-txt{position:relative;min-width:0;display:flex;flex-direction:column}
+.aivp-txt em{font-style:normal;align-self:flex-start;font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:#1a0b33;background:linear-gradient(90deg,#ffd36e,#ff9ecf);padding:3px 8px;border-radius:10px;margin-bottom:5px}
+.aiv-pixel .aivp-txt b{font-size:18px;letter-spacing:.3px;background:linear-gradient(90deg,#fff,#d8c4ff 60%,#9fe3ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.aiv-pixel .aivp-txt small{color:#cbbff0}
+.aivp-go{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;margin-top:9px;padding:7px 12px;border-radius:20px;font-size:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#d946ef);box-shadow:0 4px 14px rgba(217,70,239,.45);transition:transform .2s}
+.aiv-pixel:hover .aivp-go{transform:translateX(3px)}.aiv-pixel:active{transform:scale(.98)}
+.light .aiv-pixel .aivp-txt b{color:transparent}
+@media(prefers-reduced-motion:reduce){.aiv-pixel::before,.aivp-glow,.aivp-bot,.aivp-sp{animation:none!important}}

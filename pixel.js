@@ -15,9 +15,23 @@
   const sleep = ms => new Promise(r => setTimeout(r, ms)), clamp = (v, a, b) => Math.max(a, Math.min(b, v)), mobile = () => innerWidth < 1024;
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  /* Cabeza de Nexus Pixel en SVG (ligera, sin 3D): se usa asomándose en el gráfico y en el botón de la IA */
+  let hid = 0;
+  function headSVG(mode) {
+    const i = ++hid, face = mode === 'v'
+      ? `<g class="nph-face" filter="url(#npg${i})"><path d="M47 49h7l6 13.5 6-13.5h7l-11 23h-4z" fill="#f3ecff"/><ellipse cx="60" cy="61" rx="23" ry="6.2" transform="rotate(-14 60 61)" fill="none" stroke="#f3ecff" stroke-width="2.2" stroke-dasharray="40 6 60"/><path d="M78 45l1.3 3 3 1.3-3 1.3-1.3 3-1.3-3-3-1.3 3-1.3z" fill="#fff"/></g>`
+      : `<g class="nph-face" filter="url(#npg${i})"><g class="nph-eyes"><rect x="41" y="55" width="11" height="15" rx="5.5" fill="#efe6ff"/><rect x="68" y="55" width="11" height="15" rx="5.5" fill="#efe6ff"/></g></g>`;
+    return `<svg class="nph" viewBox="0 0 120 110" aria-hidden="true"><defs><linearGradient id="nph${i}" x1="0" y1="0" x2=".3" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c9cce3"/></linearGradient><radialGradient id="npv${i}" cx=".35" cy=".25" r=".95"><stop offset="0" stop-color="#2b2f4d"/><stop offset=".55" stop-color="#07080f"/></radialGradient><filter id="npg${i}" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.8" result="b"/><feFlood flood-color="#b46bff"/><feComposite in2="b" operator="in"/><feMerge><feMergeNode/><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+      <g class="nph-ant l"><path d="M40 30L27 5" stroke="url(#nph${i})" stroke-width="8" stroke-linecap="round"/><path d="M36 22L29 9" stroke="#b46bff" stroke-width="2.4" stroke-linecap="round"/></g><g class="nph-ant r"><path d="M80 30L93 5" stroke="url(#nph${i})" stroke-width="8" stroke-linecap="round"/><path d="M84 22L91 9" stroke="#b46bff" stroke-width="2.4" stroke-linecap="round"/></g>
+      <ellipse cx="60" cy="63" rx="47" ry="43" fill="url(#nph${i})"/><circle cx="13" cy="66" r="11" fill="#eceef8"/><circle cx="13" cy="66" r="7" fill="#1b1e38" stroke="#b46bff" stroke-width="2.6"/><circle cx="107" cy="66" r="11" fill="#eceef8"/><circle cx="107" cy="66" r="7" fill="#1b1e38" stroke="#b46bff" stroke-width="2.6"/>
+      <rect x="22" y="40" width="76" height="48" rx="24" fill="url(#npv${i})"/><ellipse cx="42" cy="47" rx="11" ry="3.6" fill="#fff" opacity=".18"/>${face}</svg>`;
+  }
+  window.NexusPixelHead = headSVG;
+  document.querySelectorAll('.aivp-bot').forEach(el => { if (!el.querySelector('.nph')) el.insertAdjacentHTML('afterbegin', headSVG('v')); });
+
   /* ── DOM ── */
-  const fab = document.createElement('button'); fab.type = 'button'; fab.className = 'px-fab'; fab.title = 'Nexus Pixel · tu avatar de trading'; fab.setAttribute('aria-label', 'Abrir a Nexus Pixel');
-  fab.innerHTML = `<svg viewBox="0 0 40 40" aria-hidden="true"><path class="px-fab-h" d="M20 5c8.6 0 14.5 5.6 14.5 13.6 0 7.4-5.6 12.4-14.5 12.4S5.5 26 5.5 18.6C5.5 10.6 11.4 5 20 5z"/><path class="px-fab-v" d="M10 13.5c3-3.2 17-3.2 20 0 1.8 2 1.8 7.4 0 9.4-3 3-17 3-20 0-1.8-2-1.8-7.4 0-9.4z"/><path class="px-fab-l" d="M14.6 14.2h2.4l3 6.4 3-6.4h2.4l-4.8 9.4h-1.2z"/><circle class="px-fab-r" cx="5.6" cy="18.5" r="2.6"/><circle class="px-fab-r" cx="34.4" cy="18.5" r="2.6"/></svg>`;
+  const fab = document.createElement('button'); fab.type = 'button'; fab.className = 'px-peek'; fab.title = 'Nexus Pixel · tócalo para que salga'; fab.setAttribute('aria-label', 'Llamar a Nexus Pixel');
+  fab.innerHTML = `<span class="px-peek-in">${headSVG('eyes')}</span>`; // escondido: solo se asoman media cabeza y las antenas
   const ink = document.createElement('canvas'); ink.className = 'px-ink'; ink.setAttribute('aria-hidden', 'true');
   const av = document.createElement('div'); av.className = 'px-av'; av.hidden = true; av.innerHTML = '<canvas class="px-cv" aria-label="Nexus Pixel: arrástralo de lado a lado para girarlo; tócalo para que salude"></canvas><span class="px-spin" aria-hidden="true"></span>';
   const bub = document.createElement('div'); bub.className = 'px-bub'; bub.hidden = true; bub.setAttribute('role', 'dialog'); bub.setAttribute('aria-label', 'Nexus Pixel');
@@ -37,6 +51,7 @@
     const h = ls.home; if (h && Number.isFinite(h.rx) && Number.isFinite(h.by)) return {x: clamp(AW() - h.rx - s.w, 0, AW() - s.w), y: clamp(AH() - h.by - s.h, 0, AH() - s.h)};
     return {x: clamp(right - s.w - 6, 0, AW() - s.w), y: clamp(bottom - s.h - (mobile() ? 10 : 18), 0, AH() - s.h)};
   }
+  function peekSpot() { const r = fab.getBoundingClientRect(), a = area.getBoundingClientRect(); return r.width ? {x: r.left - a.left + r.width / 2, y: r.top - a.top} : {x: AW() - 90, y: AH() - 40}; }
   function place(x, y) { const s = AV(); pos = {x, y}; av.style.width = s.w + 'px'; av.style.height = s.h + 'px'; av.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0)`; if (!bub.hidden) placeBubble(); }
   function placeBubble() { // a la izquierda del robot; si no cabe, a la derecha; si tampoco, arriba (o abajo)
     const s = AV(), bw = Math.min(mobile() ? 260 : 300, AW() - 16); bub.style.width = bw + 'px'; const bh = bub.offsetHeight || 180;
@@ -157,16 +172,16 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
   }
   async function show(greet) {
     if (open) return; open = true; ls.open = true; store(); fab.classList.add('on'); fab.setAttribute('aria-label', 'Nexus Pixel está activo');
-    const s = AV(); place(AW() + 10, home().y - 30); av.hidden = false;
-    try { await ensureModel(); } catch { av.hidden = true; open = false; fab.classList.remove('on'); try { window.CCT_bot && window.CCT_bot.toast('No se pudo cargar a Nexus Pixel. Revisa tu conexión.'); } catch {} return; }
-    mood('happy', 'fly'); const h = home(); await flyTo(h.x, h.y, greet ? 1000 : 500);
+    const s = AV(), pk = peekSpot(); place(pk.x - s.w / 2, AH() + 4); av.hidden = false; fab.classList.add('out'); // sale desde donde se estaba asomando
+    try { await ensureModel(); } catch { av.hidden = true; open = false; fab.classList.remove('on', 'out'); try { window.CCT_bot && window.CCT_bot.toast('No se pudo cargar a Nexus Pixel. Revisa tu conexión.'); } catch {} return; }
+    mood('excited', 'fly'); const h = home(); await flyTo(h.x, h.y, greet ? 1000 : 500);
     if (greet) { mood('happy', 'wave'); say(`¡Hola! Soy Nexus Pixel. Pídeme que te dibuje el canal, el rango, soportes y resistencias… o pregúntame lo que quieras de ${H() ? H().symbol() : 'tu gráfico'}.`); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2400); }
     else { mood('neutral', 'idle'); say('Aquí sigo. ¿Qué te dibujo?', {instant: true}); }
     lastAct = Date.now();
   }
   async function hide() {
-    if (!open) return; open = false; ls.open = false; store(); bub.hidden = true; mood('wink', 'wave'); await sleep(REDUCED ? 0 : 450); mood('happy', 'fly'); await flyTo(AW() + 20, pos.y - 40, 650);
-    av.hidden = true; fab.classList.remove('on'); fab.setAttribute('aria-label', 'Abrir a Nexus Pixel'); if (M) M.pause(true);
+    if (!open) return; open = false; ls.open = false; store(); bub.hidden = true; mood('wink', 'wave'); await sleep(REDUCED ? 0 : 450); mood('happy', 'fly'); { const s = AV(), pk = peekSpot(); await flyTo(pk.x - s.w / 2, AH() - s.h * .35, 600); await flyTo(pk.x - s.w / 2, AH() + 6, 260); }
+    av.hidden = true; fab.classList.remove('on', 'out'); fab.setAttribute('aria-label', 'Abrir a Nexus Pixel'); if (M) M.pause(true);
   }
   fab.addEventListener('click', () => { if (open) { if (bub.hidden) { bub.hidden = false; placeBubble(); input.focus({preventScroll: true}); } else hide(); } else show(true); });
   bub.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (q) { ask(q.dataset.q); return; } if (e.target.closest('[data-px=close]')) hide(); });
