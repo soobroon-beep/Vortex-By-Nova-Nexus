@@ -152,7 +152,7 @@ test('/ai: reenvía a Pollinations con la clave de la app, sin que el usuario po
     assert.strictEqual((await (await call('/ai/status')).json()).ready, true);
     const r = await call('/ai', {model: 'openai', messages: [{role: 'user', content: 'hola'}], max_tokens: 99999});
     assert.strictEqual(r.status, 200); assert.strictEqual((await r.json()).choices[0].message.content, 'hola');
-    const s = seen.find(x => /gen\.pollinations\.ai\/v1\/chat/.test(x.url)); assert.match(s.auth, /^Bearer sk_/); assert.strictEqual(JSON.parse(s.body).max_tokens, 1800);
+    const s = seen.find(x => /gen\.pollinations\.ai\/v1\/chat/.test(x.url)); assert.match(s.auth, /^Bearer sk_/); assert.strictEqual(JSON.parse(s.body).max_tokens, 4000); // tope del servidor (subido para que el Laboratorio no corte el código)
     assert.strictEqual((await call('/ai', {messages: []}, 'https://evil.example')).status, 403);
   } finally { globalThis.fetch = realFetch; }
 });

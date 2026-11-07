@@ -101,3 +101,31 @@ test('si un modelo contesta como «guardián» (Safety: Safe) se prueba el sigui
     const r = await L.chat([{role: 'user', content: 'briefing'}], {cfg: {provider: 'free', compat: {}}}); assert.equal(r.text, 'Hola, este es el briefing');
   } finally { delete global.document; }
 });
+
+/* IA dedicada por tarea (Analizar gráfico / Laboratorio). Nexus Pixel («text») no debe cambiar. */
+const withDoc = async fn => { global.document = {}; try { return await fn(); } finally { delete global.document; } };
+test('Laboratorio (code): usa su propia IA (gpt-5.4-mini) directo en Pollinations', () => withDoc(async () => {
+  const calls = mockFetch(() => mkRes(reply('ok\n```pine\n//@version=5\nindicator("x")\nplot(close)\n```')));
+  const r = await L.chat([{role: 'user', content: 'haz un indicador'}], {purpose: 'code', cfg: {provider: 'free', lab: 'free', compat: {}}});
+  assert.equal(calls[0].body.model, 'gpt-5.4-mini'); assert.match(calls[0].url, /gen\.pollinations\.ai/); assert.match(r.model, /gpt-5\.4-mini/);
+}));
+test('Tarea: un aviso de «créditos insuficientes» no se toma como respuesta; pasa a la siguiente IA', () => withDoc(async () => {
+  const calls = mockFetch((u, o, n) => n === 1 ? mkRes(reply("The account behind this API key doesn't have enough credits. This model needs paid Pollen. Please top up")) : mkRes(reply('análisis real')));
+  const r = await L.chat([{role: 'user', content: 'analiza'}], {purpose: 'chart', cfg: {provider: 'free', lab: 'free', compat: {}}});
+  assert.equal(r.text, 'análisis real'); assert.notEqual(calls[0].body.model, calls[1].body.model);
+}));
+test('Tarea: si Pollinations directo falla por red, usa tu servidor VORTEX con el mismo modelo', () => withDoc(async () => {
+  const calls = mockFetch((u) => { if (/pollinations/.test(u)) throw new TypeError('net'); return mkRes(reply('desde el servidor')); });
+  const r = await L.chat([{role: 'user', content: 'analiza'}], {purpose: 'chart', cfg: {provider: 'free', lab: 'free', compat: {}}});
+  assert.equal(r.text, 'desde el servidor'); assert.match(calls[1].url, /vortex-push/); assert.equal(calls[0].body.model, calls[1].body.model);
+}));
+test('Análisis con captura: modelo con visión recibe la imagen', () => withDoc(async () => {
+  const calls = mockFetch(() => mkRes(reply('veo el gráfico')));
+  const r = await L.chat([L.imageMessage('analiza', 'data:image/jpeg;base64,AAA')], {purpose: 'chart', cfg: {provider: 'free', lab: 'free', compat: {}}});
+  assert.equal(r.image, true); assert.ok(Array.isArray(calls[0].body.messages[0].content));
+}));
+test('Nexus Pixel (purpose text) NO usa la IA nueva: sigue yendo primero a tu servidor VORTEX', () => withDoc(async () => {
+  const calls = mockFetch((u) => /models/.test(u) ? mkRes([{name: 'openai'}]) : mkRes(reply('hola Payi')));
+  const r = await L.chat([{role: 'user', content: 'hola'}], {purpose: 'text', cfg: {provider: 'free', lab: 'free', compat: {}}});
+  assert.equal(r.text, 'hola Payi'); const post = calls.find(c => c.body); assert.match(post.url, /vortex-push.*\/ai$/); assert.equal(post.body.model, 'openai'); assert.ok(!calls.some(c => /gen\.pollinations/.test(c.url)));
+}));

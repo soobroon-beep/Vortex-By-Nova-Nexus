@@ -57,6 +57,7 @@ FORMATO (máximo ~260 palabras, viñetas cortas): ### Niveles clave (soportes y 
 ### Mi lectura del mercado (OBLIGATORIA: 2-3 frases con tu opinión como analista tras leer todo lo anterior: si es más probable que el mercado siga bajando, lateralice o suba, y por qué; usa lenguaje de probabilidad, nunca certezas)
 ### Qué vigilar hoy (1-2 líneas de cautela y horarios)
 Cierra con «Análisis educativo, no asesoría financiera.»`;
+  const NOVA_RE = /nova\s*nexus|novanexus|cripto\s*chaman|criptochaman/i; // nombre de tu indicador Nova Nexus (faltaba: el análisis tronaba con scripts Pine en el gráfico)
   function userData(ctx) { // solo lo que el usuario realmente tiene en el gráfico (sin EMA/RSI/MACD calculados por la app)
     const c = ctx.candles, r = x => x == null ? null : +(+x).toPrecision(7), hi = Math.max(...c.slice(-120).map(k => k.h)), lo = Math.min(...c.slice(-120).map(k => k.l));
     const novaOn = (ctx.pine || []).some(p => NOVA_RE.test(p.name)) || (ctx.active || []).some(k => /^nn|nova/i.test(k));
@@ -105,7 +106,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
       <button class="aiv-card" data-act="chart">${ICONS.chart}<span><b>Analizar gráfico con IA</b><small>Toma una captura de tu gráfico (con indicadores y dibujos), marca soportes y resistencias, y puedes seguir preguntándole.</small></span></button>
       <button class="aiv-card" data-act="brief">${ICONS.brief}<span><b>Briefing del día</b><small>Resumen corto de eventos importantes, noticias, novedades de IA, criptos más sonadas y la opinión de la IA sobre el mercado.</small></span></button>
       <button class="aiv-card" data-act="lab">${ICONS.lab}<span><b>Laboratorio de indicadores IA</b><small>Describe un indicador con tus palabras; la IA lo programa, lo valida y lo prueba en tu gráfico.</small></span></button>
-    </div><p class="aiv-foot">Análisis y briefing: IA de tu servidor VORTEX (Pollinations) · Laboratorio: modelo en tu navegador en PC (en el celular usa el servicio gratuito) · sin clave de Claude. Análisis educativo, no asesoría financiera.</p>`;
+    </div><p class="aiv-foot">Cada herramienta usa su propia IA gratuita (Pollinations): Análisis → GPT-5.4 nano con visión · Laboratorio → GPT-5.4 mini para código · Nexus Pixel → la suya de siempre. Si una no responde, pasa sola a otra. Análisis educativo, no asesoría financiera.</p>`;
   }
 
   /* ───────── 1 · Analizar gráfico ───────── */
@@ -120,28 +121,29 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     if (st.busy) return; const g = await gather(false), ctx = g.ctx;
     if (!ctx) { bubble('bot', md('Aún no hay un gráfico con velas cargadas. Abre la pestaña **Gráfico**, espera a que cargue y vuelve aquí.')); return; }
     st.chart.hist = []; $('#aivLog').innerHTML = ''; setBusy(true);
-    const cap = window.CCT_ai && window.CCT_ai.capture(1100); st.chart.shot = cap;
+    let cap = null; try { cap = window.CCT_ai && window.CCT_ai.capture(1100); } catch {} st.chart.shot = cap;
     if (cap) bubble('user', `<img class="aiv-shot" alt="Captura del gráfico" src="${cap.url}"><p>Analiza mi gráfico ${esc(cap.symbol)} · ${esc(cap.interval)}</p>`);
     else bubble('user', `<p>Analiza mi gráfico ${esc(ctx.symbol)} · ${esc(ctx.interval)}</p>`);
-    const prompt = `Resume este gráfico de ${ctx.symbol} en ${ctx.interval} usando solo mis indicadores (captura y datos).\n\nDATOS DE MIS INDICADORES (JSON, actualizados ahora):\n${dataBlock(ctx, g.extra)}`;
-    const msgs = [{role: 'system', content: SYS_CHART}, cap ? LLM.imageMessage(prompt, cap.url) : {role: 'user', content: prompt}];
-    const b = bubble('bot', note('Analizando…'), 'typing');
-    try {
-      const r = await callLLM(msgs, {purpose: 'vision', needVision: !!cap, maxTokens: 1100}, b); b.classList.remove('typing');
+    let prompt, msgs; const b = bubble('bot', note('Analizando…'), 'typing');
+    try { // si algo falla al preparar los datos, se avisa y se libera el botón (antes se quedaba «Analizando…» para siempre)
+    prompt = `Resume este gráfico de ${ctx.symbol} en ${ctx.interval} usando solo mis indicadores (captura y datos).\n\nDATOS DE MIS INDICADORES (JSON, actualizados ahora):\n${dataBlock(ctx, g.extra)}`;
+    msgs = [{role: 'system', content: SYS_CHART}, cap ? LLM.imageMessage(prompt, cap.url) : {role: 'user', content: prompt}];
+      const r = await callLLM(msgs, {purpose: 'chart', needVision: !!cap, maxTokens: 1400}, b); b.classList.remove('typing');
       b.insertAdjacentHTML('beforeend', note(cap ? (r.image ? 'La IA recibió la captura del gráfico junto con los datos.' : 'La captura no se pudo usar en este momento: la IA analizó los datos reales de tus velas e indicadores.') : 'No se pudo tomar la captura (abre la pestaña Gráfico primero): analizó solo los datos numéricos.') + note('Modelo: ' + r.model));
       st.chart.hist.push({role: 'user', content: msgs[1].content, text: prompt, hidden: true}, {role: 'assistant', content: r.text, text: r.text});
-    } catch (e) { b.classList.remove('typing'); b.innerHTML = md('**No pude consultar el modelo de IA.** ' + LLM.friendly(e) + '\n\nTe dejo el análisis local por reglas:\n\n' + AI.answerLocal('Analiza el gráfico', ctx, g.extra)); }
-    setBusy(false);
+    } catch (e) { b.classList.remove('typing'); let loc = ''; try { loc = AI.answerLocal('Analiza el gráfico', ctx, g.extra); } catch {} b.innerHTML = md('**No pude consultar el modelo de IA.** ' + LLM.friendly(e) + (loc ? '\n\nTe dejo el análisis local por reglas:\n\n' + loc : '')); }
+    finally { setBusy(false); }
   }
   async function followUp(q) {
     q = String(q || '').trim(); if (!q || st.busy) return; if (!st.chart.hist.length) { await analyzeChart(); }
     const g = await gather(false), ctx = g.ctx; setBusy(true); bubble('user', `<p>${esc(q)}</p>`);
     if (!ctx) { bubble('bot', md('Abre un gráfico con velas para que pueda responderte con datos reales.')); setBusy(false); return; }
-    const text = `${q}\n\nDATOS ACTUALES DE MIS INDICADORES (JSON):\n${dataBlock(ctx, g.extra)}`, hist = st.chart.hist.slice(-7);
-    const msgs = [{role: 'system', content: SYS_CHART}, ...hist.map(m => ({role: m.role, content: m.content})), {role: 'user', content: text}], b = bubble('bot', note('Pensando…'), 'typing');
-    try { const r = await callLLM(msgs, {needVision: LLM.hasImage(msgs), maxTokens: 600}, b); b.classList.remove('typing'); st.chart.hist.push({role: 'user', content: text, text: q, show: q, hidden: true}, {role: 'assistant', content: r.text, text: r.text}); }
-    catch (e) { b.classList.remove('typing'); b.innerHTML = md('**El modelo no respondió.** ' + LLM.friendly(e) + '\n\nRespuesta local:\n\n' + AI.answerLocal(q, ctx, g.extra)); }
-    setBusy(false);
+    const b = bubble('bot', note('Pensando…'), 'typing'); let text;
+    try { text = `${q}\n\nDATOS ACTUALES DE MIS INDICADORES (JSON):\n${dataBlock(ctx, g.extra)}`; const hist = st.chart.hist.slice(-7);
+      const msgs = [{role: 'system', content: SYS_CHART}, ...hist.map(m => ({role: m.role, content: m.content})), {role: 'user', content: text}];
+      const r = await callLLM(msgs, {purpose: 'chart', needVision: LLM.hasImage(msgs), maxTokens: 800}, b); b.classList.remove('typing'); st.chart.hist.push({role: 'user', content: text, text: q, show: q, hidden: true}, {role: 'assistant', content: r.text, text: r.text}); }
+    catch (e) { b.classList.remove('typing'); let loc = ''; try { loc = AI.answerLocal(q, ctx, g.extra); } catch {} b.innerHTML = md('**El modelo no respondió.** ' + LLM.friendly(e) + (loc ? '\n\nRespuesta local:\n\n' + loc : '')); }
+    finally { setBusy(false); }
   }
 
   /* ───────── 2 · Briefing del día ───────── */
@@ -217,24 +219,33 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     if (L.req) { const r0 = L.req, i0 = img || L.reqImg; L.req = ''; L.reqImg = null; return labGenerate(r0, 'Respuestas del usuario a tus preguntas (respétalas; si dejó algo sin responder o dijo que decidas tú, decide con criterio):\n' + req, true, i0, req, img); }
     addMsg('user', userHtml(req, img)); setBusy(true); const m = addMsg('bot', note('Pensando en qué preguntarte…'), 'typing'); let txt = '';
     const q = 'Indicador pedido: ' + req + (img ? ' (adjunto una imagen de referencia de cómo lo quiero)' : '');
-    try { const r = await LLM.chat([{role: 'system', content: 'Eres un asistente que ayuda a definir indicadores técnicos de trading. El usuario pide un indicador. NO escribas código todavía. Responde en español con una frase breve y luego EXACTAMENTE 5 preguntas numeradas, cortas y específicas para ESE indicador (tipo de visualización: sobre las velas u oscilador en panel aparte; qué debe medir; parámetros o periodos; señales y condiciones; colores o estilo). Si hay imagen, no preguntes lo que ya se ve en ella. Al final de cada pregunta sugiere 2-3 opciones entre paréntesis. Termina con: «Respóndeme en un solo mensaje (puedes contestar solo algunas, o decir "tú decides")».'}, img ? LLM.imageMessage(q, img) : {role: 'user', content: q}], {maxTokens: 380, temperature: .3, timeout: 60000, needVision: !!img}); txt = r.text; } catch {}
+    try { const r = await LLM.chat([{role: 'system', content: 'Eres un asistente que ayuda a definir indicadores técnicos de trading. El usuario pide un indicador. NO escribas código todavía. Responde en español con una frase breve y luego EXACTAMENTE 5 preguntas numeradas, cortas y específicas para ESE indicador (tipo de visualización: sobre las velas u oscilador en panel aparte; qué debe medir; parámetros o periodos; señales y condiciones; colores o estilo). Si hay imagen, no preguntes lo que ya se ve en ella. Al final de cada pregunta sugiere 2-3 opciones entre paréntesis. Termina con: «Respóndeme en un solo mensaje (puedes contestar solo algunas, o decir "tú decides")».'}, img ? LLM.imageMessage(q, img) : {role: 'user', content: q}], {purpose: 'lab', maxTokens: 500, temperature: .3, budget: 45000, needVision: !!img}); txt = r.text; } catch {}
     if ((txt.match(/^\s*\d+[.)]/gm) || []).length < 3) txt = 'Para dejarlo a tu gusto, cuéntame:\n' + DEF_Q.map((x, i) => `${i + 1}. ${x[0]} (${x[1]})`).join('\n') + '\n\nRespóndeme en un solo mensaje (puedes contestar solo algunas, o decir «tú decides»).';
     L.req = req; L.reqImg = img; setMsg(m, md(txt)); setBusy(false); const i = $('#labIn'); if (i) { i.placeholder = 'Responde a las preguntas (o «tú decides»)…'; i.focus(); }
   }
   const EDIT_SYS = '\nMODO EDICIÓN: modifica SOLO lo que pide el usuario; NO reescribas el indicador completo. Responde con 1-2 líneas explicando el cambio y después UNO O MÁS bloques de cambio con este formato EXACTO (copia las líneas a reemplazar tal cual están en el código actual):\n<<<<<<< SEARCH\n(líneas exactas del código actual)\n=======\n(líneas nuevas)\n>>>>>>> REPLACE\nPara AÑADIR algo, busca una línea existente cercana, repítela y agrega lo nuevo debajo. Para QUITAR algo, deja vacío el bloque de reemplazo. El cambio debe notarse: nunca devuelvas el mismo código.';
-  async function labGenerate(req, prefs, showUser, img, shownText, shownImg) {
+  function supportedList() { // funciones que de verdad entiende el motor Pine de tu app (así la IA no inventa funciones que fallan)
+    try { const a = window.CCTPine && window.CCTPine.supported ? window.CCTPine.supported().filter(x => /^(ta|math|str|array|color|input|label|line|box|table|plot|plotshape|plotchar|hline|fill|bgcolor|barcolor|nz|na|fixnan|request\.security)/.test(x) && !/^(strategy|alert|request\.(financial|economic|earnings|dividends|splits))/.test(x)) : []; return a.length ? '\nFUNCIONES DISPONIBLES EN EL MOTOR (usa SOLO estas): ' + a.join(', ') : ''; } catch { return ''; }
+  }
+  async function labGenerate(...args) { // envoltura de seguridad: pase lo que pase, el Laboratorio nunca se queda bloqueado
+    try { return await labGenerateRun(...args); }
+    catch (e) { console.warn('[Laboratorio IA]', e); const m = addMsg('bot', md('**Algo falló al crear el indicador.** ' + esc(String(e && e.message || e)).slice(0, 160) + '\n\nInténtalo otra vez; si se repite, descríbelo con otras palabras.')); m.el.classList.remove('typing'); setBusy(false); renderTail(); }
+  }
+  async function labGenerateRun(req, prefs, showUser, img, shownText, shownImg) {
     req = String(req || '').trim(); if (!req || st.busy) return; const L = st.lab; setBusy(true); L.pending = null; $('#labOut').innerHTML = '';
     if (showUser) addMsg('user', userHtml(shownText || req, shownImg === undefined ? img : shownImg));
     const editing = !!L.code, base = L.code, bb = addMsg('bot', note(editing ? 'Aplicando solo tu cambio…' : 'Diseñando el indicador…'), 'typing');
     const mk = txt => img ? LLM.imageMessage(txt + '\n(Adjunto una imagen de referencia: imítala.)', img) : {role: 'user', content: txt};
     const ask = (editing ? `Código actual:\n\`\`\`pine\n${base}\n\`\`\`\nCambio pedido: ` : 'Quiero este indicador: ') + req + (prefs ? '\n\n' + prefs : '');
-    const sys = LLM.PINE_GUIDE + '\nIMPORTANTE: en tu explicación NO repitas el código; explica en 2-4 líneas qué hace y cómo leerlo, y entrega el código SOLO dentro del bloque ```pine.' + (editing ? EDIT_SYS : '');
+    const sys = LLM.PINE_GUIDE + supportedList() + '\nIMPORTANTE: en tu explicación NO repitas el código; explica en 2-4 líneas qué hace y cómo leerlo, y entrega el código SOLO dentro del bloque ```pine.' + (editing ? EDIT_SYS : '');
     const msgs = [{role: 'system', content: sys}, ...(editing ? [] : L.hist.slice(-4)), mk(ask)];
     let code = '', expl = '', res = null, err = '', mode = editing ? 'patch' : 'full', cur = base, patched = 0, lastR = null;
     const fix = (why) => `${why}\nCódigo actual (con tus cambios hasta ahora):\n\`\`\`pine\n${cur}\n\`\`\`\n` + (mode === 'patch' ? 'Corrígelo con bloques SEARCH/REPLACE.' : 'Devuélvelo corregido y completo en un bloque ```pine.');
     try {
+      const labEnd = Date.now() + 260000; // todo el proceso (crear + corregir) en máximo ~4 minutos
       for (let tries = 0; tries < 4; tries++) {
-        const r = await callLLM(msgs, {purpose: 'code', maxTokens: 2200, temperature: .2, timeout: 180000, render: partial}, tries ? null : bb.el); lastR = r;
+        if (tries && Date.now() > labEnd - 25000) break;
+        const r = await callLLM(msgs, {purpose: 'code', maxTokens: 4000, temperature: .2, budget: Math.max(25000, Math.min(170000, labEnd - Date.now())), render: partial}, tries ? null : bb.el); lastR = r;
         expl = LLM.stripCode(r.text.replace(/<{3,}\s*SEARCH[\s\S]*$/, '')) || expl; msgs.push({role: 'assistant', content: r.text}); code = '';
         if (mode === 'patch') {
           const pr = LLM.applyPatch(cur, r.text);
@@ -249,7 +260,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
         res = await window.CCT_ai.run(code, 'Indicador IA'); cur = code;
         if (good(res)) { err = ''; break; }
         err = (res && res.error && res.error.msg) || unsup(res).map(w => `línea ${w.line}: ${w.msg}`).join('; ') || 'Error desconocido'; bb.el.classList.add('typing'); bb.el.innerHTML = note(`Corrigiendo un error del código (intento ${tries + 1}/4)…`);
-        msgs.push({role: 'user', content: fix(`El código falló en el intérprete de Pine de la app: «${err}»${res && res.error && res.error.line ? ' (línea ' + res.error.line + ')' : ''}. Esas funciones no existen en el intérprete: reemplázalas por cálculos con ta.*, math.* u operaciones básicas.`)});
+        msgs.push({role: 'user', content: fix(`El código falló en el intérprete de Pine de la app: «${err}»${res && res.error && res.error.line ? ' (línea ' + res.error.line + ')' : ''}. Esas funciones no existen en el intérprete: reemplázalas por cálculos con ta.*, math.* u operaciones básicas. Revisa paréntesis y comas, y que cada llamada quede en una sola línea.`)});
       }
     } catch (e) { setMsg(bb, md('**No pude consultar el modelo de IA.** ' + LLM.friendly(e) + '\n\nPuedes cambiar de proveedor en ⚙ e intentarlo otra vez.')); setBusy(false); renderTail(); return; }
     const unchanged = editing && (!code || code === base);

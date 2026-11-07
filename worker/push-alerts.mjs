@@ -157,8 +157,8 @@ async function tick(env, now = Date.now()) {
    La app le pide la IA a /ai y este Worker la reenvía a gen.pollinations.ai (con límite por IP para que nadie abuse). */
 const POLLEN_KEY = 'sk_1XvEYtOmiFixsgMve0FAqQz5ghhy7FFT';
 const AI_KEY_HASH = '2ab4147ae8ba67933529aa916c753628bd1374ba24387f4cfdaabb0a25a9bcb6';
-const AI_URL = 'https://gen.pollinations.ai/v1/chat/completions', AI_MODELS = 'https://gen.pollinations.ai/text/models', AI_MAX_BODY = 1600000, AI_MAX_TOKENS = 1800;
-const AI_MODELS_OK = ['openai', 'openai-fast', 'openai-large', 'mistral', 'gemini', 'gemini-fast', 'deepseek', 'qwen-coder', 'claude-fast', 'grok', 'openai-audio']; // openai-audio: transcribe tu voz (dictado en la PC)
+const AI_URL = 'https://gen.pollinations.ai/v1/chat/completions', AI_MODELS = 'https://gen.pollinations.ai/text/models', AI_MAX_BODY = 1600000, AI_MAX_TOKENS = 4000;
+const AI_MODELS_OK = ['openai', 'openai-fast', 'openai-large', 'mistral', 'gemini', 'gemini-fast', 'deepseek', 'qwen-coder', 'claude-fast', 'grok', 'openai-audio', 'gpt-5.4-mini', 'grok-fast']; // openai-audio: transcribe tu voz (dictado en la PC)
 const sha256 = async t => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))].map(b => b.toString(16).padStart(2, '0')).join('');
 const aiHits = new Map(); // límite por IP (por instancia): evita que alguien gaste tus créditos a lo loco
 function aiAllowed(ip, now = Date.now()) { const h = (aiHits.get(ip) || []).filter(t => now - t < 60000); if (h.length >= 20) return false; h.push(now); aiHits.set(ip, h); if (aiHits.size > 5000) aiHits.clear(); return true; }

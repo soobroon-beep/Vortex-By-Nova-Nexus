@@ -863,6 +863,8 @@ def('ta.dmi', ['diLength', 'adxSmoothing'], (a, c) => {
   const adx = rma(sub1(c.st, 'x'), bar, sum === null ? null : 100 * Math.abs(plus - minus) / (sum === 0 ? 1 : sum), LEN(a[1]));
   return new Tup([plus, minus, adx]);
 });
+/* ta.adx(len, suavizado): atajo que los modelos de IA escriben muy seguido (en Pine real se saca de ta.dmi). Devuelve el ADX de ta.dmi con los mismos cálculos. */
+def('ta.adx', ['diLength', 'adxSmoothing'], (a, c) => { const t = B['ta.dmi'].f([a[0], a[1] === undefined || isna(a[1]) ? a[0] : a[1]], c); return t.a[2]; });
 CONST_DYN['ta.tr'] = (ctx) => trV(ctx, ctx.bar, false);
 CONST_DYN['ta.vwap'] = (ctx, st) => { const c = ctx.candles[ctx.bar]; if (st.bar !== ctx.bar) { const d = Math.floor(c.t / 864e5); if (d !== st.day) { st.day = d; st.pv = 0; st.v = 0; } st.pv += (c.h + c.l + c.c) / 3 * c.v; st.v += c.v; st.bar = ctx.bar; } return st.v ? st.pv / st.v : null; };
 CONST_DYN['ta.obv'] = (ctx, st) => { if (st.bar !== ctx.bar) { const c = ctx.candles[ctx.bar], p = ctx.candles[ctx.bar - 1], ch = p ? c.c - p.c : 0; st.o = (st.o || 0) + (ch > 0 ? c.v : ch < 0 ? -c.v : 0); st.bar = ctx.bar; } return st.o; };

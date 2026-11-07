@@ -272,3 +272,9 @@ test('cajas: se conservan text_halign, text_size y text_valign (columnas del per
   assert.equal(c.th, undefined);
 });
 
+
+test('ta.adx(len) es igual al ADX de ta.dmi (los modelos de IA lo usan mucho)', () => {
+  const P = require('../pine.js'), c = []; let p = 100; for (let i = 0; i < 300; i++) { const o = p; p += Math.sin(i / 7) * 2 + Math.cos(i / 3); c.push({t: i * 6e4, o, h: Math.max(o, p) + 1, l: Math.min(o, p) - 1, c: p, v: 100}); }
+  const r = P.run('//@version=5\nindicator("a")\nplot(ta.adx(14))\n[a, b, x] = ta.dmi(14, 14)\nplot(x)', c);
+  assert.ok(r.ok); assert.deepEqual(r.plots[0].values, r.plots[1].values); assert.ok(Number.isFinite(r.plots[0].values.at(-1)));
+});

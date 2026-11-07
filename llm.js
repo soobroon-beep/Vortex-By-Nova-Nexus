@@ -180,6 +180,47 @@
     }
     throw last || new LLMError('El servidor de IA no respondió.', 'server');
   }
+  /* ───────── IA dedicada por tarea: «Analizar gráfico» y «Laboratorio de indicadores» ─────────
+     Antes las dos usaban la misma IA que Nexus Pixel («openai» por tu servidor) y su lista de respaldo tenía modelos que Pollinations
+     ya cobra («mistral», «gemini», «qwen-coder»): esos contestaban con un aviso de «créditos insuficientes» en vez de la respuesta
+     y la app se quedaba reintentando. Ahora cada tarea tiene su propia cadena de modelos probados (noviembre 2026), cada intento
+     tiene su tiempo máximo y, si uno falla, se pasa al siguiente en segundos. Nexus Pixel NO usa esto (sigue con chatVortex). */
+  const TASKS = {
+    chart: {models: ['openai', 'gpt-5.4-mini', 'grok-fast'], vision: new Set(['openai', 'gpt-5.4-mini', 'grok-fast']), cap: 50000, idle: 30000, budget: 110000},
+    code: {models: ['gpt-5.4-mini', 'grok-fast', 'openai', 'deepseek'], vision: new Set(['gpt-5.4-mini', 'grok-fast', 'openai']), cap: 75000, idle: 40000, budget: 170000}
+  };
+  const taskOf = p => p === 'vision' || p === 'chart' ? 'chart' : p === 'code' || p === 'lab' ? 'code' : null;
+  const noCredit = t => String(t || '').length < 800 && /enough credits|top up|paid pollen|insufficient (balance|credits)|requires? (a )?paid/i.test(t);
+  async function chatTask(messages, o, task) {
+    const T = TASKS[task], img = hasImage(messages), end = Date.now() + (o.budget || T.budget), left = () => end - Date.now(), errs = [];
+    const say = t => { try { o.onProgress && o.onProgress({text: t}); } catch {} };
+    const routes = [[GEN_URL, POLLEN_KEY, ''], [VX + '/ai', '', ' · servidor VORTEX']]; // 1) Pollinations directo con la clave de la app, 2) tu servidor VORTEX
+    const one = async (m, msgs) => {
+      let last;
+      for (const [url, key, tag] of routes) {
+        if (left() < 5000 || (o.signal && o.signal.aborted)) break;
+        try {
+          const text = await openaiCall(url, key, m, msgs, Object.assign({}, o, {timeout: Math.max(5000, Math.min(T.cap, left())), idle: T.idle}));
+          if (looksBad(text) || noCredit(text)) throw new LLMError('El modelo ' + m + ' no está disponible gratis ahora', 'model');
+          return {text, model: m + tag};
+        } catch (e) { last = e; if (o.signal && o.signal.aborted) throw e; if (e.kind === 'model' || e.kind === 'abort') break; } // el modelo no sirve o se tardó: no insistir con él por la otra ruta
+      }
+      throw last || new LLMError('Sin tiempo', 'abort');
+    };
+    let n = 0;
+    for (const m of T.models) {
+      if (left() < 8000 || (o.signal && o.signal.aborted)) break;
+      if (n++) say('Probando otra IA…');
+      const vis = T.vision.has(m);
+      try { const r = await one(m, img && !vis ? stripImages(messages) : messages); return Object.assign(r, {image: img && vis}); }
+      catch (e) { errs.push(e); if (o.signal && o.signal.aborted) throw e; if (e.kind === 'rate') await sleep(1200); }
+    }
+    if (img && left() > 8000) { // la captura pudo ser el problema: un intento más solo con los datos numéricos
+      say('Analizando con los datos de tu gráfico…');
+      try { const r = await one(T.models[0], stripImages(messages)); return Object.assign(r, {image: false}); } catch (e) { errs.push(e); }
+    }
+    throw errs.find(e => e.kind === 'network') || errs[errs.length - 1] || new LLMError('La IA no respondió a tiempo.', 'abort');
+  }
   async function serverStatus() { try { const r = await fetchT(VX + '/ai/status', {}, 7000); return r.ok ? await r.json() : {ready: false}; } catch { return {ready: false, offline: true}; } }
   async function serverSetKey(key) { const r = await fetchT(VX + '/ai/key', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({key})}, 10000); let j = {}; try { j = await r.json(); } catch {} if (!r.ok) throw new LLMError(j.error || 'Error ' + r.status, 'auth', r.status); vxDown = 0; vxModels = null; return j; }
 
@@ -214,7 +255,8 @@
     try {
       if (prov === 'compat') return await chatCompat(messages, o, cfg);
       if (prov === 'webllm') return await chatWebllm(messages, o);
-      if (typeof document !== 'undefined') { // en la app: 1) tu servidor VORTEX, 2) Pollinations directo con la clave de la app, 3) servicio antiguo sin clave
+      if (typeof document !== 'undefined' && taskOf(o.purpose)) return await chatTask(messages, o, taskOf(o.purpose)); // Analizar gráfico y Laboratorio: su propia IA
+      if (typeof document !== 'undefined') { // en la app (Nexus Pixel, briefing…): 1) tu servidor VORTEX, 2) Pollinations directo con la clave de la app, 3) servicio antiguo sin clave
         const end = Date.now() + (o.purpose === 'code' ? 150000 : 75000), oo = Object.assign({}, o, {deadline: end}); // nunca más de ~75 s (2½ min para código) en total
         let lastE; try { return await chatVortex(messages, oo); } catch (e) { lastE = e; if (o.signal && o.signal.aborted) throw e; }
         if (end - Date.now() > 20000) { try { return await chatFree(messages, Object.assign({}, oo, {budget: end - Date.now()}), Object.assign({}, cfg, {pkey: cfg.pkey || POLLEN_KEY})); } catch (e) { lastE = e; if (o.signal && o.signal.aborted) throw e; } }
@@ -230,7 +272,10 @@
   const PINE_GUIDE = `Eres un experto en Pine Script v5. Escribes indicadores para el intérprete propio de VORTEX, que soporta un SUBCONJUNTO de Pine v5.
 REGLAS OBLIGATORIAS:
 - Empieza con //@version=5 y una sola llamada indicator("Nombre corto", overlay=true|false). Nunca uses strategy().
-- Usa solo funciones de Pine v5: ta.* (sma, ema, rma, rsi, macd, stoch, atr, bb, crossover, crossunder, highest, lowest, pivothigh, pivotlow, stdev, change, cum, vwap, supertrend, adx…), math.*, plot, plotshape, plotchar, bgcolor, barcolor, hline, fill, label.new, line.new, box.new, input.int/float/bool/string/color/source, array.*, str.tostring, color.*, nz, na, if/for/while, funciones propias y var.
+- Usa solo funciones de Pine v5: ta.* (sma, ema, rma, wma, hma, rsi, macd, stoch, atr, bb, kc, cci, mfi, crossover, crossunder, cross, highest, lowest, pivothigh, pivotlow, stdev, change, cum, vwap, supertrend, dmi, adx, sar, valuewhen, barssince…), math.*, plot, plotshape, plotchar, bgcolor, barcolor, hline, fill, label.new, line.new, box.new, table.new/table.cell, input.int/float/bool/string/color/source, array.*, str.tostring, color.*, nz, na, if/for/while, funciones propias y var.
+- Firmas exactas: [macdLine, signalLine, hist] = ta.macd(close, 12, 26, 9) · [diPlus, diMinus, adx] = ta.dmi(14, 14) (también vale adx = ta.adx(14)) · [st, dir] = ta.supertrend(3.0, 10) (dir < 0 = alcista) · [mid, up, lo] = ta.bb(close, 20, 2.0) · k = ta.stoch(close, high, low, 14).
+- Cada llamada a una función debe ir COMPLETA en una sola línea (no partas los argumentos en varias líneas). Las tuplas solo con [a, b] = f(...).
+- Dibujos (line.new, label.new, box.new) solo dentro de if barstate.islast o guardados en var y actualizados con line.set_xy1/2, label.set_xy… para no crear miles.
 - NO uses: import, library, request.security con símbolos raros, request.economic/financial/earnings, alert(), strategy.*, ni funciones inventadas. Si no estás seguro de que una función exista, calcula con operaciones básicas.
 - Parámetros editables con input.* (con minval/maxval cuando aplique). Colores con color.new(color.X, transparencia).
 - Señales visuales con plotshape (compra: location.belowbar, venta: location.abovebar). Títulos de plot cortos.
