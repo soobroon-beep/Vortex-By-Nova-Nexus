@@ -86,10 +86,66 @@
   const RUN = {channel, range, sr: (cs, o) => levels(cs, o && o.sr || 3), trend, fib};
   function build(kind, cs, arg, o) { const r = kind === 'hline' ? hline(cs, arg) : RUN[kind] ? RUN[kind](cs, o) : null; return {r, drawings: r ? r.drawings : [], text: describe(kind, r, cs.length ? cs[cs.length - 1].c : 0)}; }
 
+  /* Editar lo que ya está dibujado: «pon el canal en rojo», «la resistencia más gruesa», «soportes punteados», «borra el fibonacci»,
+     «mueve la resistencia a 65000». Así ya no confunde «cambia el color del canal» con «dibuja un canal». */
+  const COLORS = {rojo: '#ef4444', roja: '#ef4444', rojos: '#ef4444', rojas: '#ef4444', verde: '#22c55e', verdes: '#22c55e', azul: '#3b82f6', azules: '#3b82f6', amarillo: '#facc15', amarilla: '#facc15', amarillos: '#facc15', amarillas: '#facc15', naranja: '#f97316', naranjas: '#f97316', anaranjado: '#f97316', morado: '#a855f7', morada: '#a855f7', morados: '#a855f7', moradas: '#a855f7', violeta: '#8b5cf6', purpura: '#a855f7', lila: '#c4b5fd', rosa: '#ec4899', rosado: '#ec4899', rosada: '#ec4899', fucsia: '#d946ef', blanco: '#ffffff', blanca: '#ffffff', blancos: '#ffffff', blancas: '#ffffff', negro: '#111827', negra: '#111827', gris: '#9ca3af', grises: '#9ca3af', cian: '#22d3ee', celeste: '#38bdf8', turquesa: '#2dd4bf', aqua: '#22d3ee', dorado: '#f0b90b', dorada: '#f0b90b', oro: '#f0b90b', cafe: '#a16207', marron: '#a16207', menta: '#3ff0c0', 'verde lima': '#a3e635', lima: '#a3e635', 'azul claro': '#60a5fa', 'azul marino': '#1e3a8a', 'verde oscuro': '#15803d', 'rojo oscuro': '#991b1b'};
+  const TARGETS = [[/canal(es)?/, 'channel'], [/soportes?/, 'sup'], [/resistencias?/, 'res'], [/(linea de )?tendencias?|directriz/, 'trend'], [/fibo(nacci)?|fib\b|retroceso/, 'fib'], [/rangos?|caja/, 'range'], [/niveles?|horizontal(es)?/, 'hline'], [/ultim[oa]/, 'last'], [/(todo|todos|todas|tus dibujos|lo tuyo|lo que dibujaste|tus lineas)/, 'all'], [/lineas?/, 'line']];
+  const nz = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  function targetOf(s) { for (const [re, k] of TARGETS) if (re.test(s)) return k; return null; }
+  function parseEdit(text) {
+    const s = nz(text), t = targetOf(s); let col = null;
+    for (const k of Object.keys(COLORS).sort((a, b) => b.length - a.length)) if (new RegExp('\\b' + k + '\\b').test(s)) { col = COLORS[k]; break; }
+    const hex = s.match(/#[0-9a-f]{6}\b/); if (hex) col = hex[0];
+    const lw = /grues|gord|resalta/.test(s) ? 3 : /delgad|\bfin[oa]s?\b/.test(s) ? 1 : 0;
+    const ds = /puntead|puntitos|de puntos/.test(s) ? 'dot' : /discontinu|guiones|rayitas|cortad/.test(s) ? 'dash' : /solida|continua|lisa/.test(s) ? '' : null;
+    const editVerb = /(cambia|cambiale|cambiar|\bpon\b|ponle|ponla|ponlo|pinta|colorea|\bhaz\b|hazla|hazlo|que sea|vuelve|deja)/.test(s);
+    if (/(borra|quita|elimina|limpia|desaparece)/.test(s)) { if (!t || t === 'all') return [{do: 'clear'}]; return [{do: 'remove', target: t}]; }
+    const mv = s.match(/\b(?:a|en|hasta)\s*\$?\s*([0-9][0-9.,]*)\s*(k|mil)?\b/);
+    if (mv && t && t !== 'all' && /(mueve|mover|muevela|recorre|subela|bajala|pasala|llevala)/.test(s)) { const raw = mv[1].replace(/[.,]$/, ''); let v = /^\d{1,3}([.,]\d{3})+$/.test(raw) ? +raw.replace(/[.,]/g, '') : +raw.replace(',', '.'); if (mv[2]) v *= 1000; if (v > 0) return [{do: 'move', target: t, price: v}]; }
+    if ((editVerb || col) && (col || lw || ds !== null) && !/(dibuja|traza|marca|crea|agrega|anade)/.test(s)) { const o = {do: 'style', target: t || 'last'}; if (col) o.col = col; if (lw) o.lw = lw; if (ds !== null) o.ds = ds; return [o]; }
+    return [];
+  }
+
+  /* Qué dibujos del gráfico son «el canal», «los soportes», «la línea»…  list = CCT_pixel.list(). Prefiere los de Pixel; si no hay, usa los tuyos. */
+  function pickTargets(list, target, price) {
+    list = Array.isArray(list) ? list : []; const g = d => d.grp || '', L = d => d.label || '';
+    const is = {
+      channel: d => d.type === 'channel' || /^channel/.test(g(d)),
+      range: d => d.type === 'rect' || /^range/.test(g(d)),
+      sup: d => d.type === 'horizontal' && /^Soporte/i.test(L(d)),
+      res: d => d.type === 'horizontal' && /^Resistencia/i.test(L(d)),
+      fib: d => /fib/.test(d.type),
+      trend: d => (d.type === 'trend' || d.type === 'ray' || d.type === 'extended') && !/^(channel|range)/.test(g(d)),
+      hline: d => d.type === 'horizontal' || d.type === 'hray',
+      line: d => ['horizontal', 'trend', 'ray', 'extended', 'hray', 'vertical'].includes(d.type) && !/^(channel|range)/.test(g(d)),
+      all: d => !!d.pix
+    }[target];
+    let hit;
+    if (target === 'last' || !is) { const last = list[list.length - 1]; if (!last) return []; hit = last.grp ? list.filter(d => d.grp === last.grp) : [last]; }
+    else { const mine = list.filter(d => d.pix && is(d)); hit = mine.length ? mine : list.filter(is); }
+    if (!hit.length) return [];
+    if (target === 'channel' || target === 'range') { const gs = hit.map(g).filter(Boolean); if (gs.length) { const lg = gs[gs.length - 1]; hit = list.filter(d => d.grp === lg); } else hit = [hit[hit.length - 1]]; } // el último canal/rango, con su línea media
+    if (Number.isFinite(price)) { const hz = hit.filter(d => d.type === 'horizontal'); if (!hz.length) return []; hz.sort((a, b) => Math.abs(a.p[0] - price) - Math.abs(b.p[0] - price)); return [hz[0].id]; } // mover: el nivel más cercano al precio nuevo
+    return hit.map(d => d.id);
+  }
+
+  /* «pon los soportes en verde y las resistencias en rojo» / «soportes y resistencias en azul» */
+  function parseEditMulti(text) {
+    const parts = nz(text).split(/\s+(?:y|e|tambien)\s+|[,;]/).map(x => x.trim()).filter(Boolean);
+    if (parts.length < 2) return parseEdit(text);
+    const verb = (nz(text).match(/^(cambia(le)?|pon(le|la|lo)?|pinta|colorea|haz(la|lo)?|borra|quita|elimina)\b/) || [''])[0];
+    const out = [], pend = [];
+    for (const p0 of parts) { const p = verb && !/^(cambia|pon|pinta|colorea|haz|borra|quita|elimina)/.test(p0) ? verb + ' ' + p0 : p0, e = parseEdit(p), t = targetOf(p);
+      if (e.length && e[0].do !== 'clear') { for (const tt of pend) out.push({...e[0], target: tt}); pend.length = 0; if (e[0].do === 'style' && !t && out.length && out[out.length - 1].do === 'style') { const o = out[out.length - 1]; for (const k of ['col', 'lw', 'ds']) if (e[0][k] !== undefined) o[k] = e[0][k]; continue; } out.push(e[0]); }
+      else if (t && t !== 'all') pend.push(t); }
+    return out.length ? out : parseEdit(text);
+  }
+
   /* Lo que pides en español → acciones. «todo» / «análisis completo» dibuja varias cosas. */
   function parse(text) {
     const s = String(text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''), out = [];
-    if (/\b(borra|limpia|quita|elimina)\b/.test(s)) return [{do: 'clear'}];
+    { const ed = parseEditMulti(text); if (ed.length) return ed; } // primero: ¿quiere EDITAR algo que ya está? (color, grosor, estilo, borrar, mover)
+    if (/(color|grosor|grueso|delgad|puntead|estilo)/.test(s)) return []; // pide cambiar algo pero no quedó claro: lo resuelve la IA, sin dibujar de más
     if (/analisis completo|todo\b|completo|haz tu magia|analizalo|analiza el grafico/.test(s)) return [{do: 'full'}]; // qué dibuja lo decide tu personalización (por defecto soportes/resistencias, tendencia y canal)
     if (/canal/.test(s)) out.push({do: 'channel'});
     if (/rango|lateral|consolida|caja/.test(s)) out.push({do: 'range'});
@@ -100,6 +156,6 @@
     if (m && /linea|nivel|marca/.test(s)) { const raw = m[1].replace(/[.,]$/, ''), v = parseFloat(/^\d{1,3}(\.\d{3})+$/.test(raw) ? raw.replace(/\./g, '') : raw.replace(/,(?=\d{3}\b)/g, '').replace(',', '.')); if (Number.isFinite(v) && v > 0) out.push({do: 'hline', price: v}); }
     return out;
   }
-  root.NexusPixelDraw = {parse, build, channel, range, levels, trend, fib, pivots, regression, atr, describe, COL};
+  root.NexusPixelDraw = {parse, parseEdit, pickTargets, targetOf, COLORS, build, channel, range, levels, trend, fib, pivots, regression, atr, describe, COL};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.NexusPixelDraw;
 })(typeof window !== 'undefined' ? window : globalThis);

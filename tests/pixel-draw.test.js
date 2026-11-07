@@ -28,3 +28,21 @@ test('entiende lo que escribes en español', () => {
   assert.ok(P.build('channel', upCh).text.includes('canal alcista'));
   assert.ok(/Necesito más velas/.test(P.build('fib', upCh.slice(0, 5)).text));
 });
+
+test('editar dibujos: color, grosor, estilo, borrar y mover (no dibuja de más)', () => {
+  const P = require('../pixel-draw.js');
+  assert.deepStrictEqual(P.parse('cambia el color del canal a rojo'), [{do: 'style', target: 'channel', col: '#ef4444'}]);
+  assert.deepStrictEqual(P.parse('pon los soportes en verde y las resistencias en rojo'), [{do: 'style', target: 'sup', col: '#22c55e'}, {do: 'style', target: 'res', col: '#ef4444'}]);
+  assert.deepStrictEqual(P.parse('haz la tendencia más gruesa y punteada'), [{do: 'style', target: 'trend', lw: 3, ds: 'dot'}]);
+  assert.deepStrictEqual(P.parse('quita los soportes'), [{do: 'remove', target: 'sup'}]);
+  assert.deepStrictEqual(P.parse('mueve la resistencia a 65000'), [{do: 'move', target: 'res', price: 65000}]);
+  assert.deepStrictEqual(P.parse('borra lo que dibujaste'), [{do: 'clear'}]);
+  assert.deepStrictEqual(P.parse('cámbiale el color'), []);
+  assert.deepStrictEqual(P.parse('dibújame el canal'), [{do: 'channel'}]);
+  assert.deepStrictEqual(P.parse('marca soportes y resistencias'), [{do: 'sr'}]);
+  const L = [{id: 1, type: 'horizontal', label: 'Soporte · 2', pix: true, p: [100]}, {id: 2, type: 'horizontal', label: 'Resistencia · 3', pix: true, p: [120]}, {id: 3, type: 'channel', pix: true, grp: 'channel:b'}, {id: 4, type: 'trend', pix: true, grp: 'channel:b'}, {id: 5, type: 'trend', p: [1, 2]}];
+  assert.deepStrictEqual(P.pickTargets(L, 'channel'), [3, 4]);
+  assert.deepStrictEqual(P.pickTargets(L, 'res'), [2]);
+  assert.deepStrictEqual(P.pickTargets(L, 'trend'), [5]);
+  assert.deepStrictEqual(P.pickTargets(L, 'fib'), []);
+});

@@ -136,23 +136,51 @@
   async function perform(acts, intro) {
     let h = H(); if (h && !onChart()) { say('Vamos al gráfico…', {busy: true}); h.go('chartView'); await sleep(900); const hm = home(); await flyTo(hm.x, hm.y, 500); }
     h = H(); if (!h || !h.ready()) { say('Abre el gráfico y espera a que carguen las velas; luego te dibujo lo que quieras.'); return; }
+    if (acts.some(a => ['style', 'remove', 'move'].includes(a.do))) { await editDrawings(acts.filter(a => ['style', 'remove', 'move'].includes(a.do)), intro); return; }
     if (acts.some(a => a.do === 'clear')) { mood('wink', 'fly'); bub.hidden = true; const p = h.plot(); await flyTo(V2({x: p.left, y: 0}).x, pos.y, 700); const n = h.clearMine(); await flyTo(home().x, home().y); mood('happy', 'thumbs'); say(n ? `Listo, borré ${n} dibujo${n === 1 ? '' : 's'} mío${n === 1 ? '' : 's'}. Los tuyos siguen ahí.` : 'No tenía dibujos míos en este gráfico.'); setTimeout(() => mood('neutral', 'idle'), 1800); return; }
     const cs = h.visible(); if (cs.length < 20) { mood('thinking', 'think'); say('Veo muy pocas velas en pantalla. Aleja un poco el gráfico (pellizca o usa la rueda) y vuelvo a intentarlo.'); return; }
     mood('analyzing', 'think'); say(intro ? intro : 'Analizando tus velas…', {busy: true}); await sleep(REDUCED ? 0 : 750);
     bub.hidden = true; const texts = [];
     const C = CFG(); acts = acts.flatMap(a => a.do === 'full' ? (C.completo && C.completo.length ? C.completo : ['sr', 'trend', 'channel']).map(k => ({do: k})) : [a]);
-    for (const a of acts.slice(0, 5)) { const r = D.build(a.do, cs, a.price, {sr: C.sr}); texts.push(r.text); for (const d of r.drawings) { if (/^Soporte/.test(d.label || '') && C.colSup) d.col = C.colSup; if (/^Resistencia/.test(d.label || '') && C.colRes) d.col = C.colRes; await drawAnimated(d); } }
+    for (const a of acts.slice(0, 5)) { const r = D.build(a.do, cs, a.price, {sr: C.sr}), grp = a.do + ':' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); texts.push(r.text); for (const d of r.drawings) { d.grp = grp; if (/^Soporte/.test(d.label || '') && C.colSup) d.col = C.colSup; if (/^Resistencia/.test(d.label || '') && C.colRes) d.col = C.colRes; await drawAnimated(d); } }
     const hm = home(); await flyTo(hm.x, hm.y); mood('happy', 'thumbs');
     say(((intro ? intro + ' ' : '') + texts.filter(Boolean).join(' ')).trim() || 'Listo.'); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2200);
   }
+
+  /* ── editar lo que ya está dibujado: color, grosor, estilo, borrar o mover una pieza ── */
+  const TNAME = {channel: ['el canal', 'los canales'], sup: ['el soporte', 'los soportes'], res: ['la resistencia', 'las resistencias'], trend: ['la tendencia', 'las tendencias'], fib: ['el Fibonacci', 'los Fibonacci'], range: ['el rango', 'los rangos'], hline: ['el nivel', 'los niveles'], line: ['la línea', 'las líneas'], last: ['el último dibujo', 'el último dibujo'], all: ['mis dibujos', 'mis dibujos']};
+  const CNAME = c => { for (const [k, v] of Object.entries(D.COLORS)) if (v === c) return k; return c; };
+  async function editDrawings(acts, intro) {
+    const h = H(), out = []; let any = false;
+    for (const a of acts.slice(0, 4)) {
+      const list = h.list(), ids = D.pickTargets(list, a.target, a.do === 'move' ? a.price : undefined), nm = TNAME[a.target] || ['eso', 'eso'], pl = ids.length > 1 ? nm[1] : nm[0];
+      if (!ids.length) { out.push(list.length ? `No encontré ${nm[0]} en el gráfico. ¿Quieres que lo dibuje primero?` : 'Todavía no hay dibujos en este gráfico. Pídeme uno y luego lo cambiamos.'); continue; }
+      const d0 = list.find(d => d.id === ids[0]); if (d0 && d0.pts && d0.pts[0]) { const q = h.toScreen(d0.pts[0]); if (q) { const s = AV(), f = V2(q), hd = M ? M.handScreen() : {x: s.w * .8, y: s.h * .55}; bub.hidden = true; mood('focused', 'point'); await flyTo(clamp(f.x - hd.x, 0, AW() - s.w), clamp(f.y - hd.y, 0, AH() - s.h), 650); await sleep(REDUCED ? 0 : 250); } }
+      any = true;
+      if (a.do === 'remove') { const n = h.remove(ids); out.push(`Listo, quité ${pl}${n > 1 ? ` (${n})` : ''}.`); }
+      else if (a.do === 'move') { h.patch(ids, {price: a.price}); out.push(`Moví ${nm[0]} a ${h.fmt ? h.fmt(a.price) : a.price}.`); }
+      else { const f = {}; if (a.col) f.col = a.col; if (a.lw) f.lw = a.lw; if (a.ds !== undefined) f.ds = a.ds;
+        if (a.col) { if (a.target === 'sup') setCfgSafe({colSup: a.col}); if (a.target === 'res') setCfgSafe({colRes: a.col}); }
+        h.patch(ids, f); const bits = [a.col && `en ${CNAME(a.col)}`, a.lw === 3 && 'más gruesa', a.lw === 1 && 'más delgada', a.ds === 'dot' && 'punteada', a.ds === 'dash' && 'discontinua', a.ds === '' && 'sólida'].filter(Boolean);
+        out.push(`Listo, puse ${pl} ${bits.join(' y ')}.`); }
+    }
+    if (any) { mood('happy', 'thumbs'); await sleep(REDUCED ? 0 : 300); const hm = home(); await flyTo(hm.x, hm.y, 600); } else mood('thinking', 'idle');
+    say(((intro ? intro + ' ' : '') + out.join(' ')).trim()); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2000);
+  }
+  function setCfgSafe(o) { try { const h = H(); if (h && h.setCfg) h.setCfg({...CFG(), ...o}); } catch {} } // que los próximos soportes/resistencias salgan del color que pediste
   const SYS = `Eres NEXUS PIXEL, el avatar asistente de trading de VORTEX (by Nova Nexus): un robot amable que flota sobre el gráfico del usuario y puede dibujar en él.
 Habla en español, breve (máximo 3 frases), claro y con buena onda, sin prometer ganancias (no es asesoría financiera).
 Responde SOLO con un objeto JSON: {"reply":"tu respuesta","actions":[...]}
 Acciones posibles (úsalas cuando el usuario pida dibujar o cuando un dibujo ayude a explicar): {"do":"channel"} canal, {"do":"range"} rango/consolidación, {"do":"sr"} soportes y resistencias, {"do":"trend"} línea de tendencia, {"do":"fib"} Fibonacci, {"do":"hline","price":NUMERO} línea horizontal en un precio, {"do":"clear"} borrar tus dibujos.
+Para EDITAR lo que ya está dibujado (ver DIBUJOS en los datos) usa: {"do":"style","target":T,"col":"#rrggbb","lw":1|2|3,"ds":"dot"|"dash"|""} (color, grosor, punteada/discontinua/sólida), {"do":"remove","target":T} quitar uno, {"do":"move","target":T,"price":NUMERO} mover un nivel. T es uno de: channel, sup, res, trend, fib, range, hline, line, last.
+MUY IMPORTANTE: si el usuario pide cambiar color, grosor o estilo de algo que YA existe, NUNCA dibujes algo nuevo: usa "style". Si no está claro a qué dibujo se refiere, pregúntale cuál (usa los nombres de DIBUJOS) y deja "actions":[].
+El usuario ya está viendo su gráfico (en computadora el gráfico está siempre a la izquierda y el panel a la derecha): responde sobre el gráfico.
 Los niveles los calcula la app con las velas reales: no inventes precios. Si no hace falta dibujar, deja "actions":[].`;
   function context() {
     const h = H(); if (!h) return {}; const cs = h.visible(), o = {simbolo: h.symbol(), temporalidad: h.interval(), ultimo: h.last(), velasEnPantalla: cs.length};
     if (cs.length) { o.maximoVisible = Math.max(...cs.map(c => c.h)); o.minimoVisible = Math.min(...cs.map(c => c.l)); o.cambioVisiblePct = +((cs[cs.length - 1].c / cs[0].o - 1) * 100).toFixed(2); }
+    try { if (h.desktop() && section() !== 'chartView') o.panelDerechoAbierto = (NAMES[section()] || section()) + ': ' + screenText(section()).slice(0, 500); } catch {}
+    try { o.dibujos = h.list().slice(-14).map(d => ({tipo: d.type, nombre: d.label || '', color: d.col, mio: d.pix, precio: d.p && d.p.map(v => +(+v).toPrecision(6))})); } catch {}
     try { const c = window.CCT_getAIContext && window.CCT_getAIContext(); if (c) o.indicadores = JSON.stringify(c).slice(0, 1800); } catch {}
     return o;
   }
@@ -171,7 +199,10 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     const r = await Promise.race([L.chat(msgs, {purpose: 'text', maxTokens: 380}), sleep(28000).then(() => { throw new Error('La IA tardó demasiado'); })]);
     const raw = String(r && r.text || ''), m = raw.match(/\{[\s\S]*\}/); let j = null; try { j = m ? JSON.parse(m[0]) : null; } catch {}
     const reply = j && typeof j.reply === 'string' ? j.reply : raw.replace(/```[\s\S]*?```/g, '').trim();
-    const ok = ['channel', 'range', 'sr', 'trend', 'fib', 'hline', 'clear'], actions = (j && Array.isArray(j.actions) ? j.actions : []).filter(a => a && ok.includes(a.do) && (a.do !== 'hline' || (Number.isFinite(+a.price) && +a.price > 0))).map(a => a.do === 'hline' ? {do: 'hline', price: +a.price} : {do: a.do});
+    const ok = ['channel', 'range', 'sr', 'trend', 'fib', 'hline', 'clear', 'style', 'remove', 'move'], TG = ['channel', 'sup', 'res', 'trend', 'fib', 'range', 'hline', 'line', 'last'], hx = c => /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : (D.COLORS[String(c || '').toLowerCase()] || undefined);
+    const actions = (j && Array.isArray(j.actions) ? j.actions : []).filter(a => a && ok.includes(a.do) && ((a.do !== 'hline' && a.do !== 'move') || (Number.isFinite(+a.price) && +a.price > 0)) && (!['style', 'remove', 'move'].includes(a.do) || TG.includes(a.target)))
+      .map(a => a.do === 'hline' ? {do: 'hline', price: +a.price} : a.do === 'move' ? {do: 'move', target: a.target, price: +a.price} : a.do === 'remove' ? {do: 'remove', target: a.target} : a.do === 'style' ? {do: 'style', target: a.target, col: hx(a.col), lw: [1, 2, 3].includes(+a.lw) ? +a.lw : undefined, ds: ['dot', 'dash', ''].includes(a.ds) ? a.ds : undefined} : {do: a.do})
+      .filter(a => a.do !== 'style' || a.col || a.lw || a.ds !== undefined);
     hist.push({role: 'user', content: text}, {role: 'assistant', content: reply}); if (hist.length > 12) hist.splice(0, hist.length - 12);
     return {reply: reply.slice(0, 600), actions};
   }
@@ -205,8 +236,8 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     discordView: [['¿Cómo conecto mi canal?', '¿Cómo conecto mi canal de Discord?']]
   };
   const GENERIC = [['¿Dónde está…?', '¿Dónde encuentro la herramienta de Fibonacci?'], ['¿Qué puedes hacer?', '¿Qué puedes hacer aquí?']];
-  function setChips() { const sec0 = section(); input.placeholder = sec0 === 'chartView' ? 'Pídeme algo: «dibuja el canal»…' : sec0 === 'alertsView' ? 'Ej.: avísame si BTC pasa 70 mil…' : sec0 === 'screenerView' ? '¿Cuál tiene la mejor entrada?…' : 'Pregúntame o pídeme algo…';
-    const sec = sec0, c = H() && H().desktop() && sec !== 'chartView' ? [...(CHIPS[sec] || []), ...CHIPS.chartView.slice(0, 3)] : (CHIPS[sec] || GENERIC); bub.querySelector('.px-chips').innerHTML = c.map(([t, q]) => `<button type="button" data-q="${esc(q)}">${esc(t)}</button>`).join(''); }
+  function setChips() { const sec0 = section(), dk = !!(H() && H().desktop()); input.placeholder = sec0 === 'chartView' || dk ? 'Pídeme algo: «dibuja el canal»…' : sec0 === 'alertsView' ? 'Ej.: avísame si BTC pasa 70 mil…' : sec0 === 'screenerView' ? '¿Cuál tiene la mejor entrada?…' : 'Pregúntame o pídeme algo…';
+    const sec = sec0, c = dk && sec !== 'chartView' ? [...CHIPS.chartView.slice(0, 5), ...(CHIPS[sec] || []).slice(0, 2)] : (CHIPS[sec] || GENERIC); bub.querySelector('.px-chips').innerHTML = c.map(([t, q]) => `<button type="button" data-q="${esc(q)}">${esc(t)}</button>`).join(''); }
   function screenText(sec) { const el = document.getElementById(sec); if (!el) return ''; return el.innerText.replace(/\n{2,}/g, '\n').slice(0, 2600); }
 
   /* ── señalar en pantalla (buscar herramientas y botones) ── */
@@ -334,6 +365,8 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     try { const r = await llmText(SYS_APP + `\nEl usuario está en la sección «${NAMES[sec] || sec}». Responde lo que pregunta usando lo que se ve en su pantalla. Si pregunta dónde está algo, dile exactamente el botón y la sección.`, `${t}\n\nLO QUE SE VE EN SU PANTALLA (${NAMES[sec] || sec}):\n${screenText(sec)}${extra}`, 550); big(r.length > 260); mood('happy', 'idle'); say(r); }
     catch { mood('surprised', 'idle'); say('No pude hablar con la IA ahorita. Pero puedo enseñarte dónde está cada cosa: pregúntame «¿dónde está…?».'); }
   }
+  /* En PC: palabras que indican que hablas del panel derecho y no del gráfico */
+  const SIDE_KW = {watchView: /(seguimiento|watchlist|mi lista|lista de monedas|cual se mueve|panel)/, newsView: /(noticia|titular|resum|panel)/, alertsView: /(alerta|panel)/, lensView: /(lens|bingx|cuenta|panel)/, botLabView: /(\bbots?\b|bot lab|panel)/, aiView: /(panel|esta seccion|aqui)/, settingsView: /(config|ajuste|panel)/, discordView: /(discord|panel)/, screenerView: /(screener|panel)/};
   /* A qué habilidad va cada pedido */
   async function routeApp(text) {
     const q = nrm(text), sec = section();
@@ -348,10 +381,11 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     if (/(donde|no encuentro|como (abro|pongo|activo|uso|cambio|encuentro)|muestrame|ensename|ubica)/.test(q) && await findThing(text)) return true;
     if (/(alerta|avisame|avisa(me)? (si|cuando)|notificame)/.test(q) && /(\d|%|crea|pon|hazme|quiero)/.test(q)) { await skillAlert(text); return true; }
     if (/noticia|resum|que (esta )?pasa|que mueve|mercado hoy|titulares/.test(q) && (sec === 'newsView' || /noticia|titular/.test(q))) { await skillNews(text); return true; }
-    if ((sec === 'screenerView' && /(mejor|entrada|long|short|confluencia|senal|cual|analiza)/.test(q)) || /screener/.test(q)) { await skillScreener(text); return true; }
+    const desk = !!(H() && H().desktop()); // en PC el gráfico SIEMPRE está a la vista: el panel derecho solo manda si lo mencionas
+    if ((sec === 'screenerView' && (desk ? /(screener|mejor(es)? (entrada|senal)|confluencia)/ : /(mejor|entrada|long|short|confluencia|senal|cual|analiza)/).test(q)) || /screener/.test(q)) { await skillScreener(text); return true; }
     if (/\bbots?\b|estrategia automat|bot lab/.test(q) && !/screener/.test(q)) { await skillBot(text); return true; }
-    if (/nexus lens|api key|secret key/.test(q) || (sec === 'lensView' && !D.parse(text).length)) { await skillLens(text); return true; }
-    if (sec !== 'chartView' && !D.parse(text).length && (!(H() && H().desktop()) || !/grafic|vela|indicador|\bema\b|rsi|soporte|resistencia|precio|tendencia|dibuj|entrar|long|short/.test(q))) { await skillGeneral(text); return true; }
+    if (/nexus lens|api key|secret key/.test(q) || (!desk && sec === 'lensView' && !D.parse(text).length)) { await skillLens(text); return true; }
+    if (sec !== 'chartView' && !D.parse(text).length && (!desk || (SIDE_KW[sec] && SIDE_KW[sec].test(q) && !/grafic|vela|indicador|\bema\b|rsi|soporte|resistencia|tendencia|dibuj|canal|fibo|linea|color/.test(q)))) { await skillGeneral(text); return true; }
     return false;
   }
 
@@ -392,20 +426,68 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
   bub.querySelector('form').addEventListener('submit', e => { e.preventDefault(); ask(input.value); });
   input.addEventListener('keydown', e => e.stopPropagation());
 
-  /* ── Micrófono: háblale a Pixel (reconocimiento de voz del navegador, en español). Al terminar de hablar se manda solo. ── */
-  const mic = bub.querySelector('.px-mic'), SR = window.SpeechRecognition || window.webkitSpeechRecognition; let rec = null, heard = '';
-  function stopMic() { if (rec) { try { rec.stop(); } catch {} } }
-  mic.addEventListener('click', () => {
-    if (rec) { stopMic(); return; }
-    if (!SR) { say('Tu navegador no permite dictar por voz. En Android usa Chrome; en iPhone, Safari actualizado. También puedes usar el micrófono del teclado.'); return; }
-    if (busy) return; wake();
-    rec = new SR(); rec.lang = 'es-MX'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1; heard = '';
-    rec.onstart = () => { mic.classList.add('on'); bub.classList.add('listening'); status('te escucho…'); input.value = ''; input.placeholder = 'Te escucho… habla ahora'; mood('surprised', 'idle'); };
+  /* ── Micrófono: háblale a Pixel. En el celular usa el dictado del navegador (rápido). En PC (y si el dictado falla) graba tu voz
+       y la transcribe el servidor de IA de VORTEX: así funciona aunque el navegador o la app de escritorio no traigan dictado. ── */
+  const mic = bub.querySelector('.px-mic'), SR = window.SpeechRecognition || window.webkitSpeechRecognition; let rec = null, heard = '', srBroken = !!ls.srBroken;
+  const VXURL = 'https://vortex-push.soobroon.workers.dev';
+  const useRecorder = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder) && (!SR || srBroken || (H() && H().desktop()));
+  let mr = null, mStream = null, mCtx = null, mTimer = 0;
+  function micUI(on, msg) { mic.classList.toggle('on', on); bub.classList.toggle('listening', on); input.placeholder = on ? (msg || 'Te escucho… habla ahora (toca el micrófono para terminar)') : 'Pídeme algo: «dibuja el canal»…'; if (on) { input.value = ''; mood('surprised', 'idle'); status('te escucho…'); } }
+  function stopMic() { if (rec) { try { rec.stop(); } catch {} } if (mr && mr.state === 'recording') { try { mr.stop(); } catch {} } }
+  function relMic() { clearInterval(mTimer); mTimer = 0; try { mStream && mStream.getTracks().forEach(t => t.stop()); } catch {} mStream = null; try { mCtx && mCtx.close(); } catch {} mCtx = null; }
+  function toWav(buf) { // 16 kHz mono, 16 bits
+    const n = buf.length, out = new DataView(new ArrayBuffer(44 + n * 2)), W = (o, t) => { for (let i = 0; i < t.length; i++) out.setUint8(o + i, t.charCodeAt(i)); };
+    W(0, 'RIFF'); out.setUint32(4, 36 + n * 2, true); W(8, 'WAVE'); W(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true); out.setUint32(24, 16000, true); out.setUint32(28, 32000, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); W(36, 'data'); out.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) { const v = Math.max(-1, Math.min(1, buf[i])); out.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true); } return out.buffer;
+  }
+  const b64 = ab => { const u = new Uint8Array(ab); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+  async function transcribe(blob) {
+    const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(), dec = await ac.decodeAudioData(await blob.arrayBuffer()); try { ac.close(); } catch {}
+    const len = Math.ceil(dec.duration * 16000), off = new OfflineAudioContext(1, Math.max(1, len), 16000), src = off.createBufferSource(); src.buffer = dec; src.connect(off.destination); src.start(); const pcm = (await off.startRendering()).getChannelData(0);
+    const body = {model: 'openai-audio', temperature: 0, max_tokens: 300, messages: [{role: 'system', content: 'Eres un transcriptor. Escribe EXACTAMENTE lo que dice la persona en el audio, en español, sin responderle, sin comillas y sin agregar nada. Si no se entiende nada, responde solo: ""'}, {role: 'user', content: [{type: 'text', text: 'Transcribe este audio.'}, {type: 'input_audio', input_audio: {data: b64(toWav(pcm)), format: 'wav'}}]}]};
+    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 30000);
+    try { const r = await fetch(VXURL + '/ai', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body), signal: ctl.signal}); if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(), t = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content; return String(t || '').replace(/^["«“\s]+|["»”\s]+$/g, '').trim(); }
+    finally { clearTimeout(to); }
+  }
+  async function recordVoice() {
+    try { mStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}}); }
+    catch (e) { relMic(); say(e && e.name === 'NotFoundError' ? 'No encontré ningún micrófono conectado. Conecta uno y vuelve a intentarlo.' : 'Necesito permiso para usar el micrófono: permítelo en el aviso del navegador (o en el candado de la barra de direcciones) y vuelve a tocarlo.'); return; }
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find(m => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } }) || '';
+    const chunks = []; mr = new MediaRecorder(mStream, mime ? {mimeType: mime} : {}); mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    let spoke = false, quietSince = 0; const t0 = Date.now();
+    try { const AC = window.AudioContext || window.webkitAudioContext; mCtx = new AC(); const an = mCtx.createAnalyser(); an.fftSize = 1024; mCtx.createMediaStreamSource(mStream).connect(an); const d = new Uint8Array(an.fftSize);
+      mTimer = setInterval(() => { an.getByteTimeDomainData(d); let e = 0; for (const v of d) e += (v - 128) * (v - 128); const rms = Math.sqrt(e / d.length) / 128, now = Date.now();
+        if (rms > .045) { spoke = true; quietSince = 0; } else if (spoke) { quietSince = quietSince || now; if (now - quietSince > 1500) stopMic(); } // te callas 1.5 s → se manda solo
+        if ((!spoke && now - t0 > 8000) || now - t0 > 25000) stopMic(); }, 100); } catch {}
+    mr.onstop = async () => { const dur = Date.now() - t0, type = (mr && mr.mimeType) || mime || 'audio/webm'; relMic(); mr = null; micUI(false);
+      if (!chunks.length || dur < 600) { mood('neutral', 'idle'); say('No alcancé a escucharte. Toca el micrófono y habla.'); return; }
+      busy = true; bub.classList.add('working'); mood('thinking', 'think'); say('Escuchando lo que dijiste…', {busy: true}); status('transcribiendo…');
+      let t = ''; try { t = await transcribe(new Blob(chunks, {type})); } catch (e) { console.warn('Pixel voz', e); }
+      busy = false; bub.classList.remove('working'); status('IA de VORTEX');
+      if (!t || t.length < 2) { mood('surprised', 'idle'); say('No te entendí bien. Intenta de nuevo hablando un poco más cerca del micrófono, o escríbeme.'); return; }
+      input.value = t; ask(t); };
+    mr.start(250); micUI(true);
+  }
+  function dictate() { // dictado del navegador (celular)
+    rec = new SR(); rec.lang = 'es-MX'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1; heard = ''; let fail = '';
+    rec.onstart = () => micUI(true, 'Te escucho… habla ahora');
     rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; heard = t.trim(); input.value = heard; };
-    rec.onerror = e => { const m = e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'Necesito permiso para usar el micrófono: actívalo en los permisos del navegador (o de VORTEX) y vuelve a tocarlo.' : e.error === 'no-speech' ? 'No te escuché. Toca el micrófono y vuelve a intentarlo.' : e.error === 'network' ? 'El dictado por voz necesita internet.' : ''; if (m) say(m); };
-    rec.onend = () => { mic.classList.remove('on'); bub.classList.remove('listening'); status('IA de VORTEX'); input.placeholder = 'Pídeme algo: «dibuja el canal»…'; rec = null; mood('neutral', 'idle'); const t = heard; heard = ''; if (t) ask(t); };
-    try { rec.start(); } catch { rec = null; say('No se pudo iniciar el micrófono. Inténtalo otra vez.'); }
-  }); // que las teclas no muevan el gráfico mientras escribes
+    rec.onerror = e => { fail = e.error; };
+    rec.onend = () => { micUI(false); status('IA de VORTEX'); rec = null; mood('neutral', 'idle'); const t = heard; heard = '';
+      if (t) { ask(t); return; }
+      if (fail === 'not-allowed') { say('Necesito permiso para usar el micrófono: actívalo en los permisos del navegador (o de VORTEX) y vuelve a tocarlo.'); return; }
+      if (fail === 'no-speech' || fail === 'aborted') { say('No te escuché. Toca el micrófono y vuelve a intentarlo.'); return; }
+      if (window.MediaRecorder && navigator.mediaDevices) { srBroken = true; ls.srBroken = true; store(); recordVoice(); return; } // el dictado del navegador no funciona aquí: grabo y transcribo en el servidor
+      say('El dictado por voz no está disponible en este navegador. Puedes escribirme o usar el micrófono del teclado.'); };
+    try { rec.start(); } catch { rec = null; if (window.MediaRecorder) recordVoice(); else say('No se pudo iniciar el micrófono. Inténtalo otra vez.'); }
+  }
+  mic.addEventListener('click', () => {
+    if (rec || (mr && mr.state === 'recording')) { stopMic(); return; }
+    if (busy) return; wake();
+    if (useRecorder()) { recordVoice(); return; }
+    if (SR) { dictate(); return; }
+    say('Tu navegador no permite usar el micrófono. Puedes escribirme o usar el micrófono del teclado.');
+  });
 
   /* ── tocar, girar 360° y mover ── */
   let drag = null, taps = 0, tapT = 0;
