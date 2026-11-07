@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Se muestran en Configuración → Acerca de. */
 window.CCT_CHANGELOG = [
+  {v: '2.2', d: '7 nov 2026', items: [
+    'IA: «Analizar gráfico» ya no se queda trabado cuando tienes scripts Pine (como Nova Nexus) en el gráfico.',
+    'IA: el análisis y el Laboratorio de indicadores usan su propia IA (distinta a la de Nexus Pixel) y pasan solas a otra si una no responde.',
+    'Laboratorio: indicadores más complejos funcionan a la primera; el motor de Pine ahora entiende ta.adx().'
+  ]},
   {v: '2.1', d: '4 nov 2026', items: [
     'Pestañas de gráficos: abre varios gráficos, cada uno con su moneda, temporalidad y tipo de vela, con vista previa.',
     'Preferencias: zona horaria, hora 12/24 h, formato de fecha, decimales, separadores y símbolo de moneda.',
