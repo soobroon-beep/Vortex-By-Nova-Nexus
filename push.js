@@ -41,14 +41,26 @@
     if (!force && sig === lastSig && Date.now() - (cfg.at || 0) < 6 * 3600e3) return;
     busy = true;
     try {
-      const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
-      if (!sub) { cfg.on = false; store(cfg); lastErr = 'Se perdió el permiso de notificaciones; vuelve a activarlas.'; render(); return; }
+      const reg = await navigator.serviceWorker.ready, sub = await ensureSub(reg);
+      if (!sub) { lastErr = Notification.permission === 'denied' ? 'El celular bloqueó las notificaciones de VORTEX: actívalas en Ajustes del sistema → Apps → VORTEX/Chrome → Notificaciones. El interruptor sigue encendido y se reanuda solo.' : 'Esperando el permiso de notificaciones del celular.'; return; } // NUNCA se apaga solo: solo tú lo apagas
       const j = await api('/sync', {id: cfg.id, sub: sub.toJSON(), since: cfg.since || 0, ...p});
       applyBack(j.back); cfg.since = j.now || Date.now(); cfg.at = Date.now(); store(cfg);
       lastSig = JSON.stringify(payload()); lastErr = '';
     } catch (e) { lastErr = e.message || 'Sin conexión con el servidor de avisos'; }
     finally { busy = false; render(); }
   }
+  /* Si el navegador renovó o perdió la suscripción (pasa al salir de la app, al actualizarse o tras días sin uso),
+     se crea otra sola —sin preguntarte— mientras el permiso siga concedido. Así el interruptor se queda encendido para siempre. */
+  async function ensureSub(reg) {
+    let sub = await reg.pushManager.getSubscription(); if (sub) return sub;
+    if (!ok || Notification.permission !== 'granted') return null;
+    if (!cfg.key) { cfg.key = (await api('/vapid')).key; store(cfg); }
+    try { sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64ToU8(cfg.key)}); }
+    catch { const {key} = await api('/vapid'); cfg.key = key; store(cfg); sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64ToU8(key)}); }
+    return sub;
+  }
+  /* El service worker también necesita saber a quién avisar si el sistema cambia la suscripción con la app cerrada (evento pushsubscriptionchange). */
+  const meta = on => { try { caches.open('vortex-meta').then(c => on ? c.put('push-meta', new Response(JSON.stringify({id: cfg.id, url: url(), key: cfg.key || ''}))) : c.delete('push-meta')).catch(() => {}); } catch {} };
   async function enable() {
     if (!ok) { toast(ios && !standalone ? 'En iPhone primero añade VORTEX a la pantalla de inicio y ábrela desde ahí' : 'Este navegador no permite notificaciones push'); return; }
     const perm = await Notification.requestPermission();
@@ -58,13 +70,13 @@
       let sub = await reg.pushManager.getSubscription();
       if (sub && cfg.key && cfg.key !== key) { await sub.unsubscribe(); sub = null; } // el servidor cambió de claves
       if (!sub) sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64ToU8(key)});
-      cfg.on = true; cfg.key = key; store(cfg); await sync(true);
+      cfg.on = true; cfg.key = key; store(cfg); meta(true); await sync(true);
       if (!lastErr) toast('Listo: te avisaré aunque VORTEX esté cerrada');
     } catch (e) { lastErr = e.message || String(e); toast('No se pudo activar: ' + lastErr); }
     render();
   }
   async function disable() {
-    cfg.on = false; store(cfg);
+    cfg.on = false; store(cfg); meta(false);
     try { await api('/sync', {id: cfg.id, off: true}); } catch {}
     try { const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (sub) await sub.unsubscribe(); } catch {}
     render(); toast('Avisos con la app cerrada desactivados');
@@ -89,6 +101,7 @@
   });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(true); }); // al volver a la app trae lo que disparó el servidor
   setInterval(() => sync(false), 10000); // si cambian tus alertas, se mandan al servidor en ≤10 s
-  render(); if (cfg.on) sync(true);
+  window.addEventListener('pageshow', () => { if (cfg.on) sync(true); }); // al volver desde otra app (Android puede congelar la página)
+  render(); if (cfg.on) { meta(true); sync(true); }
   window.VortexPush = {sync, enable, disable, render, get on() { return !!cfg.on; }};
 })();

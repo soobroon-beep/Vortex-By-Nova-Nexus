@@ -4895,13 +4895,21 @@ window.CCT_bot = {
 };
 /* ───────── Ganchos para la pestaña IA (solo lectura del gráfico + motor Pine existente; no cambian nada más) ───────── */
 window.CCT_ai = {
-  capture(maxW) { // captura PNG/JPEG del gráfico tal como se ve (velas, indicadores, dibujos, alertas); null si no hay lienzo visible
+  capture(maxW) { // captura JPEG del gráfico tal como se ve (velas, indicadores, dibujos, alertas); null si no hay velas
+    if (!candles.length) return null;
+    const cv = $('#priceCanvas'), view = $('#chartView'), prev = currentView; if (!cv || !view) return null;
+    /* En el celular el gráfico vive en otra pestaña (oculto) y el sistema puede borrar su imagen al salir de la app: antes salía en negro.
+       Ahora se vuelve a dibujar en ese momento, fuera de la pantalla, con el tamaño del celular, y se captura. */
+    const hidden = !cv.getBoundingClientRect().width, css = view.style.cssText, wasActive = view.classList.contains('active');
     try {
-      const cv = $('#priceCanvas'); if (!cv || !cv.width || !cv.height || !candles.length) return null;
+      if (hidden) { view.classList.add('active'); view.style.cssText = css + `;position:fixed!important;left:-10000px!important;top:0!important;width:${Math.max(320, innerWidth)}px!important;height:${Math.max(460, innerHeight - 130)}px!important;visibility:visible!important;pointer-events:none!important;z-index:-1`; }
+      currentView = 'chartView'; renderCore();
+      if (!cv.width || !cv.height || !cv.getBoundingClientRect().width) return null;
       const k = Math.min(1, (maxW || 1100) / cv.width), w = Math.round(cv.width * k), h = Math.round(cv.height * k), o = document.createElement('canvas'); o.width = w; o.height = h;
       const g2 = o.getContext('2d'), bg = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#0b0e11'; g2.fillStyle = bg; g2.fillRect(0, 0, w, h); g2.drawImage(cv, 0, 0, w, h);
       return {url: o.toDataURL('image/jpeg', .82), w, h, symbol: symOf(state.symbol), interval: state.interval, at: Date.now()};
     } catch { return null; }
+    finally { currentView = prev; if (hidden) { view.style.cssText = css; if (!wasActive) view.classList.remove('active'); } }
   },
   candles: () => candles.slice(),
   async run(code, name) { if (!candles.length) return {ok: false, error: {msg: 'Abre un gráfico y espera a que carguen las velas.'}}; return pineRunFull(code, {interval: state.interval, symbol: symOf(state.symbol), name: name || 'Indicador IA', timeLimitMs: 12000}); },

@@ -134,3 +134,12 @@ test('/mkt: reenvía datos públicos solo de exchanges permitidos y solo a VORTE
     assert.deepStrictEqual(seen, ['https://open-api.bingx.com/openApi/swap/v2/quote/ticker']);
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('/sync subOnly: renueva la suscripción sin borrar alertas ni ajustes', async () => {
+  const w = await W(), KV = memKV(), env = {KV}, f = await fakeBrowserSub(w.b64u), ID = 'dev_cccccccccccccccccccc';
+  const call = body => w.default.fetch(new Request('https://x.workers.dev/sync', {method: 'POST', headers: {origin: 'https://soobroon-beep.github.io'}, body: JSON.stringify(body)}), env).then(r => r.status);
+  assert.strictEqual(await call({id: ID, sub: f.sub, subOnly: true}), 404);
+  await call({id: ID, sub: f.sub, alerts: [{id: 'a1', symbol: 'BTCUSDT', on: true, price: 100, dir: 'up'}], move: {on: true, pct: 3}});
+  assert.strictEqual(await call({id: ID, sub: {...f.sub, endpoint: 'https://fcm.googleapis.com/fcm/send/nuevo'}, subOnly: true}), 200);
+  const d = JSON.parse(KV.m.get('dev:' + ID)); assert.strictEqual(d.sub.endpoint, 'https://fcm.googleapis.com/fcm/send/nuevo'); assert.strictEqual(d.alerts[0].id, 'a1'); assert.strictEqual(d.move.on, true);
+});

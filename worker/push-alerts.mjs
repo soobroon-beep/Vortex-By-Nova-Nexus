@@ -182,6 +182,7 @@ export default {
       if (b.off) { await env.KV.delete('dev:' + id); if (ids.includes(id)) await env.KV.put('devs', JSON.stringify(ids.filter(x => x !== id))); return json({ok: true, off: true}); }
       const cur = (await env.KV.get('dev:' + id, 'json')) || {};
       const sub = sanSub(b.sub) || cur.sub; if (!sub) return json({error: 'Falta la suscripción push'}, 400);
+      if (b.subOnly) { if (!cur.sub) return json({ok: false, error: 'Dispositivo sin registrar'}, 404); cur.sub = sub; cur.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(cur)); if (!ids.includes(id)) await env.KV.put('devs', JSON.stringify([...ids, id])); return json({ok: true}); } // el celular renovó su suscripción: se conservan alertas y ajustes
       const incoming = (Array.isArray(b.alerts) ? b.alerts : []).map(sanAlert).filter(Boolean).slice(0, MAX_ALERTS);
       const m = mergeAlerts(incoming, cur.alerts, b.since);
       const d = {sub, alerts: m.alerts, move: sanMove(b.move), priceOn: b.priceOn !== false, moveLast: cur.moveLast || {}, updated: Date.now()};

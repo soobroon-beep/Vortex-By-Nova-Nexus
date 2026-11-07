@@ -1,6 +1,6 @@
 'use strict';
 // Bump this version when changing cached application files. No API responses or account data are cached.
-const CACHE = 'cct-shell-v122';
+const CACHE = 'cct-shell-v123';
 const ROOT = new URL('./', self.location.href);
 const SHELL = ['index.html', 'style.css', 'glass.css', 'pwa.css', 'pwa-icons.js', 'pwa.js', 'icons.js',
   'app.js', 'screener.js', 'firebase-config.js', 'markets.js', 'indicators.js', 'patterns.js', 'channels.js', 'discord-format.js', 'discord.js', 'nova-nexus.js', 'catalog.js', 'pine.js',
@@ -43,6 +43,17 @@ self.addEventListener('push', event => {
   let d = {}; try { d = event.data ? event.data.json() : {}; } catch { d = {body: event.data ? event.data.text() : ''}; }
   const icon = new URL('icons/i01-192.png', ROOT).href, badge = new URL('icons/notif-badge-96.png', ROOT).href; // badge: V blanca sobre transparente (Android solo usa la silueta en la barra de estado)
   event.waitUntil(self.registration.showNotification(d.title || 'VORTEX', {body: d.body || '', tag: d.tag || 'vortex', renotify: true, icon, badge, vibrate: [200, 100, 200], data: {url: d.url || ROOT.href}}));
+});
+// Si el sistema renueva la suscripción push con la app cerrada, se vuelve a suscribir sola y avisa al servidor: los avisos no se apagan.
+self.addEventListener('pushsubscriptionchange', event => {
+  event.waitUntil((async () => {
+    let m = null; try { const r = await (await caches.open('vortex-meta')).match('push-meta'); if (r) m = await r.json(); } catch {}
+    if (!m || !m.id || !m.url) return;
+    const b64 = s => { s = s.replace(/-/g, '+').replace(/_/g, '/'); const bin = atob(s + '='.repeat((4 - s.length % 4) % 4)); return Uint8Array.from(bin, c => c.charCodeAt(0)); };
+    let sub = event.newSubscription || await self.registration.pushManager.getSubscription();
+    if (!sub) { const key = (event.oldSubscription && event.oldSubscription.options && event.oldSubscription.options.applicationServerKey) || (m.key && b64(m.key)); if (!key) return; sub = await self.registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: key}); }
+    await fetch(m.url.replace(/\/+$/, '') + '/sync', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({id: m.id, sub: sub.toJSON(), subOnly: true})});
+  })().catch(() => {}));
 });
 self.addEventListener('notificationclick', event => {
   event.notification.close();
