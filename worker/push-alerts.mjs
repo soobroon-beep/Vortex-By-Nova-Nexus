@@ -153,6 +153,7 @@ async function tick(env, now = Date.now()) {
 }
 
 /* ───────── HTTP ───────── */
+const MKT_HOSTS = new Set(['open-api.bingx.com', 'api.kucoin.com', 'api.mexc.com', 'api.gateio.ws', 'api.bitget.com', 'api.huobi.pro', 'api.kraken.com', 'api.bybit.com', 'www.okx.com', 'api.exchange.coinbase.com', 'api.binance.com', 'fapi.binance.com']);
 export default {
   async fetch(req, env) {
     const allowed = String(env.ALLOWED_ORIGIN || DEFAULT_ORIGINS).split(',').map(s => s.trim()).filter(Boolean);
@@ -163,6 +164,14 @@ export default {
     const path = new URL(req.url).pathname;
     if (req.method === 'GET' && path === '/') return json({ok: true, app: 'VORTEX push', note: 'Notificaciones de alertas con la app cerrada'});
     if (!ok) return json({error: 'Origen no permitido'}, 403);
+    if (req.method === 'GET' && path === '/mkt') { // datos PÚBLICOS de exchanges que bloquean CORS (BingX, KuCoin, MEXC…): solo GET, sin llaves, solo hosts permitidos
+      let t; try { t = new URL(new URL(req.url).searchParams.get('u') || ''); } catch { return json({error: 'URL inválida'}, 400); }
+      if (t.protocol !== 'https:' || !MKT_HOSTS.has(t.host)) return json({error: 'Exchange no permitido'}, 403);
+      try {
+        const r = await fetch(t.href, {headers: {'user-agent': 'VORTEX-Market/1.0', accept: 'application/json'}, cf: {cacheTtl: /symbols|AssetPairs|common/.test(t.pathname) ? 300 : 5, cacheEverything: true}});
+        return new Response(r.body, {status: r.status, headers: {...cors, 'content-type': r.headers.get('content-type') || 'application/json', 'cache-control': 'no-store'}});
+      } catch (e) { return json({error: 'Exchange sin respuesta'}, 502); }
+    }
     if (req.method === 'GET' && path === '/vapid') return json({key: (await vapidKeys(env)).pub});
     if (req.method !== 'POST') return json({error: 'Método no permitido'}, 405);
     const raw = await req.text(); if (raw.length > 60000) return json({error: 'Demasiado grande'}, 413);

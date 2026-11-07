@@ -654,3 +654,11 @@ body.pane .favbar{display:none}
 .sec-grip{flex:none;display:grid;place-items:center;width:26px;height:30px;color:var(--muted);font-size:15px;cursor:grab;touch-action:none;opacity:.8}
 .sec-grip:active{cursor:grabbing;color:var(--accent)}
 @media(max-width:1023px){#botLabView,#rrBotLab,#blSettingRow{display:none!important}}
+
+/* Celular: Alertas y Notificaciones en la barra de arriba (junto a cuenta, ajustes y tema); el dock lleva el Screener */
+.icon-btn.m-top-only{display:grid;place-items:center}
+.icon-btn.m-top-only.active{color:var(--accent);border-color:var(--accent)}
+@media(min-width:1024px){.icon-btn.m-top-only{display:none!important}}
+@media(max-width:430px){.brand small{display:none}.top-actions{gap:4px}.top-actions .icon-btn{padding:6px 7px}.topbar{padding-left:10px;padding-right:10px}}
+@media(max-width:400px){.brand>div:not(.brand-icon){display:none}}
+.ex-bybitf{color:#f7a600}.ex-okxf{color:#e8eef9}.ex-bingxf{color:#2f7bff}.ex-kucoin{color:#24ae8f}.ex-gate{color:#2354e6}.ex-mexc{color:#3dc3c9}.ex-bitget{color:#00c4d6}.ex-htx{color:#2a8cf7}.ex-kraken{color:#8d5cf6}

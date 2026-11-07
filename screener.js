@@ -86,6 +86,6 @@
     const h = H(); if (!h) return; bind(); if (!st.tf) st.tf = TFS.includes(h.interval()) ? h.interval() : '1h';
     paint(); if (!st.rows.length || Date.now() - st.at > 120e3 || st.tfDone !== st.tf) { st.tfDone = st.tf; scan(); }
   }
-  document.addEventListener('click', e => { if (e.target.closest('#scrOpen, [data-side="screenerView"]')) open(); });
+  document.addEventListener('click', e => { if (e.target.closest('#scrOpen, [data-side="screenerView"], [data-view="screenerView"]')) open(); });
   window.CCTScreener = {signalOf, kindOf, open, sortRows, SIG_BARS};
 })();

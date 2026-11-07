@@ -120,3 +120,17 @@ test('ronda programada: avisa una vez, guarda el estado y borra suscripciones ve
     assert.strictEqual(pull.j.back[0].on, false); assert.ok(pull.j.now > 0); // la app se entera de que ya se disparó
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('/mkt: reenvía datos públicos solo de exchanges permitidos y solo a VORTEX', async () => {
+  const w = await W(), env = {KV: memKV()}, realFetch = globalThis.fetch, seen = [];
+  globalThis.fetch = async url => { seen.push(String(url)); return new Response(JSON.stringify({code: 0, data: [{symbol: 'BTC-USDT', lastPrice: '1'}]}), {headers: {'content-type': 'application/json'}}); };
+  const get = (u, origin = 'https://soobroon-beep.github.io') => w.default.fetch(new Request('https://x.workers.dev/mkt?u=' + encodeURIComponent(u), {headers: {origin}}), env);
+  try {
+    const ok = await get('https://open-api.bingx.com/openApi/swap/v2/quote/ticker');
+    assert.strictEqual(ok.status, 200); assert.strictEqual(ok.headers.get('access-control-allow-origin'), 'https://soobroon-beep.github.io'); assert.strictEqual((await ok.json()).data[0].symbol, 'BTC-USDT');
+    assert.strictEqual((await get('https://evil.example/x')).status, 403);
+    assert.strictEqual((await get('http://api.kucoin.com/api/v1/market/allTickers')).status, 403);
+    assert.strictEqual((await get('https://api.kucoin.com/api/v1/market/allTickers', 'https://evil.example')).status, 403);
+    assert.deepStrictEqual(seen, ['https://open-api.bingx.com/openApi/swap/v2/quote/ticker']);
+  } finally { globalThis.fetch = realFetch; }
+});

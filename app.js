@@ -58,7 +58,7 @@ function sanDiscord(a) { // Discord: webhook del canal #vortex, invitación al s
   return {url, invite: inv, on: {move: o.move !== false, price: o.price !== false, ind: o.ind !== false, s1h: o.s1h !== false, s4h: o.s4h !== false}, sent: {s1h: t(sn.s1h), s4h: t(sn.s4h)}};
 }
 const CTYPES = [['candles', 'Velas', 'c_candles'], ['hollow', 'Velas huecas', 'c_hollow'], ['ha', 'Heikin Ashi', 'c_ha'], ['bars', 'Barras OHLC', 'c_bars'], ['hlc', 'Barras HLC', 'c_hlc'], ['line', 'Línea', 'c_line'], ['area', 'Área', 'c_area'], ['step', 'Línea escalonada', 'c_step']];
-const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', okx: 'OKX Spot', coinbase: 'Coinbase', bingx: 'BingX', dom: 'Dominancia USDT/BTC'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
+const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', bybitf: 'Bybit Perpetuos', okx: 'OKX Spot', okxf: 'OKX Perpetuos', coinbase: 'Coinbase', bingx: 'BingX Spot', bingxf: 'BingX Perpetuos', kucoin: 'KuCoin', gate: 'Gate.io', mexc: 'MEXC', bitget: 'Bitget', htx: 'HTX', kraken: 'Kraken', dom: 'Dominancia USDT/BTC'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
 const CHART_DEF = {bg: '#0d1019', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1, alertCol: '', alertA: 28, alertS: 'Puntos', alertW: 1};
 function sanChartStyle(c) {
   const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
@@ -272,6 +272,7 @@ function switchView(id) {
   if (id === 'lensView') { const f = $('#lensFrame'); if (f && !f.src) f.src = f.dataset.src; }
   $$('.view').forEach(x => x.classList.toggle('active', x.id === id));
   $$('.bottom-nav button').forEach(x => x.classList.toggle('active', x.dataset.view === id));
+  { const ta = $('#topAlertsBtn'); if (ta) ta.classList.toggle('active', id === 'alertsView'); } // celular: Alertas vive arriba, junto a Notificaciones
   document.body.classList.toggle('chart-mode', id === 'chartView');
   if (id !== 'chartView') document.body.classList.remove('expanded');
   if (id === 'chartView') requestAnimationFrame(() => { if (!candles.length) loadCandles(); render(); });
@@ -282,6 +283,7 @@ function switchView(id) {
 }
 $$('.bottom-nav button').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
 $('#settingsBtn').onclick = () => switchView('settingsView');
+{ const ta = $('#topAlertsBtn'); if (ta) ta.onclick = () => switchView('alertsView'); }
 let prevSide = ''; // panel que estaba abierto antes del clic en la barra de iconos (volver a tocar el mismo lo oculta)
 $$('.right-rail [data-side]').forEach(b => b.addEventListener('click', () => { prevSide = document.body.dataset.side || 'watchView'; setSide(b.dataset.side); }));
 $('#scrOpen').addEventListener('click', () => { if (isDesktop()) setSide('screenerView'); else switchView('screenerView'); }); // celular: el Screener es una vista completa
@@ -1034,6 +1036,7 @@ const SRC_FETCH = {
   bingx: {ok: tf => !!(window.CCTMarkets && CCTMarkets.BX_IV[tf]), get: (sym, tf, limit) => CCTMarkets.klinesBingx(dashPair(sym), tf, limit)},
   dom: {ok: () => true, get: (sym, tf, limit) => CCTMarkets.klinesDom(sym, tf, limit)}
 };
+['bybitf', 'okxf', 'bingxf', 'kucoin', 'gate', 'mexc', 'bitget', 'htx', 'kraken'].forEach(x => { SRC_FETCH[x] = {ok: tf => !!(window.CCTMarkets && CCTMarkets.tfOk(x, tf)), get: (sym, tf, limit) => CCTMarkets.klines(x, sym, tf, limit)}; }); // más exchanges (spot y perpetuos)
 async function fetchKlinesAny(key, tf, signal, limit = 1000) { // el exchange va en la clave del activo; si no tiene el par o la temporalidad, se usa Binance Spot
   const sym = symOf(key), src = srcOf(key), f = SRC_FETCH[src];
   if (src === 'dom') return {cs: await f.get(sym, tf, limit, signal), src};
@@ -1066,15 +1069,15 @@ function connectWS() {
   if (typeof WebSocket === 'undefined') return;
   const gen = wsGen, sym = symOf(state.symbol), tf = state.interval, src = dataSrc || 'binance';
   if (src === 'dom') { setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH.dom.get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 60000); return; }
-  if (src === 'coinbase' || src === 'bingx') { // Coinbase y BingX no ofrecen velas por WebSocket público sencillo: se consulta cada 8 s
+  if (SRC_FETCH[src] && !(window.CCTMarkets ? CCTMarkets.LIVE_WS : ['binance', 'binancef', 'bybit', 'okx']).includes(src)) { // Coinbase, BingX, KuCoin, Gate, MEXC, Bitget, HTX, Kraken: sin WebSocket público sencillo, se consulta cada 8 s
     setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH[src].get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 8000); return;
   }
-  const by = src === 'bybit' && BY_IV[tf], ok = src === 'okx' && OKX_BAR[tf];
-  const url = by ? 'wss://stream.bybit.com/v5/public/spot' : ok ? 'wss://ws.okx.com:8443/ws/v5/business' : src === 'binancef' ? `wss://fstream.binance.com/ws/${sym.toLowerCase()}@kline_${tf}` : `wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_${tf}`;
+  const by = (src === 'bybit' || src === 'bybitf') && BY_IV[tf], ok = (src === 'okx' || src === 'okxf') && OKX_BAR[tf];
+  const url = by ? `wss://stream.bybit.com/v5/public/${src === 'bybitf' ? 'linear' : 'spot'}` : ok ? 'wss://ws.okx.com:8443/ws/v5/business' : src === 'binancef' ? `wss://fstream.binance.com/ws/${sym.toLowerCase()}@kline_${tf}` : `wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_${tf}`;
   try { ws = new WebSocket(url); } catch { return; }
   ws.onopen = () => { if (gen === wsGen) { wsOpen = true; wsRetry = 0; setLive(true);
     if (by) { ws.send(JSON.stringify({op: 'subscribe', args: [`kline.${BY_IV[tf]}.${sym}`]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send(JSON.stringify({op: 'ping'})); } catch {} }, 20000); }
-    if (ok) { ws.send(JSON.stringify({op: 'subscribe', args: [{channel: 'candle' + OKX_BAR[tf], instId: dashPair(sym)}]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send('ping'); } catch {} }, 20000); } } };
+    if (ok) { ws.send(JSON.stringify({op: 'subscribe', args: [{channel: 'candle' + OKX_BAR[tf], instId: dashPair(sym) + (src === 'okxf' ? '-SWAP' : '')}]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send('ping'); } catch {} }, 20000); } } };
   ws.onmessage = e => {
     if (gen !== wsGen) return;
     let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -1588,8 +1591,8 @@ function symBuild() {
     if (symTab === 'fav' && !state.symbols.includes(r.key)) return false;
     if (symF.src && r.src !== symF.src) return false;
     if (symF.quote && r.quote !== symF.quote) return false;
-    if (symF.prod === 'spot' && (r.src === 'binancef' || r.src === 'dom')) return false;
-    if (symF.prod === 'perp' && r.src !== 'binancef') return false;
+    if (symF.prod === 'spot' && (CCTMarkets.isPerp(r.src) || r.src === 'dom')) return false;
+    if (symF.prod === 'perp' && !CCTMarkets.isPerp(r.src)) return false;
     return true;
   });
   const g = new Map();
@@ -1638,7 +1641,7 @@ function renderSymEx() {
   if (!a) { box.innerHTML = ''; return; }
   const rows = a.rows.slice().sort((x, y) => (y.vol || 0) - (x.vol || 0) || M_ORDER(x) - M_ORDER(y)).slice(0, 40);
   box.innerHTML = `<div class="sym-head"><button class="sym-back" id="symBack" type="button">‹ Volver</button>${symIcon(a.base)}<b>${esc(a.base)}</b><small>${esc(a.name)}</small><span class="sym-count">${a.rows.length} ${a.rows.length === 1 ? 'mercado' : 'mercados'}</span></div>` +
-    rows.map(r => `<button class="sym-row ex" data-sympick="${esc(r.key)}" type="button"><span class="ex-tag ex-${r.src}">${esc(CCTMarkets.SHORT[r.src])}</span><span class="sym-nm"><strong>${esc(r.quote ? r.base + '/' + r.quote : r.base)}</strong><small>${r.src === 'binancef' ? 'Perpetuo' : r.src === 'dom' ? 'Índice' : 'Spot'}</small></span>${symSparkCell(r)}<span class="sym-px"><strong>${symPx(r)}</strong>${symChg(r)}</span><span class="sym-go">${state.symbols.includes(r.key) ? '✓' : '＋'}</span></button>`).join('');
+    rows.map(r => `<button class="sym-row ex" data-sympick="${esc(r.key)}" type="button"><span class="ex-tag ex-${r.src}">${esc(CCTMarkets.SHORT[r.src])}</span><span class="sym-nm"><strong>${esc(r.quote ? r.base + '/' + r.quote : r.base)}</strong><small>${CCTMarkets.isPerp(r.src) ? 'Perpetuo' : r.src === 'dom' ? 'Índice' : 'Spot'}</small></span>${symSparkCell(r)}<span class="sym-px"><strong>${symPx(r)}</strong>${symChg(r)}</span><span class="sym-go">${state.symbols.includes(r.key) ? '✓' : '＋'}</span></button>`).join('');
   symSparks(rows.map(r => r.key));
 }
 const M_ORDER = r => CCTMarkets.ORDER.indexOf(r.src);
@@ -3993,11 +3996,11 @@ function renderPrefs() {
   const onChange = e => { const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
   for (const r of [$('#settingsView'), $('#prefsPop')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
   // Campana: abre o cierra el panel de notificaciones y preferencias
-  const pop = $('#prefsPop'), btns = [$('#setPrefs')];
+  const pop = $('#prefsPop'), btns = [$('#setPrefs'), $('#topNotifBtn')]; // Ajustes y, en el celular, la campana de arriba
   const setOpen = on => { pop.hidden = !on; btns.forEach(b => b && b.classList.toggle('active', on)); if (on) renderPrefs(); };
   btns.forEach(b => b && b.addEventListener('click', e => { e.stopPropagation(); setOpen(pop.hidden); }));
   pop.querySelector('[data-pp-close]').onclick = () => setOpen(false);
-  document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('#prefsPop, #setPrefs')) setOpen(false); }, true);
+  document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('#prefsPop, #setPrefs, #topNotifBtn')) setOpen(false); }, true);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pop.hidden) setOpen(false); });
 }
 /* ───────── Sesiones de las bolsas: barra de estado abajo a la derecha del gráfico; al pasar el cursor (o tocar) sale la ventana con Nueva York, Londres, Tokio… ───────── */
