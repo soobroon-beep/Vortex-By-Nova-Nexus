@@ -803,3 +803,10 @@ body.botlab-wide #botLabView{grid-column:2/4;grid-row:1;z-index:5;background:var
 .pxc-l input[type=range]{accent-color:#b46bff}.pxc-n{color:var(--text);font-size:13px}
 #pxMsg.ok{color:#20bf9f}
 .light .pxc-chips button.on{color:#3b0d7a}
+/* Micrófono de Nexus Pixel */
+.px-in .px-mic{width:34px;height:34px;flex:0 0 34px;border:1px solid rgba(180,107,255,.4);border-radius:10px;background:rgba(180,107,255,.12);color:#e6dcff;display:grid;place-items:center;cursor:pointer;position:relative}
+.px-in .px-mic:hover{background:rgba(180,107,255,.25)}
+.px-in .px-mic.on{background:#f06b79;border-color:#f06b79;color:#fff;animation:pxMicP 1.2s ease-out infinite}
+@keyframes pxMicP{0%{box-shadow:0 0 0 0 rgba(240,107,121,.6)}100%{box-shadow:0 0 0 12px rgba(240,107,121,0)}}
+.px-bub.listening .px-dot{background:#f06b79;box-shadow:0 0 8px #f06b79;animation:pxBlink .7s ease-in-out infinite}
+.light .px-in .px-mic{color:#5b21b6}

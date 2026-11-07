@@ -39,7 +39,7 @@
   bub.innerHTML = `<div class="px-hd" title="Arrastra para moverlo"><span class="px-dot"></span><b>Nexus Pixel</b><small class="px-st">IA de VORTEX</small><button type="button" class="px-x" data-px="close" aria-label="Despedir a Nexus Pixel">&times;</button></div>
     <div class="px-msg" aria-live="polite"></div>
     <div class="px-chips">${[['Canal', 'Dibújame el canal'], ['Rango', 'Marca el rango'], ['Soportes y resistencias', 'Marca soportes y resistencias'], ['Tendencia', 'Traza la línea de tendencia'], ['Fibonacci', 'Pon Fibonacci'], ['Análisis completo', 'Análisis completo'], ['Borrar lo mío', 'Borra lo que dibujaste']].map(([t, q]) => `<button type="button" data-q="${esc(q)}">${t}</button>`).join('')}</div>
-    <form class="px-in"><input type="text" placeholder="Pídeme algo: «dibuja el canal»…" autocomplete="off" enterkeyhint="send" aria-label="Escríbele a Nexus Pixel"><button type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></form>`;
+    <form class="px-in"><input type="text" placeholder="Pídeme algo: «dibuja el canal»…" autocomplete="off" enterkeyhint="send" aria-label="Escríbele a Nexus Pixel"><button type="button" class="px-mic" aria-label="Hablarle a Nexus Pixel" title="Háblale"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button><button type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></form>`;
   area.append(ink, av, bub, fab);
   const cv = av.querySelector('.px-cv'), msg = bub.querySelector('.px-msg'), input = bub.querySelector('input'), st = bub.querySelector('.px-st');
 
@@ -191,13 +191,28 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     lastAct = Date.now();
   }
   async function hide() {
-    if (!open) return; open = false; ls.open = false; store(); bub.hidden = true; mood('wink', 'wave'); await sleep(REDUCED ? 0 : 450); mood('happy', 'fly'); { const s = AV(), pk = peekSpot(); await flyTo(pk.x - s.w / 2, AH() - s.h * .35, 600); await flyTo(pk.x - s.w / 2, AH() + 6, 260); }
+    if (!open) return; stopMic(); open = false; ls.open = false; store(); bub.hidden = true; mood('wink', 'wave'); await sleep(REDUCED ? 0 : 450); mood('happy', 'fly'); { const s = AV(), pk = peekSpot(); await flyTo(pk.x - s.w / 2, AH() - s.h * .35, 600); await flyTo(pk.x - s.w / 2, AH() + 6, 260); }
     av.hidden = true; fab.classList.remove('on', 'out'); fab.setAttribute('aria-label', 'Abrir a Nexus Pixel'); if (M) M.pause(true);
   }
   fab.addEventListener('click', () => { if (open) { if (bub.hidden) { bub.hidden = false; placeBubble(); input.focus({preventScroll: true}); } else hide(); } else show(true); });
   bub.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (q) { ask(q.dataset.q); return; } if (e.target.closest('[data-px=close]')) hide(); });
   bub.querySelector('form').addEventListener('submit', e => { e.preventDefault(); ask(input.value); });
-  input.addEventListener('keydown', e => e.stopPropagation()); // que las teclas no muevan el gráfico mientras escribes
+  input.addEventListener('keydown', e => e.stopPropagation());
+
+  /* ── Micrófono: háblale a Pixel (reconocimiento de voz del navegador, en español). Al terminar de hablar se manda solo. ── */
+  const mic = bub.querySelector('.px-mic'), SR = window.SpeechRecognition || window.webkitSpeechRecognition; let rec = null, heard = '';
+  function stopMic() { if (rec) { try { rec.stop(); } catch {} } }
+  mic.addEventListener('click', () => {
+    if (rec) { stopMic(); return; }
+    if (!SR) { say('Tu navegador no permite dictar por voz. En Android usa Chrome; en iPhone, Safari actualizado. También puedes usar el micrófono del teclado.'); return; }
+    if (busy) return; wake();
+    rec = new SR(); rec.lang = 'es-MX'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1; heard = '';
+    rec.onstart = () => { mic.classList.add('on'); bub.classList.add('listening'); status('te escucho…'); input.value = ''; input.placeholder = 'Te escucho… habla ahora'; mood('surprised', 'idle'); };
+    rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; heard = t.trim(); input.value = heard; };
+    rec.onerror = e => { const m = e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'Necesito permiso para usar el micrófono: actívalo en los permisos del navegador (o de VORTEX) y vuelve a tocarlo.' : e.error === 'no-speech' ? 'No te escuché. Toca el micrófono y vuelve a intentarlo.' : e.error === 'network' ? 'El dictado por voz necesita internet.' : ''; if (m) say(m); };
+    rec.onend = () => { mic.classList.remove('on'); bub.classList.remove('listening'); status('IA de VORTEX'); input.placeholder = 'Pídeme algo: «dibuja el canal»…'; rec = null; mood('neutral', 'idle'); const t = heard; heard = ''; if (t) ask(t); };
+    try { rec.start(); } catch { rec = null; say('No se pudo iniciar el micrófono. Inténtalo otra vez.'); }
+  }); // que las teclas no muevan el gráfico mientras escribes
 
   /* ── tocar, girar 360° y mover ── */
   let drag = null, taps = 0, tapT = 0;
