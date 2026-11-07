@@ -98,11 +98,11 @@
     const hex = s.match(/#[0-9a-f]{6}\b/); if (hex) col = hex[0];
     const lw = /grues|gord|resalta/.test(s) ? 3 : /delgad|\bfin[oa]s?\b/.test(s) ? 1 : 0;
     const ds = /puntead|puntitos|de puntos/.test(s) ? 'dot' : /discontinu|guiones|rayitas|cortad/.test(s) ? 'dash' : /solida|continua|lisa/.test(s) ? '' : null;
-    const editVerb = /(cambia|cambiale|cambiar|\bpon\b|ponle|ponla|ponlo|pinta|colorea|\bhaz\b|hazla|hazlo|que sea|vuelve|deja)/.test(s);
+    const editVerb = /(cambia|\bpon(er|le|la|lo|las|los|ga)?\b|pinta|colorea|\bhaz\b|hazla|hazlo|hacer|que sea|vuelve|deja)/.test(s);
     if (/(borra|quita|elimina|limpia|desaparece)/.test(s)) { if (!t || t === 'all') return [{do: 'clear'}]; return [{do: 'remove', target: t}]; }
     const mv = s.match(/\b(?:a|en|hasta)\s*\$?\s*([0-9][0-9.,]*)\s*(k|mil)?\b/);
     if (mv && t && t !== 'all' && /(mueve|mover|muevela|recorre|subela|bajala|pasala|llevala)/.test(s)) { const raw = mv[1].replace(/[.,]$/, ''); let v = /^\d{1,3}([.,]\d{3})+$/.test(raw) ? +raw.replace(/[.,]/g, '') : +raw.replace(',', '.'); if (mv[2]) v *= 1000; if (v > 0) return [{do: 'move', target: t, price: v}]; }
-    if ((editVerb || col) && (col || lw || ds !== null) && !/(dibuja|traza|marca|crea|agrega|anade)/.test(s)) { const o = {do: 'style', target: t || 'last'}; if (col) o.col = col; if (lw) o.lw = lw; if (ds !== null) o.ds = ds; return [o]; }
+    if ((editVerb || col || (t && t !== 'all')) && (col || lw || ds !== null) && !/(dibuja|traza|marca|crea|agrega|anade)/.test(s)) { const o = {do: 'style', target: t || 'last'}; if (col) o.col = col; if (lw) o.lw = lw; if (ds !== null) o.ds = ds; return [o]; }
     return [];
   }
 
@@ -133,7 +133,7 @@
   function parseEditMulti(text) {
     const parts = nz(text).split(/\s+(?:y|e|tambien)\s+|[,;]/).map(x => x.trim()).filter(Boolean);
     if (parts.length < 2) return parseEdit(text);
-    const verb = (nz(text).match(/^(cambia(le)?|pon(le|la|lo)?|pinta|colorea|haz(la|lo)?|borra|quita|elimina)\b/) || [''])[0];
+    const verb = (nz(text).match(/^(cambia(le|r)?|pon(er|le|la|lo)?|pinta(r)?|colorea(r)?|haz(la|lo)?|borra(r)?|quita(r)?|elimina(r)?)\b/) || [''])[0];
     const out = [], pend = [];
     for (const p0 of parts) { const p = verb && !/^(cambia|pon|pinta|colorea|haz|borra|quita|elimina)/.test(p0) ? verb + ' ' + p0 : p0, e = parseEdit(p), t = targetOf(p);
       if (e.length && e[0].do !== 'clear') { for (const tt of pend) out.push({...e[0], target: tt}); pend.length = 0; if (e[0].do === 'style' && !t && out.length && out[out.length - 1].do === 'style') { const o = out[out.length - 1]; for (const k of ['col', 'lw', 'ds']) if (e[0][k] !== undefined) o[k] = e[0][k]; continue; } out.push(e[0]); }
