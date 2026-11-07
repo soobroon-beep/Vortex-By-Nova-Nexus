@@ -283,6 +283,18 @@ function switchView(id) {
 }
 $$('.bottom-nav button').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
 $('#settingsBtn').onclick = () => switchView('settingsView');
+/* Centro de avisos: todo en la vista Alertas, en tres pestañas (Mis alertas · Cómo te aviso · Movimientos bruscos) */
+let alTab = 'list';
+function setAlTab(t) {
+  alTab = t; $$('#alertsView [data-altab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.altab === t)));
+  $$('#alertsView [data-alpane]').forEach(p => { p.hidden = p.dataset.alpane !== t; });
+  if (t === 'how') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } else if (t === 'move') renderMoveAlerts();
+}
+function alTabCount() { const n = (state.alerts || []).filter(a => a.on).length, e = $('#alTabN'); if (e) e.textContent = n ? String(n) : ''; }
+function openAlerts(t) { switchView('alertsView'); setAlTab(t || alTab); }
+$$('#alertsView [data-altab]').forEach(b => b.addEventListener('click', () => setAlTab(b.dataset.altab)));
+{ const d = $('#alDiscord'); if (d) d.onclick = () => { window.CCT_dcBack = 'alertsView'; switchView('discordView'); if (window.CCTDiscord) setTimeout(() => CCTDiscord.paint(), 0); }; }
+{ const s2 = $('#setAlerts'); if (s2) s2.onclick = () => openAlerts('how'); }
 { const ta = $('#topAlertsBtn'); if (ta) ta.onclick = () => switchView('alertsView'); }
 let prevSide = ''; // panel que estaba abierto antes del clic en la barra de iconos (volver a tocar el mismo lo oculta)
 $$('.right-rail [data-side]').forEach(b => b.addEventListener('click', () => { prevSide = document.body.dataset.side || 'watchView'; setSide(b.dataset.side); }));
@@ -649,6 +661,7 @@ async function checkAlertsPoll() {
 }
 function curPrice(sym) { const t = tickers[sym]; return Number.isFinite(+t?.lastPrice) && t ? +t.lastPrice : alertPrice[sym]; }
 function renderAlerts() {
+  alTabCount();
   const el = $('#alertList'); if (!el) return;
   const act = state.alerts.filter(a => a.on), done = state.alerts.filter(a => !a.on);
   const row = a => { if (a.kind === 'ind') { const missing = a.src === 'pine' && !scripts.some(s => s.id === a.sid);
@@ -3959,7 +3972,7 @@ function setPref(k, v, sub) { // guarda una preferencia, la manda a la cuenta y 
   syncUi(); renderPrefs(); try { render(); renderWatch(); updateChartHeader(); renderAlerts(); renderMoveAlerts(); } catch {}
 }
 function renderPrefs() {
-  const pb = $('#prefsBox'), nb = $('#notifBox'), ab = $('#aboutBox'); if (!pb || !nb || !ab) return;
+  const pb = $('#prefsBox'), nb = $('#notifBox'), ab = $('#aboutBox'); if (!pb || !nb || !ab) return; alTabCount();
   const seg = (k, cur, opts) => `<div class="seg" role="group">${opts.map(([v, t]) => `<button type="button" data-pk="${k}" data-v="${v}" aria-pressed="${String(cur) === String(v)}">${t}</button>`).join('')}</div>`;
   const row = (t, sm, ctl) => `<div class="pref-row"><div class="pref-l"><b>${t}</b>${sm ? `<small>${sm}</small>` : ''}</div><div class="pref-c">${ctl}</div></div>`;
   const sw = (id, on, t, sm) => row(t, sm, `<button type="button" class="toggle${on ? ' on' : ''}" data-sw="${id}" role="switch" aria-checked="${!!on}" aria-label="${t}"></button>`);
@@ -3976,7 +3989,6 @@ function renderPrefs() {
   nb.innerHTML = `<div class="pref-list">`
     + row('Sonido', '', seg('sound', PR.sound, [['on', 'Activado'], ['off', 'Silencio']]))
     + row('Tono', '', `<select class="pref-sel" data-pk="tone" aria-label="Tono">${CCTPrefs.TONES.map(([v, t]) => `<option value="${v}" ${PR.tone === v ? 'selected' : ''}>${t}</option>`).join('')}</select><button type="button" class="pref-play" data-play aria-label="Probar sonido" title="Probar sonido"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg></button>`)
-    + sw('move', !!M.on, 'Movimientos bruscos', 'Sube o cae fuerte en minutos')
     + sw('price', PR.n.price, 'Alertas de precio', 'Cuando el precio toca tu nivel')
     + sw('ind', PR.n.ind, 'Alertas de indicador', 'Señales de tus indicadores')
     + sw('discord', PR.n.discord, 'Enviar a Discord', 'Los avisos también al canal #vortex')
@@ -3994,13 +4006,13 @@ function renderPrefs() {
     if (e.target.closest('[data-news]')) openNews();
   };
   const onChange = e => { const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
-  for (const r of [$('#settingsView'), $('#prefsPop')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
+  for (const r of [$('#settingsView'), $('#prefsPop'), $('#alertsView')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
   // Campana: abre o cierra el panel de notificaciones y preferencias
-  const pop = $('#prefsPop'), btns = [$('#setPrefs'), $('#topNotifBtn')]; // Ajustes y, en el celular, la campana de arriba
+  const pop = $('#prefsPop'), btns = [$('#setPrefs')]; // Preferencias (hora, fecha, formato) desde Configuración
   const setOpen = on => { pop.hidden = !on; btns.forEach(b => b && b.classList.toggle('active', on)); if (on) renderPrefs(); };
   btns.forEach(b => b && b.addEventListener('click', e => { e.stopPropagation(); setOpen(pop.hidden); }));
   pop.querySelector('[data-pp-close]').onclick = () => setOpen(false);
-  document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('#prefsPop, #setPrefs, #topNotifBtn')) setOpen(false); }, true);
+  document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('#prefsPop, #setPrefs')) setOpen(false); }, true);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pop.hidden) setOpen(false); });
 }
 /* ───────── Sesiones de las bolsas: barra de estado abajo a la derecha del gráfico; al pasar el cursor (o tocar) sale la ventana con Nueva York, Londres, Tokio… ───────── */

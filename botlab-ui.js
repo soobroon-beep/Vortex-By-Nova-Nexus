@@ -101,19 +101,99 @@
   const head = (title, sub, back, extra) => `<div class="bl-head">${back ? `<button class="bl-ib" data-a="${back}" aria-label="Volver">${IC.back}</button>` : `<span class="bl-logo">${IC.robot}</span>`}<div class="bl-title"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>${extra || ''}<button class="bl-ib bl-exp" data-a="wide" aria-label="${wide ? 'Reducir' : 'Expandir'}" title="${wide ? 'Volver al tamaño normal' : 'Expandir el laboratorio'}">${wide ? IC.shrink : IC.expand}</button></div>`;
   const desk = () => matchMedia('(min-width:1024px)').matches; // Nova Bot Lab es solo para la versión de PC
   function render() {
-    if (!root || !desk()) return; stopReplayIf(); const keep = root.scrollTop;
-    if (view === 'lib') libView(); else if (view === 'new') newView(); else if (view === 'edit') editView(); else if (view === 'bot') botView(); else if (view === 'cmp') cmpView(); else if (view === 'risk') riskView();
+    if (!root || !desk()) return; stopReplayIf(); const keep = root.scrollTop; document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches); // antes de dibujar: las gráficas del dashboard usan el ancho real
+    if (view === 'lib') { libView(); dashBind(); dashWatch(); } else if (view === 'new') newView(); else if (view === 'edit') editView(); else if (view === 'bot') botView(); else if (view === 'cmp') cmpView(); else if (view === 'risk') riskView();
     root.scrollTop = view === 'lib' ? keep : root.scrollTop; document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches);
   }
   const stopReplayIf = () => { if (replay.timer && view !== 'bot') { clearInterval(replay.timer); replay.timer = 0; replay.on = false; } };
 
   function miniStats(b) { const r = runOf(b); if (!r) return '<span class="bl-dim">Sin pruebas todavía</span>'; const m = r.metrics; return `<span class="${cls(m.net)}">${pct(m.retPct)}</span> · ${m.n} op. · aciertos ${m.winRate == null ? '—' : num(m.winRate, 0) + ' %'} · DD ${num(m.maxDDPct, 1)} %`; }
+  /* ───────── Dashboard visual (arriba de la biblioteca): KPIs, curvas de capital interactivas, ranking, riesgo vs. retorno, paper en vivo y actividad ─────────
+     Todo sale de los backtests y sesiones de paper guardados; no inventa datos. Pasa el cursor (o el dedo) por las gráficas para ver los valores. */
+  const PAL = ['#548fff', '#20bf9f', '#f0b90b', '#c084fc', '#f06b79', '#38bdf8', '#fb923c', '#a3e635', '#f472b6', '#2dd4bf'];
+  const dash = {mode: 'bt', off: new Set(), ser: []};
+  const colOf = id => { const i = S.bots.findIndex(b => b.id === id); return PAL[(i < 0 ? 0 : i) % PAL.length]; };
+  function dashSeries() {
+    const out = [];
+    for (const b of S.bots) {
+      if (b.status === 'archived') continue; const col = colOf(b.id);
+      if (dash.mode === 'bt') { const r = runOf(b); if (!r || !r.equity || r.equity.length < 2) continue; const cap = ((mainSpec(b).risk || {}).capital) || r.equity[0][1] || 1; out.push({k: b.id, id: b.id, name: b.name, col, m: r.metrics, pts: r.equity.map(p => [p[0], (p[1] / cap - 1) * 100])}); }
+      else for (const s of b.paper || []) { if (!s.curve || s.curve.length < 2 || s.status === 'stopped') continue; const st = PP() ? PP().stats(s) : null; out.push({k: s.id, id: b.id, name: b.name + ((b.paper || []).length > 1 ? ' · v' + s.v : ''), col, m: st, sess: s, pts: s.curve.map(p => [p[0], (p[1] / s.capital - 1) * 100])}); }
+    }
+    return out;
+  }
+  const ring = (v, col) => { const p = Math.max(0, Math.min(100, v || 0)), c = 2 * Math.PI * 15; return `<svg class="bd-ring" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="15" fill="none" stroke="var(--line)" stroke-width="5"/><circle cx="20" cy="20" r="15" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${(c * p / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 20 20)"/></svg>`; };
+  const spark = (pts, col, w = 120, h = 34) => { if (!pts || pts.length < 2) return ''; const ys = pts.map(p => p[1]), lo = Math.min(...ys), hi = Math.max(...ys), t0 = pts[0][0], t1 = pts[pts.length - 1][0] || t0 + 1, X = t => (t - t0) / (t1 - t0 || 1) * w, Y = v => h - 2 - (v - lo) / (hi - lo || 1) * (h - 4); const d = pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(''); return `<svg class="bd-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="${d}L${w} ${h}L0 ${h}Z" fill="${col}" opacity=".14"/><path d="${d}" fill="none" stroke="${col}" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`; };
+  function eqChart(W, H) {
+    const vis = dash.ser.filter(x => !dash.off.has(x.k)); if (!vis.length) return `<div class="bd-empty">${dash.ser.length ? 'Activa algún bot en la leyenda para ver su curva.' : dash.mode === 'bt' ? 'Prueba un bot (backtest) para ver aquí su curva de capital.' : 'Inicia paper trading en un bot para verlo aquí en vivo.'}</div>`;
+    const all = vis.flatMap(s => s.pts); let t0 = Math.min(...all.map(p => p[0])), t1 = Math.max(...all.map(p => p[0])); if (t1 <= t0) t1 = t0 + 1;
+    let y0 = Math.min(0, ...all.map(p => p[1])), y1 = Math.max(0, ...all.map(p => p[1])); const pad = (y1 - y0) * .1 || 1; y0 -= pad; y1 += pad;
+    const pl = 8, pr = 46, pt = 10, pb = 22, X = t => pl + (t - t0) / (t1 - t0) * (W - pl - pr), Y = v => pt + (y1 - v) / (y1 - y0) * (H - pt - pb);
+    const step = (() => { const r = (y1 - y0) / 4, m = Math.pow(10, Math.floor(Math.log10(r))); return [1, 2, 2.5, 5, 10].map(x => x * m).find(x => x >= r) || r; })();
+    let grid = ''; for (let v = Math.ceil(y0 / step) * step; v <= y1; v += step) grid += `<line x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}" class="${Math.abs(v) < step / 1e3 ? 'bd-zero' : 'bd-grid'}"/><text x="${W - pr + 6}" y="${Y(v) + 3.5}" class="bd-ax">${Math.abs(v) < step / 1e3 ? '0' : (v > 0 ? '+' : '') + num(v, step < 1 ? 1 : 0)}%</text>`;
+    for (let i = 0; i <= 3; i++) { const t = t0 + (t1 - t0) * i / 3; grid += `<text x="${X(t)}" y="${H - 6}" class="bd-ax" text-anchor="${i === 0 ? 'start' : i === 3 ? 'end' : 'middle'}">${dd(t)}</text>`; }
+    const lines = vis.map((s, i) => { const d = s.pts.map((p, j) => (j ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(''), last = s.pts[s.pts.length - 1];
+      return `${i === 0 ? `<path d="${d}L${X(last[0]).toFixed(1)} ${Y(0)}L${X(s.pts[0][0]).toFixed(1)} ${Y(0)}Z" fill="${s.col}" opacity=".10"/>` : ''}<path d="${d}" fill="none" stroke="${s.col}" stroke-width="2" stroke-linejoin="round" class="bd-line"/><circle cx="${X(last[0])}" cy="${Y(last[1])}" r="3.5" fill="${s.col}"/>`; }).join('');
+    dash.geo = {X, Y, t0, t1, pl, pr, W, H, vis};
+    return `<div class="bd-eqwrap"><svg class="bd-eq" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${grid}${lines}<g class="bd-cross" visibility="hidden"><line class="bd-cl" y1="${pt}" y2="${H - pb}"/>${vis.map(s => `<circle r="4.5" fill="${s.col}" stroke="var(--bg)" stroke-width="2"/>`).join('')}</g></svg><div class="bd-tip" hidden></div></div>`;
+  }
+  function dashHtml() {
+    dash.ser = dashSeries();
+    const act = S.bots.filter(b => b.status !== 'archived'), runs = act.map(b => ({b, r: runOf(b)})).filter(x => x.r), sess = act.flatMap(b => (b.paper || []).filter(s => s.status === 'running').map(s => ({b, s, st: PP() ? PP().stats(s) : null})));
+    if (!act.length) return `<div class="bd-hero"><div class="bd-hero-ic">${IC.robot}</div><h3>Tu laboratorio de bots</h3><p>Crea un bot en español, con el constructor visual o con tus indicadores. Pruébalo con datos reales (backtest), simúlalo en vivo (paper) y aquí verás todo en gráficas.</p><div class="bd-steps"><span><b>1</b>Crear</span><i></i><span><b>2</b>Probar</span><i></i><span><b>3</b>Simular</span><i></i><span><b>4</b>Mejorar</span></div><button class="bl-btn" data-a="new">${IC.plus}Crear mi primer bot</button></div>`;
+    const best = runs.slice().sort((a, b) => b.r.metrics.retPct - a.r.metrics.retPct)[0], wr = runs.filter(x => x.r.metrics.winRate != null), avgWr = wr.length ? wr.reduce((a, x) => a + x.r.metrics.winRate, 0) / wr.length : null;
+    const worstDD = runs.length ? Math.max(...runs.map(x => x.r.metrics.maxDDPct || 0)) : null, papNet = sess.reduce((a, x) => a + ((x.st && x.st.net) || 0), 0), pos = runs.filter(x => x.r.metrics.net > 0).length;
+    const kpi = (lab, val, sub, extra, c) => `<div class="bd-kpi ${c || ''}">${extra || ''}<div><small>${lab}</small><b>${val}</b>${sub ? `<em>${sub}</em>` : ''}</div></div>`;
+    const kpis = `<div class="bd-kpis">`
+      + kpi('Bots', act.length, `${runs.length} probados · ${sess.length} en vivo`)
+      + kpi('Mejor bot', best ? `<span class="${cls(best.r.metrics.retPct)}">${pct(best.r.metrics.retPct)}</span>` : '—', best ? esc(best.b.name) : 'Sin pruebas', '', best ? 'click' : '').replace('class="bd-kpi click"', best ? `class="bd-kpi click" data-a="open" data-id="${best.b.id}"` : 'class="bd-kpi"')
+      + kpi('Aciertos promedio', avgWr == null ? '—' : num(avgWr, 0) + ' %', `${pos}/${runs.length} bots ganan`, ring(avgWr, avgWr >= 50 ? '#20bf9f' : '#f0b90b'))
+      + kpi('Peor caída', worstDD == null ? '—' : num(worstDD, 1) + ' %', 'drawdown máximo', ring(Math.min(100, (worstDD || 0) * 2), (worstDD || 0) > 25 ? '#f06b79' : (worstDD || 0) > 12 ? '#f0b90b' : '#20bf9f'))
+      + kpi('Paper en vivo', sess.length ? `<span class="${cls(papNet)}">${money(papNet)}</span>` : '—', sess.length ? `${sess.length} sesión${sess.length === 1 ? '' : 'es'} simulando` : 'sin simulaciones')
+      + `</div>`;
+    const legend = dash.ser.map(s => `<button type="button" class="bd-leg ${dash.off.has(s.k) ? 'off' : ''}" data-dleg="${esc(s.k)}"><i style="background:${s.col}"></i>${esc(s.name)}<span class="${cls(s.m && s.m.retPct)}">${s.m ? pct(s.m.retPct) : ''}</span></button>`).join('');
+    const W = Math.max(280, Math.min(1400, (root.clientWidth || 360) - 34)); dash.w = root.clientWidth;
+    const board = runs.slice().sort((a, b) => b.r.metrics.retPct - a.r.metrics.retPct), mx = Math.max(1, ...board.map(x => Math.abs(x.r.metrics.retPct)));
+    const lb = board.map((x, i) => { const m = x.r.metrics, w = Math.abs(m.retPct) / mx * 50; return `<button type="button" class="bd-row" data-a="open" data-id="${x.b.id}"><span class="bd-pos">${i + 1}</span><span class="bd-nm"><b>${esc(x.b.name)}</b><small>${esc(mainSpec(x.b).symbol)} · ${esc(mainSpec(x.b).interval)} · ${m.n} op. · ${m.winRate == null ? '—' : num(m.winRate, 0) + ' %'} aciertos</small></span><span class="bd-bar"><i class="${m.retPct >= 0 ? 'up' : 'dn'}" style="${m.retPct >= 0 ? 'left:50%' : 'right:50%'};width:${w.toFixed(1)}%"></i></span><span class="bd-val ${cls(m.retPct)}">${pct(m.retPct)}</span></button>`; }).join('');
+    const SW = Math.max(280, Math.min(W, Math.round(W > 700 ? W / 2 - 40 : W))), SH = 200, mdd = Math.max(5, ...runs.map(x => x.r.metrics.maxDDPct || 0)) * 1.1, rr = runs.map(x => x.r.metrics.retPct), ry0 = Math.min(0, ...rr) * 1.15 - 1, ry1 = Math.max(0, ...rr) * 1.15 + 1;
+    const sX = v => 30 + v / mdd * (SW - 44), sY = v => 10 + (ry1 - v) / (ry1 - ry0) * (SH - 34);
+    const scatter = runs.length ? `<svg class="bd-sc" viewBox="0 0 ${SW} ${SH}" width="${SW}" height="${SH}"><rect x="30" y="10" width="${(sX(mdd / 2) - 30).toFixed(1)}" height="${(sY(0) - 10).toFixed(1)}" class="bd-ideal"/><text x="36" y="${(sY(0) - 6).toFixed(1)}" class="bd-ax bd-idl">Zona ideal: gana con poco riesgo</text><line x1="30" x2="${SW - 14}" y1="${sY(0)}" y2="${sY(0)}" class="bd-zero"/><line x1="30" x2="30" y1="10" y2="${SH - 24}" class="bd-grid"/><text x="${SW - 14}" y="${SH - 6}" class="bd-ax" text-anchor="end">Caída máxima → más riesgo</text><text x="4" y="14" class="bd-ax">Gana</text><text x="4" y="${SH - 26}" class="bd-ax">Pierde</text>`
+      + runs.map(x => { const m = x.r.metrics, r = Math.max(5, Math.min(13, 4 + Math.sqrt(m.n || 1))); return `<g class="bd-pt" data-a="open" data-id="${x.b.id}"><circle cx="${sX(m.maxDDPct || 0).toFixed(1)}" cy="${sY(m.retPct).toFixed(1)}" r="${r.toFixed(1)}" fill="${colOf(x.b.id)}" fill-opacity=".75" stroke="${colOf(x.b.id)}"/><title>${esc(x.b.name)}: ${pct(m.retPct)} · caída ${num(m.maxDDPct, 1)} % · ${m.n} operaciones</title></g>`; }).join('') + `</svg><p class="bd-note">Cada burbuja es un bot; más grande = más operaciones. Toca una para abrirlo.</p>` : `<div class="bd-empty">Prueba tus bots para compararlos aquí.</div>`;
+    const live = sess.map(({b, s, st}) => { const o = s.open; return `<button type="button" class="bd-live" data-a="open" data-id="${b.id}"><div class="bd-live-h"><span class="bd-dot"></span><b>${esc(b.name)}</b><small>${esc(s.spec.symbol)} · ${esc(s.spec.interval)}</small></div><div class="bd-live-m"><span class="bd-pos-chip ${o ? (o.side === 'long' ? 'long' : 'short') : 'flat'}">${o ? (o.side === 'long' ? 'COMPRADO' : 'VENDIDO') : 'SIN POSICIÓN'}</span><b class="${cls(st && st.net)}">${st ? money(st.net) : '—'}</b><small>${st ? pct(st.retPct) : ''}</small></div>${spark(s.curve, colOf(b.id), 220, 40)}<small class="bd-live-f">${st ? `${st.nClosed} operaciones cerradas · ${num(st.days, 1)} días` : ''}${o ? ` · abierta ${o.unreal >= 0 ? '+' : '−'}$${num(Math.abs(o.unreal), 2)}` : ''}</small></button>`; }).join('');
+    const feed = act.flatMap(b => (b.journal || []).slice(-6).map(j => ({b, j}))).sort((a, b) => b.j.t - a.j.t).slice(0, 7).map(({b, j}) => `<div class="bd-ev"><i style="background:${colOf(b.id)}"></i><div><b>${esc(b.name)}</b> <span class="bd-kind">${esc(j.kind)}</span><small>${esc(String(j.text).slice(0, 140))}</small></div><time>${dt(j.t)}</time></div>`).join('');
+    return `<div class="bd">${kpis}
+      <div class="bd-card"><div class="bd-ch"><h4>Curva de capital</h4><div class="bd-seg"><button type="button" data-dmode="bt" aria-pressed="${dash.mode === 'bt'}">Backtest</button><button type="button" data-dmode="paper" aria-pressed="${dash.mode === 'paper'}">Paper en vivo</button></div></div>
+        <div class="bd-legs">${legend}</div>${eqChart(W, 230)}</div>
+      ${sess.length ? `<div class="bd-card"><div class="bd-ch"><h4>Simulando ahora</h4><small>${sess.length} en vivo</small></div><div class="bd-lives">${live}</div></div>` : ''}
+      <div class="bd-cols"><div class="bd-card"><div class="bd-ch"><h4>Ranking por rentabilidad</h4><small>último backtest</small></div>${lb || '<div class="bd-empty">Aún no hay bots probados.</div>'}</div>
+      <div class="bd-card"><div class="bd-ch"><h4>Riesgo vs. retorno</h4></div>${scatter}</div></div>
+      ${feed ? `<div class="bd-card"><div class="bd-ch"><h4>Actividad reciente</h4></div><div class="bd-feed">${feed}</div></div>` : ''}
+      <h4 class="bd-sub">Tus bots</h4></div>`;
+  }
+  function dashBind() { // cruz y tooltip de la curva de capital (ratón o dedo)
+    const svg = root.querySelector('.bd-eq'), tip = root.querySelector('.bd-tip'); if (!svg || !dash.geo) return;
+    const G = dash.geo, cross = svg.querySelector('.bd-cross'), cl = svg.querySelector('.bd-cl'), dots = [...cross.querySelectorAll('circle')];
+    const at = (pts, t) => { let lo = 0, hi = pts.length - 1; if (t <= pts[0][0]) return null; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m][0] <= t) lo = m; else hi = m; } return t > pts[pts.length - 1][0] ? pts[pts.length - 1] : pts[lo]; };
+    const move = e => { const r = svg.getBoundingClientRect(), x = (e.clientX - r.left) * G.W / r.width; if (x < G.pl || x > G.W - G.pr) { hide(); return; }
+      const t = G.t0 + (x - G.pl) / (G.W - G.pl - G.pr) * (G.t1 - G.t0); cross.setAttribute('visibility', 'visible'); cl.setAttribute('x1', x); cl.setAttribute('x2', x);
+      const rows = G.vis.map((s, i) => { const p = at(s.pts, t); if (!p) { dots[i].setAttribute('visibility', 'hidden'); return ''; } dots[i].setAttribute('visibility', 'visible'); dots[i].setAttribute('cx', G.X(p[0])); dots[i].setAttribute('cy', G.Y(p[1])); return `<div><i style="background:${s.col}"></i>${esc(s.name)}<b class="${cls(p[1])}">${pct(p[1], 2)}</b></div>`; }).join('');
+      tip.innerHTML = `<small>${dt(t)}</small>${rows}`; tip.hidden = false; const left = (x / G.W) * r.width; tip.style.left = Math.min(r.width - tip.offsetWidth - 4, Math.max(4, left + 14 + tip.offsetWidth > r.width ? left - tip.offsetWidth - 14 : left + 14)) + 'px'; };
+    const hide = () => { cross.setAttribute('visibility', 'hidden'); tip.hidden = true; };
+    svg.addEventListener('pointermove', move); svg.addEventListener('pointerdown', move); svg.addEventListener('pointerleave', hide);
+  }
+  let dashRO = null; // si cambias el ancho del panel (o lo expandes), se vuelven a dibujar las gráficas a su tamaño
+  function dashWatch() { if (dashRO || !window.ResizeObserver || !root) return; let t = 0; dashRO = new ResizeObserver(() => { clearTimeout(t); t = setTimeout(() => { if (view === 'lib' && root.clientWidth && Math.abs(root.clientWidth - (dash.w || 0)) > 24) render(); }, 160); }); dashRO.observe(root); }
+  function dashClick(e) {
+    const m = e.target.closest('[data-dmode]'); if (m && root.contains(m)) { dash.mode = m.dataset.dmode; render(); return true; }
+    const l = e.target.closest('[data-dleg]'); if (l && root.contains(l)) { const k = l.dataset.dleg; dash.off.has(k) ? dash.off.delete(k) : dash.off.add(k); render(); return true; }
+    return false;
+  }
   function libView() {
     const list = S.bots.filter(b => showArch ? true : b.status !== 'archived').sort((a, b) => b.updatedAt - a.updatedAt), tested = S.bots.filter(b => runOf(b));
     root.innerHTML = head('NOVA BOT LAB', 'AI Trading Laboratory · backtest y simulación, sin dinero real') + `<div class="bl-actions"><button class="bl-btn" data-a="new">${IC.plus}Crear nuevo bot</button><button class="bl-btn ghost" data-a="import">Importar</button><button class="bl-btn ghost" data-a="risk">Panel de riesgo</button><button class="bl-btn ghost" data-a="cmp" ${sel.size >= 2 ? '' : 'disabled'}>Comparar (${sel.size})</button><label class="bl-chk"><input type="checkbox" id="blArch" ${showArch ? 'checked' : ''}> Archivados</label></div>
-      <div class="bl-stats"><div><b>${S.bots.filter(b => b.status !== 'archived').length}</b><small>Bots</small></div><div><b>${tested.length}</b><small>Probados</small></div><div><b>${S.bots.reduce((a, b) => a + b.runs.length, 0)}</b><small>Backtests guardados</small></div><div><b>${S.bots.reduce((a, b) => a + (b.paper || []).filter(x => x.status === 'running').length, 0)}</b><small>Simulando (paper)</small></div></div>
+      ${dashHtml()}
       ${list.length ? list.map(b => { const v = mainSpec(b); return `<div class="bl-card ${b.status}"><label class="bl-sel"><input type="checkbox" data-sel="${b.id}" ${sel.has(b.id) ? 'checked' : ''}></label><div class="bl-card-m" data-a="open" data-id="${b.id}"><div class="bl-card-t"><b>${esc(b.name)}</b><span class="bl-chip s-${b.status}">${ST[b.status] || b.status}</span></div><small>${esc(v.symbol)} · ${esc(v.interval)} · v${b.mainV} · ${b.method === 'nl' ? 'lenguaje natural' : b.method === 'nova' ? 'Nova' : b.method === 'indicador' ? 'indicador propio' : 'constructor'}${b.desc ? ' · ' + esc(b.desc.slice(0, 70)) : ''}</small><div class="bl-card-s">${miniStats(b)}</div></div><div class="bl-card-b"><button class="bl-mini" data-a="dup" data-id="${b.id}">Duplicar</button><button class="bl-mini" data-a="pause" data-id="${b.id}">${b.status === 'paused' ? 'Reanudar' : 'Pausar'}</button><button class="bl-mini" data-a="arch" data-id="${b.id}">${b.status === 'archived' ? 'Restaurar' : 'Archivar'}</button><button class="bl-mini" data-a="exp" data-id="${b.id}">Exportar</button><button class="bl-mini danger" data-a="del" data-id="${b.id}">Eliminar</button></div></div>`; }).join('') : `<div class="bl-empty">${IC.robot}<p><b>Aún no tienes bots.</b></p><p class="bl-dim">Crea uno escribiendo tu estrategia en español, armándola con el constructor o partiendo de Nova Nexus. Cada bot se prueba con datos históricos reales y se evalúa fuera de muestra.</p></div>`}
-      <p class="bl-foot">Fase 1: backtest profesional + validación por tramos. Paper trading, optimización automática y reentrenamiento programado llegan en las siguientes fases. Los resultados históricos no son una promesa de ganancia.</p>`;
+      <p class="bl-foot">Los resultados históricos y la simulación no son una promesa de ganancia. No se ejecutan órdenes reales.</p>`;
   }
 
   /* ----- Crear ----- */
@@ -540,7 +620,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     rpPlay() { if (replay.on) { replay.on = false; clearInterval(replay.timer); replay.timer = 0; } else { replay.on = true; if (replay.t == null) rpTick(); replay.timer = setInterval(rpTick, 1100 / replay.speed); } render(); }, rpStep() { rpTick(); }, rpReset() { replay.t = null; replay.on = false; clearInterval(replay.timer); replay.timer = 0; pushMarks(); render(); }
   };
   function bind() {
-    root.addEventListener('click', e => { const el = e.target.closest('[data-a]'); if (!el || !root.contains(el) || el.disabled) return; const f = ACT[el.dataset.a]; if (f) { e.preventDefault(); f(el); } });
+    root.addEventListener('click', e => { if (view === 'lib' && dashClick(e)) return; const el = e.target.closest('[data-a]'); if (!el || !root.contains(el) || el.disabled) return; const f = ACT[el.dataset.a]; if (f) { e.preventDefault(); f(el); } });
     root.addEventListener('change', e => {
       const el = e.target; if (el.id === 'blArch') { showArch = el.checked; return render(); } if (el.dataset.sel) { el.checked ? sel.add(el.dataset.sel) : sel.delete(el.dataset.sel); return render(); }
       if (el.id === 'rpSpd') { replay.speed = +el.value; if (replay.on) { clearInterval(replay.timer); replay.timer = setInterval(rpTick, 1100 / replay.speed); } return; } if (el.id === 'rpSeg') { replay.seg = el.value; replay.t = null; pushMarks(); return render(); } if (el.id === 'rpVer') { replay.ver = +el.value; replay.t = null; pushMarks(); return render(); } if (el.dataset.sh) { replay.show[el.dataset.sh] = el.checked; return pushMarks(); }
