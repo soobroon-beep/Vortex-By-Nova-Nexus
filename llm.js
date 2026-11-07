@@ -15,7 +15,7 @@
   const OPEN = /mistral|llama|qwen|deepseek|gemma|phi|glm|gpt-oss|kimi|olmo|nemotron|smol|minimax/i;
   const VISION = /vision|(^|[-_:\s])vl([-_:\s]|$)|llava|pixtral|gemma-?3|mistral(-(small|medium|large))?$|llama-?4|llama-3\.2-(11|90)|minicpm-v|molmo|internvl|moondream|qwen.*vl|gpt-4o|gemini/i;
   const FALLBACK_FREE = ['mistral', 'llama', 'qwen-coder', 'deepseek'];
-  const DEF = {provider: 'free', lab: 'webllm', compat: {url: 'http://localhost:11434/v1', key: '', model: 'qwen2.5vl:7b', vision: true}};
+  const DEF = {provider: 'free', lab: 'free', compat: {url: 'http://localhost:11434/v1', key: '', model: 'qwen2.5vl:7b', vision: true}};
 
   class LLMError extends Error { constructor(msg, kind, status) { super(msg); this.kind = kind || 'other'; this.status = status || 0; } }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -26,8 +26,12 @@
     let o = {}; try { o = JSON.parse(lsGet(KEY) || '{}') || {}; } catch {}
     const c = o.compat || {}, ok = x => ['free', 'compat', 'webllm'].includes(x);
     let provider = ok(o.provider) ? o.provider : DEF.provider, lab = ok(o.lab) ? o.lab : null;
-    if (!lab) { lab = provider === 'compat' ? 'compat' : DEF.lab; if (provider === 'webllm') provider = 'free'; } // ajustes antiguos: lo general va por el servicio gratuito y el Laboratorio por el modelo en el navegador
-    return {provider, lab, pkey: /^(pk|sk)_[\w-]{6,}$/.test(String(o.pkey || '').trim()) ? String(o.pkey).trim() : '', compat: {url: String(c.url || DEF.compat.url).trim(), key: String(c.key || ''), model: String(c.model || DEF.compat.model).trim(), vision: c.vision !== false}};
+    if (!lab) { lab = provider === 'compat' ? 'compat' : DEF.lab; if (provider === 'webllm') provider = 'free'; }
+    /* El modelo dentro del navegador descarga cientos de MB (la IA parecía «no hacer nada»): solo se usa si lo eliges tú en Ajustes después de este cambio.
+       Configuraciones guardadas antes con 'webllm' (era el valor por defecto) pasan a tu servidor VORTEX. */
+    if (o.webllmOptIn !== true) { if (lab === 'webllm') lab = 'free'; if (provider === 'webllm') provider = 'free'; }
+    if (provider === 'compat' && !(o.compat && o.compat.url)) { provider = 'free'; if (lab === 'compat') lab = 'free'; } // servidor sin configurar → tu servidor VORTEX
+    return {provider, lab, webllmOptIn: o.webllmOptIn === true, pkey: /^(pk|sk)_[\w-]{6,}$/.test(String(o.pkey || '').trim()) ? String(o.pkey).trim() : '', compat: {url: String(c.url || DEF.compat.url).trim(), key: String(c.key || ''), model: String(c.model || DEF.compat.model).trim(), vision: c.vision !== false}};
   }
   const save = cfg => lsSet(KEY, JSON.stringify(cfg));
 

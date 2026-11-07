@@ -60,7 +60,9 @@ test('carga y guarda ajustes con valores por defecto seguros', () => {
   assert.equal(L.load().provider, 'free'); L.save({provider: 'compat', compat: {url: 'http://a/v1', key: '', model: 'm', vision: false}});
   assert.equal(L.load().provider, 'compat'); assert.equal(L.load().compat.vision, false);
   store.cct_llm_v1 = '{"provider":"hack"}'; assert.equal(L.load().provider, 'free');
-  store.cct_llm_v1 = '{"provider":"webllm"}'; const m = L.load(); assert.equal(m.provider, 'free'); assert.equal(m.lab, 'webllm'); // migración: general gratis, Laboratorio en el navegador
+  store.cct_llm_v1 = '{"provider":"webllm"}'; const m = L.load(); assert.equal(m.provider, 'free'); assert.equal(m.lab, 'free'); // antes por defecto en el navegador (cientos de MB): ahora todo va a tu servidor
+  store.cct_llm_v1 = '{"provider":"free","lab":"webllm"}'; assert.equal(L.load().lab, 'free');
+  store.cct_llm_v1 = '{"provider":"free","lab":"webllm","webllmOptIn":true}'; assert.equal(L.load().lab, 'webllm'); // solo si lo eliges tú
   store.cct_llm_v1 = '{"provider":"free","lab":"free"}'; assert.equal(L.load().lab, 'free');
 });
 

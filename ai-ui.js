@@ -312,7 +312,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     $('#cfProv').value = c.provider; $('#cfLab').value = c.lab; const sync = () => { const p = $('#cfProv').value; $('#cfCompat').hidden = p !== 'compat' && $('#cfLab').value !== 'compat'; $('#cfNote').textContent = p === 'free' ? 'Privacidad: tu pregunta, los datos del gráfico y la captura viajan al servicio gratuito de terceros (Pollinations), que usa modelos abiertos. No incluyas nada que no quieras compartir. Es un servicio comunitario: puede ir lento o saturarse.' : p === 'webllm' ? 'El modelo se descarga una vez (cientos de MB) y corre en tu equipo con WebGPU: nada sale de tu navegador. Necesita Chrome/Edge de escritorio reciente y buena memoria gráfica. Es experimental.' : 'Los datos van solo a la URL que indiques (si es tu computadora, no salen de ella). La clave se guarda solo en este navegador.'; };
     $('#cfProv').onchange = sync; $('#cfLab').onchange = sync; sync();
   }
-  function readCfg() { return {provider: $('#cfProv').value, lab: $('#cfLab').value, pkey: '', compat: {url: $('#cfUrl').value.trim(), key: $('#cfKey').value.trim(), model: $('#cfModel').value.trim(), vision: $('#cfVis').checked}}; }
+  function readCfg() { return {provider: $('#cfProv').value, lab: $('#cfLab').value, webllmOptIn: $('#cfProv').value === 'webllm' || $('#cfLab').value === 'webllm', pkey: '', compat: {url: $('#cfUrl').value.trim(), key: $('#cfKey').value.trim(), model: $('#cfModel').value.trim(), vision: $('#cfVis').checked}}; }
 
   /* ───────── Eventos ───────── */
   function onClick(e) {
