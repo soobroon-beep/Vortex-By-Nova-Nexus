@@ -81,3 +81,21 @@ test('applyPatch cambia solo lo pedido (exacto, con sangría distinta y bloques 
   r = L.applyPatch(code, '<<<<<<< SEARCH\nlinea inexistente\n=======\nx\n>>>>>>> REPLACE'); assert.equal(r.applied, 0); assert.equal(r.failed.length, 1); assert.equal(r.changed, false);
   assert.equal(L.applyPatch(code, 'sin bloques').found, 0);
 });
+
+test('servidor VORTEX: nunca usa el filtro «qwen3guard»; analiza con un modelo de chat y la captura', async () => {
+  global.document = {}; // como en la app
+  try {
+    const calls = mockFetch(url => /\/ai\/models/.test(url) ? mkRes([{name: 'qwen/qwen3guard-gen-8b'}, {name: 'openai', aliases: ['gpt-nano']}, {name: 'mistral'}])
+      : /\/ai$/.test(url) ? mkRes(reply('### Niveles clave\n- Soporte 100')) : mkRes([], false, 404));
+    const r = await L.chat([L.imageMessage('analiza', 'data:image/jpeg;base64,AAA')], {cfg: {provider: 'free', compat: {}}});
+    const sent = calls.filter(c => c.body); assert.equal(sent[0].body.model, 'openai'); assert.ok(sent[0].body.messages[0].content.some(p => p.type === 'image_url'));
+    assert.match(r.text, /Niveles clave/); assert.equal(r.image, true); assert.ok(!sent.some(c => /guard/.test(c.body.model)));
+  } finally { delete global.document; }
+});
+test('si un modelo contesta como «guardián» (Safety: Safe) se prueba el siguiente', async () => {
+  global.document = {};
+  try {
+    mockFetch((url, o, n) => /\/ai\/models/.test(url) ? mkRes([]) : /\/ai$/.test(url) ? mkRes(reply(JSON.parse(o.body).model === 'openai' ? 'Safety: Safe\nCategories: None' : 'Hola, este es el briefing')) : mkRes([], false, 404));
+    const r = await L.chat([{role: 'user', content: 'briefing'}], {cfg: {provider: 'free', compat: {}}}); assert.equal(r.text, 'Hola, este es el briefing');
+  } finally { delete global.document; }
+});

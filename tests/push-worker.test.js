@@ -156,3 +156,10 @@ test('/ai: reenvía a Pollinations con la clave de la app, sin que el usuario po
     assert.strictEqual((await call('/ai', {messages: []}, 'https://evil.example')).status, 403);
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('/ai: un modelo que no es de chat (qwen3guard) se cambia por openai', async () => {
+  const w = await W(), env = {KV: memKV()}, realFetch = globalThis.fetch, seen = [];
+  globalThis.fetch = async (url, init) => { seen.push(JSON.parse(init.body).model); return new Response('{}', {headers: {'content-type': 'application/json'}}); };
+  try { await w.default.fetch(new Request('https://x.workers.dev/ai', {method: 'POST', headers: {origin: 'https://soobroon-beep.github.io', 'cf-connecting-ip': '9.9.9.9'}, body: JSON.stringify({model: 'qwen/qwen3guard-gen-8b', messages: []})}), env); assert.deepStrictEqual(seen, ['openai']); }
+  finally { globalThis.fetch = realFetch; }
+});

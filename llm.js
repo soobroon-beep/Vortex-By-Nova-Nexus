@@ -41,7 +41,7 @@
   function pickFree(list, o) { // modelos abiertos del servicio gratuito, en orden de preferencia para la tarea
     o = o || {}; const arr = (Array.isArray(list) ? list : []).map(x => typeof x === 'string' ? {name: x} : x).filter(x => x && x.name);
     if (!arr.length) return FALLBACK_FREE.slice();
-    let open = arr.filter(x => OPEN.test(x.name)); if (!open.length) open = arr;
+    let open = arr.filter(x => OPEN.test(x.name) && !/guard|moderat|safety|embed|rerank|audio|tts|whisper|transcri|speech/i.test(x.name + ' ' + (x.description || ''))); if (!open.length) open = arr.filter(x => !/guard|moderat|safety|embed|audio/i.test(x.name));
     const score = x => { let s = 0; const v = supportsVision(x.name, x); if (o.needVision) s += v ? 100 : 0;
       if (o.code) s += /coder|qwen|deepseek/i.test(x.name) ? 50 : 0; else s += /mistral|llama|qwen|gemma/i.test(x.name) ? 20 : 0;
       if (/uncensored|roblox|unity|midijourney|rtist/i.test(x.name + ' ' + (x.description || ''))) s -= 200; return s - (x.name.length / 100); };
@@ -130,12 +130,12 @@
     const pk = cfg && cfg.pkey, url = pk ? GEN_URL : FREE_URL;
     let list = []; if (pk) { try { const r = await fetchT(GEN_MODELS, {headers: {authorization: 'Bearer ' + pk}}, 6000); if (r.ok) { const j = await r.json(); list = Array.isArray(j) ? j : Array.isArray(j && j.data) ? j.data.map(x => ({name: x.id || x.name, vision: x.vision})) : []; } } catch {} }
     if (!list.length) list = await freeModels();
-    const img = hasImage(messages), cand = pickFree(list, {needVision: o.needVision || img, code: o.purpose === 'code'}).slice(0, 4), t0 = Date.now(), budget = o.budget || 85000; let last;
+    const img = hasImage(messages), cand = (pk ? pickVx(list, {needVision: o.needVision || img, code: o.purpose === 'code'}) : pickFree(list, {needVision: o.needVision || img, code: o.purpose === 'code'}).slice(0, 4)), t0 = Date.now(), budget = o.budget || 85000; let last;
     const left = () => budget - (Date.now() - t0);
     for (const m of cand) { // cada modelo tiene su tiempo; si uno se cuelga, se prueba el siguiente (antes la app se quedaba esperando)
       if (left() < 8000 || (o.signal && o.signal.aborted)) break;
-      const meta = list.find(x => x && x.name === m), vis = supportsVision(m, meta);
-      try { const text = await openaiCall(url, pk, m, img && !vis ? stripImages(messages) : messages, Object.assign({}, o, {timeout: Math.min(o.timeout || 45000, left())})); return {text, model: m, image: img && vis}; }
+      const meta = list.find(x => x && x.name === m), vis = pk ? VX_VISION.has(m) : supportsVision(m, meta);
+      try { const text = await openaiCall(url, pk, m, img && !vis ? stripImages(messages) : messages, Object.assign({}, o, {timeout: Math.min(o.timeout || 45000, left())})); if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); return {text, model: m, image: img && vis}; }
       catch (e) { last = e; if (e.kind === 'network' && !img) throw e; if (o.signal && o.signal.aborted) throw e; if (e.kind === 'rate') await sleep(2000); }
     }
     if (img && left() > 10000) { // la captura pudo ser el problema: un intento más solo con los datos
@@ -145,16 +145,26 @@
     throw last || new LLMError('El servicio gratuito no respondió.', 'server');
   }
 
+  /* Modelos de CHAT confiables de Pollinations (la lista del servicio también trae filtros de seguridad como «qwen3guard», audio,
+     imágenes y modelos de pago: si se elegía uno de esos, la IA contestaba «Safety: Safe» o nada). */
+  const VX_TEXT = ['openai', 'mistral', 'gemini', 'deepseek', 'openai-fast'], VX_VIS = ['openai', 'gemini', 'openai-fast'], VX_CODE = ['qwen-coder', 'openai', 'deepseek', 'mistral'];
+  const VX_VISION = new Set(VX_VIS), NOT_CHAT = /guard|moderat|safety|embed|rerank|audio|tts|whisper|transcri|speech|image|video|vision-only|midijourney|roblox|rtist|unity/i;
+  function pickVx(list, o) {
+    const pref = o.code ? VX_CODE : o.needVision ? VX_VIS : VX_TEXT, names = new Set(); for (const x of list || []) { names.add(x.name); for (const a of x.aliases || []) names.add(a); }
+    const avail = names.size ? pref.filter(m => names.has(m)) : []; return [...new Set([...avail, ...pref])].slice(0, 3);
+  }
+  const looksBad = t => /^\s*(safety|categories)\s*:/i.test(t) || /^\s*(safe|unsafe)\s*$/i.test(t); // respuesta de un modelo «guardián», no de chat
+
   /* ───────── IA de tu servidor VORTEX (Pollinations con tu clave, guardada en el Worker) ───────── */
   let vxDown = 0, vxModels = null;
   async function chatVortex(messages, o) {
     if (Date.now() < vxDown) throw new LLMError('Servidor de IA no disponible', 'nokey');
-    if (!vxModels || Date.now() - vxModels.t > 30 * 6e4) { try { const r = await fetchT(VX + '/ai/models', {}, 7000); if (r.status === 503) { vxDown = Date.now() + 10 * 6e4; throw new LLMError('El servidor aún no tiene la clave', 'nokey'); } if (r.ok) { const j = await r.json(); const arr = Array.isArray(j) ? j : Array.isArray(j && j.data) ? j.data : []; vxModels = {t: Date.now(), list: arr.map(x => typeof x === 'string' ? {name: x} : {name: x.name || x.id, vision: x.vision === true || (Array.isArray(x.input_modalities) && x.input_modalities.includes('image')), description: x.description})}; } } catch (e) { if (e.kind === 'nokey') throw e; } }
-    const list = (vxModels && vxModels.list.length) ? vxModels.list : [{name: 'openai', vision: true}, {name: 'mistral'}, {name: 'qwen-coder'}];
-    const img = hasImage(messages), cand = pickFree(list, {needVision: o.needVision || img, code: o.purpose === 'code'}).slice(0, 3), t0 = Date.now(); let last;
+    if (!vxModels || Date.now() - vxModels.t > 30 * 6e4) { try { const r = await fetchT(VX + '/ai/models', {}, 7000); if (r.status === 503) { vxDown = Date.now() + 10 * 6e4; throw new LLMError('El servidor aún no tiene la clave', 'nokey'); } if (r.ok) { const j = await r.json(); const arr = Array.isArray(j) ? j : Array.isArray(j && j.data) ? j.data : []; vxModels = {t: Date.now(), list: arr.map(x => typeof x === 'string' ? {name: x} : {name: x.name || x.id, aliases: Array.isArray(x.aliases) ? x.aliases : [], vision: x.vision === true || (Array.isArray(x.input_modalities) && x.input_modalities.includes('image')), description: x.description})}; } } catch (e) { if (e.kind === 'nokey') throw e; } }
+    const list = (vxModels && vxModels.list.length) ? vxModels.list : [];
+    const img = hasImage(messages), cand = pickVx(list, {needVision: o.needVision || img, code: o.purpose === 'code'}), t0 = Date.now(); let last;
     for (const m of cand) {
-      if (Date.now() - t0 > 70000) break; const meta = list.find(x => x.name === m), vis = supportsVision(m, meta);
-      try { const text = await openaiCall(VX + '/ai', '', m, img && !vis ? stripImages(messages) : messages, Object.assign({}, o, {timeout: Math.min(o.timeout || 50000, 80000 - (Date.now() - t0))})); return {text, model: m + ' · servidor VORTEX', image: img && vis}; }
+      if (Date.now() - t0 > 70000) break; const vis = VX_VISION.has(m);
+      try { const text = await openaiCall(VX + '/ai', '', m, img && !vis ? stripImages(messages) : messages, Object.assign({}, o, {timeout: Math.min(o.timeout || 50000, 80000 - (Date.now() - t0))})); if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); return {text, model: m + ' · servidor VORTEX', image: img && vis}; }
       catch (e) { last = e; if (e.status === 503) { vxDown = Date.now() + 10 * 6e4; break; } if (e.kind === 'network') break; if (o.signal && o.signal.aborted) throw e; if (e.kind === 'rate') await sleep(2000); }
     }
     throw last || new LLMError('El servidor de IA no respondió.', 'server');
@@ -225,7 +235,7 @@ FORMATO DE RESPUESTA: primero 2-4 líneas en español explicando qué hace y có
     return out;
   }
 
-  const api = {serverStatus, serverSetKey, resetCache: () => { freeCache = null; }, LLMError, load, save, chat, freeModels, pickFree, supportsVision, imageMessage, hasImage, stripImages, extractCode, stripCode, applyPatch, friendly, providerLabel, PINE_GUIDE, signalMetrics, WEBLLM_MODELS, FREE_URL};
+  const api = {pickVx, looksBad, serverStatus, serverSetKey, resetCache: () => { freeCache = null; }, LLMError, load, save, chat, freeModels, pickFree, supportsVision, imageMessage, hasImage, stripImages, extractCode, stripCode, applyPatch, friendly, providerLabel, PINE_GUIDE, signalMetrics, WEBLLM_MODELS, FREE_URL};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTLLM = api;
 })(typeof self !== 'undefined' ? self : this);
