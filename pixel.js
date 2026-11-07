@@ -446,7 +446,7 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     const len = Math.ceil(dec.duration * 16000), off = new OfflineAudioContext(1, Math.max(1, len), 16000), src = off.createBufferSource(); src.buffer = dec; src.connect(off.destination); src.start(); const pcm = (await off.startRendering()).getChannelData(0);
     const body = {model: 'openai-audio', temperature: 0, max_tokens: 300, messages: [{role: 'system', content: 'Eres un transcriptor. Escribe EXACTAMENTE lo que dice la persona en el audio, en español, sin responderle, sin comillas y sin agregar nada. Si no se entiende nada, responde solo: ""'}, {role: 'user', content: [{type: 'text', text: 'Transcribe este audio.'}, {type: 'input_audio', input_audio: {data: b64(toWav(pcm)), format: 'wav'}}]}]};
     const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 30000);
-    try { const r = await fetch(VXURL + '/ai', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body), signal: ctl.signal}); if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(), t = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content; return String(t || '').replace(/^["«“\s]+|["»”\s]+$/g, '').trim(); }
+    try { const r = await fetch(VXURL + '/ai', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body), signal: ctl.signal}); if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(), m = j && j.choices && j.choices[0] && j.choices[0].message || {}, t = m.content || (m.audio && m.audio.transcript) || ''; return String(t || '').replace(/^["«“\s]+|["»”\s]+$/g, '').trim(); }
     finally { clearTimeout(to); }
   }
   async function recordVoice() {
