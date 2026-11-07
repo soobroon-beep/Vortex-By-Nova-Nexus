@@ -105,7 +105,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
       <button class="aiv-card" data-act="chart">${ICONS.chart}<span><b>Analizar gráfico con IA</b><small>Toma una captura de tu gráfico (con indicadores y dibujos), marca soportes y resistencias, y puedes seguir preguntándole.</small></span></button>
       <button class="aiv-card" data-act="brief">${ICONS.brief}<span><b>Briefing del día</b><small>Resumen corto de eventos importantes, noticias, novedades de IA, criptos más sonadas y la opinión de la IA sobre el mercado.</small></span></button>
       <button class="aiv-card" data-act="lab">${ICONS.lab}<span><b>Laboratorio de indicadores IA</b><small>Describe un indicador con tus palabras; la IA lo programa, lo valida y lo prueba en tu gráfico.</small></span></button>
-    </div><p class="aiv-foot">Análisis y briefing: modelos abiertos gratuitos · Laboratorio: modelo en tu navegador en PC (en el celular usa el servicio gratuito) · sin clave de Claude. Análisis educativo, no asesoría financiera.</p>`;
+    </div><p class="aiv-foot">Análisis y briefing: IA de tu servidor VORTEX (Pollinations) · Laboratorio: modelo en tu navegador en PC (en el celular usa el servicio gratuito) · sin clave de Claude. Análisis educativo, no asesoría financiera.</p>`;
   }
 
   /* ───────── 1 · Analizar gráfico ───────── */
@@ -270,7 +270,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     root.innerHTML = head('Ajustes de la IA', 'Proveedor del modelo') + `<div class="aiv-cfg">
       <label>Proveedor<select id="cfProv"><option value="free">Gratis · modelos abiertos (sin clave)</option><option value="compat">Mi servidor / Ollama / servicio con clave gratuita</option><option value="webllm">En mi navegador (WebLLM, experimental)</option></select></label>
       <label>Proveedor del Laboratorio de indicadores (código)<select id="cfLab"><option value="webllm">En mi navegador (WebLLM) — recomendado</option><option value="free">Gratis · modelos abiertos (sin clave)</option><option value="compat">Mi servidor / Ollama</option></select></label>
-      <label>Clave de app de Pollinations (opcional, gratis)<input id="cfPk" value="${esc(c.pkey || '')}" autocomplete="off" spellcheck="false" placeholder="pk_…  (enter.pollinations.ai)"></label><p class="aiv-dim">Si la IA gratuita tarda o no contesta, crea una clave de app <b>pk_</b> gratis en enter.pollinations.ai y pégala aquí: usa su servicio nuevo, más estable. En el celular el Laboratorio usa siempre el servicio gratuito.</p>
+      <div class="aiv-srv"><b>IA lista para usar</b><small id="cfSrvSt" class="ok">✓ Configurada: cualquier persona puede usar la IA sin poner claves ni datos.</small></div>
       <div id="cfCompat"><label>URL compatible con OpenAI<input id="cfUrl" value="${esc(c.compat.url)}" autocomplete="off" spellcheck="false" placeholder="http://localhost:11434/v1"></label>
         <label>Modelo<input id="cfModel" value="${esc(c.compat.model)}" autocomplete="off" spellcheck="false" placeholder="qwen2.5vl:7b"></label>
         <label>Clave (opcional)<input id="cfKey" type="password" value="${esc(c.compat.key)}" autocomplete="off" placeholder="solo si el servicio la pide"></label>
@@ -281,7 +281,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     $('#cfProv').value = c.provider; $('#cfLab').value = c.lab; const sync = () => { const p = $('#cfProv').value; $('#cfCompat').hidden = p !== 'compat' && $('#cfLab').value !== 'compat'; $('#cfNote').textContent = p === 'free' ? 'Privacidad: tu pregunta, los datos del gráfico y la captura viajan al servicio gratuito de terceros (Pollinations), que usa modelos abiertos. No incluyas nada que no quieras compartir. Es un servicio comunitario: puede ir lento o saturarse.' : p === 'webllm' ? 'El modelo se descarga una vez (cientos de MB) y corre en tu equipo con WebGPU: nada sale de tu navegador. Necesita Chrome/Edge de escritorio reciente y buena memoria gráfica. Es experimental.' : 'Los datos van solo a la URL que indiques (si es tu computadora, no salen de ella). La clave se guarda solo en este navegador.'; };
     $('#cfProv').onchange = sync; $('#cfLab').onchange = sync; sync();
   }
-  function readCfg() { return {provider: $('#cfProv').value, lab: $('#cfLab').value, pkey: ($('#cfPk') ? $('#cfPk').value.trim() : ''), compat: {url: $('#cfUrl').value.trim(), key: $('#cfKey').value.trim(), model: $('#cfModel').value.trim(), vision: $('#cfVis').checked}}; }
+  function readCfg() { return {provider: $('#cfProv').value, lab: $('#cfLab').value, pkey: '', compat: {url: $('#cfUrl').value.trim(), key: $('#cfKey').value.trim(), model: $('#cfModel').value.trim(), vision: $('#cfVis').checked}}; }
 
   /* ───────── Eventos ───────── */
   function onClick(e) {
@@ -294,6 +294,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     const a = t.dataset.act, L = st.lab, A = window.CCT_ai;
     if (a === 'pixel') { if (window.CCT_switchView) window.CCT_switchView('chartView'); setTimeout(() => { if (window.NexusPixel) window.NexusPixel.show(true); }, 350); return; }
     if (a === 'home') home(); else if (a === 'chart') chartView(); else if (a === 'brief') briefView(); else if (a === 'lab') labView(); else if (a === 'cfg') cfgView();
+    else if (a === 'cfsk') { const i = $('#cfSk'), st2 = $('#cfSrvSt'), k = i ? i.value.trim() : ''; if (!/^sk_/.test(k)) { if (st2) st2.textContent = 'Pega tu clave sk_…'; return; } if (st2) st2.textContent = 'Guardando…'; LLM.serverSetKey(k).then(() => { i.value = ''; if (st2) { st2.textContent = '✓ Guardada para siempre en tu servidor. Ya puedes usar la IA en todos tus dispositivos.'; st2.className = 'ok'; } }).catch(e => { if (st2) { st2.textContent = '✗ ' + (e.message || 'No se pudo guardar'); st2.className = 'err'; } }); return; }
     else if (a === 'reshot') analyzeChart(); else if (a === 'rebrief') makeBrief();
     else if (a === 'try') { if (L.sid && A.list().some(x => x.id === L.sid)) { A.toggle(L.sid, true); } else if (good(L.res)) L.sid = A.tryOnChart(L.code, 'Indicador IA', L.res); renderTail(); }
     else if (a === 'save') { if (L.sid && A.keep(L.sid)) { renderSaved(); const b = document.createElement('div'); b.className = 'pine-box ok'; b.textContent = 'Guardado en «Mis indicadores IA» y en tus scripts de Pine.'; $('#labOut').prepend(b); } }

@@ -143,3 +143,16 @@ test('/sync subOnly: renueva la suscripción sin borrar alertas ni ajustes', asy
   assert.strictEqual(await call({id: ID, sub: {...f.sub, endpoint: 'https://fcm.googleapis.com/fcm/send/nuevo'}, subOnly: true}), 200);
   const d = JSON.parse(KV.m.get('dev:' + ID)); assert.strictEqual(d.sub.endpoint, 'https://fcm.googleapis.com/fcm/send/nuevo'); assert.strictEqual(d.alerts[0].id, 'a1'); assert.strictEqual(d.move.on, true);
 });
+
+test('/ai: reenvía a Pollinations con la clave de la app, sin que el usuario ponga nada', async () => {
+  const w = await W(), env = {KV: memKV()}, realFetch = globalThis.fetch, seen = [];
+  globalThis.fetch = async (url, init) => { seen.push({url: String(url), auth: init && init.headers && init.headers.authorization, body: init && init.body}); return new Response(JSON.stringify({choices: [{message: {content: 'hola'}}]}), {headers: {'content-type': 'application/json'}}); };
+  const call = (path, body, origin = 'https://soobroon-beep.github.io') => w.default.fetch(new Request('https://x.workers.dev' + path, {method: body ? 'POST' : 'GET', headers: {origin, 'cf-connecting-ip': '1.2.3.4'}, body: body ? JSON.stringify(body) : undefined}), env);
+  try {
+    assert.strictEqual((await (await call('/ai/status')).json()).ready, true);
+    const r = await call('/ai', {model: 'openai', messages: [{role: 'user', content: 'hola'}], max_tokens: 99999});
+    assert.strictEqual(r.status, 200); assert.strictEqual((await r.json()).choices[0].message.content, 'hola');
+    const s = seen.find(x => /gen\.pollinations\.ai\/v1\/chat/.test(x.url)); assert.match(s.auth, /^Bearer sk_/); assert.strictEqual(JSON.parse(s.body).max_tokens, 1800);
+    assert.strictEqual((await call('/ai', {messages: []}, 'https://evil.example')).status, 403);
+  } finally { globalThis.fetch = realFetch; }
+});

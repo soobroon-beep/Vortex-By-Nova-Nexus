@@ -7,6 +7,8 @@
 (function (root) {
   'use strict';
   const KEY = 'cct_llm_v1', FREE_URL = 'https://text.pollinations.ai/openai', FREE_MODELS = 'https://text.pollinations.ai/models';
+  const VX = 'https://vortex-push.soobroon.workers.dev'; // tu servidor VORTEX: reenvía las consultas a Pollinations con la clave de la app
+  const POLLEN_KEY = 'sk_1XvEYtOmiFixsgMve0FAqQz5ghhy7FFT'; // clave de la app (Pollinations, gratuita): nadie tiene que escribir claves para usar la IA
   const GEN_URL = 'https://gen.pollinations.ai/v1/chat/completions', GEN_MODELS = 'https://gen.pollinations.ai/text/models'; // API nueva de Pollinations (con clave de app pk_ gratuita)
   const WEBLLM_CDN = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.79/+esm';
   const WEBLLM_MODELS = {text: 'Qwen2.5-3B-Instruct-q4f16_1-MLC', code: 'Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC', vision: 'Phi-3.5-vision-instruct-q4f16_1-MLC'};
@@ -25,7 +27,7 @@
     const c = o.compat || {}, ok = x => ['free', 'compat', 'webllm'].includes(x);
     let provider = ok(o.provider) ? o.provider : DEF.provider, lab = ok(o.lab) ? o.lab : null;
     if (!lab) { lab = provider === 'compat' ? 'compat' : DEF.lab; if (provider === 'webllm') provider = 'free'; } // ajustes antiguos: lo general va por el servicio gratuito y el Laboratorio por el modelo en el navegador
-    return {provider, lab, pkey: /^pk_[\w-]{6,}$/.test(String(o.pkey || '').trim()) ? String(o.pkey).trim() : '', compat: {url: String(c.url || DEF.compat.url).trim(), key: String(c.key || ''), model: String(c.model || DEF.compat.model).trim(), vision: c.vision !== false}};
+    return {provider, lab, pkey: /^(pk|sk)_[\w-]{6,}$/.test(String(o.pkey || '').trim()) ? String(o.pkey).trim() : '', compat: {url: String(c.url || DEF.compat.url).trim(), key: String(c.key || ''), model: String(c.model || DEF.compat.model).trim(), vision: c.vision !== false}};
   }
   const save = cfg => lsSet(KEY, JSON.stringify(cfg));
 
@@ -143,6 +145,23 @@
     throw last || new LLMError('El servicio gratuito no respondió.', 'server');
   }
 
+  /* ───────── IA de tu servidor VORTEX (Pollinations con tu clave, guardada en el Worker) ───────── */
+  let vxDown = 0, vxModels = null;
+  async function chatVortex(messages, o) {
+    if (Date.now() < vxDown) throw new LLMError('Servidor de IA no disponible', 'nokey');
+    if (!vxModels || Date.now() - vxModels.t > 30 * 6e4) { try { const r = await fetchT(VX + '/ai/models', {}, 7000); if (r.status === 503) { vxDown = Date.now() + 10 * 6e4; throw new LLMError('El servidor aún no tiene la clave', 'nokey'); } if (r.ok) { const j = await r.json(); const arr = Array.isArray(j) ? j : Array.isArray(j && j.data) ? j.data : []; vxModels = {t: Date.now(), list: arr.map(x => typeof x === 'string' ? {name: x} : {name: x.name || x.id, vision: x.vision === true || (Array.isArray(x.input_modalities) && x.input_modalities.includes('image')), description: x.description})}; } } catch (e) { if (e.kind === 'nokey') throw e; } }
+    const list = (vxModels && vxModels.list.length) ? vxModels.list : [{name: 'openai', vision: true}, {name: 'mistral'}, {name: 'qwen-coder'}];
+    const img = hasImage(messages), cand = pickFree(list, {needVision: o.needVision || img, code: o.purpose === 'code'}).slice(0, 3), t0 = Date.now(); let last;
+    for (const m of cand) {
+      if (Date.now() - t0 > 70000) break; const meta = list.find(x => x.name === m), vis = supportsVision(m, meta);
+      try { const text = await openaiCall(VX + '/ai', '', m, img && !vis ? stripImages(messages) : messages, Object.assign({}, o, {timeout: Math.min(o.timeout || 50000, 80000 - (Date.now() - t0))})); return {text, model: m + ' · servidor VORTEX', image: img && vis}; }
+      catch (e) { last = e; if (e.status === 503) { vxDown = Date.now() + 10 * 6e4; break; } if (e.kind === 'network') break; if (o.signal && o.signal.aborted) throw e; if (e.kind === 'rate') await sleep(2000); }
+    }
+    throw last || new LLMError('El servidor de IA no respondió.', 'server');
+  }
+  async function serverStatus() { try { const r = await fetchT(VX + '/ai/status', {}, 7000); return r.ok ? await r.json() : {ready: false}; } catch { return {ready: false, offline: true}; } }
+  async function serverSetKey(key) { const r = await fetchT(VX + '/ai/key', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({key})}, 10000); let j = {}; try { j = await r.json(); } catch {} if (!r.ok) throw new LLMError(j.error || 'Error ' + r.status, 'auth', r.status); vxDown = 0; vxModels = null; return j; }
+
   /* ───────── Servidor compatible con OpenAI (Ollama, LM Studio, Groq, OpenRouter…) ───────── */
   async function chatCompat(messages, o, cfg) {
     const c = cfg.compat, base = c.url.replace(/\/+$/, ''), url = /\/chat\/completions$/.test(base) ? base : base + '/chat/completions', img = hasImage(messages);
@@ -174,6 +193,10 @@
     try {
       if (prov === 'compat') return await chatCompat(messages, o, cfg);
       if (prov === 'webllm') return await chatWebllm(messages, o);
+      if (typeof document !== 'undefined') { // en la app: 1) tu servidor VORTEX, 2) Pollinations directo con la clave de la app, 3) servicio antiguo sin clave
+        try { return await chatVortex(messages, o); } catch (e) { if (o.signal && o.signal.aborted) throw e; }
+        try { return await chatFree(messages, o, Object.assign({}, cfg, {pkey: cfg.pkey || POLLEN_KEY})); } catch (e) { if (o.signal && o.signal.aborted) throw e; }
+      }
       return await chatFree(messages, o, cfg);
     } catch (e) { if (e instanceof LLMError) { e.message = friendly(e) + (e.kind === 'model' || e.kind === 'server' || e.kind === 'other' ? ' (' + String(e.message).slice(0, 120) + ')' : ''); throw e; } throw new LLMError(String(e && e.message || e), 'other'); }
   }
@@ -202,7 +225,7 @@ FORMATO DE RESPUESTA: primero 2-4 líneas en español explicando qué hace y có
     return out;
   }
 
-  const api = {resetCache: () => { freeCache = null; }, LLMError, load, save, chat, freeModels, pickFree, supportsVision, imageMessage, hasImage, stripImages, extractCode, stripCode, applyPatch, friendly, providerLabel, PINE_GUIDE, signalMetrics, WEBLLM_MODELS, FREE_URL};
+  const api = {serverStatus, serverSetKey, resetCache: () => { freeCache = null; }, LLMError, load, save, chat, freeModels, pickFree, supportsVision, imageMessage, hasImage, stripImages, extractCode, stripCode, applyPatch, friendly, providerLabel, PINE_GUIDE, signalMetrics, WEBLLM_MODELS, FREE_URL};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTLLM = api;
 })(typeof self !== 'undefined' ? self : this);

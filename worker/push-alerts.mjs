@@ -152,6 +152,36 @@ async function tick(env, now = Date.now()) {
   return {devices: devs.length, sent, gone: gone.length};
 }
 
+/* ───────── IA de VORTEX (Pollinations con TU clave secreta) ─────────
+   La clave de Pollinations (producto gratuito) va aquí fija: cualquier persona usa la IA sin escribir claves ni datos.
+   La app le pide la IA a /ai y este Worker la reenvía a gen.pollinations.ai (con límite por IP para que nadie abuse). */
+const POLLEN_KEY = 'sk_1XvEYtOmiFixsgMve0FAqQz5ghhy7FFT';
+const AI_KEY_HASH = '2ab4147ae8ba67933529aa916c753628bd1374ba24387f4cfdaabb0a25a9bcb6';
+const AI_URL = 'https://gen.pollinations.ai/v1/chat/completions', AI_MODELS = 'https://gen.pollinations.ai/text/models', AI_MAX_BODY = 900000, AI_MAX_TOKENS = 1800;
+const sha256 = async t => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))].map(b => b.toString(16).padStart(2, '0')).join('');
+const aiHits = new Map(); // límite por IP (por instancia): evita que alguien gaste tus créditos a lo loco
+function aiAllowed(ip, now = Date.now()) { const h = (aiHits.get(ip) || []).filter(t => now - t < 60000); if (h.length >= 20) return false; h.push(now); aiHits.set(ip, h); if (aiHits.size > 5000) aiHits.clear(); return true; }
+async function aiKey(env) { return env.POLLEN_KEY || (await env.KV.get('ai:pollen')) || POLLEN_KEY; }
+async function aiRoute(req, env, path, json, cors) {
+  if (path === '/ai/status') return json({ok: true, ready: !!(await aiKey(env))});
+  if (path === '/ai/key' && req.method === 'POST') {
+    let b; try { b = JSON.parse(await req.text()); } catch { return json({error: 'JSON inválido'}, 400); }
+    const k = String(b.key || '').trim(); if (!/^sk_[\w-]{10,}$/.test(k) || await sha256(k) !== AI_KEY_HASH) return json({error: 'Esa no es la clave autorizada para este servidor'}, 403);
+    await env.KV.put('ai:pollen', k); return json({ok: true, ready: true});
+  }
+  const key = await aiKey(env); if (!key) return json({error: 'El servidor aún no tiene la clave de IA', kind: 'nokey'}, 503);
+  if (!aiAllowed(req.headers.get('cf-connecting-ip') || 'x')) return json({error: 'Demasiadas consultas seguidas; espera un minuto'}, 429);
+  if (path === '/ai/models') { const r = await fetch(AI_MODELS, {headers: {authorization: 'Bearer ' + key}}); return new Response(r.body, {status: r.status, headers: {...cors, 'content-type': 'application/json', 'cache-control': 'max-age=1800'}}); }
+  if (path === '/ai' && req.method === 'POST') {
+    const raw = await req.text(); if (raw.length > AI_MAX_BODY) return json({error: 'La consulta es demasiado grande'}, 413);
+    let b; try { b = JSON.parse(raw); } catch { return json({error: 'JSON inválido'}, 400); }
+    const body = {model: String(b.model || 'openai').slice(0, 60), messages: Array.isArray(b.messages) ? b.messages.slice(-16) : [], temperature: Number.isFinite(+b.temperature) ? +b.temperature : .4, max_tokens: Math.min(+b.max_tokens || 1200, AI_MAX_TOKENS), stream: !!b.stream};
+    const r = await fetch(AI_URL, {method: 'POST', headers: {'content-type': 'application/json', authorization: 'Bearer ' + key}, body: JSON.stringify(body)});
+    return new Response(r.body, {status: r.status, headers: {...cors, 'content-type': r.headers.get('content-type') || 'application/json', 'cache-control': 'no-store'}});
+  }
+  return json({error: 'No encontrado'}, 404);
+}
+
 /* ───────── HTTP ───────── */
 const MKT_HOSTS = new Set(['open-api.bingx.com', 'api.kucoin.com', 'api.mexc.com', 'api.gateio.ws', 'api.bitget.com', 'api.huobi.pro', 'api.kraken.com', 'api.bybit.com', 'www.okx.com', 'api.exchange.coinbase.com', 'api.binance.com', 'fapi.binance.com']);
 export default {
@@ -164,6 +194,7 @@ export default {
     const path = new URL(req.url).pathname;
     if (req.method === 'GET' && path === '/') return json({ok: true, app: 'VORTEX push', note: 'Notificaciones de alertas con la app cerrada'});
     if (!ok) return json({error: 'Origen no permitido'}, 403);
+    if (path === '/ai' || path.startsWith('/ai/')) return aiRoute(req, env, path, json, cors);
     if (req.method === 'GET' && path === '/mkt') { // datos PÚBLICOS de exchanges que bloquean CORS (BingX, KuCoin, MEXC…): solo GET, sin llaves, solo hosts permitidos
       let t; try { t = new URL(new URL(req.url).searchParams.get('u') || ''); } catch { return json({error: 'URL inválida'}, 400); }
       if (t.protocol !== 'https:' || !MKT_HOSTS.has(t.host)) return json({error: 'Exchange no permitido'}, 403);
