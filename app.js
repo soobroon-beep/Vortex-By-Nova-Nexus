@@ -4992,8 +4992,35 @@ window.CCT_getAIContext = function () {
       if (r.osc && n >= 4) { const a = r.osc.slice(-3).filter(Number.isFinite); if (a.length === 3) nova.sig = a[0] / 3 + a[1] / 3 + a[2] / 3; } // media de 3 del oscilador = línea de señal
     }
   } catch (e) { nova = null; }
+  /* Lecturas de TODOS los indicadores activos (EMA, SMA, Bollinger, RSI, MACD, Estocástico, ADX, Ichimoku…): la IA las usa para comentar
+     cada uno con su valor, pendiente, posición del precio y último cruce (antes solo recibía unos cuantos y no veía la EMA, por ejemplo). */
+  const lecturas = {}; let visible = null, dibujos = [];
+  try {
+    const px = candles[n - 1].c, R = x => x == null || !Number.isFinite(x) ? null : +(+x).toPrecision(6);
+    const at = (a, k) => { const i = a.length - 1 - k; return i >= 0 ? a[i] : null; };
+    const lastCross = (a, b, look = 60) => { for (let i = a.length - 1, m = Math.max(1, a.length - look); i >= m; i--) { const x0 = a[i - 1], y0 = typeof b === 'function' ? b(i - 1) : b[i - 1], x1 = a[i], y1 = typeof b === 'function' ? b(i) : b[i]; if ([x0, y0, x1, y1].every(Number.isFinite) && Math.sign(x0 - y0) !== Math.sign(x1 - y1)) return {hace_velas: a.length - 1 - i, tipo: x1 > y1 ? 'cruzó hacia ARRIBA' : 'cruzó hacia ABAJO'}; } return null; };
+    const serie = a => { if (!Array.isArray(a) || !a.length || !a.some(Number.isFinite)) return null; const v = at(a, 0); if (!Number.isFinite(v)) return null; const v5 = at(a, 5), vis = a.slice(-120).filter(Number.isFinite);
+      const o = {ultimo: R(v), hace_1: R(at(a, 1)), hace_5: R(v5), hace_20: R(at(a, 20)), pendiente: Number.isFinite(v5) ? (v > v5 * 1.0005 ? 'sube' : v < v5 * .9995 ? 'baja' : 'plana') : null, max_120: R(Math.max(...vis)), min_120: R(Math.min(...vis))};
+      if (v > 0 && px / v > .5 && px / v < 2) { o.precio_vs_linea = (px >= v ? 'precio ARRIBA ' : 'precio ABAJO ') + Math.abs((px / v - 1) * 100).toFixed(2) + '%'; const cr = lastCross(candles.map(k => k.c), a); if (cr) o.ultimo_cruce_del_precio = cr; }
+      return o; };
+    const objeto = ob => { const out = {}, arrs = Object.entries(ob).filter(([, v]) => Array.isArray(v) && v.some(Number.isFinite)); for (const [k, v] of arrs.slice(0, 6)) { const sr = serie(v); if (sr) out[k] = sr; } if (arrs.length >= 2) { const cr = lastCross(arrs[0][1], arrs[1][1]); if (cr) out['cruce_' + arrs[0][0] + '_vs_' + arrs[1][0]] = cr; } return Object.keys(out).length ? out : null; };
+    const SRC = {ema20: ind.ema20, ema50: ind.ema50, sma200: ind.sma200, wma20: ind.wma20, bollinger: ind.bbU ? {superior: ind.bbU, media: ind.bbU.map((u, i) => u == null || ind.bbL[i] == null ? null : (u + ind.bbL[i]) / 2), inferior: ind.bbL} : null, vwap: ind.vwap, supertrend: ind.stDir ? {linea: ind.stDir.map((d, i) => d < 0 ? ind.stUp && ind.stUp[i] : ind.stDn && ind.stDn[i])} : null, rsi: ind.rsi,
+      macd: ind.macd, stoch: ind.stoch, atr: ind.atr, obv: ind.obv, adx: ind.adx, cci: ind.cci, willr: ind.willr, mfi: ind.mfi, roc: ind.roc, stochrsi: ind.stochrsi, ao: ind.ao, cmf: ind.cmf, donchian: ind.donchian, keltner: ind.keltner, ichimoku: ind.ichimoku, psar: ind.psar};
+    for (const k of active) {
+      const v = SRC[k]; let r = null; if (!v) continue;
+      r = Array.isArray(v) ? (typeof v[0] === 'object' && v[0] && !Array.isArray(v[0]) ? null : serie(v)) : typeof v === 'object' ? objeto(v) : null;
+      if (k === 'rsi' && r) r.zona = r.ultimo >= 70 ? 'SOBRECOMPRA (≥70)' : r.ultimo <= 30 ? 'SOBREVENTA (≤30)' : 'neutral (30-70)';
+      if (k === 'bollinger' && r && r.superior && r.inferior) { const u = r.superior.ultimo, l = r.inferior.ultimo; r.posicion_precio_en_bandas_pct = R((px - l) / ((u - l) || 1) * 100); r.ancho_pct = R((u - l) / px * 100); }
+      if (k === 'supertrend' && ind.stDir) r = Object.assign(r || {}, {tendencia: ind.stDir[n - 1] < 0 ? 'ALCISTA' : 'BAJISTA'});
+      if (r) lecturas[(typeof stdName === 'function' ? stdName(k) : k) + (state.stdHide && state.stdHide[k] ? ' (oculto)' : '')] = r;
+    }
+    if (active.includes('ema20') && active.includes('ema50') && ind.ema20 && ind.ema50) { const cr = lastCross(ind.ema20, ind.ema50, 200); lecturas['Cruce ' + stdName('ema20') + ' / ' + stdName('ema50')] = {rapida_sobre_lenta: ind.ema20[n - 1] > ind.ema50[n - 1], ultimo_cruce: cr}; }
+    if (active.includes('volume')) { const vs = candles.slice(-21, -1).map(k => k.v), avg = vs.reduce((a, b) => a + b, 0) / (vs.length || 1); lecturas['Volumen'] = {ultima_vela: R(candles[n - 1].v), promedio_20: R(avg), relacion: R(candles[n - 1].v / (avg || 1))}; }
+    if (geo) { const a = Math.max(0, Math.floor(geo.start)), b = Math.min(n - 1, Math.ceil(geo.end)), cs = candles.slice(a, b + 1); if (cs.length) visible = {velas_en_pantalla: cs.length, desde: new Date(cs[0].t).toISOString(), maximo: R(Math.max(...cs.map(k => k.h))), minimo: R(Math.min(...cs.map(k => k.l))), cambio_pct: R((cs[cs.length - 1].c / cs[0].o - 1) * 100)}; }
+    dibujos = getDrawings().filter(d => !d.hide).slice(-20).map(d => ({tipo: d.type, etiqueta: d.label || d.text || undefined, precios: [d.a, d.b, d.c].filter(Boolean).map(q => R(q.p)), de_nexus_pixel: d.pix ? true : undefined}));
+  } catch (e) {}
   const tk = tickers[state.symbol];
-  return {nova, symbol: symOf(state.symbol), exchange: exName(state.symbol), interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine};
+  return {lecturas, visible, dibujos, nova, symbol: symOf(state.symbol), exchange: exName(state.symbol), interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine};
 };
 /* ───────── Divisiones: de 1 a 5 gráficos ─────────
    Cada gráfico extra es la misma app dentro de un iframe (con su propio activo, temporalidad e indicadores). 3, 4 y 5 gráficos solo en pantallas anchas. */
