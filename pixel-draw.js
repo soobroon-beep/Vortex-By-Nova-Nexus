@@ -83,14 +83,14 @@
     if (kind === 'hline') return `Listo, línea en ${fmtN(r.drawings[0].a.p)}.`;
     return '';
   }
-  const RUN = {channel, range, sr: cs => levels(cs), trend, fib};
-  function build(kind, cs, arg) { const r = kind === 'hline' ? hline(cs, arg) : RUN[kind] ? RUN[kind](cs) : null; return {r, drawings: r ? r.drawings : [], text: describe(kind, r, cs.length ? cs[cs.length - 1].c : 0)}; }
+  const RUN = {channel, range, sr: (cs, o) => levels(cs, o && o.sr || 3), trend, fib};
+  function build(kind, cs, arg, o) { const r = kind === 'hline' ? hline(cs, arg) : RUN[kind] ? RUN[kind](cs, o) : null; return {r, drawings: r ? r.drawings : [], text: describe(kind, r, cs.length ? cs[cs.length - 1].c : 0)}; }
 
   /* Lo que pides en español → acciones. «todo» / «análisis completo» dibuja varias cosas. */
   function parse(text) {
     const s = String(text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''), out = [];
     if (/\b(borra|limpia|quita|elimina)\b/.test(s)) return [{do: 'clear'}];
-    if (/analisis completo|todo\b|completo|haz tu magia|analizalo|analiza el grafico/.test(s)) return [{do: 'sr'}, {do: 'trend'}, {do: 'channel'}];
+    if (/analisis completo|todo\b|completo|haz tu magia|analizalo|analiza el grafico/.test(s)) return [{do: 'full'}]; // qué dibuja lo decide tu personalización (por defecto soportes/resistencias, tendencia y canal)
     if (/canal/.test(s)) out.push({do: 'channel'});
     if (/rango|lateral|consolida|caja/.test(s)) out.push({do: 'range'});
     if (/soporte|resistencia|niveles|s\/r|zonas/.test(s)) out.push({do: 'sr'});

@@ -101,7 +101,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
   function home() {
     st.view = 'home';
     root.innerHTML = head('Asistente IA', LLM.providerLabel()) + `<div class="aiv-cards">
-      <button class="aiv-card aiv-pixel" data-act="pixel"><span class="aivp-glow" aria-hidden="true"></span><span class="aivp-bot" aria-hidden="true">${window.NexusPixelHead ? window.NexusPixelHead('v') : ''}<i class="aivp-sp s1"></i><i class="aivp-sp s2"></i><i class="aivp-sp s3"></i></span><span class="aivp-txt"><em>Tu bot amigo</em><b>Nexus Pixel</b><small>Platica contigo y te dibuja canales, rangos y soportes en tu gráfico.</small><span class="aivp-go">¡Hola, Pixel! <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg></span></span></button>
+      <button class="aiv-card aiv-pixel" data-act="pixel"><span class="aivp-glow" aria-hidden="true"></span><span class="aivp-bot" aria-hidden="true">${window.NexusPixelHead ? window.NexusPixelHead('v') : ''}<i class="aivp-sp s1"></i><i class="aivp-sp s2"></i><i class="aivp-sp s3"></i></span><span class="aivp-txt"><em>Tu bot amigo</em><b>Nexus Pixel</b><small>Platica contigo y te dibuja canales, rangos y soportes en tu gráfico.</small><span class="aivp-go">Personalizar <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg></span></span></button>
       <button class="aiv-card" data-act="chart">${ICONS.chart}<span><b>Analizar gráfico con IA</b><small>Toma una captura de tu gráfico (con indicadores y dibujos), marca soportes y resistencias, y puedes seguir preguntándole.</small></span></button>
       <button class="aiv-card" data-act="brief">${ICONS.brief}<span><b>Briefing del día</b><small>Resumen corto de eventos importantes, noticias, novedades de IA, criptos más sonadas y la opinión de la IA sobre el mercado.</small></span></button>
       <button class="aiv-card" data-act="lab">${ICONS.lab}<span><b>Laboratorio de indicadores IA</b><small>Describe un indicador con tus palabras; la IA lo programa, lo valida y lo prueba en tu gráfico.</small></span></button>
@@ -264,6 +264,36 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
   }
   const copyText = async t => { try { await navigator.clipboard.writeText(t); return true; } catch { const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(a); a.select(); let ok = false; try { ok = document.execCommand('copy'); } catch {} a.remove(); return ok; } };
 
+  /* ───────── Personalizar a Nexus Pixel (se abre desde su tarjeta) ───────── */
+  const PXN = {sr: 'Soportes y resistencias', trend: 'Tendencia', channel: 'Canal', range: 'Rango', fib: 'Fibonacci'}, PXC = {purple: '#b46bff', blue: '#4cc3ff', orange: '#ff9d3c', mint: '#3ff0c0', red: '#ff4d6d'};
+  function pixelView() {
+    const B = window.CCT_pixel; if (!B || !B.cfg) return; const c = B.cfg(), O = B.opts; st.view = 'pixel';
+    const chips = (k, list, cur, multi) => `<div class="pxc-chips">${list.map(([v, n]) => `<button type="button" data-pxk="${k}" data-v="${esc(v)}" ${multi ? 'data-multi="1"' : ''} class="${(multi ? cur.includes(v) : cur === v) ? 'on' : ''}">${esc(n)}</button>`).join('')}</div>`;
+    const head2 = window.NexusPixelHead ? window.NexusPixelHead('v') : '';
+    root.innerHTML = head('Nexus Pixel', 'Personaliza a tu bot amigo') + `<div class="pxc">
+      <div class="pxc-hero"><span class="pxc-prev" data-c="${c.color}">${head2}</span><div><b>Hazlo a tu forma</b><small>Pixel usará esto cada vez que platiques con él o le pidas dibujar. Se guarda en tu cuenta (PC y celular).</small></div></div>
+      <button class="aiv-btn pxc-call" type="button" data-act="pxcall">Llamar a Pixel al gráfico</button>
+      <label class="pxc-l">¿Cómo te llamo?<input id="pxNombre" maxlength="30" value="${esc(c.nombre)}" placeholder="Tu nombre o apodo"></label>
+      <div class="pxc-l">Cómo operas${chips('estilo', O.estilo.map(x => [x, x[0].toUpperCase() + x.slice(1)]), c.estilo)}</div>
+      <div class="pxc-l">Tus temporalidades favoritas${chips('tfs', B.intervals().map(x => [x, x]), c.tfs, true)}</div>
+      <div class="pxc-l">Nivel de riesgo${chips('riesgo', O.riesgo.map(x => [x, x[0].toUpperCase() + x.slice(1)]), c.riesgo)}</div>
+      <label class="pxc-l">Tus reglas de trading<textarea id="pxReglas" rows="4" maxlength="1500" placeholder="Ej.: Solo opero a favor de la EMA 200. No entro si el RSI está en sobrecompra. Siempre con stop loss bajo el último mínimo.">${esc(c.reglas)}</textarea></label>
+      <label class="pxc-l">Cosas que siempre debe recordar<textarea id="pxNotas" rows="3" maxlength="1000" placeholder="Ej.: Mi indicador principal es Nova Nexus. Me interesan las zonas de liquidez. Opero BTC y SOL.">${esc(c.notas)}</textarea></label>
+      <div class="pxc-l">Cómo te habla${chips('tono', O.tono.map(x => [x, x[0].toUpperCase() + x.slice(1)]), c.tono)}${chips('trato', O.trato.map(x => [x, x[0].toUpperCase() + x.slice(1)]), c.trato)}</div>
+      <div class="pxc-l">«Análisis completo» dibuja${chips('completo', O.completo.map(x => [x, PXN[x]]), c.completo, true)}</div>
+      <label class="pxc-l">Soportes y resistencias por lado<input id="pxSr" type="range" min="1" max="5" value="${c.sr}"><small class="pxc-n" id="pxSrN">${c.sr}</small></label>
+      <div class="pxc-l pxc-cols"><label>Color de soportes<input id="pxColSup" type="color" value="${c.colSup || '#20bf9f'}"></label><label>Color de resistencias<input id="pxColRes" type="color" value="${c.colRes || '#f06b79'}"></label></div>
+      <div class="pxc-l">Color de su luz${chips('color', O.color.map(x => [x, '']), c.color)}</div>
+      <div class="aiv-actions"><button class="aiv-btn" type="button" data-act="pxsave">Guardar</button></div><p class="aiv-dim" id="pxMsg"></p></div>`;
+    root.querySelectorAll('[data-pxk="color"]').forEach(b => { b.style.background = PXC[b.dataset.v]; b.setAttribute('aria-label', b.dataset.v); });
+    const r = $('#pxSr'); if (r) r.oninput = () => { $('#pxSrN').textContent = r.value; };
+  }
+  function pixelSave() {
+    const B = window.CCT_pixel; if (!B) return; const on = k => [...root.querySelectorAll(`[data-pxk="${k}"].on`)].map(b => b.dataset.v), one = k => on(k)[0];
+    const c = B.setCfg({nombre: $('#pxNombre').value.trim(), estilo: one('estilo'), riesgo: one('riesgo'), tono: one('tono'), trato: one('trato'), color: one('color'), tfs: on('tfs'), completo: on('completo'), reglas: $('#pxReglas').value.trim(), notas: $('#pxNotas').value.trim(), sr: +$('#pxSr').value, colSup: $('#pxColSup').value, colRes: $('#pxColRes').value});
+    const m = $('#pxMsg'); if (m) { m.textContent = `✓ Guardado. Pixel ya te conoce${c.nombre ? ', ' + c.nombre : ''}.`; m.className = 'aiv-dim ok'; }
+  }
+
   /* ───────── Ajustes ───────── */
   function cfgView() {
     const c = LLM.load(), prev = st.view; st.cfgPrev = prev; st.view = 'cfg';
@@ -285,14 +315,17 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
 
   /* ───────── Eventos ───────── */
   function onClick(e) {
-    const t = e.target.closest('[data-act],[data-q],[data-lab],[data-sv]'); if (!t) return;
+    const t = e.target.closest('[data-act],[data-q],[data-lab],[data-sv],[data-pxk]'); if (!t) return;
     if (t.dataset.q) return followUp(t.dataset.q);
     if (t.dataset.lab) { const i = $('#labIn'); if (i) { i.value = t.dataset.lab; i.focus(); } return; }
     if (t.dataset.sv) { const L = st.lab, A = window.CCT_ai, id = t.dataset.id, x = A.list().find(y => y.id === id); if (!x) return;
       if (t.dataset.sv === 'tog') { A.toggle(id, !x.on); renderSaved(); } else if (t.dataset.sv === 'del') { if (confirm(`¿Eliminar el indicador «${x.name}»?`)) { A.remove(id); if (L.sid === id) { L.sid = null; L.code = ''; L.res = null; } renderTail(); renderSaved(); } }
       else { L.code = x.code; L.sid = id; L.res = null; L.req = ''; L.hist = []; addMsg('bot', md(`Editando **${x.name}**. Dime qué quieres cambiar.`)); renderTail(); const i = $('#labIn'); if (i) i.focus(); } return; }
     const a = t.dataset.act, L = st.lab, A = window.CCT_ai;
-    if (a === 'pixel') { if (window.CCT_switchView) window.CCT_switchView('chartView'); setTimeout(() => { if (window.NexusPixel) window.NexusPixel.show(true); }, 350); return; }
+    if (a === 'pixel') { pixelView(); return; }
+    if (a === 'pxcall') { if (window.CCT_switchView) window.CCT_switchView('chartView'); setTimeout(() => { if (window.NexusPixel) window.NexusPixel.show(true); }, 350); return; }
+    if (a === 'pxsave') { pixelSave(); return; }
+    if (t.dataset.pxk) { const k = t.dataset.pxk, v = t.dataset.v; if (t.dataset.multi) t.classList.toggle('on'); else { root.querySelectorAll(`[data-pxk="${k}"]`).forEach(b => b.classList.toggle('on', b === t)); } if (k === 'color') { const h = root.querySelector('.pxc-prev'); if (h) h.dataset.c = v; } return; }
     if (a === 'home') home(); else if (a === 'chart') chartView(); else if (a === 'brief') briefView(); else if (a === 'lab') labView(); else if (a === 'cfg') cfgView();
     else if (a === 'cfsk') { const i = $('#cfSk'), st2 = $('#cfSrvSt'), k = i ? i.value.trim() : ''; if (!/^sk_/.test(k)) { if (st2) st2.textContent = 'Pega tu clave sk_…'; return; } if (st2) st2.textContent = 'Guardando…'; LLM.serverSetKey(k).then(() => { i.value = ''; if (st2) { st2.textContent = '✓ Guardada para siempre en tu servidor. Ya puedes usar la IA en todos tus dispositivos.'; st2.className = 'ok'; } }).catch(e => { if (st2) { st2.textContent = '✗ ' + (e.message || 'No se pudo guardar'); st2.className = 'err'; } }); return; }
     else if (a === 'reshot') analyzeChart(); else if (a === 'rebrief') makeBrief();

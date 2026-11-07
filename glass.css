@@ -784,3 +784,22 @@ body.botlab-wide #botLabView{grid-column:2/4;grid-row:1;z-index:5;background:var
 .aivp-go{margin-top:6px;padding:5px 10px;font-size:11px}
 .aivp-glow{width:120px;height:120px;left:-30px;top:-40px}
 .aiv-pixel>.aivp-bot{flex:0 0 52px!important;width:52px;min-width:0}.aiv-pixel>.aivp-txt{flex:1 1 auto!important;min-width:0}
+
+/* Personalizar a Nexus Pixel */
+.pxc{display:flex;flex-direction:column;gap:12px}
+.pxc-hero{display:flex;align-items:center;gap:12px;padding:12px;border-radius:16px;background:linear-gradient(135deg,#2a1260,#1a1446 50%,#0d2a4a);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.pxc-hero b{display:block;font-size:15px}.pxc-hero small{display:block;font-size:12px;line-height:1.45;color:#cbbff0;margin-top:2px}
+.pxc-prev{flex:0 0 56px;height:52px;display:grid;place-items:center;animation:pxHop 2.8s ease-in-out infinite}.pxc-prev .nph{width:56px;height:52px}
+.pxc-prev[data-c=blue]{filter:hue-rotate(-75deg)}.pxc-prev[data-c=orange]{filter:hue-rotate(140deg) saturate(1.3)}.pxc-prev[data-c=mint]{filter:hue-rotate(-130deg)}.pxc-prev[data-c=red]{filter:hue-rotate(70deg) saturate(1.4)}
+.pxc-call{align-self:stretch;background:linear-gradient(135deg,#8b5cf6,#d946ef)!important;color:#fff!important;border:0!important}
+.pxc-l{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.2px}
+.pxc-l input:not([type=range]):not([type=color]),.pxc-l textarea{font:inherit;font-weight:400;font-size:13px;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 10px;resize:vertical}
+.pxc-l input:focus,.pxc-l textarea:focus{outline:0;border-color:#b46bff}
+.pxc-chips{display:flex;flex-wrap:wrap;gap:6px}
+.pxc-chips button{border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:12px;font-weight:600;padding:6px 11px;border-radius:16px;cursor:pointer}
+.pxc-chips button.on{border-color:#b46bff;background:rgba(180,107,255,.2);color:#fff}
+.pxc-chips [data-pxk=color]{width:28px;height:28px;padding:0;border-radius:50%;border:2px solid transparent}.pxc-chips [data-pxk=color].on{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.25)}
+.pxc-cols{flex-direction:row;gap:14px}.pxc-cols label{display:flex;align-items:center;gap:8px;font-weight:600}.pxc-cols input[type=color]{width:34px;height:26px;border:0;background:none;padding:0}
+.pxc-l input[type=range]{accent-color:#b46bff}.pxc-n{color:var(--text);font-size:13px}
+#pxMsg.ok{color:#20bf9f}
+.light .pxc-chips button.on{color:#3b0d7a}

@@ -155,6 +155,15 @@ function sanDesigns(a) { // diseños guardados (configuración completa del grá
   }
   return out;
 }
+/* Nexus Pixel personalizado: tu estilo, reglas, notas, cómo te habla y cómo dibuja (se edita en la tarjeta de Pixel de la IA) */
+const PIX_OPT = {estilo: ['scalping', 'intradía', 'swing', 'largo plazo'], riesgo: ['conservador', 'moderado', 'agresivo'], tono: ['corto y directo', 'explicado paso a paso'], trato: ['amigable', 'serio', 'divertido'], color: ['purple', 'blue', 'orange', 'mint', 'red'], completo: ['sr', 'trend', 'channel', 'range', 'fib']};
+function sanPixel(x) {
+  const q = x && typeof x === 'object' && !Array.isArray(x) ? x : {}, pick = (k, d) => PIX_OPT[k].includes(q[k]) ? q[k] : d, txt = (v, n) => typeof v === 'string' ? v.slice(0, n) : '', hex = v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v : '';
+  return {nombre: txt(q.nombre, 30), estilo: pick('estilo', 'intradía'), riesgo: pick('riesgo', 'moderado'), tono: pick('tono', 'corto y directo'), trato: pick('trato', 'amigable'), color: pick('color', 'purple'),
+    tfs: Array.isArray(q.tfs) ? q.tfs.filter(t => INTERVALS.includes(t)).slice(0, 6) : [], reglas: txt(q.reglas, 1500), notas: txt(q.notas, 1000),
+    sr: Math.max(1, Math.min(5, Math.round(+q.sr) || 3)), colSup: hex(q.colSup), colRes: hex(q.colRes),
+    completo: Array.isArray(q.completo) && q.completo.filter(k => PIX_OPT.completo.includes(k)).length ? q.completo.filter(k => PIX_OPT.completo.includes(k)) : ['sr', 'trend', 'channel'], at: +q.at || 0};
+}
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
@@ -195,6 +204,7 @@ function merge(s) {
   o.layout = ['1', '2v', '2h', '3', '4', '5'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.stdHide = o.stdHide && typeof o.stdHide === 'object' && !Array.isArray(o.stdHide) ? Object.fromEntries(Object.keys(o.stdHide).filter(k => o.stdHide[k] === true && Object.prototype.hasOwnProperty.call(o.indicators, k) && !k.startsWith('nn') && o.indicators[k]).map(k => [k, true])) : {}; // «oculto» (ojito) ≠ «apagado»: sigue activo en Indicadores, solo no se dibuja
   o.designs = sanDesigns(o.designs);
+  o.pixel = sanPixel(o.pixel); // personalización de Nexus Pixel (viaja con tu cuenta)
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
@@ -4963,7 +4973,9 @@ window.CCT_pixel = {
   add(ds) { if (!ds || !ds.length) return 0; snapDraw(); setDrawings([...getDrawings(), ...ds.map(d => ({...d, id: newDrawId(), pix: 1}))]); updateDrawUI(); render(); return ds.length; },
   clearMine() { const a = getDrawings(), keep = a.filter(d => !d.pix); if (keep.length === a.length) return 0; snapDraw(); setDrawings(keep); selectedId = null; updateDrawUI(); render(); return a.length - keep.length; },
   symbol: () => symOf(state.symbol), interval: () => state.interval, last: () => candles.length ? candles[candles.length - 1].c : null, fmt: v => fmt(v),
-  onChart: () => currentView === 'chartView'
+  onChart: () => currentView === 'chartView',
+  cfg: () => sanPixel(state.pixel), opts: PIX_OPT, intervals: () => INTERVALS.slice(),
+  setCfg(c) { state.pixel = sanPixel(Object.assign({}, c, {at: Date.now()})); save(); try { window.dispatchEvent(new CustomEvent('cct-pixel-cfg', {detail: state.pixel})); } catch {} return state.pixel; }
 };
 window.CCT_getAIContext = function () {
   const n = candles.length; if (n < 30) return null;

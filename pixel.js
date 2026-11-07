@@ -10,6 +10,7 @@
   if (/[?&]pane=/.test(location.search)) return;
   const D = window.NexusPixelDraw, area = document.getElementById('chartArea'); if (!D || !area) return;
   const H = () => window.CCT_pixel, LLM = () => window.CCTLLM;
+  const CFG = () => { try { return (window.CCT_pixel && window.CCT_pixel.cfg && window.CCT_pixel.cfg()) || {}; } catch { return {}; } }; // tu personalización (tarjeta de Pixel en la IA)
   const KEY = 'cct_pixel_v1', ls = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } })(), store = () => { try { localStorage.setItem(KEY, JSON.stringify(ls)); } catch {} };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const sleep = ms => new Promise(r => setTimeout(r, ms)), clamp = (v, a, b) => Math.max(a, Math.min(b, v)), mobile = () => innerWidth < 1024;
@@ -124,7 +125,8 @@
     const cs = h.visible(); if (cs.length < 20) { mood('thinking', 'think'); say('Veo muy pocas velas en pantalla. Aleja un poco el gráfico (pellizca o usa la rueda) y vuelvo a intentarlo.'); return; }
     mood('analyzing', 'think'); say(intro ? intro : 'Analizando tus velas…', {busy: true}); await sleep(REDUCED ? 0 : 750);
     bub.hidden = true; const texts = [];
-    for (const a of acts.slice(0, 4)) { const r = D.build(a.do, cs, a.price); texts.push(r.text); for (const d of r.drawings) await drawAnimated(d); }
+    const C = CFG(); acts = acts.flatMap(a => a.do === 'full' ? (C.completo && C.completo.length ? C.completo : ['sr', 'trend', 'channel']).map(k => ({do: k})) : [a]);
+    for (const a of acts.slice(0, 5)) { const r = D.build(a.do, cs, a.price, {sr: C.sr}); texts.push(r.text); for (const d of r.drawings) { if (/^Soporte/.test(d.label || '') && C.colSup) d.col = C.colSup; if (/^Resistencia/.test(d.label || '') && C.colRes) d.col = C.colRes; await drawAnimated(d); } }
     const hm = home(); await flyTo(hm.x, hm.y); mood('happy', 'thumbs');
     say(((intro ? intro + ' ' : '') + texts.filter(Boolean).join(' ')).trim() || 'Listo.'); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2200);
   }
@@ -139,9 +141,18 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     try { const c = window.CCT_getAIContext && window.CCT_getAIContext(); if (c) o.indicadores = JSON.stringify(c).slice(0, 1800); } catch {}
     return o;
   }
+  function profile() { // lo que el usuario configuró en la tarjeta de Pixel
+    const c = CFG(), out = [];
+    if (c.nombre) out.push(`El usuario se llama ${c.nombre}: llámalo así.`);
+    if (c.estilo) out.push(`Opera ${c.estilo}${c.tfs && c.tfs.length ? ' en ' + c.tfs.join(', ') : ''}, con riesgo ${c.riesgo}.`);
+    if (c.reglas) out.push('SUS REGLAS DE TRADING (respétalas y avísale si algo las rompe): ' + c.reglas);
+    if (c.notas) out.push('RECUERDA SIEMPRE: ' + c.notas);
+    if (c.tono) out.push(`Háblale ${c.tono === 'corto y directo' ? 'corto y directo (máximo 3 frases)' : 'explicando paso a paso (máximo 6 frases)'}, en tono ${c.trato}.`);
+    return out.length ? '\nPERFIL DEL USUARIO:\n' + out.join('\n') : '';
+  }
   async function llmAsk(text) {
     const L = LLM(); if (!L || !L.chat) throw new Error('sin IA');
-    const msgs = [{role: 'system', content: SYS}, ...hist.slice(-6), {role: 'user', content: `${text}\n\nDATOS DEL GRÁFICO (JSON): ${JSON.stringify(context())}`}];
+    const msgs = [{role: 'system', content: SYS + profile()}, ...hist.slice(-6), {role: 'user', content: `${text}\n\nDATOS DEL GRÁFICO (JSON): ${JSON.stringify(context())}`}];
     const r = await Promise.race([L.chat(msgs, {purpose: 'text', maxTokens: 380}), sleep(28000).then(() => { throw new Error('La IA tardó demasiado'); })]);
     const raw = String(r && r.text || ''), m = raw.match(/\{[\s\S]*\}/); let j = null; try { j = m ? JSON.parse(m[0]) : null; } catch {}
     const reply = j && typeof j.reply === 'string' ? j.reply : raw.replace(/```[\s\S]*?```/g, '').trim();
@@ -166,7 +177,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
   async function ensureModel() {
     if (M) return M; if (loading) return loading;
     av.classList.add('loading');
-    loading = import('./pixel-model.js').then(mod => { M = mod.create(cv); av.classList.remove('loading'); return M; })
+    loading = import('./pixel-model.js').then(mod => { M = mod.create(cv); try { M.setColor(CFG().color || 'purple'); } catch {} av.classList.remove('loading'); return M; })
       .catch(e => { av.classList.remove('loading'); loading = null; throw e; });
     return loading;
   }
@@ -175,7 +186,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     const s = AV(), pk = peekSpot(); place(pk.x - s.w / 2, AH() + 4); av.hidden = false; fab.classList.add('out'); // sale desde donde se estaba asomando
     try { await ensureModel(); } catch { av.hidden = true; open = false; fab.classList.remove('on', 'out'); try { window.CCT_bot && window.CCT_bot.toast('No se pudo cargar a Nexus Pixel. Revisa tu conexión.'); } catch {} return; }
     mood('excited', 'fly'); const h = home(); await flyTo(h.x, h.y, greet ? 1000 : 500);
-    if (greet) { mood('happy', 'wave'); say(`¡Hola! Soy Nexus Pixel. Pídeme que te dibuje el canal, el rango, soportes y resistencias… o pregúntame lo que quieras de ${H() ? H().symbol() : 'tu gráfico'}.`); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2400); }
+    if (greet) { mood('happy', 'wave'); say(`¡Hola${CFG().nombre ? ', ' + CFG().nombre : ''}! Soy Nexus Pixel. Pídeme que te dibuje el canal, el rango, soportes y resistencias… o pregúntame lo que quieras de ${H() ? H().symbol() : 'tu gráfico'}.`); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2400); }
     else { mood('neutral', 'idle'); say('Aquí sigo. ¿Qué te dibujo?', {instant: true}); }
     lastAct = Date.now();
   }
@@ -212,5 +223,6 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
   addEventListener('resize', () => { if (!open || busy) return; const h = home(); place(h.x, h.y); });
   if (window.ResizeObserver) new ResizeObserver(() => { if (open && !busy && !mv) { const h = home(); place(h.x, h.y); } }).observe(area);
   if (ls.open) setTimeout(() => { if (H() && H().onChart() && area.offsetWidth) show(false); else { const t = setInterval(() => { if (H() && H().onChart() && area.offsetWidth) { clearInterval(t); show(false); } }, 1500); } }, 1800);
+  addEventListener('cct-pixel-cfg', () => { try { if (M) M.setColor(CFG().color || 'purple'); } catch {} });
   window.NexusPixel = {show, hide, ask, get open() { return open; }};
 })();
