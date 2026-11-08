@@ -7,26 +7,26 @@
   const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   root.innerHTML = `
-    <div class="section-label">APLICACIÓN EN TU CELULAR</div>
+    <div class="sg-label">App en tu celular</div>
     <div class="pwa-card">
-      <div class="pwa-preview"><img data-app-icon width="64" height="64" alt="Ícono seleccionado"><div><b>VORTEX</b><small id="appIconName"></small></div></div>
-      <p class="small-note">Elige el ícono de la app (se aplica al instante); el ícono se usa al instalar. Tu selección se guarda en este navegador.</p>
+      <div class="pwa-preview"><span class="pwa-prev-ic"><img data-app-icon width="64" height="64" alt="Ícono seleccionado"></span><div class="pwa-prev-t"><b>VORTEX</b><small id="appIconName"></small><span class="pwa-prev-k">Ícono de la app</span></div><button class="primary" id="installApp" type="button">Instalar aplicación</button></div>
       <div class="pwa-icons" role="group" aria-label="Ícono de la aplicación"></div>
-      <button class="primary" id="installApp" type="button">Instalar aplicación</button>
+      <button type="button" class="pwa-more" id="pwaMore" aria-expanded="false"><span>Ver los ${icons.variants.length} íconos</span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
       <p id="installStatus" class="small-note" role="status" aria-live="polite"></p>
       <details id="installHelp"><summary>Cómo instalar o cambiar el ícono</summary>
         <p><b>Android:</b> abre esta página en Chrome, elige un ícono y toca Instalar aplicación. Si no aparece el aviso, usa el menú ⋮ → Instalar aplicación o Añadir a pantalla de inicio.</p>
         <p><b>iPhone / iPad:</b> abre esta página en Safari, elige un ícono y usa Compartir → Añadir a pantalla de inicio. Activa «Abrir como app» si aparece.</p>
         <p><b>Si ya está instalada:</b> el ícono de inicio no cambia inmediatamente desde estos ajustes. El navegador puede ofrecer una actualización; si conserva el anterior, vuelve a añadir la aplicación con el ícono elegido.</p>
-        <p>Antes de eliminar una instalación, exporta tu configuración desde Datos y seguimiento o confirma que esté guardada en tu cuenta. El sistema puede borrar datos locales al eliminar la app.</p>
+        <p>Antes de eliminar una instalación, exporta tu configuración desde Datos o confirma que esté guardada en tu cuenta. El sistema puede borrar datos locales al eliminar la app.</p>
         <p>Los precios, noticias, IA y sincronización necesitan conexión a internet.</p>
       </details>
       <button id="updateApp" class="small-button" type="button" hidden>Actualizar aplicación</button>
     </div>`;
+  { const mb = root.querySelector('#pwaMore'); mb.addEventListener('click', () => { const open = root.querySelector('.pwa-card').classList.toggle('all'); mb.setAttribute('aria-expanded', String(open)); mb.querySelector('span').textContent = open ? 'Ver menos' : `Ver los ${icons.variants.length} íconos`; }); }
   const grid = root.querySelector('.pwa-icons'), button = root.querySelector('#installApp'), status = root.querySelector('#installStatus');
   for (const [id, name] of icons.variants) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'pwa-icon-option'; b.dataset.icon = id;
-    b.setAttribute('aria-label', name); b.title = name; b.innerHTML = `<img src="icons/${id}-192.png" width="56" height="56" alt=""><span>${name}</span>`;
+    b.setAttribute('aria-label', name); b.title = name; b.innerHTML = `<img src="icons/${id}-192.png" width="56" height="56" alt="" loading="lazy"><i class="pwa-ck" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>`;
     b.addEventListener('click', () => {
       if (id === icons.selected) return;
       promptEvent = null; icons.apply(id);
@@ -37,8 +37,7 @@
   }
   function render() {
     icons.apply(icons.selected);
-    grid.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.icon === icons.selected)));
-    { const cur = grid.querySelector('[aria-pressed=true]'); if (cur && grid.clientWidth) grid.scrollLeft = cur.offsetLeft - (grid.clientWidth - cur.offsetWidth) / 2; } // deja a la vista el ícono elegido
+    grid.querySelectorAll('button').forEach((b, i) => { const on = b.dataset.icon === icons.selected; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('pin', on && i >= 11); }); // el elegido se ve aunque esté más abajo
     root.querySelector('#appIconName').textContent = icons.variants.find(v => v[0] === icons.selected)[1];
     button.textContent = icons.selected !== icons.initial ? 'Preparar instalación' : standalone() ? 'Ver instrucciones de instalación' : promptEvent ? 'Instalar aplicación' : ios ? 'Ver pasos para iPhone / iPad' : 'Ver cómo instalar';
   }

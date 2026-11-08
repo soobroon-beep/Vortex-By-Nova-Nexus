@@ -59,7 +59,7 @@ function sanDiscord(a) { // Discord: webhook del canal #vortex, invitación al s
 }
 const CTYPES = [['candles', 'Velas', 'c_candles'], ['hollow', 'Velas huecas', 'c_hollow'], ['ha', 'Heikin Ashi', 'c_ha'], ['bars', 'Barras OHLC', 'c_bars'], ['hlc', 'Barras HLC', 'c_hlc'], ['line', 'Línea', 'c_line'], ['area', 'Área', 'c_area'], ['step', 'Línea escalonada', 'c_step']];
 const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', bybitf: 'Bybit Perpetuos', okx: 'OKX Spot', okxf: 'OKX Perpetuos', coinbase: 'Coinbase', bingx: 'BingX Spot', bingxf: 'BingX Perpetuos', kucoin: 'KuCoin', gate: 'Gate.io', mexc: 'MEXC', bitget: 'Bitget', htx: 'HTX', kraken: 'Kraken', dom: 'Dominancia USDT/BTC'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
-const CHART_DEF = {bg: '#0d1019', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1, alertCol: '', alertA: 28, alertS: 'Puntos', alertW: 1};
+const CHART_DEF = {bg: '#07090e', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1, alertCol: '', alertA: 28, alertS: 'Puntos', alertW: 1};
 function sanChartStyle(c) {
   const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
   for (const k of ['bg', 'grid', 'up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick', 'cross', 'alertCol']) if (typeof c[k] === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(c[k])) o[k] = c[k];
@@ -115,7 +115,8 @@ const stdOn = k => !!state.indicators[k] && !(state.stdHide && state.stdHide[k])
 const stdName = k => ({ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', adx: `ADX ${sp('adx', 'len')}`, cci: `CCI ${sp('cci', 'len')}`, willr: `Williams %R ${sp('willr', 'len')}`, mfi: `MFI ${sp('mfi', 'len')}`, roc: `ROC ${sp('roc', 'len')}`, stochrsi: 'Estoc. RSI', ao: 'Awesome Osc.', cmf: `CMF ${sp('cmf', 'len')}`, donchian: `Donchian ${sp('donchian', 'len')}`, keltner: `Keltner ${sp('keltner', 'len')}`, ichimoku: 'Ichimoku', psar: 'Parabolic SAR', vpvr: 'VPVR', liqmap: 'Liquidaciones (heatmap)', patterns: 'Patrones', dchan: 'Canales dinámicos', cross: 'Cruces EMA 20/50'}[k] || k);
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
-const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle || {}); if (!(state.chartStyle && state.chartStyle.bg) && document.body.classList.contains('light')) o.bg = ''; return o; }; // fondo por defecto #0d1019 (el tema claro conserva el suyo)
+const OLD_BG = /^#(0d1019|101725|090e19)$/i; // fondos por defecto anteriores: pasan al tema nuevo más oscuro
+const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle || {}); if (OLD_BG.test(o.bg || '')) o.bg = CHART_DEF.bg; if (!(state.chartStyle && state.chartStyle.bg) && document.body.classList.contains('light')) o.bg = ''; return o; }; // fondo por defecto #07090e (el tema claro conserva el suyo)
 /* Preferencias de interfaz que también viajan a la cuenta: altura de paneles, tamaño de paneles, opciones del dibujo (imán, bloquear…) y color/ícono de la app */
 function sanUi(u) {
   const q = u && typeof u === 'object' && !Array.isArray(u) ? u : {}, o = {};
@@ -303,7 +304,7 @@ function setAlTab(t) {
 function alTabCount() { const n = (state.alerts || []).filter(a => a.on).length, e = $('#alTabN'); if (e) e.textContent = n ? String(n) : ''; }
 function openAlerts(t) { switchView('alertsView'); setAlTab(t || alTab); }
 $$('#alertsView [data-altab]').forEach(b => b.addEventListener('click', () => setAlTab(b.dataset.altab)));
-{ const d = $('#alDiscord'); if (d) d.onclick = () => { window.CCT_dcBack = 'alertsView'; switchView('discordView'); if (window.CCTDiscord) setTimeout(() => CCTDiscord.paint(), 0); }; }
+document.addEventListener('click', e => { if (!e.target.closest('#alDiscord')) return; window.CCT_dcBack = 'alertsView'; switchView('discordView'); if (window.CCTDiscord) setTimeout(() => CCTDiscord.paint(), 0); }); // el botón se vuelve a dibujar con los avisos
 { const s2 = $('#setAlerts'); if (s2) s2.onclick = () => openAlerts('how'); }
 { const ta = $('#topAlertsBtn'); if (ta) ta.onclick = () => switchView('alertsView'); }
 let prevSide = ''; // panel que estaba abierto antes del clic en la barra de iconos (volver a tocar el mismo lo oculta)
@@ -1361,8 +1362,8 @@ const indicatorRows = () => { document.body.dataset.indtab = indTab; return indT
 document.addEventListener('change', e => { const s = e.target.closest('[data-pine-pane]'); if (!s) return; const p = state.pine.find(x => x.sid === s.dataset.pinePane); if (!p) return; if (s.value) p.pane = s.value; else delete p.pane; save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); scheduleRender(); });
 document.addEventListener('click', e => { const t = e.target.closest('[data-indtab]'); if (!t) return; indTab = t.dataset.indtab; renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); });
 function renderIndicators() { $('#indicatorList').innerHTML = indicatorRows(); }
-function syncLiqBtn() { const b = $('#rrLiq'); if (!b) return; const on = !!state.indicators.liqmap; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }
-{ const b = $('#rrLiq'); if (b) b.addEventListener('click', () => { state.indicators.liqmap = !state.indicators.liqmap; if (state.stdHide) delete state.stdHide.liqmap; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast(state.indicators.liqmap ? 'Heatmap de liquidaciones activado (estimado)' : 'Heatmap de liquidaciones apagado'); }); }
+function syncLiqBtn() { const b = $('#liqBtn'); if (!b) return; const on = !!state.indicators.liqmap; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }
+{ const b = $('#liqBtn'); if (b) b.addEventListener('click', () => { state.indicators.liqmap = !state.indicators.liqmap; if (state.stdHide) delete state.stdHide.liqmap; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast(state.indicators.liqmap ? 'Heatmap de liquidaciones activado (estimado)' : 'Heatmap de liquidaciones apagado'); }); }
 function countIndicators() { syncLiqBtn(); const n = Object.entries(state.indicators).filter(([k, v]) => v && !k.startsWith('nn')).length + (novaOn() ? 1 : 0); $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-ind]'); if (!b) return;
@@ -2605,8 +2606,8 @@ function openStdDialog(key) {
   }});
 }
 function openChartStyle() {
-  const cs = cstyle(); let bgDef = '#101725'; try { if (!document.body.classList.contains('light')) throw 0; let n = $('#chartArea'); while (n) { const c = getComputedStyle(n).backgroundColor, m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(c); if (m && (m[4] === undefined || +m[4] > 0)) { bgDef = '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join(''); break; } n = n.parentElement; } } catch { if (!document.body.classList.contains('light')) bgDef = CHART_DEF.bg; }
-  const lineDef = '#263244', P = (key, title, type, def, group, extra) => Object.assign({key, title, type, def, value: state.chartStyle && state.chartStyle[key] !== undefined ? state.chartStyle[key] : def, group}, extra || {});
+  const cs = cstyle(); let bgDef = '#0b0f18'; try { if (!document.body.classList.contains('light')) throw 0; let n = $('#chartArea'); while (n) { const c = getComputedStyle(n).backgroundColor, m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(c); if (m && (m[4] === undefined || +m[4] > 0)) { bgDef = '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join(''); break; } n = n.parentElement; } } catch { if (!document.body.classList.contains('light')) bgDef = CHART_DEF.bg; }
+  const lineDef = '#1e2635', P = (key, title, type, def, group, extra) => Object.assign({key, title, type, def, value: state.chartStyle && state.chartStyle[key] !== undefined ? state.chartStyle[key] : def, group}, extra || {});
   const inputs = [
     P('bg', 'Color de fondo', 'color', bgDef, 'FONDO Y CUADRÍCULA'), P('gridH', 'Líneas horizontales', 'bool', true, 'FONDO Y CUADRÍCULA'), P('gridV', 'Líneas verticales', 'bool', true, 'FONDO Y CUADRÍCULA'), P('grid', 'Color de la cuadrícula', 'color', lineDef, 'FONDO Y CUADRÍCULA'),
     P('up', 'Vela alcista · cuerpo', 'color', CHART_DEF.up, 'VELAS'), P('down', 'Vela bajista · cuerpo', 'color', CHART_DEF.down, 'VELAS'),
@@ -3995,23 +3996,30 @@ function renderPrefs() {
     + row('Separadores', '', seg('sep', PR.sep, [['en', '1,234.5'], ['es', '1.234,5'], ['sp', '1 234,5'], ['none', '1234.5']]))
     + row('Símbolo', 'Delante del precio', seg('sym', PR.sym, [['', 'Ninguno'], ['$', '$'], ['US$', 'US$']]))
     + `<div class="pref-ex" aria-live="polite">${esc(ex)}</div></div>`;
-  const M = state.moveAlerts || {};
-  nb.innerHTML = `<div class="pref-list">`
-    + row('Sonido', '', seg('sound', PR.sound, [['on', 'Activado'], ['off', 'Silencio']]))
-    + row('Tono', '', `<select class="pref-sel" data-pk="tone" aria-label="Tono">${CCTPrefs.TONES.map(([v, t]) => `<option value="${v}" ${PR.tone === v ? 'selected' : ''}>${t}</option>`).join('')}</select><button type="button" class="pref-play" data-play aria-label="Probar sonido" title="Probar sonido"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg></button>`)
-    + sw('price', PR.n.price, 'Alertas de precio', 'Cuando el precio toca tu nivel')
-    + sw('ind', PR.n.ind, 'Alertas de indicador', 'Señales de tus indicadores')
-    + sw('discord', PR.n.discord, 'Enviar a Discord', 'Los avisos también al canal #vortex')
+  const soundOn = PR.sound !== 'off', ico = (c, d) => `<span class="sg-ic" style="--c:${c}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg></span>`;
+  const irow = (ic, t, sm, ctl, cls) => `<div class="pref-row${cls ? ' ' + cls : ''}">${ic}<div class="pref-l"><b>${t}</b>${sm ? `<small>${sm}</small>` : ''}</div><div class="pref-c">${ctl}</div></div>`;
+  const tg = (id, on, t) => `<button type="button" class="toggle${on ? ' on' : ''}" data-sw="${id}" role="switch" aria-checked="${!!on}" aria-label="${t}"></button>`;
+  nb.innerHTML = `<div class="sg-label">Sonido</div><div class="pref-list">`
+    + irow(ico('#f5a623', soundOn ? '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>' : '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="m16 10 4 4M20 10l-4 4"/>'), 'Sonido de los avisos', soundOn ? 'Suena y vibra al llegar un aviso' : 'Los avisos llegan en silencio', tg('sound', soundOn, 'Sonido de los avisos'))
+    + irow(ico('#f5a623', '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), 'Tono', '', `<select class="pref-sel" data-pk="tone" aria-label="Tono" ${soundOn ? '' : 'disabled'}>${CCTPrefs.TONES.map(([v, t]) => `<option value="${v}" ${PR.tone === v ? 'selected' : ''}>${t}</option>`).join('')}</select><button type="button" class="pref-play" data-play aria-label="Probar sonido" title="Probar sonido" ${soundOn ? '' : 'disabled'}><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg></button>`, soundOn ? '' : 'off')
+    + `</div><div class="sg-label">Qué te avisamos</div><div class="pref-list">`
+    + irow(ico('#548fff', '<path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>'), 'Alertas de precio', 'Cuando el precio toca tu nivel', tg('price', PR.n.price, 'Alertas de precio'))
+    + irow(ico('#b07cff', '<path d="M5 4v16M5 14c3-6 6 2 9-4s4-2 5-3"/>'), 'Alertas de indicador', 'Señales de tus indicadores', tg('ind', PR.n.ind, 'Alertas de indicador'))
+    + `</div><div class="sg-label">Discord</div><div class="pref-list">`
+    + irow(ico('#7c87ff', '<path d="M4 12h12M12 6l6 6-6 6"/>'), 'Enviar avisos a Discord', 'También llegan al canal #vortex de Nova Nexus', tg('discord', PR.n.discord, 'Enviar avisos a Discord'))
+    + `<button type="button" class="pref-row pref-link" id="alDiscord">${ico('#7c87ff', '<path d="M8 8.5c2.5-1 5.5-1 8 0M7.5 16c3 1.2 6 1.2 9 0"/><circle cx="9.5" cy="12.5" r="1"/><circle cx="14.5" cy="12.5" r="1"/>')}<div class="pref-l"><b>Servidor Nova Nexus</b><small>Unirte y elegir tu canal</small></div><div class="pref-c"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></div></button>`
     + `</div>`;
   const cl = window.CCT_CHANGELOG || [], cur = cl[0] || {v: '—', d: ''};
-  ab.innerHTML = `<div class="pref-list">${row('VORTEX · Powered by Nova Nexus', `Versión ${esc(cur.v)} <span id="buildNo"></span>`, '<button type="button" class="pref-pill" data-news>Novedades</button>')}</div>`;
+  ab.innerHTML = `<div class="about-card"><img data-app-icon class="about-ic" width="52" height="52" alt=""><div class="about-t"><b>VORTEX</b><small>Powered by Nova Nexus</small><span class="about-v">Versión ${esc(cur.v)} <span id="buildNo"></span></span></div></div>`
+    + `<div class="sg-label">Novedades</div><div class="cl-list">${cl.map((r, i) => `<details class="cl-ver"${i === 0 ? ' open' : ''}><summary><span class="cl-v">${esc(r.v)}</span><span class="cl-h"><b>${esc(r.t || 'Versión ' + r.v)}</b><small>${esc(r.d)}</small></span>${i === 0 ? '<span class="cl-new">Nuevo</span>' : ''}<svg class="cl-chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><ul>${r.items.map(it => `<li>${esc(it)}</li>`).join('')}</ul></details>`).join('')}</div>`;
+  if (window.CCTAppIcons) try { CCTAppIcons.apply(CCTAppIcons.selected); } catch {}
   if (window.caches && caches.keys) caches.keys().then(k => { const m = k.map(x => /^cct-shell-v(\d+)$/.exec(x)).filter(Boolean).map(x => +x[1]).sort((a, b) => b - a)[0]; const e = $('#buildNo'); if (e && m) e.textContent = '· compilación ' + m; }).catch(() => {});
 }
 {
   const onClick = e => {
     const b = e.target.closest('[data-pk]'); if (b && b.tagName === 'BUTTON') { const v = b.dataset.v; setPref(b.dataset.pk, /^\d+$/.test(v) ? +v : v); return; }
     const w = e.target.closest('[data-sw]');
-    if (w) { const k = w.dataset.sw; if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); if (on) { try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {} } save(); renderPrefs(); renderMoveAlerts(); } else setPref(k, !PR.n[k], true); return; }
+    if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); if (on) { try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {} } save(); renderPrefs(); renderMoveAlerts(); } else setPref(k, !PR.n[k], true); return; }
     if (e.target.closest('[data-play]')) { const t = $('#notifBox select[data-pk=tone]'); alertBeep(true, t && t.value); return; }
     if (e.target.closest('[data-news]')) openNews();
   };

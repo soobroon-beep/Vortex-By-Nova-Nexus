@@ -6,8 +6,8 @@
   "start_url": "../?appIcon=i03",
   "scope": "../",
   "display": "standalone",
-  "background_color": "#090e19",
-  "theme_color": "#090e19",
+  "background_color": "#05070c",
+  "theme_color": "#05070c",
   "icons": [
     {
       "src": "../icons/i03-192.png",

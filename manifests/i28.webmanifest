@@ -6,8 +6,8 @@
   "start_url": "../?appIcon=i28",
   "scope": "../",
   "display": "standalone",
-  "background_color": "#090e19",
-  "theme_color": "#090e19",
+  "background_color": "#05070c",
+  "theme_color": "#05070c",
   "icons": [
     {
       "src": "../icons/i28-192.png",
