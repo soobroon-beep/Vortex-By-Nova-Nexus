@@ -64,7 +64,7 @@
   function placePeek() { // escondido: en el gráfico (PC) o sobre el dock (celular)
     const w = fab.offsetWidth || 54, hgt = fab.offsetHeight || 40;
     if (H() && H().desktop() && area.offsetWidth) { const o = ao(); fab.style.left = (o.x + o.w - 132 - w) + 'px'; fab.style.top = (o.y + o.h - hgt) + 'px'; }
-    else { fab.style.left = (AW() - 70 - w) + 'px'; fab.style.top = (AH() - navH() - hgt) + 'px'; }
+    else { fab.style.left = (AW() - (onChart() ? 6 : 70) - w) + 'px'; fab.style.top = (AH() - navH() - hgt) + 'px'; } // en el gráfico del celular: pegado a la orilla para no tapar el «⋯» de la píldora
   }
   function peekSpot() { const r = fab.getBoundingClientRect(), l = layer.getBoundingClientRect(); return r.width ? {x: r.left - l.left + r.width / 2, y: r.top - l.top} : {x: AW() - 90, y: AH() - 40}; }
   function place(x, y) { const s = AV(); pos = {x, y}; av.style.width = s.w + 'px'; av.style.height = s.h + 'px'; av.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0)`; if (!bub.hidden) placeBubble(); }
