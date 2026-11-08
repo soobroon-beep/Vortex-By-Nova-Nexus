@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.2', d: '8 nov 2026', t: 'Gráfico más amplio en el celular', items: [
+    'La barra de arriba del gráfico ahora es una píldora flotante abajo, arriba del dock: temporalidad, indicadores, plantilla, operar, dibujar y deshacer a un toque.',
+    'Liquidaciones, Repetición, Libro, Diario, Diseño y Velas están en «⋯».',
+    'En el celular ya no aparece la franja de derivados junto al precio.'
+  ]},
   {v: '3.1', d: '8 nov 2026', t: 'Avisos del Screener puntuales', items: [
     'Las señales del Screener (1h y 4h) ahora las manda el servidor VORTEX al empezar cada hora, sin depender de GitHub: llegan a tiempo y sin saltarse horas.',
     'Nuevo: recibe esas señales también como notificación en tu celular (Alertas › Movimientos y señales).',

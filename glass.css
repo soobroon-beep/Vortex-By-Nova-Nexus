@@ -1413,3 +1413,29 @@ body.rp-picking #chartArea{cursor:crosshair}
 .jr-form input,.jr-form select{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);border-radius:9px;color:var(--text);font:inherit;font-size:13px;padding:8px}
 .jr-save{grid-column:1/-1;border:0;background:var(--accent);color:#fff;border-radius:11px;padding:11px;font:inherit;font-weight:800;margin-top:4px}
 .light .jr-box0,.light .jr-det{background:#fff;border-color:rgba(0,0,0,.1)}
+
+/* ───────── Celular: barra del gráfico como píldora flotante arriba del dock ───────── */
+@media(max-width:1023px){
+  #chartView{position:relative}
+  #chartView .chart-toolbar{position:absolute;z-index:25;left:10px;bottom:30px;width:max-content;max-width:calc(100% - 96px);display:flex;flex-wrap:nowrap;align-items:center;gap:1px;padding:3px;margin:0;overflow-x:auto;scrollbar-width:none;border-radius:999px;background:rgba(10,13,20,.86)!important;border:1px solid rgba(255,255,255,.1)!important;-webkit-backdrop-filter:blur(14px)!important;backdrop-filter:blur(14px)!important;box-shadow:0 8px 24px rgba(0,0,0,.45)!important}
+  #chartView .chart-toolbar::-webkit-scrollbar{display:none}
+  #chartView .chart-toolbar>button{font-size:0;min-width:36px;height:34px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;border-radius:999px!important;background:transparent!important;border-color:transparent!important;flex:0 0 auto}
+  #chartView .chart-toolbar>button .ic{width:18px;height:18px}
+  #chartView .chart-toolbar>button .rp-lbl,#chartView .chart-toolbar>button span:not(.prem-tag){display:none}
+  #chartView .chart-toolbar #tfBtn{font-size:12.5px;font-weight:800;padding:0 10px;color:var(--accent)}
+  #chartView .chart-toolbar [data-panel=indicators]::before{content:'ƒx';font-size:16px;font-style:italic;font-weight:600}
+  #chartView .chart-toolbar #moreBtn{position:static;margin-left:0;font-size:16px;line-height:1;color:var(--text)}
+  #chartView .chart-toolbar>button[aria-expanded=true],#chartView .chart-toolbar>button.on{background:rgba(84,143,255,.22)!important;color:#cfe0ff}
+  #chartView .more-group .rp-lbl,#chartView .more-group .prem-lbl{display:inline!important}
+  #chartView.more-open .more-group{left:10px;right:auto;width:min(300px,calc(100% - 20px))}
+  #chartView.more-open .more-group button{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px}
+  #chartView .timeframes{left:10px;right:auto;width:min(320px,calc(100% - 20px))}
+  .light #chartView .chart-toolbar{background:rgba(255,255,255,.9)!important;border-color:rgba(0,0,0,.1)!important}
+}
+@media(max-width:1023px){
+  #chartView.more-open .more-group button{background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:12px}
+  #chartView .more-group .prem-btn{color:#f3d48a!important;border-color:rgba(246,210,122,.45)!important}
+  #chartView .more-group .prem-btn .ic{color:#f6d27a}
+  #chartView .more-group .prem-tag{font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px;background:#f6d27a;color:#1a1205}
+  #chartView .more-group button.on,#chartView .more-group button[aria-pressed=true]{border-color:var(--accent)!important;color:#cfe0ff}
+}

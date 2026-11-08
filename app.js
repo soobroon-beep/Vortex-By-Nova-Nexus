@@ -1027,7 +1027,10 @@ function renderFrames() {
   const close = () => { view.classList.remove('tf-open', 'more-open'); tf.setAttribute('aria-expanded', 'false'); more.setAttribute('aria-expanded', 'false'); };
   const toggle = (cls, btn, panel) => {
     const was = view.classList.contains(cls); close(); if (was) return;
-    panel.style.top = (tb.offsetTop + tb.offsetHeight + 4) + 'px'; view.classList.add(cls); btn.setAttribute('aria-expanded', 'true');
+    // la píldora del celular está abajo: los menús se abren hacia arriba
+    const r = tb.getBoundingClientRect(), vr = view.getBoundingClientRect();
+    if (r.top - vr.top > vr.height / 2) { panel.style.top = 'auto'; panel.style.bottom = (vr.bottom - r.top + 8) + 'px'; } else { panel.style.bottom = 'auto'; panel.style.top = (tb.offsetTop + tb.offsetHeight + 4) + 'px'; }
+    view.classList.add(cls); btn.setAttribute('aria-expanded', 'true');
   };
   tf.onclick = e => { e.stopPropagation(); toggle('tf-open', tf, $('#timeframes')); };
   more.onclick = e => { e.stopPropagation(); toggle('more-open', more, $('#moreGroup')); };
@@ -1037,6 +1040,18 @@ function renderFrames() {
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   window.addEventListener('resize', close);
+  // celular: en la píldora quedan solo los esenciales; lo demás pasa a «Más» (en escritorio todo vuelve a su lugar)
+  const MOVE = ['liqBtn', 'replayBtn', 'bookBtn', 'journalBtn'].map(id => $('#' + id)).filter(Boolean), home = MOVE.map(b => [b, b.nextElementSibling]);
+  const place = () => {
+    const mob = !isDesktop(), grp = $('#moreGroup');
+    if (mob) { MOVE.forEach(b => { if (b.parentNode !== grp) grp.appendChild(b); }); if (grp.parentNode !== view) view.appendChild(grp); } // fuera de la píldora para que no lo recorte su desplazamiento
+    else {
+      if (grp.parentNode !== tb) tb.insertBefore(grp, more.nextSibling);
+      home.slice().reverse().forEach(([b, nx]) => { if (b.parentNode === grp) tb.insertBefore(b, nx && nx.parentNode === tb ? nx : more); });
+    }
+    view.classList.toggle('pill-bar', mob);
+  };
+  place(); if (deskMQ.addEventListener) deskMQ.addEventListener('change', () => { close(); place(); });
 })();
 $('#timeframes').addEventListener('click', e => {
   const b = e.target.closest('[data-tf]'); if (!b) return;
