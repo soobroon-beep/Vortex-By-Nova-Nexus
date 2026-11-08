@@ -60,7 +60,7 @@ function sanDiscord(a) { // Discord: webhook del canal #vortex, invitación al s
   const url = typeof q.url === 'string' && /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/.test(q.url.trim()) ? q.url.trim() : '';
   const inv = typeof q.invite === 'string' && /^https:\/\/(?:discord\.gg\/|(?:www\.)?discord\.com\/invite\/)[\w-]{2,40}$/.test(q.invite.trim()) ? q.invite.trim() : '';
   const t = v => Number.isFinite(+v) && +v > 0 ? Math.round(+v) : 0;
-  return {url, invite: inv, on: {move: o.move !== false, price: o.price !== false, ind: o.ind !== false, s1h: o.s1h !== false, s4h: o.s4h !== false}, sent: {s1h: t(sn.s1h), s4h: t(sn.s4h)}};
+  return {url, invite: inv, on: {bots: o.bots !== false, move: o.move !== false, price: o.price !== false, ind: o.ind !== false, s1h: o.s1h !== false, s4h: o.s4h !== false}, sent: {s1h: t(sn.s1h), s4h: t(sn.s4h)}};
 }
 const CTYPES = [['candles', 'Velas', 'c_candles'], ['hollow', 'Velas huecas', 'c_hollow'], ['ha', 'Heikin Ashi', 'c_ha'], ['bars', 'Barras OHLC', 'c_bars'], ['hlc', 'Barras HLC', 'c_hlc'], ['line', 'Línea', 'c_line'], ['area', 'Área', 'c_area'], ['step', 'Línea escalonada', 'c_step']];
 const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', bybitf: 'Bybit Perpetuos', okx: 'OKX Spot', okxf: 'OKX Perpetuos', coinbase: 'Coinbase', bingx: 'BingX Spot', bingxf: 'BingX Perpetuos', kucoin: 'KuCoin', gate: 'Gate.io', mexc: 'MEXC', bitget: 'Bitget', htx: 'HTX', kraken: 'Kraken', dom: 'Dominancia USDT/BTC'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)

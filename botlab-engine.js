@@ -83,7 +83,7 @@
   function validateSpec(spec) {
     const s = normalizeSpec(spec), er = [], chkOp = (o, where) => { if (!o || !OPERANDS[o.k]) er.push(`${where}: indicador desconocido`); else if (o.k === 'user' && !(typeof o.sid === 'string' && o.sid && typeof o.src === 'string' && o.src)) er.push(`${where}: elige el indicador y su señal`); else for (const [k, v] of Object.entries(Object.assign({}, OPERANDS[o.k].p || {}, o))) if (k !== 'k' && typeof v === 'number' && (!Number.isFinite(v) || (k !== 'v' && k !== 'd' && v < 1) || v > 5000)) er.push(`${where}: valor fuera de rango (${k} = ${v})`); };
     const chk = (list, where) => list.forEach((c, i) => { if (!OPS[c.op]) er.push(`${where} #${i + 1}: operador inválido`); chkOp(c.a, `${where} #${i + 1}`); if (c.op !== 'is') chkOp(c.b, `${where} #${i + 1}`); });
-    if (!/^[A-Z0-9]{5,20}$/.test(s.symbol)) er.push('Símbolo inválido (ej. BTCUSDT)'); if (!IV_MS[s.interval]) er.push('Temporalidad no soportada');
+    if (!/^[A-Z0-9]{5,20}$/.test(s.symbol)) er.push('Símbolo inválido (ej. BTCUSDT)'); if (s.basket != null && (!Array.isArray(s.basket) || s.basket.length < 2 || s.basket.length > 8 || s.basket.some(x => !/^[A-Z0-9]{5,20}$/.test(x)) || new Set(s.basket).size !== s.basket.length)) er.push('La cesta debe tener de 2 a 8 monedas distintas (ej. BTCUSDT, ETHUSDT)'); if (!IV_MS[s.interval]) er.push('Temporalidad no soportada');
     if (!['long', 'short', 'both'].includes(s.sides)) er.push('Dirección inválida');
     const wantL = s.sides !== 'short', wantS = s.sides !== 'long';
     if (wantL && !s.entry.long.length) er.push('Falta al menos una condición de ENTRADA para compras (largos)'); if (wantS && !s.entry.short.length) er.push('Falta al menos una condición de ENTRADA para ventas (cortos)');
@@ -96,7 +96,7 @@
   }
   function describeSpec(spec) { // texto en español con EXACTAMENTE lo que hará el bot (para que el usuario lo confirme antes de probarlo)
     const s = normalizeSpec(spec), L = [], list = (a, sep) => a.length ? a.map(condText).join(sep) : '— (ninguna)', r = s.risk;
-    L.push(`**${s.name}** · ${s.symbol} · ${s.interval} · ${s.sides === 'long' ? 'solo compras (largos)' : s.sides === 'short' ? 'solo ventas (cortos)' : 'compras y ventas'}`);
+    L.push(`**${s.name}** · ${Array.isArray(s.basket) && s.basket.length ? 'cesta de ' + s.basket.length + ' monedas (' + s.basket.map(x => x.replace(/USDT$/, '')).join(', ') + '), el capital se reparte por igual' : s.symbol} · ${s.interval} · ${s.sides === 'long' ? 'solo compras (largos)' : s.sides === 'short' ? 'solo ventas (cortos)' : 'compras y ventas'}`);
     if (s.sides !== 'short') { L.push(`**Compra** cuando se cumplan TODAS: ${list(s.entry.long, ' Y ')}.`); L.push(`**Cierra la compra** cuando se cumpla ALGUNA: ${s.exit.long.length ? list(s.exit.long, ' O ') : 'solo por stop loss / take profit / trailing' + (r.maxBars ? ' / tiempo máximo' : '')}.`); }
     if (s.sides !== 'long') { L.push(`**Vende (corto)** cuando se cumplan TODAS: ${list(s.entry.short, ' Y ')}.`); L.push(`**Cierra el corto** cuando se cumpla ALGUNA: ${s.exit.short.length ? list(s.exit.short, ' O ') : 'solo por stop loss / take profit / trailing' + (r.maxBars ? ' / tiempo máximo' : '')}.`); }
     const f = s.filters, ev = []; if (f.minVolRatio) ev.push(`volumen < ${f.minVolRatio}× su media`); if (f.minAtrPct) ev.push(`volatilidad (ATR) < ${f.minAtrPct} % del precio`); if (f.maxAtrPct) ev.push(`volatilidad (ATR) > ${f.maxAtrPct} % del precio`); if (f.hoursUtc) ev.push(`fuera del horario ${f.hoursUtc[0]}:00–${f.hoursUtc[1]}:00 UTC`);
@@ -222,14 +222,43 @@
     return {level: 'no-confirmada', text: loss ? 'Gana en el histórico total pero NO se confirma en validación/prueba: posible sobreajuste.' : 'Resultado fuera de muestra débil.'};
   }
 
+  /* ───────── Cesta: las mismas reglas en varias monedas a la vez (capital repartido por igual; cada moneda opera de forma independiente) ───────── */
+  function backtestBasket(bySym, specIn, opts) {
+    const spec = normalizeSpec(specIn), syms = spec.basket, n = syms.length, cap = spec.risk.capital, parts = [];
+    for (const sym of syms) { const C = bySym[sym]; if (!C || C.length < 60) throw new Error('Faltan velas de ' + sym); const sp = JSON.parse(JSON.stringify(spec)); sp.symbol = sym; delete sp.basket; sp.risk.capital = cap / n; const r = backtest(C, sp, opts && opts.per ? opts.per(sym) : opts); r.trades.forEach(t => { t.sym = sym; }); r.avoid.forEach(z => z.push(sym)); parts.push(r); }
+    const times = [...new Set(parts.flatMap(r => r.equity.map(p => p.t)))].sort((a, b) => a - b), last = parts.map(r => r.capital), idx = parts.map(() => 0);
+    const equity = times.map(t => { let e = 0; parts.forEach((r, k) => { while (idx[k] < r.equity.length && r.equity[idx[k]].t <= t) { last[k] = r.equity[idx[k]].e; idx[k]++; } e += last[k]; }); return {t, e}; });
+    const trades = parts.flatMap(r => r.trades).sort((a, b) => a.entryT - b.entryT); trades.forEach((t, i) => { t.id = i + 1; });
+    const dd = maxDD(equity.map(x => x.e)), fin = equity[equity.length - 1].e, from = times[0], to = times[times.length - 1];
+    const m = Object.assign(tradeStats(trades, cap), {capital: cap, finalEquity: fin, net: fin - cap, retPct: (fin - cap) / cap * 100, maxDD: dd.abs, maxDDPct: dd.pct, bars: Math.max(...parts.map(r => r.metrics.bars)), days: Math.max(1, Math.round((to - from) / 864e5)), exposurePct: parts.reduce((a, r) => a + r.metrics.exposurePct, 0) / n, slipEst: null});
+    const span = to - from, b1 = from + span * .6, b2 = from + span * .8, mk = (name, a, b) => Object.assign({name, from: a, to: b, fromBar: 0, toBar: 0}, tradeStats(trades.filter(t => t.entryT >= a && t.entryT < b + (b === to ? 1 : 0)), cap));
+    const segs = {train: mk('Entrenamiento', from, b1), val: mk('Validación', b1, b2), test: mk('Prueba', b2, to)};
+    const sumMap = key => { const o = {}; for (const r of parts) for (const [k, v] of Object.entries(r.breakdown[key] || {})) { const x = o[k] || (o[k] = {n: 0, net: 0, wins: 0}); x.n += v.n; x.net += v.net; x.wins += v.wins; } return o; };
+    const out = {avoid: parts.flatMap(r => r.avoid).sort((a, b) => a[0] - b[0]).slice(-400), spec, bars: m.bars, from, to, trades, equity, warnings: [...new Set(parts.flatMap(r => r.warnings).filter(w => !/^Solo \d+ operaciones/.test(w)))], halted: parts.some(r => r.halted), capital: cap, interval: spec.interval, symbol: syms.join(','), basket: syms,
+      metrics: m, segments: segs, buyHold: {final: cap * (1 + parts.reduce((a, r) => a + r.buyHold.retPct, 0) / n / 100), retPct: parts.reduce((a, r) => a + r.buyHold.retPct, 0) / n, maxDDPct: Math.max(...parts.map(r => r.buyHold.maxDDPct))},
+      daily: {days: Math.max(...parts.map(r => r.daily.days)), pos: 0, neg: 0, flat: 0}, breakdown: {hour: sumMap('hour'), trend: sumMap('trend'), vol: sumMap('vol'), side: sumMap('side')}, perSymbol: parts.map((r, k) => ({symbol: syms[k], n: r.metrics.n, retPct: r.metrics.retPct, winRate: r.metrics.winRate, maxDDPct: r.metrics.maxDDPct}))};
+    if (trades.length < 30) out.warnings.push(`Solo ${trades.length} operaciones en total: la muestra es demasiado pequeña para sacar conclusiones fiables.`);
+    out.verdict = verdict(out); return out;
+  }
+
   /* ───────── Plantillas para empezar ───────── */
+  function safeSpec(name, interval, maxBars) {
+    return Object.assign(defaultSpec(), {name, symbol: 'BTCUSDT', basket: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'], interval, sides: 'long',
+      entry: {long: [{a: {k: 'close'}, op: 'gt', b: {k: 'ema', n: 200}}, {a: {k: 'ema', n: 50}, op: 'gt', b: {k: 'ema', n: 200}}, {a: {k: 'adx', n: 14}, op: 'gt', b: {k: 'num', v: 20}}, {a: {k: 'rsi', n: 14}, op: 'crossUp', b: {k: 'num', v: 45}}], short: []},
+      exit: {long: [{a: {k: 'close'}, op: 'crossDown', b: {k: 'ema', n: 200}}], short: []},
+      filters: {minVolRatio: 0, minAtrPct: 0, maxAtrPct: interval === '1h' ? 2.5 : 5, hoursUtc: null},
+      risk: {capital: 10000, riskPct: 0.5, sizePct: 10, maxLeverage: 1, atrLen: 14, sl: {type: 'atr', v: 2}, tp: {type: 'rr', v: 1}, trail: null, maxBars, maxDailyLossPct: 2, maxDrawdownPct: 10}});
+  }
   const PRESETS = {
     emaRsi: () => Object.assign(defaultSpec(), {name: 'EMA 20/50 + RSI', entry: {long: [{a: {k: 'ema', n: 20}, op: 'crossUp', b: {k: 'ema', n: 50}}, {a: {k: 'rsi', n: 14}, op: 'gt', b: {k: 'num', v: 50}}], short: []}, exit: {long: [{a: {k: 'ema', n: 20}, op: 'crossDown', b: {k: 'ema', n: 50}}], short: []}}),
     novaNexus: () => Object.assign(defaultSpec(), {name: 'Nova Nexus + volumen', entry: {long: [{a: {k: 'novaBuy'}, op: 'is'}, {a: {k: 'volRatio', n: 20}, op: 'gt', b: {k: 'num', v: 1}}], short: []}, exit: {long: [{a: {k: 'novaSell'}, op: 'is'}], short: []}}),
+    /* «Seguro»: solo compras, solo en tendencia alcista confirmada, entrando en un retroceso que ya se recupera; stop amplio, objetivo cercano (más aciertos), riesgo bajo y freno de pérdidas. Opera poco a propósito. */
+    safe1h: () => safeSpec('Seguro 1h · BTC ETH SOL BNB XRP', '1h', 36),
+    safe4h: () => safeSpec('Seguro 4h · BTC ETH SOL BNB XRP', '4h', 18),
     macdTrend: () => Object.assign(defaultSpec(), {name: 'Tendencia + MACD', entry: {long: [{a: {k: 'close'}, op: 'gt', b: {k: 'ema', n: 200}}, {a: {k: 'macd'}, op: 'crossUp', b: {k: 'macdSignal'}}], short: []}, exit: {long: [{a: {k: 'macd'}, op: 'crossDown', b: {k: 'macdSignal'}}], short: []}})
   };
 
-  const api = {IV_MS, OPERANDS, OPS, ema, sma, rsi, atr, macd, bb, adx, backtest, tradeStats, defaultSpec, normalizeSpec, validateSpec, describeSpec, condText, opText, PRESETS, series, maxDD};
+  const api = {IV_MS, OPERANDS, OPS, ema, sma, rsi, atr, macd, bb, adx, backtest, backtestBasket, verdict, tradeStats, defaultSpec, normalizeSpec, validateSpec, describeSpec, condText, opText, PRESETS, series, maxDD};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTBotLab = api;
 })(typeof self !== 'undefined' ? self : this);

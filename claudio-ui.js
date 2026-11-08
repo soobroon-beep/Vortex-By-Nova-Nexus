@@ -56,11 +56,18 @@
     if (!s) return ['on', 'Encendido'];
     return ['on', 'Operando 24/7 (simulación)'];
   }
+  const AV = (size, live) => `<span class="bl-avw"><span class="bl-av" style="--av:#7c5cff;width:${size}px;height:${size}px"><img src="icons/bots/robot.png" width="${size}" height="${size}" alt="" draggable="false"></span>${live == null ? '' : `<span class="bl-dot d-${live ? 'live' : 'draft'}"></span>`}</span>`;
+  /* Claudio en la lista: un bot más, con el mismo aspecto que los demás */
   function card() {
-    const s = st.s, [k, label] = status(), stt = s ? K.stats(s) : null;
+    const s = st.s, [k, label] = status(), stt = s ? K.stats(s) : null, on = k === 'on';
     if (!st.loaded || Date.now() - st.loaded > 6e4) setTimeout(load, 0);
-    return `<div class="cl-card" data-a="claudio" role="button" tabindex="0"><div class="cl-face">${FACE}</div><div class="cl-card-m"><div class="cl-card-t"><b>Claudio</b><span class="cl-chip k-${k}">${esc(k === 'on' ? 'En vivo' : label)}</span></div>
-      <small>Agente autónomo · ${RS.CANDIDATES.length} monedas · 1 h</small></div><span class="bl-row-v ${stt ? cls(stt.retPct) : ''}">${stt ? pct(stt.retPct) : '—'}</span><span class="bl-row-go">›</span><button type="button" class="bl-tg ${(st.cfg || {}).enabled && !(st.cfg || {}).kill ? 'on' : ''}" data-a="clToggle" title="Encender / apagar a Claudio" aria-pressed="${!!(st.cfg || {}).enabled}"><i></i></button></div>`;
+    const pts = s && s.curve && s.curve.length > 1 ? s.curve.map(p => [p[0], (p[1] / s.capital - 1) * 100]) : null, col = stt && stt.retPct < 0 ? '#f06b79' : '#20bf9f';
+    const sp = pts ? (() => { const w = 60, h = 26, a = pts.length > 40 ? pts.filter((_, i) => i % Math.ceil(pts.length / 40) === 0).concat([pts[pts.length - 1]]) : pts, ys = a.map(p => p[1]), lo = Math.min(...ys), hi = Math.max(...ys), t0 = a[0][0], t1 = a[a.length - 1][0] || t0 + 1, d = a.map((p, i) => (i ? 'L' : 'M') + ((p[0] - t0) / (t1 - t0 || 1) * w).toFixed(1) + ' ' + (h - 2 - (p[1] - lo) / (hi - lo || 1) * (h - 4)).toFixed(1)).join(''); return `<svg class="bd-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="${col}" stroke-width="1.6"/></svg>`; })() : '';
+    return `<div class="bl-row"><button type="button" class="bl-row-m" data-a="claudio">${AV(34, on)}<span class="bl-row-n"><b>Claudio</b><small>${RS.CANDIDATES.length} monedas · 1h · ${esc(on ? 'En vivo' : label)}</small></span>${sp}<span class="bl-row-v ${stt ? cls(stt.retPct) : ''}">${stt ? pct(stt.retPct) : '—'}</span><span class="bl-row-go">›</span></button><button type="button" class="bl-tg ${(st.cfg || {}).enabled && !(st.cfg || {}).kill ? 'on' : ''}" data-a="clToggle" title="Encender / apagar" aria-pressed="${!!(st.cfg || {}).enabled}"><i></i></button></div>`;
+  }
+  function liveRow() { // para el Torneo de bots
+    const s = st.s; if (!s || !(st.cfg && st.cfg.enabled) || st.cfg.kill) return null; const x = K.stats(s);
+    return {id: 'claudio', name: 'Claudio', av: AV(30), col: '#7c5cff', ret: x.retPct, n: x.n, win: x.winRate, since: s.startT, curve: (s.curve || []).map(p => [p[0], (p[1] / s.capital - 1) * 100]), open: 'claudio'};
   }
   const gauge = (lab, v, max, unit, invert) => { const p = Math.max(0, Math.min(100, (v || 0) / max * 100)), col = p > 80 ? '#f06b79' : p > 50 ? '#f0b90b' : '#20bf9f'; return `<div class="cl-g"><div class="cl-g-h"><small>${lab}</small><b>${num(v, 2)}${unit} <i>/ ${max}${unit}</i></b></div><div class="cl-g-b"><i style="width:${p.toFixed(1)}%;background:${col}"></i></div></div>`; };
   function curve(s) {
@@ -124,7 +131,7 @@
       + '<p class="bl-foot">Simulación con capital virtual: Claudio no envía órdenes reales ni usa tus claves de exchange. Los resultados simulados no garantizan resultados reales. No es asesoría financiera.</p>';
   }
   function view(r, headFn) {
-    root = r; head = headFn; r.innerHTML = headFn('CLAUDIO', 'Agente de trading autónomo · cerebro Opus 5.5 + reflejo Jev', 'lib') + '<div class="cl-view"></div>';
+    root = r; head = headFn; r.innerHTML = headFn('Claudio', `Bot · ${RS.CANDIDATES.length} monedas · 1h`, 'lib', '', AV(36)) + '<div class="cl-view"></div>';
     if (!r.__clBound) { r.__clBound = true; r.addEventListener('click', onClick); }
     paint(); if (!st.loaded || Date.now() - st.loaded > 6e4) load();
     clearInterval(timer); timer = setInterval(() => { if (!root || !root.querySelector('.cl-view')) return clearInterval(timer); tick(); }, 5 * 6e4);
@@ -158,5 +165,5 @@
   async function toggle() { if (!st.loaded) await load(); const on = !(st.cfg && st.cfg.enabled && !st.cfg.kill); await setCfg(on ? {enabled: true, kill: false, capital: (st.cfg && st.cfg.capital) || 10000} : {enabled: false}); if (typeof UI.onChange === 'function') UI.onChange(); }
   setInterval(() => { if (st.loaded) load(); }, 5 * 6e4); // sigue avanzando aunque el panel esté cerrado
   setTimeout(() => { if (!st.loaded) load(); }, 6000);
-  const UI = window.CCTClaudioUI = {card, view, state: () => st, load, toggle, isOn: () => !!(st.cfg && st.cfg.enabled && !st.cfg.kill), onChange: null};
+  const UI = window.CCTClaudioUI = {card, liveRow, view, state: () => st, load, toggle, isOn: () => !!(st.cfg && st.cfg.enabled && !st.cfg.kill), onChange: null};
 })();

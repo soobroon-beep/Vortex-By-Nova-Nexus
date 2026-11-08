@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.9', d: '8 nov 2026', t: 'Torneo de bots, bots «Seguro» y avisos a Discord', items: [
+    'Torneo de bots: todos los encendidos (Claudio incluido, ahora es un bot más) compiten en vivo con podio, clasificación y curvas.',
+    'Nuevos bots «Seguro 1h» y «Seguro 4h»: solo compras en tendencia alcista confirmada en BTC, ETH, SOL, BNB y XRP, riesgo bajo y objetivo cercano. Los bots ya pueden operar una cesta de varias monedas.',
+    'Avisos a tu Discord de cada compra, venta y cierre (botón por bot y opción en Configuración › Discord). «Señales al gráfico» convierte un bot en indicador de tu gráfico. Palomita animada al aplicar una versión nueva y personaje editable al editar.'
+  ]},
   {v: '3.8', d: '8 nov 2026', t: 'Claudio estable y bots guardados en tu cuenta', items: [
     'Claudio ya no se apaga solo: su encendido y su progreso se guardan en tu cuenta junto con tus bots, y avanza en tu navegador con VORTEX abierto (y en el servidor cuando no).',
     'Al encender un bot empieza en cero. En Resumen y Operaciones se separa «En vivo» (desde que lo encendiste) de «Historia» (backtest).',

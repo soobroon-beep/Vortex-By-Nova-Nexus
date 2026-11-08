@@ -22,7 +22,7 @@
     const s = B.normalizeSpec(spec);
     if (!run) return {level: 'sin-datos', title: 'Aún no hay datos', lines: ['Este bot todavía no se ha probado. Toca «Probar» y en segundos verás cómo le habría ido con velas reales.']};
     const m = run.metrics, sg = run.segments, bh = run.buyHold, L = [];
-    L.push(`En ${run.bars} velas de ${s.symbol} ${s.interval} hizo ${m.n} operaciones: ${m.retPct >= 0 ? 'ganó' : 'perdió'} ${n1(Math.abs(m.retPct))} % (${money(m.net)}), con ${m.winRate == null ? '—' : n0(m.winRate) + ' %'} de aciertos y una caída máxima de ${n1(m.maxDDPct)} %.`);
+    L.push(`En ${run.bars} velas de ${Array.isArray(s.basket) && s.basket.length ? s.basket.map(x => x.replace('USDT', '')).join(', ') : s.symbol} ${s.interval} hizo ${m.n} operaciones: ${m.retPct >= 0 ? 'ganó' : 'perdió'} ${n1(Math.abs(m.retPct))} % (${money(m.net)}), con ${m.winRate == null ? '—' : n0(m.winRate) + ' %'} de aciertos y una caída máxima de ${n1(m.maxDDPct)} %.`);
     L.push(m.retPct > bh.retPct ? `Le ganó a simplemente comprar y mantener (${bh.retPct >= 0 ? '+' : ''}${n1(bh.retPct)} %).` : `No le ganó a comprar y mantener (${bh.retPct >= 0 ? '+' : ''}${n1(bh.retPct)} %).`);
     const oos = [sg.val, sg.test].filter(x => x.n > 0);
     if (oos.length) L.push(oos.every(x => x.net > 0) ? 'En los datos que no usó para armarse (validación y prueba) también gana: buena señal.' : 'En los datos que no usó para armarse (validación y prueba) pierde: el resultado podría ser casualidad o sobreajuste.');
@@ -73,7 +73,7 @@
     else if (m.n < 30 && ii > 0) add({id: 'ivDown', kind: 'temporalidad', title: `Pruébalo en ${IVS[ii - 1]} para tener más muestra`, why: `Solo ${m.n} operaciones: muy pocas para saber si funciona. En ${IVS[ii - 1]} tendrá más señales con el mismo historial.`, patch: {interval: IVS[ii - 1]}});
     // activos: del análisis en otros mercados
     const rows = (sweeps && sweeps.rows || []).filter(x => !x.err && x.n >= 20 && x.retPct > Math.max(0, m.retPct) && !(x.symbol === s.symbol && x.interval === s.interval)).sort((a, c) => c.retPct - a.retPct);
-    if (rows[0]) { const x = rows[0]; add({id: 'asset', kind: 'activo', title: `Llévalo a ${x.symbol.replace('USDT', '')} ${x.interval}`, why: `En el análisis en otros mercados, ${x.symbol} ${x.interval} rindió ${x.retPct >= 0 ? '+' : ''}${n1(x.retPct)} % con ${x.n} operaciones${x.win != null ? ` y ${n0(x.win)} % de aciertos` : ''}, mejor que ${s.symbol} ${s.interval} (${m.retPct >= 0 ? '+' : ''}${n1(m.retPct)} %).`, patch: {symbol: x.symbol, interval: x.interval}}); }
+    if (rows[0] && !(Array.isArray(s.basket) && s.basket.length)) { const x = rows[0]; add({id: 'asset', kind: 'activo', title: `Llévalo a ${x.symbol.replace('USDT', '')} ${x.interval}`, why: `En el análisis en otros mercados, ${x.symbol} ${x.interval} rindió ${x.retPct >= 0 ? '+' : ''}${n1(x.retPct)} % con ${x.n} operaciones${x.win != null ? ` y ${n0(x.win)} % de aciertos` : ''}, mejor que ${s.symbol} ${s.interval} (${m.retPct >= 0 ? '+' : ''}${n1(m.retPct)} %).`, patch: {symbol: x.symbol, interval: x.interval}}); }
     return out;
   }
   /* Valida consejos que vengan de la IA: solo pasan los que producen una especificación válida y distinta. */

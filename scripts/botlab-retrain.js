@@ -6,7 +6,7 @@
    · La app te muestra la propuesta (si hay) y tú decides.
    · Sin la variable FIREBASE_SERVICE_ACCOUNT no hace nada (sale sin error). Nunca imprime secretos ni datos de usuarios. */
 'use strict';
-const B = require('../botlab-engine.js'), O = require('../botlab-optimizer.js'), P = require('../botlab-paper.js'), RK = require('../botlab-risk.js');
+const NT = require('../botlab-notify.js'), B = require('../botlab-engine.js'), O = require('../botlab-optimizer.js'), P = require('../botlab-paper.js'), RK = require('../botlab-risk.js');
 try { require('../nova-nexus.js'); } catch {}
 let Pine = null; try { Pine = require('../pine.js'); } catch {}
 const BASES = ['https://data-api.binance.vision/api/v3', 'https://api.binance.com/api/v3']; // los runners de GitHub no siempre llegan a api.binance.com
@@ -44,11 +44,13 @@ async function retrainBot(bot, scripts, getCandles, now) {
       decision: opt.decision, reasons: opt.reasons, changes: opt.changes, folds: opt.folds, oos: opt.oos, holdout: opt.holdout, candidate: opt.candidate, dims: opt.dims};
   } catch (e) { return {at: now, v: bot.mainV, status: 'error', reason: String(e.message || e).slice(0, 300)}; }
 }
-async function paperBot(bot, scripts, getCandles, now, gateF) { // avanza las sesiones de paper trading activas (mismo motor que la app; no envía órdenes)
+async function postDiscord(url, embeds) { try { const r = await fetch(url + '?wait=false', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: embeds.slice(0, 10), allowed_mentions: {parse: []}})}); return r.ok; } catch { return false; } }
+async function paperBot(bot, scripts, getCandles, now, gateF, notify) { // avanza las sesiones de paper trading activas (mismo motor que la app; no envía órdenes)
   const out = []; for (const sess of bot.paper || []) {
     if (sess.status !== 'running') continue; const iv = B.IV_MS[sess.spec.interval]; if (sess.last && now < sess.last.t + 2 * iv) continue; const ropts = {nova: globalThis.NovaNexus, user: null, gate: gateF ? gateF(sess) : null};
     try { await P.step(sess, async (sym, itv, count) => { const C = await getCandles(sym, itv, count); const u = userSeries(sess.spec, C, scripts); ropts.user = Object.keys(u).length ? u : null; return C; }, ropts, now); sess.err = null; sess.checkedAt = now; sess.by = 'servidor'; }
     catch (e) { sess.err = String(e.message || e).slice(0, 200); sess.checkedAt = now; sess.by = 'servidor'; }
+    const evs = NT.pending(sess); if (evs.length && notify && notify.url && notify.bots !== false && bot.notify !== false && /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\//.test(notify.url)) await postDiscord(notify.url, evs.slice(-6).map(e => NT.embed(bot, sess, e)));
     const L = sess.ledger; for (let i = 0; i < L.length - 300; i++) { delete L[i].reasonIn; delete L[i].ctx; delete L[i].sl; delete L[i].tp; } out.push(sess);
   } return out;
 }
@@ -68,7 +70,7 @@ async function main() {
     const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(s.data().items || '[]') : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } };
     for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force)) continue; await loadScripts(); const r = await retrainBot(b, scripts, getCandles, now); results[b.id] = r; changed = true; nr++; if (r.decision === 'propuesta') np++; }
     const gateF = RK.gateFor(S.risk, all.flatMap(x => x.status === 'archived' ? [] : x.paper || []), now);
-    for (const b of pap) { await loadScripts(); const ss = await paperBot(b, scripts, getCandles, now, gateF); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
+    for (const b of pap) { await loadScripts(); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.notify); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
     if (changed) { for (const id of Object.keys(results)) if (!all.some(b => b.id === id)) delete results[id]; for (const id of Object.keys(paper)) if (!all.some(b => b.id === id)) delete paper[id]; await u.collection('data').doc('botlab_server').set({results, paper, updatedAt: admin.firestore.FieldValue.serverTimestamp()}); }
   }
   console.log(`Modo ${MODE} · ciclos: ${nb} · reentrenados: ${nr} · con propuesta: ${np} · sesiones paper avanzadas: ${nps}`);

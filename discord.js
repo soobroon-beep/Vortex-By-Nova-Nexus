@@ -52,7 +52,7 @@
   }
 
   /* Panel */
-  const SW = [['move', 'Movimientos bruscos', 'Cuando una moneda sube o cae fuerte en minutos'], ['price', 'Alertas de precio', 'Cuando una alerta que creaste llega a su precio'], ['ind', 'Alertas con indicador', 'Cuando se cumple una alerta con indicador']];
+  const SW = [['bots', 'Operaciones de mis bots', 'Cuando un bot encendido de Nova Bot Lab compra, vende o cierra (cada bot tiene su botón de avisos)'], ['move', 'Movimientos bruscos', 'Cuando una moneda sube o cae fuerte en minutos'], ['price', 'Alertas de precio', 'Cuando una alerta que creaste llega a su precio'], ['ind', 'Alertas con indicador', 'Cuando se cumple una alerta con indicador']];
   function paint() {
     const box = $('#discordBox'); if (!box) return; const D = get(), has = !!D.url; if (box.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') { const st = $('.dc-st', box); if (st) { st.textContent = status.t; st.className = 'dc-st ' + status.cls; } return; }
     box.innerHTML = `
