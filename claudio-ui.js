@@ -57,9 +57,9 @@
   }
   function card() {
     const s = st.s, [k, label] = status(), stt = s ? K.stats(s) : null;
-    if (!st.loaded) setTimeout(load, 0);
+    if (!st.loaded || (cloud() ? st.mode !== 'cuenta' : st.mode !== 'local') || Date.now() - st.loaded > 6e4) setTimeout(load, 0); // si iniciaste sesión después, se vuelve a leer de tu cuenta
     return `<div class="cl-card" data-a="claudio" role="button" tabindex="0"><div class="cl-face">${FACE}</div><div class="cl-card-m"><div class="cl-card-t"><b>Claudio</b><span class="cl-chip k-${k}">${esc(k === 'on' ? 'En vivo' : label)}</span></div>
-      <small>Agente autónomo · ${RS.CANDIDATES.length} monedas · 1 h</small></div><span class="bl-row-v ${stt ? cls(stt.retPct) : ''}">${stt ? pct(stt.retPct) : '—'}</span><span class="bl-row-go">›</span></div>`;
+      <small>Agente autónomo · ${RS.CANDIDATES.length} monedas · 1 h</small></div><span class="bl-row-v ${stt ? cls(stt.retPct) : ''}">${stt ? pct(stt.retPct) : '—'}</span><span class="bl-row-go">›</span><button type="button" class="bl-tg ${(st.cfg || {}).enabled && !(st.cfg || {}).kill ? 'on' : ''}" data-a="clToggle" title="Encender / apagar a Claudio" aria-pressed="${!!(st.cfg || {}).enabled}"><i></i></button></div>`;
   }
   const gauge = (lab, v, max, unit, invert) => { const p = Math.max(0, Math.min(100, (v || 0) / max * 100)), col = p > 80 ? '#f06b79' : p > 50 ? '#f0b90b' : '#20bf9f'; return `<div class="cl-g"><div class="cl-g-h"><small>${lab}</small><b>${num(v, 2)}${unit} <i>/ ${max}${unit}</i></b></div><div class="cl-g-b"><i style="width:${p.toFixed(1)}%;background:${col}"></i></div></div>`; };
   function curve(s) {
@@ -154,5 +154,6 @@
     .cl-bins{display:flex;align-items:flex-end;gap:4px;height:90px;margin:8px 0}.cl-bins div{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}.cl-bins i{display:block;width:100%;background:linear-gradient(#7c5cff,#20bf9f);border-radius:4px 4px 0 0;min-height:2px}.cl-bins small{font-size:9px;color:var(--muted)}
     .bd-ev i.cl-ev-entrada{background:#20bf9f}.bd-ev i.cl-ev-cierre{background:#548fff}.bd-ev i.cl-ev-riesgo,.bd-ev i.cl-ev-veto{background:#f06b79}.bd-ev i.cl-ev-escalada{background:#f0b90b}.bd-ev i.cl-ev-nocturno{background:#c084fc}.bd-ev i.cl-ev-inicio,.bd-ev i.cl-ev-datos{background:#8796ab}`;
   document.head.appendChild(css);
-  const UI = window.CCTClaudioUI = {card, view, state: () => st, load, onChange: null};
+  async function toggle() { if (!st.loaded) await load(); const on = !(st.cfg && st.cfg.enabled && !st.cfg.kill); await setCfg(on ? {enabled: true, kill: false, capital: (st.cfg && st.cfg.capital) || 10000} : {enabled: false}); if (typeof UI.onChange === 'function') UI.onChange(); }
+  const UI = window.CCTClaudioUI = {card, view, state: () => st, load, toggle, isOn: () => !!(st.cfg && st.cfg.enabled && !st.cfg.kill), onChange: null};
 })();

@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.7', d: '8 nov 2026', t: 'Varios bots encendidos a la vez', items: [
+    'Cada bot (y Claudio) tiene su interruptor en la lista: enciende varios a la vez para comparar estrategias en vivo.',
+    'Personajes espaciales a color para tus bots: robot, astronauta, alien, cohete, planeta, estrella, OVNI, luna, cometa, pulpo, satélite y vórtice.',
+    'El gráfico de compras y ventas muestra toda la historia de una vez. Arreglado el botón de volver al editar un bot.'
+  ]},
   {v: '3.6', d: '8 nov 2026', t: 'Consejos de la IA para cada bot', items: [
     'En Editar, debajo de las reglas: cómo va el bot, qué vio la IA y consejos para ESE bot (tendencia, aciertos, horario, riesgo, temporalidad y en qué moneda funciona mejor). Un clic en «Aplicar» lo prueba y lo deja como principal si no empeora.',
     'En Operaciones, debajo del diario: gráfico de velas con cada compra, venta y salida del bot.',
