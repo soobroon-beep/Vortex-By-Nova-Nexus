@@ -4924,7 +4924,7 @@ function dvPriceChg24() { const n = candles.length, iv = IV_MS[state.interval] |
 function dvCountdown(t) { const ms = t - Date.now(); if (!(ms > 0)) return '—'; const h = Math.floor(ms / 36e5), m = Math.floor(ms % 36e5 / 6e4), sc = Math.floor(ms % 6e4 / 1e3); return `${h}:${String(m).padStart(2, '0')}:${String(sc).padStart(2, '0')}`; }
 function dvRender() {
   const head = $('#chartSymHead'); if (!head) return;
-  let box = $('#dvChips'); const fs = dvSym(), on = !!state.indicators.derivs && !replay;
+  let box = $('#dvChips'); const fs = dvSym(), on = !!state.indicators.derivs && !replay && isDesktop(); // en el celular no: ocupa mucho espacio del gráfico
   if (!on || !fs) { if (box) { box.remove(); scheduleRender(); } return; }
   if (!box) { box = document.createElement('button'); box.type = 'button'; box.id = 'dvChips'; box.className = 'dv-chips'; box.title = 'Derivados en vivo · toca para ver el detalle'; head.appendChild(box); box.addEventListener('pointerdown', e => e.stopPropagation()); box.addEventListener('click', e => { e.stopPropagation(); dvOpen(); }); }
   const S = CCTDerivs.summary(fs);
