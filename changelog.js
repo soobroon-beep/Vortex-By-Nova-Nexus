@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.10', d: '8 nov 2026', t: 'Notificaciones con un solo botón y menú de tu cuenta', items: [
+    'Alertas › Avisos: «Activar notificaciones» enciende todo de una vez (sonido, vibración y avisos con la app cerrada). En «Qué te avisamos» están juntos precio, indicador, movimientos bruscos (con su sensibilidad) y señales del Screener.',
+    'Alertas tiene botón ‹ para volver, pestañas más cortas (Mis alertas · Avisos · Historial) y en Discord primero el servidor Nova Nexus y luego el envío de avisos.',
+    'Tu foto abre el menú de la cuenta con «Cerrar sesión»; Configuración ya no muestra la tarjeta de la cuenta. Nueva «Personalización de la aplicación» con tema, aspecto del gráfico, barra de favoritos e íconos.'
+  ]},
   {v: '3.9', d: '8 nov 2026', t: 'Torneo de bots, bots «Seguro» y avisos a Discord', items: [
     'Torneo de bots: todos los encendidos (Claudio incluido, ahora es un bot más) compiten en vivo con podio, clasificación y curvas.',
     'Nuevos bots «Seguro 1h» y «Seguro 4h»: solo compras en tendencia alcista confirmada en BTC, ETH, SOL, BNB y XRP, riesgo bajo y objetivo cercano. Los bots ya pueden operar una cesta de varias monedas.',

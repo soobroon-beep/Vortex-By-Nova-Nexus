@@ -10,6 +10,8 @@
   const load = () => { try { return Object.assign({tier: 'free'}, JSON.parse(localStorage.getItem(LS) || '{}')); } catch { return {tier: 'free'}; } };
   const save = s => { try { localStorage.setItem(LS, JSON.stringify(s)); } catch {} };
   let st = load(), owner = false, ov = null;
+  const PV_LS = 'cct_plan_view'; // vista previa TEMPORAL: ver la app como Gratis, Plus o Infinity (solo en este dispositivo)
+  let pv = (() => { try { const v = localStorage.getItem(PV_LS) || ''; return ['free', 'plus', 'infinity'].includes(v) ? v : ''; } catch { return ''; } })();
 
   const TIERS = {
     free: {n: 'Gratis', c: 'free', sub: 'Para todos', ic: '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>',
@@ -22,15 +24,57 @@
   // qué plan necesita cada herramienta (todavía no se bloquea: ENFORCE se activa cuando exista la verificación)
   const ENFORCE = false, RANK = {free: 0, plus: 1, infinity: 2};
   const FEATURES = {chart: 'free', drawings: 'free', freeInd: 'free', replay: 'free', risk: 'free', trade: 'free', watch: 'free', news: 'free', alerts: 'free', layouts: 'plus', novaLite: 'plus', aiChart: 'plus', aiBrief: 'plus', aiLab: 'plus', screener: 'plus', discord: 'plus', novaNexus: 'infinity', liq: 'infinity', pixel: 'infinity', lens: 'infinity', botlab: 'infinity'};
-  const can = f => !ENFORCE || RANK[current()] >= RANK[FEATURES[f] || 'free'];
-  const current = () => owner ? 'infinity' : (TIERS[st.tier] ? st.tier : 'free');
+  const can = f => !(ENFORCE || pv) || RANK[current()] >= RANK[FEATURES[f] || 'free'];
+  const real = () => owner ? 'infinity' : (TIERS[st.tier] ? st.tier : 'free');
+  const current = () => pv || real();
   const svg = (p, s = 18) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   const CHK = '<path d="m5 12.5 4.5 4.5L19 7.5"/>';
 
+  /* Qué botón necesita qué función: con la vista previa activa se ven atenuados y al tocarlos avisan qué plan los incluye */
+  const GATE = [['#liqBtn', 'liq'], ['[data-side="screenerView"], .bottom-nav [data-view="screenerView"], #scrOpen', 'screener'], ['#rrDiscord, #dcOpenFromSettings, #alDiscord', 'discord'],
+    ['[data-side="lensView"], .bottom-nav [data-view="lensView"]', 'lens'], ['#rrBotLab', 'botlab'], ['[data-side="aiView"], .bottom-nav [data-view="aiView"]', 'aiChart'], ['#layoutBtn', 'layouts'],
+    ['[data-feat="novaNexus"] .script-btns, .nova-card:has(.prem-tag) .script-btns, .ib-card:has(.prem-tag) .ib-act', 'novaNexus']];
+  const below = k => Object.keys(RANK).filter(t => RANK[t] < RANK[k]);
+  if (typeof document !== 'undefined') {
+    const css = GATE.map(([sel, f]) => below(FEATURES[f]).map(t => `body[data-pv="${t}"] :is(${sel})`).join(',')).filter(Boolean).join(',\n')
+      + '{opacity:.38!important;filter:grayscale(1)}'
+      + below('infinity').map(t => `body[data-pv="${t}"] .px-layer`).join(',') + '{display:none!important}';
+    const el = document.createElement('style'); el.id = 'plGate'; el.textContent = css; (document.head || document.documentElement).appendChild(el);
+    document.addEventListener('click', e => {
+      if (!pv) return;
+      for (const [sel, f] of GATE) {
+        let hit = null; try { hit = e.target.closest(sel); } catch {}
+        if (!hit || can(f)) continue;
+        e.preventDefault(); e.stopImmediatePropagation();
+        const need = TIERS[FEATURES[f]]; toast(`Con el plan ${TIERS[current()].n} esto aparece bloqueado · se desbloquea con ${need.n}`); return;
+      }
+    }, true);
+  }
+  function setPreview(t) {
+    pv = ['free', 'plus', 'infinity'].includes(t) ? t : '';
+    try { if (pv) localStorage.setItem(PV_LS, pv); else localStorage.removeItem(PV_LS); } catch {}
+    badge(); if (ov && !ov.hidden) render();
+    toast(pv ? `Viendo la app como ${TIERS[pv].n}` : 'Volviste a tu plan');
+  }
+  function applyTier() {
+    const b = document.body; if (!b) return; const cur = current();
+    b.dataset.tier = cur; if (pv) b.dataset.pv = pv; else delete b.dataset.pv;
+    const liq = document.getElementById('liqBtn'); // con Infinity (o siendo el creador) el botón de liquidaciones se ve normal, sin dorado ni «PRO»
+    if (liq) { const prem = RANK[cur] < RANK.infinity; liq.classList.toggle('prem-btn', prem); const tg = liq.querySelector('.prem-tag'); if (tg) tg.hidden = !prem; liq.title = prem ? 'Mapa de calor de liquidaciones · Premium' : 'Mapa de calor de liquidaciones'; }
+    document.querySelectorAll('[data-pv]').forEach(x => { if (x !== b) x.setAttribute('aria-pressed', String((x.dataset.pv || '') === pv)); });
+    let bn = document.getElementById('pvBanner');
+    if (pv) {
+      if (!bn) { bn = document.createElement('div'); bn.id = 'pvBanner'; bn.className = 'pv-banner'; bn.setAttribute('role', 'status'); document.body.appendChild(bn); }
+      bn.innerHTML = `<span>Vista previa · plan <b>${esc(TIERS[pv].n)}</b></span><button type="button" data-pv="">Salir</button>`;
+    } else if (bn) bn.remove();
+  }
+  if (typeof document !== 'undefined') document.addEventListener('click', e => { const b = e.target.closest('button[data-pv]'); if (b) setPreview(b.dataset.pv); });
+
   function badge() {
+    applyTier();
     const t = TIERS[current()];
     document.querySelectorAll('[data-plan-badge]').forEach(el => { el.className = 'pl-badge ' + t.c; el.innerHTML = svg(t.ic, 13) + esc(t.n); });
-    document.querySelectorAll('[data-plan-sub]').forEach(el => { el.textContent = owner ? 'Cuenta del creador · acceso total' : st.yt || st.bx ? 'Solicitud guardada · pendiente de verificar' : 'Gratis, Plus o Infinity'; });
+    document.querySelectorAll('[data-plan-sub]').forEach(el => { el.textContent = pv ? 'Vista previa de ' + TIERS[pv].n + ' · Salir en Vista de membresía' : owner ? 'Cuenta del creador · acceso total' : st.yt || st.bx ? 'Solicitud guardada · pendiente de verificar' : 'Gratis, Plus o Infinity'; });
   }
 
   function col(k) {
@@ -150,5 +194,5 @@
   }
   document.addEventListener('click', e => { if (e.target.closest('[data-plans-open]')) open(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', badge); else badge();
-  root.CCTPlans = {open, close, current, can, FEATURES, setUser, TIERS, links: {youtube: YT, bingx: BX, code: BX_CODE}};
+  root.CCTPlans = {open, close, current, real, can, setPreview, get preview() { return pv; }, FEATURES, setUser, TIERS, links: {youtube: YT, bingx: BX, code: BX_CODE}};
 })(typeof self !== 'undefined' ? self : this);

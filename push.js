@@ -11,7 +11,7 @@
   const ok = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && window.isSecureContext;
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } };
   const store = o => { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch {} };
-  let cfg = load(), lastSig = '', busy = false, lastErr = '';
+  let cfg = load(), lastSig = '', busy = false, lastErr = '', lastMaster = null;
   if (!cfg.id) { const r = new Uint8Array(18); crypto.getRandomValues(r); cfg.id = 'd_' + Array.from(r, b => b.toString(16).padStart(2, '0')).join(''); store(cfg); }
   const url = () => String(cfg.url || DEF_URL).replace(/\/+$/, '');
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -71,7 +71,7 @@
       if (sub && cfg.key && cfg.key !== key) { await sub.unsubscribe(); sub = null; } // el servidor cambió de claves
       if (!sub) sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64ToU8(key)});
       cfg.on = true; cfg.key = key; store(cfg); meta(true); await sync(true);
-      if (!lastErr) toast('Listo: te avisaré aunque VORTEX esté cerrada');
+      if (!lastErr) toast('Notificaciones activadas: te aviso aunque VORTEX esté cerrada');
     } catch (e) { lastErr = e.message || String(e); toast('No se pudo activar: ' + lastErr); }
     render();
   }
@@ -79,29 +79,46 @@
     cfg.on = false; store(cfg); meta(false);
     try { await api('/sync', {id: cfg.id, off: true}); } catch {}
     try { const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (sub) await sub.unsubscribe(); } catch {}
-    render(); toast('Avisos con la app cerrada desactivados');
+    render(); toast('Notificaciones desactivadas');
   }
   async function testPush() {
     try { await sync(true); const j = await api('/test', {id: cfg.id}); toast(j.ok ? 'Prueba enviada: cierra la app y mira tu celular' : 'El servicio push respondió ' + j.status); }
     catch (e) { toast('No se pudo enviar la prueba: ' + e.message); }
   }
 
+  /* Un solo interruptor: «Activar notificaciones» enciende sonido + vibración + notificaciones del sistema + avisos con la app cerrada.
+     Si el navegador no permite push (p. ej. iPhone sin instalar), enciende lo demás y explica cómo tener también la app cerrada. */
+  const soundOn = () => ((B.prefs() || {}).sound) !== 'off';
+  const master = () => ok ? !!cfg.on : soundOn();
+  async function turnOn() {
+    if (B.setSound) B.setSound(true);
+    if (ok) { await enable(); return; }
+    try { if (window.Notification && Notification.permission === 'default') await Notification.requestPermission(); } catch {}
+    toast(ios && !standalone ? 'Notificaciones activadas. Para recibirlas con la app cerrada en iPhone, añade VORTEX a la pantalla de inicio' : 'Notificaciones activadas');
+    render();
+  }
+  async function turnOff() {
+    if (B.setSound) B.setSound(false);
+    if (ok && cfg.on) { await disable(); return; }
+    render(); toast('Notificaciones desactivadas');
+  }
   function render() {
     const box = document.getElementById('pushBox'); if (!box) return;
-    const n = priceAlerts().filter(a => a.on).length, mv = !!(st().moveAlerts || {}).on;
-    const why = !ok ? (ios && !standalone ? 'En iPhone: Compartir → Añadir a pantalla de inicio, y actívalo desde la app instalada.' : 'Este navegador no permite notificaciones push.')
-      : cfg.on ? (lastErr ? '⚠ ' + lastErr : `Activo · vigilando ${n} alerta${n === 1 ? '' : 's'} de precio${mv ? ' y movimientos bruscos' : ''} cada minuto`)
-      : 'Te llega la notificación aunque VORTEX esté cerrada: alertas de precio y movimientos bruscos. Las de indicador siguen con la app abierta.';
-    box.innerHTML = `<div class="setting-row"><div><b>Avisos con la app cerrada</b><small>${why}</small></div><button class="toggle ${cfg.on ? 'on' : ''}" id="pushOn" type="button" aria-label="Avisos con la app cerrada" aria-pressed="${!!cfg.on}" ${ok ? '' : 'disabled'}></button></div>`
-      + (cfg.on ? `<div class="setting-row"><div><b>Probar</b><small>Manda una notificación de prueba a este celular</small></div><button class="small-button" id="pushTest" type="button">Enviar</button></div>` : '');
+    const on = master(), n = priceAlerts().filter(a => a.on).length, mv = !!(st().moveAlerts || {}).on;
+    const why = !on ? 'Un solo botón: sonido, vibración y aviso en tu celular aunque VORTEX esté cerrada.'
+      : !ok ? (ios && !standalone ? 'Activas con la app abierta. Para la app cerrada: Compartir → Añadir a pantalla de inicio.' : 'Activas con la app abierta. Este navegador no permite avisos con la app cerrada.')
+      : lastErr ? '⚠ ' + lastErr : `Activas, también con la app cerrada · vigilando ${n} alerta${n === 1 ? '' : 's'} de precio${mv ? ' y movimientos bruscos' : ''}`;
+    box.innerHTML = `<div class="setting-row nt-master${on ? ' on' : ''}"><div><b>Activar notificaciones</b><small>${why}</small></div><button class="toggle ${on ? 'on' : ''}" id="pushOn" type="button" aria-label="Activar notificaciones" aria-pressed="${on}"></button></div>`
+      + (on && ok && cfg.on ? `<div class="setting-row"><div><b>Probar</b><small>Manda una notificación de prueba a este celular</small></div><button class="small-button" id="pushTest" type="button">Enviar</button></div>` : '');
+    if (on !== lastMaster) { lastMaster = on; if (B.renderPrefs) try { B.renderPrefs(); } catch {} } // «Qué te avisamos» cambia según esté encendido
   }
   document.addEventListener('click', e => {
-    if (e.target.closest('#pushOn')) { cfg.on ? disable() : enable(); }
+    if (e.target.closest('#pushOn')) { master() ? turnOff() : turnOn(); }
     else if (e.target.closest('#pushTest')) testPush();
   });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(true); }); // al volver a la app trae lo que disparó el servidor
   setInterval(() => sync(false), 10000); // si cambian tus alertas, se mandan al servidor en ≤10 s
   window.addEventListener('pageshow', () => { if (cfg.on) sync(true); }); // al volver desde otra app (Android puede congelar la página)
   render(); if (cfg.on) { meta(true); sync(true); }
-  window.VortexPush = {sync, enable, disable, render, get on() { return !!cfg.on; }};
+  window.VortexPush = {sync, enable, disable, render, get on() { return !!cfg.on; }, get master() { return master(); }};
 })();

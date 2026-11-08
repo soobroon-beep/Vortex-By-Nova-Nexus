@@ -278,17 +278,20 @@ const lastShown = {};
 /* ───────── Navegación ───────── */
 const deskMQ = window.matchMedia ? window.matchMedia('(min-width: 1024px)') : {matches: false};
 const isDesktop = () => deskMQ.matches;
+const SUB_VIEWS = ['alertsView', 'discordView', 'customView']; let alBackTo = ''; // a dónde regresa el botón ‹ de Alertas
 function setSide(id) {
+  { const cur = document.body.dataset.side; if (id === 'alertsView' && cur && !SUB_VIEWS.includes(cur)) alBackTo = cur; }
   document.body.dataset.side = id;
   if (id === 'lensView') { const f = $('#lensFrame'); if (f && !f.src) f.src = f.dataset.src; } // Nexus Lens se carga la primera vez que se abre
-  $$('.right-rail [data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === id));
+  $$('.right-rail [data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === (id === 'customView' ? 'settingsView' : id)));
 }
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
-    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView' || id === 'botLabView') { setSide(id); if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
+    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView' || id === 'botLabView' || id === 'customView') { setSide(id); if (id === 'customView') renderCustom(); if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
     id = 'chartView';
   }
-  currentView = id;
+  if (id === 'alertsView' && currentView !== id && !SUB_VIEWS.includes(currentView)) alBackTo = currentView;
+  currentView = id; if (id === 'customView') renderCustom();
   if (id === 'lensView') { const f = $('#lensFrame'); if (f && !f.src) f.src = f.dataset.src; }
   $$('.view').forEach(x => x.classList.toggle('active', x.id === id));
   $$('.bottom-nav button').forEach(x => x.classList.toggle('active', x.dataset.view === id));
@@ -314,6 +317,8 @@ function setAlTab(t) {
 function alTabCount() { const n = (state.alerts || []).filter(a => a.on).length, e = $('#alTabN'); if (e) e.textContent = n ? String(n) : ''; }
 function openAlerts(t) { switchView('alertsView'); setAlTab(t || alTab); }
 $$('#alertsView [data-altab]').forEach(b => b.addEventListener('click', () => setAlTab(b.dataset.altab)));
+{ const bk = $('#alBack'); if (bk) bk.onclick = () => switchView(alBackTo && alBackTo !== 'alertsView' ? alBackTo : (isDesktop() ? 'watchView' : 'chartView')); } // ‹ regresa a donde estabas antes de abrir Alertas
+{ const bk = $('#cuBack'); if (bk) bk.onclick = () => switchView('settingsView'); const sc = $('#setCustom'); if (sc) sc.onclick = () => switchView('customView'); }
 document.addEventListener('click', e => { if (!e.target.closest('#alDiscord')) return; window.CCT_dcBack = 'alertsView'; switchView('discordView'); if (window.CCTDiscord) setTimeout(() => CCTDiscord.paint(), 0); }); // el botón se vuelve a dibujar con los avisos
 { const s2 = $('#setAlerts'); if (s2) s2.onclick = () => openAlerts('how'); }
 { const ta = $('#topAlertsBtn'); if (ta) ta.onclick = () => switchView('alertsView'); }
@@ -776,7 +781,7 @@ function moveCheck(sym, price, now) {
 function fireMove(sym, dir, ch, lbl, price) {
   const msg = `${base(sym)} ${dir === 'up' ? 'sube' : 'cae'} ${Math.abs(ch).toFixed(1)}% en ${lbl} · ${fmt(price)}`;
   moveLog.unshift({t: Date.now(), s: sym, d: dir, c: +ch.toFixed(2), w: lbl, p: price}); moveLog = moveLog.slice(0, 30); try { localStorage.setItem(MOVE_LOG_KEY, JSON.stringify(moveLog)); } catch {}
-  toast('Movimiento brusco: ' + msg); if ((state.moveAlerts || {}).sound !== false) { alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} }
+  toast('Movimiento brusco: ' + msg); if (PR.sound !== 'off') { alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} } // sonido y vibración: van con «Activar notificaciones»
   sysNotify('VORTEX · Movimiento brusco', msg, 'mv-' + sym + '-' + dir);
   dcSend('move', {symbol: base(sym), dir, pct: ch, win: lbl, price, text: msg});
   renderMoveAlerts();
@@ -790,49 +795,25 @@ async function movePoll() {
   } catch {}
 }
 const MOVE_LEVELS = [[1, 'Muy sensible · ±1 % en 5 min'], [2, 'Normal · ±2 % en 5 min'], [4, 'Solo grandes · ±4 % en 5 min'], [8, 'Solo extremos · ±8 % en 5 min']];
-function renderMoveAlerts() {
-  const box = $('#moveBox'); if (!box) return; const M = state.moveAlerts || {on: true, pct: 2, sound: true};
-  const near = MOVE_LEVELS.reduce((a, l) => Math.abs(l[0] - M.pct) < Math.abs(a[0] - M.pct) ? l : a);
+function renderMoveAlerts() { // pestaña Historial: los últimos movimientos bruscos (el interruptor y la sensibilidad están en Avisos › Qué te avisamos)
+  const box = $('#moveBox'); if (!box) return;
   const sv = p => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px">${p}</svg>`; // (SV aún no existe cuando esto corre por primera vez)
   const ic = d => d === 'up' ? sv('<path d="M5 15l5-5 3 3 6-7"/><path d="M15 6h4v4"/>') : sv('<path d="M5 9l5 5 3-3 6 7"/><path d="M15 18h4v-4"/>');
-  box.innerHTML = `<div class="setting-row"><div><b>Avisar movimientos bruscos</b><small>Sube o cae fuerte en minutos: solo del top 5 (BTC, ETH, BNB, XRP, SOL)</small></div><button class="toggle ${M.on ? 'on' : ''}" id="moveOn" type="button" aria-label="Avisos de movimientos bruscos" aria-pressed="${!!M.on}"></button></div>`
-    + (M.on ? `<div class="setting-row"><div><b>Sensibilidad</b><small>También avisa si pasa ±${(M.pct * 2.5).toFixed(M.pct * 2.5 % 1 ? 1 : 0)} % en 1 hora</small></div><select id="moveLvl" class="pane-sel" aria-label="Sensibilidad">${MOVE_LEVELS.map(l => `<option value="${l[0]}" ${l[0] === near[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select></div>
-      <div class="setting-row"><div><b>Sonido y vibración</b><small>Además del mensaje en pantalla</small></div><button class="toggle ${M.sound !== false ? 'on' : ''}" id="moveSnd" type="button" aria-label="Sonido y vibración" aria-pressed="${M.sound !== false}"></button></div>` : '')
-    + (moveLog.length ? `<div class="section-label">ÚLTIMOS AVISOS</div>` + moveLog.slice(0, 8).map(x => `<div class="setting-row move-row ${x.d}"><div><b>${ic(x.d)} ${esc(base(x.s))} ${x.c > 0 ? '+' : ''}${x.c}% en ${esc(x.w)}</b><small>${new Date(x.t).toLocaleString()} · ${fmt(x.p)}</small></div></div>`).join('') : '');
+  box.innerHTML = `<div class="section-label">MOVIMIENTOS BRUSCOS</div>` + (moveLog.length ? moveLog.slice(0, 12).map(x => `<div class="setting-row move-row ${x.d}"><div><b>${ic(x.d)} ${esc(base(x.s))} ${x.c > 0 ? '+' : ''}${x.c}% en ${esc(x.w)}</b><small>${new Date(x.t).toLocaleString()} · ${fmt(x.p)}</small></div></div>`).join('')
+    : `<p class="small-note">${(state.moveAlerts || {}).on ? 'Todavía no hay movimientos bruscos en el top 5.' : 'Los avisos de movimientos bruscos están apagados (Avisos › Qué te avisamos).'}</p>`);
 }
-{
-  const mb = $('#moveBox');
-  if (mb) mb.addEventListener('change', e => { if (e.target.id === 'moveLvl') { state.moveAlerts = sanMoveAlerts({...state.moveAlerts, pct: +e.target.value}); save(); renderMoveAlerts(); } });
-  if (mb) mb.addEventListener('click', e => {
-    const t = e.target.closest('#moveOn, #moveSnd'); if (!t) return; const M = {...(state.moveAlerts || {})};
-    if (t.id === 'moveOn') { M.on = !M.on; if (M.on) { try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {} } } else M.sound = M.sound === false;
-    state.moveAlerts = sanMoveAlerts(M); save(); renderMoveAlerts();
-  });
-  renderMoveAlerts();
-}
+renderMoveAlerts();
 /* Señales del Screener al celular: las calcula el servidor al empezar cada hora (1h) y cada 4 h, aunque la app esté cerrada */
 let scrSrv = null;
 async function scrStatus() { try { const r = await fetch('https://vortex-push.soobroon.workers.dev/scr/state'); if (r.ok) { scrSrv = await r.json(); renderScrPush(); } } catch {} }
-function renderScrPush() {
-  const box = $('#scrPushBox'); if (!box) return; const S = state.scrPush || {}, pushOn = !!(window.VortexPush && VortexPush.on);
+function renderScrPush() { // pestaña Historial: último análisis del Screener (el interruptor está en Avisos › Qué te avisamos)
+  const box = $('#scrPushBox'); if (!box) return; const S = state.scrPush || {};
   const last = tf => { const l = scrSrv && scrSrv.last && scrSrv.last[tf]; return l ? `Último análisis ${new Date(l.at).toLocaleString([], {hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'})}: ${l.n} con señal de ${l.of}` : 'Se analiza al empezar cada ' + (tf === '1h' ? 'hora' : '4 horas'); };
-  const tg = (id, on, lbl) => `<button class="toggle ${on ? 'on' : ''}" id="${id}" type="button" aria-label="${lbl}" aria-pressed="${on}"></button>`;
-  box.innerHTML = `<div class="section-label">SEÑALES DEL SCREENER</div>
-    <div class="setting-row"><div><b>Avisarme las señales al celular</b><small>LONG, SHORT y RANGO del top 50 por volumen, con la app cerrada${pushOn ? '' : '. Primero activa «Avisos con la app cerrada» en «Cómo te aviso»'}</small></div>${tg('scrOn', !!S.on, 'Señales del Screener al celular')}</div>`
-    + (S.on ? `<div class="setting-row"><div><b>Temporalidad 1 hora</b><small>${esc(last('1h'))}</small></div>${tg('scrH1', S.h1 !== false, 'Señales de 1 hora')}</div>
-    <div class="setting-row"><div><b>Temporalidad 4 horas</b><small>${esc(last('4h'))}</small></div>${tg('scrH4', S.h4 !== false, 'Señales de 4 horas')}</div>` : '')
-    + `<p class="small-note">Solo llega aviso cuando hay al menos una cripto con señal. También se publican en el canal #vortex de Discord.</p>`;
+  box.innerHTML = `<div class="section-label">SEÑALES DEL SCREENER</div>`
+    + (S.on ? [['1h', 'Temporalidad 1 hora', S.h1 !== false], ['4h', 'Temporalidad 4 horas', S.h4 !== false]].map(([tf, t, on]) => `<div class="setting-row"><div><b>${t}${on ? '' : ' · apagada'}</b><small>${esc(last(tf))}</small></div></div>`).join('')
+      : `<p class="small-note">Las señales del Screener están apagadas (Avisos › Qué te avisamos).</p>`);
 }
-{
-  const sb = $('#scrPushBox');
-  if (sb) sb.addEventListener('click', e => {
-    const t = e.target.closest('#scrOn, #scrH1, #scrH4'); if (!t) return; const S = {...(state.scrPush || {})};
-    if (t.id === 'scrOn') { S.on = !S.on; if (S.on && !(window.VortexPush && VortexPush.on)) toast('Activa «Avisos con la app cerrada» para recibirlas con la app cerrada'); }
-    else if (t.id === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false;
-    state.scrPush = sanScrPush(S); save(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true);
-  });
-  renderScrPush();
-}
+renderScrPush();
 
 /* ───────── Alertas con indicadores ─────────
    Se evalúan sobre la ÚLTIMA VELA CERRADA (sin repintado) del símbolo y temporalidad elegidos, aunque no estén en el gráfico.
@@ -936,7 +917,7 @@ async function indAlertTick(force) {
   if (changed) { save(); renderAlerts(); }
 }
 window.CCTAlerts = {stdHit, pineHit, STD_CONDS}; // expuesto para pruebas
-window.CCTPushBridge = {state: () => state, prefs: () => PR, save: () => save(), renderAlerts: () => renderAlerts(), scheduleRender: () => scheduleRender(), toast: m => toast(m)}; // para push.js (avisos con la app cerrada)
+window.CCTPushBridge = {state: () => state, prefs: () => PR, save: () => save(), setSound: on => setPref('sound', on ? 'on' : 'off'), renderPrefs: () => renderPrefs(), renderAlerts: () => renderAlerts(), scheduleRender: () => scheduleRender(), toast: m => toast(m)}; // para push.js (avisos con la app cerrada)
 setInterval(() => { if (!document.hidden) indAlertTick(); }, 15000);
 setTimeout(indAlertTick, 4000);
 
@@ -4310,15 +4291,21 @@ function renderPrefs() {
   const soundOn = PR.sound !== 'off', ico = (c, d) => `<span class="sg-ic" style="--c:${c}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg></span>`;
   const irow = (ic, t, sm, ctl, cls) => `<div class="pref-row${cls ? ' ' + cls : ''}">${ic}<div class="pref-l"><b>${t}</b>${sm ? `<small>${sm}</small>` : ''}</div><div class="pref-c">${ctl}</div></div>`;
   const tg = (id, on, t) => `<button type="button" class="toggle${on ? ' on' : ''}" data-sw="${id}" role="switch" aria-checked="${!!on}" aria-label="${t}"></button>`;
-  nb.innerHTML = `<div class="sg-label">Sonido</div><div class="pref-list">`
-    + irow(ico('#f5a623', soundOn ? '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>' : '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="m16 10 4 4M20 10l-4 4"/>'), 'Sonido de los avisos', soundOn ? 'Suena y vibra al llegar un aviso' : 'Los avisos llegan en silencio', tg('sound', soundOn, 'Sonido de los avisos'))
-    + irow(ico('#f5a623', '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), 'Tono', '', `<select class="pref-sel" data-pk="tone" aria-label="Tono" ${soundOn ? '' : 'disabled'}>${CCTPrefs.TONES.map(([v, t]) => `<option value="${v}" ${PR.tone === v ? 'selected' : ''}>${t}</option>`).join('')}</select><button type="button" class="pref-play" data-play aria-label="Probar sonido" title="Probar sonido" ${soundOn ? '' : 'disabled'}><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg></button>`, soundOn ? '' : 'off')
-    + `</div><div class="sg-label">Qué te avisamos</div><div class="pref-list">`
+  const mOn = window.VortexPush ? VortexPush.master : soundOn, M = state.moveAlerts || {on: true, pct: 2}, S = state.scrPush || {};
+  const near = MOVE_LEVELS.reduce((a, l) => Math.abs(l[0] - M.pct) < Math.abs(a[0] - M.pct) ? l : a), sub = 'pref-sub';
+  nb.innerHTML = `<div class="pref-list">`
+    + irow(ico('#f5a623', '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), 'Tono', 'El sonido de tus avisos', `<select class="pref-sel" data-pk="tone" aria-label="Tono" ${mOn ? '' : 'disabled'}>${CCTPrefs.TONES.map(([v, t]) => `<option value="${v}" ${PR.tone === v ? 'selected' : ''}>${t}</option>`).join('')}</select><button type="button" class="pref-play" data-play aria-label="Probar sonido" title="Probar sonido"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg></button>`, mOn ? '' : 'off')
+    + `</div><div class="sg-label">Qué te avisamos</div>${mOn ? '' : '<p class="small-note nt-hint">Enciende «Activar notificaciones» para recibir estos avisos.</p>'}<div class="pref-list${mOn ? '' : ' nt-off'}">`
     + irow(ico('#548fff', '<path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>'), 'Alertas de precio', 'Cuando el precio toca tu nivel', tg('price', PR.n.price, 'Alertas de precio'))
     + irow(ico('#b07cff', '<path d="M5 4v16M5 14c3-6 6 2 9-4s4-2 5-3"/>'), 'Alertas de indicador', 'Señales de tus indicadores', tg('ind', PR.n.ind, 'Alertas de indicador'))
+    + irow(ico('#f06b79', '<path d="M3 12h4l2-6 4 12 2-6h6"/>'), 'Movimientos bruscos', 'Sube o cae fuerte en minutos · top 5 (BTC, ETH, BNB, XRP, SOL)', tg('move', !!M.on, 'Movimientos bruscos'))
+    + (M.on ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Sensibilidad', `También avisa si pasa ±${(M.pct * 2.5).toFixed(M.pct * 2.5 % 1 ? 1 : 0)} % en 1 hora`, `<select id="moveLvl" class="pref-sel" aria-label="Sensibilidad">${MOVE_LEVELS.map(l => `<option value="${l[0]}" ${l[0] === near[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select>`, sub) : '')
+    + irow(ico('#20bf9f', '<path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M7 15l3-4 3 2 4-5"/>'), 'Señales del Screener', 'LONG, SHORT y RANGO del top 50 por volumen', tg('scr', !!S.on, 'Señales del Screener'))
+    + (S.on ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Temporalidad 1 hora', 'Al empezar cada hora', tg('scrH1', S.h1 !== false, 'Señales de 1 hora'), sub)
+      + irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Temporalidad 4 horas', 'Cada 4 horas', tg('scrH4', S.h4 !== false, 'Señales de 4 horas'), sub) : '')
     + `</div><div class="sg-label">Discord</div><div class="pref-list">`
-    + irow(ico('#7c87ff', '<path d="M4 12h12M12 6l6 6-6 6"/>'), 'Enviar avisos a Discord', 'También llegan al canal #vortex de Nova Nexus', tg('discord', PR.n.discord, 'Enviar avisos a Discord'))
     + `<button type="button" class="pref-row pref-link" id="alDiscord">${ico('#7c87ff', '<path d="M8 8.5c2.5-1 5.5-1 8 0M7.5 16c3 1.2 6 1.2 9 0"/><circle cx="9.5" cy="12.5" r="1"/><circle cx="14.5" cy="12.5" r="1"/>')}<div class="pref-l"><b>Servidor Nova Nexus</b><small>Unirte y elegir tu canal</small></div><div class="pref-c"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></div></button>`
+    + irow(ico('#7c87ff', '<path d="M4 12h12M12 6l6 6-6 6"/>'), 'Enviar avisos a Discord', 'También llegan al canal #vortex de Nova Nexus', tg('discord', PR.n.discord, 'Enviar avisos a Discord'))
     + `</div>`;
   const cl = window.CCT_CHANGELOG || [], cur = cl[0] || {v: '—', d: ''};
   ab.innerHTML = `<div class="about-card"><img data-app-icon class="about-ic" width="52" height="52" alt=""><div class="about-t"><svg class="brand-word wm-sm" viewBox="0 -1 160 45" role="img" aria-label="VORTEX"><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-back" d="M8 22A72 9 0 0 1 152 22"/></g><text x="80" y="29" text-anchor="middle">VORTEX</text><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-gap" d="M152 22A72 9 0 0 1 8 22"/><path class="ring-front" d="M152 22A72 9 0 0 1 8 22"/></g><path class="ring-star" d="M80 .6l1.55 3.75 3.75 1.55-3.75 1.55L80 11.2l-1.55-3.75-3.75-1.55 3.75-1.55z"/></svg><small>Powered by Nova Nexus</small><span class="about-v">Versión ${esc(cur.v)} <span id="buildNo"></span></span></div></div>`
@@ -4330,11 +4317,11 @@ function renderPrefs() {
   const onClick = e => {
     const b = e.target.closest('[data-pk]'); if (b && b.tagName === 'BUTTON') { const v = b.dataset.v; setPref(b.dataset.pk, /^\d+$/.test(v) ? +v : v); return; }
     const w = e.target.closest('[data-sw]');
-    if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); if (on) { try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {} } save(); renderPrefs(); renderMoveAlerts(); } else setPref(k, !PR.n[k], true); return; }
+    if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); save(); renderPrefs(); renderMoveAlerts(); if (window.VortexPush) VortexPush.sync(true); } else if (k === 'scr' || k === 'scrH1' || k === 'scrH4') { const S = {...(state.scrPush || {})}; if (k === 'scr') S.on = !S.on; else if (k === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false; state.scrPush = sanScrPush(S); save(); renderPrefs(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true); } else setPref(k, !PR.n[k], true); return; }
     if (e.target.closest('[data-play]')) { const t = $('#notifBox select[data-pk=tone]'); alertBeep(true, t && t.value); return; }
     if (e.target.closest('[data-news]')) openNews();
   };
-  const onChange = e => { const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
+  const onChange = e => { if (e.target.id === 'moveLvl') { state.moveAlerts = sanMoveAlerts({...state.moveAlerts, pct: +e.target.value}); save(); renderPrefs(); if (window.VortexPush) VortexPush.sync(true); return; } const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
   for (const r of [$('#settingsView'), $('#prefsPop'), $('#alertsView')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
   // Campana: abre o cierra el panel de notificaciones y preferencias
   const pop = $('#prefsPop'), btns = [$('#setPrefs')]; // Preferencias (hora, fecha, formato) desde Configuración
@@ -4343,6 +4330,26 @@ function renderPrefs() {
   pop.querySelector('[data-pp-close]').onclick = () => setOpen(false);
   document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('#prefsPop, #setPrefs')) setOpen(false); }, true);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pop.hidden) setOpen(false); });
+}
+/* ───────── Personalización de la aplicación: tema, aspecto del gráfico, barra de favoritos e íconos de la app (los íconos los dibuja pwa.js en #appInstall) ───────── */
+function renderCustom() {
+  const box = $('#customBox'); if (!box) return;
+  const ic = (c, d) => `<span class="sg-ic" style="--c:${c}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg></span>`;
+  const chev = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+  box.innerHTML = `<div class="pref-list">`
+    + `<div class="pref-row">${ic('#f5a623', state.light ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>' : '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>')}<div class="pref-l"><b>Tema claro</b><small>${state.light ? 'Activo · apágalo para el tema oscuro' : 'Ahora usas el tema oscuro'}</small></div><div class="pref-c"><button type="button" class="toggle${state.light ? ' on' : ''}" data-cu="theme" role="switch" aria-checked="${!!state.light}" aria-label="Tema claro"></button></div></div>`
+    + `<button type="button" class="pref-row pref-link" data-cu="style">${ic('#548fff', '<path d="M6 20V10M12 20V4M18 20v-7"/>')}<div class="pref-l"><b>Aspecto del gráfico</b><small>Colores de velas, fondo, cuadrícula, cursor y línea de alertas</small></div><div class="pref-c">${chev}</div></button>`
+    + `<div class="pref-row">${ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>')}<div class="pref-l"><b>Barra de herramientas favoritas</b><small>Tus herramientas de dibujo con estrella, siempre a la mano</small></div><div class="pref-c"><button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button></div></div>`
+    + `</div>`;
+}
+{
+  const cv = $('#customView');
+  if (cv) cv.addEventListener('click', e => {
+    const b = e.target.closest('[data-cu]'); if (!b) return; const k = b.dataset.cu;
+    if (k === 'theme') { state.light = !state.light; save(); theme(); renderCustom(); }
+    else if (k === 'style') openChartStyle();
+    else if (k === 'fav') { setFavBar(!FB.show); renderCustom(); }
+  });
 }
 /* ───────── Sesiones de las bolsas: barra de estado abajo a la derecha del gráfico; al pasar el cursor (o tocar) sale la ventana con Nueva York, Londres, Tokio… ───────── */
 {
@@ -4409,7 +4416,7 @@ function pickSource(anchor) { // menú para elegir la fuente de velas (Binance S
 }
 paintSource(); window.__paintSource = paintSource;
 { const sl = $('#srcLabel'); if (sl) sl.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); openSheet(); }); } // el exchange se elige al buscar el activo
-document.querySelectorAll('.theme-sw').forEach(b => b.onclick = () => { state.light = !state.light; save(); theme(); });
+document.querySelectorAll('.theme-sw').forEach(b => b.onclick = () => { state.light = !state.light; save(); theme(); renderCustom(); });
 $('#exportData').onclick = () => {
   const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'}), url = URL.createObjectURL(blob), a = document.createElement('a');
   a.href = url; a.download = 'vortex-config.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 500);
@@ -4534,7 +4541,7 @@ function novaPreviewSvg() {
 }
 function novaCard() {
   const on = novaOn(), act = NN_KEYS.filter(k => state.indicators[k]).length;
-  return `<div class="nova-card ${on ? 'on' : ''}">${novaPreviewSvg()}<div class="nova-body"><div><b>Nova Nexus</b><small>${on ? `${act} de ${NN_KEYS.length} módulos activos` : 'Apagado'} · señales IA, nube EMA, SMC, liquidaciones, perfil de volumen y más</small></div><div class="script-btns"><button class="small-button" data-nova-set="1">${I('gear', 14)} Configurar</button><button class="toggle ${on ? 'on' : ''}" data-nova-tog="1" aria-pressed="${on}" aria-label="Activar Nova Nexus"></button></div></div></div>`;
+  return `<div class="nova-card ${on ? 'on' : ''}" data-feat="novaNexus">${novaPreviewSvg()}<div class="nova-body"><div><b>Nova Nexus</b><small>${on ? `${act} de ${NN_KEYS.length} módulos activos` : 'Apagado'} · señales IA, nube EMA, SMC, liquidaciones, perfil de volumen y más</small></div><div class="script-btns"><button class="small-button" data-nova-set="1">${I('gear', 14)} Configurar</button><button class="toggle ${on ? 'on' : ''}" data-nova-tog="1" aria-pressed="${on}" aria-label="Activar Nova Nexus"></button></div></div></div>`;
 }
 function novaToggleAll(on) {
   if (on) { const sv = state.novaSaved; for (const k of NN_KEYS) state.indicators[k] = sv ? !!sv[k] : NOVA_DEFAULT.includes(k); if (!novaOn()) NOVA_DEFAULT.forEach(k => state.indicators[k] = true); state.novaSaved = null; }
@@ -5045,18 +5052,50 @@ function renderAccount() {
     box.innerHTML = `<div class="setting-row"><div><b>Cuenta de Google</b><small>No configurada. Tus datos se guardan solo en este dispositivo. Quien administra la app debe completar <code>firebase-config.js</code>.</small></div><span class="pill">Desactivada</span></div>`;
     return;
   }
-  if (fbUser) {
+  if (fbUser) { // la tarjeta de la cuenta y «Cerrar sesión» viven en el botón de la cuenta (foto), no en Configuración
     top.hidden = false; top.innerHTML = fbUser.photoURL ? `<img src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : I('user', 18); top.title = 'Cuenta';
-    box.innerHTML = `<div class="setting-row account-row">${fbUser.photoURL ? `<img class="avatar" src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : `<span class="avatar">${I('user', 22)}</span>`}<div><b>${esc(fbUser.displayName || 'Cuenta de Google')}</b><small>${esc(fbUser.email || '')}<br>${esc(syncStatus)}</small></div></div><button class="setting-row action-row" id="signOutBtn"><span>Cerrar sesión</span><span>${I('power', 18)}</span></button>`;
-    $('#signOutBtn').onclick = signOut;
+    box.innerHTML = '';
+    queueMicrotask(() => { const r = $('#rrAccount'); if (r) r.innerHTML = fbUser.photoURL ? `<img class="rr-avatar" src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : RR_USER; });
+    if (acctMenu) paintAcctMenu();
   } else {
     top.hidden = false; top.textContent = 'Iniciar sesión'; top.title = 'Iniciar sesión con Google';
     box.innerHTML = `<div class="setting-row"><div><b>Guarda todo en tu cuenta</b><small>${esc(syncStatus) || 'Inicia sesión con Google para conservar tu seguimiento, indicadores y dibujos en cualquier dispositivo.'}</small></div></div><button class="google-btn" id="signInBtn"><span class="g">G</span> Iniciar sesión con Google</button>`;
     $('#signInBtn').onclick = signIn;
+    queueMicrotask(() => { const r = $('#rrAccount'); if (r) r.innerHTML = RR_USER; });
+    closeAcctMenu();
   }
 }
-$('#accountBtn').onclick = () => { if (fbUser) switchView('settingsView'); else signIn(); };
-{ const r = $('#rrAccount'); if (r) r.onclick = () => $('#accountBtn').onclick(); }
+const RR_USER = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.8-3.6 3.7-5.4 7-5.4s6.2 1.8 7 5.4"/></svg>';
+/* Menú de la cuenta: se abre desde la foto (barra derecha en PC, arriba en el celular) con tu nombre, correo, plan y «Cerrar sesión» */
+let acctMenu = null, acctAnchor = null;
+function paintAcctMenu() {
+  if (!acctMenu || !fbUser) return;
+  const plan = window.CCTPlans ? CCTPlans.TIERS[CCTPlans.real ? CCTPlans.real() : CCTPlans.current()] : null;
+  acctMenu.innerHTML = `<div class="am-head">${fbUser.photoURL ? `<img class="am-av" src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : `<span class="am-av">${I('user', 26)}</span>`}<div class="am-t"><b>${esc(fbUser.displayName || 'Cuenta de Google')}</b><small>${esc(fbUser.email || '')}</small></div></div>
+    <div class="am-sync">${I('check', 14)}<span>${esc(syncStatus || 'Todo se guarda en tu cuenta')}</span></div>
+    ${plan ? `<button type="button" class="am-it" data-plans-open>${SV('<path d="M3 8.5 7.5 12 12 5l4.5 7L21 8.5 19 18H5z"/>', 17)}<span>Tu plan</span><em class="am-plan">${esc(plan.n)}</em></button>` : ''}
+    <button type="button" class="am-it danger" id="signOutBtn">${I('power', 17)}<span>Cerrar sesión</span></button>`;
+  acctMenu.querySelector('#signOutBtn').onclick = () => { closeAcctMenu(); signOut(); };
+  placeAcctMenu();
+}
+function placeAcctMenu() {
+  if (!acctMenu || !acctAnchor) return; const r = acctAnchor.getBoundingClientRect(), w = acctMenu.offsetWidth, h = acctMenu.offsetHeight;
+  let x = r.left < innerWidth / 2 ? r.right + 10 : r.left - w - 10, y = r.top; // PC: al lado del botón; celular: debajo
+  if (r.top < 80) { x = r.right - w; y = r.bottom + 8; }
+  acctMenu.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + 'px'; acctMenu.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + 'px';
+}
+function closeAcctMenu() { if (!acctMenu) return; acctMenu.remove(); acctMenu = null; document.removeEventListener('pointerdown', acctAway, true); document.removeEventListener('keydown', acctKey, true); }
+const acctAway = e => { if (acctMenu && !acctMenu.contains(e.target) && !(acctAnchor && acctAnchor.contains(e.target))) closeAcctMenu(); }, acctKey = e => { if (e.key === 'Escape') closeAcctMenu(); };
+function toggleAcctMenu(anchor) {
+  if (acctMenu) { closeAcctMenu(); return; }
+  acctAnchor = anchor; acctMenu = document.createElement('div'); acctMenu.className = 'acct-menu'; acctMenu.setAttribute('role', 'menu'); acctMenu.setAttribute('aria-label', 'Tu cuenta');
+  document.body.appendChild(acctMenu); paintAcctMenu();
+  acctMenu.addEventListener('click', e => { if (e.target.closest('[data-plans-open]')) closeAcctMenu(); });
+  setTimeout(() => { document.addEventListener('pointerdown', acctAway, true); document.addEventListener('keydown', acctKey, true); });
+}
+$('#accountBtn').onclick = () => { if (fbUser) toggleAcctMenu($('#accountBtn')); else signIn(); };
+{ const r = $('#rrAccount'); if (r) r.onclick = () => { if (fbUser) toggleAcctMenu(r); else signIn(); }; }
+window.addEventListener('resize', () => placeAcctMenu());
 async function signIn() {
   if (!auth) { toast('El servicio de cuentas no está disponible'); return; }
   const provider = new firebase.auth.GoogleAuthProvider(); provider.setCustomParameters({prompt: 'select_account'});

@@ -69,10 +69,11 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   #watchView{display:block!important;grid-area:watch;border-right:1px solid var(--line);padding:18px 16px 20px}
   #chartView{display:flex!important;grid-area:chart;min-width:0}
   #indicatorView{display:none!important}
-  #newsView,#aiView,#settingsView,#alertsView,#screenerView,#lensView,#discordView,#botLabView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
+  #newsView,#aiView,#settingsView,#customView,#alertsView,#screenerView,#lensView,#discordView,#botLabView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
   body:not([data-side]) #newsView,body[data-side="newsView"] #newsView{display:block}
   body[data-side="aiView"] #aiView{display:block}
   body[data-side="settingsView"] #settingsView{display:block}
+  body[data-side="customView"] #customView{display:block}
   body[data-side="alertsView"] #alertsView{display:block}
   body[data-side="screenerView"] #screenerView{display:block}
   body[data-side="lensView"] #lensView{display:block}
@@ -96,7 +97,7 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   .sheet-handle{display:none}
   #toast{bottom:36px}
   .expanded .topbar{display:flex}
-  .expanded #watchView,.expanded #newsView,.expanded #aiView,.expanded #alertsView,.expanded #settingsView,.expanded #screenerView,.expanded #lensView,.expanded #discordView{display:none!important}
+  .expanded #watchView,.expanded #newsView,.expanded #aiView,.expanded #alertsView,.expanded #settingsView,.expanded #customView,.expanded #screenerView,.expanded #lensView,.expanded #discordView{display:none!important}
   .expanded main{grid-template-columns:1fr;grid-template-areas:"chart"}
 }
 @media(min-width:1024px){
@@ -189,7 +190,7 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
   #splitL{left:calc(var(--wl-w) - 4px)}#splitR{right:calc(var(--side-w) - 4px)}
   .split-btn{position:absolute;top:50%;left:-3px;transform:translateY(-50%);width:16px;height:44px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:14px;line-height:1;opacity:0;transition:opacity .15s;cursor:pointer}
   .splitter:hover .split-btn,.splitter.collapsed .split-btn{opacity:1}
-  body.wl-off #watchView,body.side-off #newsView,body.side-off #aiView,body.side-off #settingsView,body.side-off #alertsView,body.side-off #screenerView,body.side-off #lensView,body.side-off #discordView{display:none!important}
+  body.wl-off #watchView,body.side-off #newsView,body.side-off #aiView,body.side-off #settingsView,body.side-off #customView,body.side-off #alertsView,body.side-off #screenerView,body.side-off #lensView,body.side-off #discordView{display:none!important}
   body.wl-off #splitL{left:0}body.side-off #splitR{right:0}
 }
 
@@ -248,7 +249,7 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
 
 /* ── Segundo gráfico (división) ── */
 #pane2{display:none;border:0;width:100%;height:100%;background:var(--bg);min-height:0}
-body.pane .topbar,body.pane .bottom-nav,body.pane .splitter,body.pane #watchView,body.pane #newsView,body.pane #aiView,body.pane #alertsView,body.pane #lensView,body.pane #discordView,body.pane #screenerView,body.pane #settingsView,body.pane #indicatorView{display:none!important}
+body.pane .topbar,body.pane .bottom-nav,body.pane .splitter,body.pane #watchView,body.pane #newsView,body.pane #aiView,body.pane #alertsView,body.pane #lensView,body.pane #discordView,body.pane #screenerView,body.pane #settingsView,body.pane #customView,body.pane #indicatorView{display:none!important}
 body.pane #layoutBtn{display:none}
 body.pane #app,body.pane main{max-width:none;border:0;margin:0}
 body.pane main{display:block!important}
@@ -683,3 +684,48 @@ body.pane .favbar{display:none}
 .brand-word .ring-gap{stroke:var(--bg)}
 .wm-sm{width:104px;height:29px;margin:0 0 2px -2px}.wm-sm text{letter-spacing:5px}
 .pwa-card .wm-sm .ring-gap,.about-card .wm-sm .ring-gap{stroke:var(--surface)}
+
+/* ── Botón ‹ para volver (Alertas, Personalización) ── */
+.view-head.vh-back{display:flex;align-items:center;justify-content:flex-start!important;gap:12px;text-align:left}
+.view-back{flex:none;width:36px;height:36px;display:grid;place-items:center;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--text);cursor:pointer;padding:0;transition:background .2s,transform .15s}
+.view-back:hover{background:var(--raised)}.view-back:active{transform:scale(.94)}
+/* ── Pestañas de Alertas: textos cortos que siempre caben ── */
+.al-tabs button{font-size:12.5px;padding:10px 4px;overflow:hidden;text-overflow:ellipsis}
+/* ── Avisos: interruptor único y filas dependientes ── */
+.nt-master{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--surface)}
+.nt-master.on{border-color:rgba(84,143,255,.45);background:linear-gradient(135deg,rgba(84,143,255,.12),rgba(84,143,255,.03)),var(--surface)}
+.nt-master b{font-size:14px}
+.nt-hint{margin:2px 0 8px}
+.pref-list.nt-off{opacity:.55}
+.pref-row.pref-sub{padding-left:22px}
+.pref-row.pref-sub .pref-ind{background:none!important;box-shadow:none!important;width:18px}
+.pref-row.pref-sub .pref-l b{font-weight:600}
+/* ── Menú de la cuenta (desde la foto) ── */
+.rr-btn .rr-avatar{width:28px;height:28px;border-radius:50%;object-fit:cover;display:block}
+.acct-menu{position:fixed;z-index:3000;width:260px;padding:12px;border-radius:16px;border:1px solid var(--glass-line,var(--line));background:rgba(12,17,28,.92);-webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4);box-shadow:0 18px 50px rgba(0,0,0,.5);animation:amIn .18s ease-out}
+.light .acct-menu{background:rgba(255,255,255,.95);box-shadow:0 18px 50px rgba(0,0,0,.18)}
+@keyframes amIn{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
+.acct-menu .am-head{display:flex;align-items:center;gap:12px;padding:4px 4px 10px}
+.acct-menu .am-av{width:46px;height:46px;border-radius:50%;object-fit:cover;flex:none;display:grid;place-items:center;background:var(--raised)}
+.acct-menu .am-t{min-width:0}.acct-menu .am-t b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-menu .am-t small{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-menu .am-sync{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--green);padding:8px 6px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:6px}
+.acct-menu .am-it{width:100%;display:flex;align-items:center;gap:10px;padding:10px 8px;border:0;border-radius:10px;background:none;color:var(--text);font-size:13.5px;cursor:pointer;text-align:left}
+.acct-menu .am-it:hover{background:rgba(255,255,255,.06)}.light .acct-menu .am-it:hover{background:rgba(0,0,0,.05)}
+.acct-menu .am-it span{flex:1}.acct-menu .am-it.danger{color:var(--red)}
+.acct-menu .am-plan{font-style:normal;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--raised);color:var(--muted)}
+/* ── Vista de membresía (temporal) ── */
+.sg-tmp{font-style:normal;font-size:10px;font-weight:700;letter-spacing:.4px;margin-left:6px;padding:1px 6px;border-radius:6px;background:rgba(245,166,35,.15);color:#f5a623;vertical-align:1px}
+.pv-box{border:1px solid var(--glass-line,var(--line));border-radius:16px;background:var(--surface);padding:12px}
+.pv-box>small{display:block;color:var(--muted);font-size:12px;margin-bottom:10px}
+.pv-seg{display:flex;width:100%}.pv-seg button{flex:1}
+.pv-banner{position:fixed;z-index:2900;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 84px);transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:7px 8px 7px 14px;border-radius:999px;border:1px solid rgba(245,166,35,.45);background:rgba(20,15,6,.9);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);color:#f6d27a;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.pv-banner button{border:0;border-radius:999px;padding:5px 12px;background:#f6d27a;color:#1a1205;font-weight:800;font-size:12px;cursor:pointer}
+@media(min-width:1024px){.pv-banner{bottom:20px}}
+/* Con acceso a todo (Infinity o el creador) no se muestran etiquetas «PRO» */
+body[data-tier="infinity"] .prem-tag{display:none!important}
+#customView #appInstall .sg-label:first-child{margin-top:18px}
+#notifBox .pref-row:has(.pref-sel){flex-wrap:wrap}
+#notifBox .pref-row:has(.pref-sel) .pref-l{flex:1 1 60%}
+#notifBox .pref-row:has(.pref-sel) .pref-c{max-width:100%;width:100%;justify-content:flex-start}
+#notifBox .pref-row:has(.pref-sel) .pref-sel{flex:1;max-width:320px}
