@@ -1,8 +1,8 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
   {v: '3.2', d: '8 nov 2026', t: 'Gráfico más amplio en el celular', items: [
-    'La barra de arriba del gráfico ahora es una píldora flotante abajo, arriba del dock: temporalidad, indicadores, plantilla, operar, dibujar y deshacer a un toque.',
-    'Liquidaciones, Repetición, Libro, Diario, Diseño y Velas están en «⋯».',
+    'La barra del gráfico ahora es una píldora de cristal oscuro debajo del gráfico (no tapa el oscilador): temporalidad, indicadores, plantilla, operar, tus herramientas favoritas ★ y deshacer.',
+    'Dibujar, Liquidaciones, Repetición, Libro, Diario, Diseño y Velas están en «⋯».',
     'En el celular ya no aparece la franja de derivados junto al precio.'
   ]},
   {v: '3.1', d: '8 nov 2026', t: 'Avisos del Screener puntuales', items: [

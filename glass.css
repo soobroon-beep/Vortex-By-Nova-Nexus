@@ -1439,3 +1439,30 @@ body.rp-picking #chartArea{cursor:crosshair}
   #chartView .more-group .prem-tag{font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px;background:#f6d27a;color:#1a1205}
   #chartView .more-group button.on,#chartView .more-group button[aria-pressed=true]{border-color:var(--accent)!important;color:#cfe0ff}
 }
+
+/* ───────── Celular v2: la píldora va fija debajo del gráfico (no tapa el oscilador) · liquid glass oscuro ───────── */
+.fav-pill{display:none}
+@media(max-width:1023px){
+  #chartView{display:flex!important;flex-direction:column}
+  #chartView .chart-area{flex:1 1 auto;min-height:0}
+  #chartView .chart-toolbar{position:relative;order:5;left:auto;bottom:auto;align-self:center;flex:0 0 auto;margin:5px auto 6px;max-width:calc(100% - 16px);
+    background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.015)),rgba(12,16,24,.62)!important;border:1px solid rgba(255,255,255,.1)!important;
+    -webkit-backdrop-filter:blur(22px) saturate(1.5)!important;backdrop-filter:blur(22px) saturate(1.5)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 10px 28px rgba(0,0,0,.4)!important}
+  #chartView .chart-toolbar>button{color:rgba(237,243,252,.86)}
+  #chartView .fav-pill{display:inline-flex;color:#f1d27a!important}
+  #chartView .fav-pill.on{background:rgba(241,210,122,.18)!important}
+  #chartView .fav-pill.active:not(.on){color:var(--accent)!important}
+  #chartView .timeframes,#chartView.more-open .more-group,#chartView .favbar.fb-mobile{
+    background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.015)),rgba(12,16,24,.7)!important;border:1px solid rgba(255,255,255,.1)!important;border-radius:20px!important;
+    -webkit-backdrop-filter:blur(24px) saturate(1.5)!important;backdrop-filter:blur(24px) saturate(1.5)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 16px 40px rgba(0,0,0,.5)!important}
+  #chartView .timeframes button,#chartView.more-open .more-group button{background:rgba(255,255,255,.04)!important;border:1px solid rgba(255,255,255,.07)!important;border-radius:13px!important;color:rgba(237,243,252,.9)}
+  #chartView .timeframes button.active{background:rgba(84,143,255,.2)!important;border-color:rgba(84,143,255,.5)!important;color:#cfe0ff}
+  #chartView.more-open .more-group button.on,#chartView.more-open .more-group button[aria-pressed=true]{background:rgba(84,143,255,.2)!important;border-color:rgba(84,143,255,.5)!important}
+  #chartView .more-group .prem-btn{border-color:rgba(246,210,122,.4)!important}
+  #chartView .timeframes,#chartView.more-open .more-group{left:50%!important;right:auto!important;transform:translateX(-50%);width:min(330px,calc(100% - 16px))!important}
+  .light #chartView .chart-toolbar,.light #chartView .timeframes,.light #chartView.more-open .more-group{background:rgba(255,255,255,.75)!important;border-color:rgba(0,0,0,.08)!important}
+}
+@media(max-width:1023px){
+  #chartView .chart-toolbar{align-self:flex-start;margin-left:8px;max-width:calc(100% - 80px)}
+  #chartView .px-peek{--pk-r:12px}
+}

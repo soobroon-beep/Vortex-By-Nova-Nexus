@@ -1041,7 +1041,7 @@ function renderFrames() {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   window.addEventListener('resize', close);
   // celular: en la píldora quedan solo los esenciales; lo demás pasa a «Más» (en escritorio todo vuelve a su lugar)
-  const MOVE = ['liqBtn', 'replayBtn', 'bookBtn', 'journalBtn'].map(id => $('#' + id)).filter(Boolean), home = MOVE.map(b => [b, b.nextElementSibling]);
+  const MOVE = [...['liqBtn', 'replayBtn', 'bookBtn', 'journalBtn'].map(id => $('#' + id)), tb.querySelector('[data-panel=tools]')].filter(Boolean), home = MOVE.map(b => [b, b.nextElementSibling]);
   const place = () => {
     const mob = !isDesktop(), grp = $('#moreGroup');
     if (mob) { MOVE.forEach(b => { if (b.parentNode !== grp) grp.appendChild(b); }); if (grp.parentNode !== view) view.appendChild(grp); } // fuera de la píldora para que no lo recorte su desplazamiento
@@ -1051,6 +1051,7 @@ function renderFrames() {
     }
     view.classList.toggle('pill-bar', mob);
   };
+  const fp = $('#favPillBtn'); if (fp) fp.addEventListener('click', e => { e.stopPropagation(); if (!FB.show) { FB.show = true; syncUi(); renderFavBar(); } setFbOpen(!fbOpen); placeFab(); });
   place(); if (deskMQ.addEventListener) deskMQ.addEventListener('change', () => { close(); place(); });
 })();
 $('#timeframes').addEventListener('click', e => {
@@ -2352,7 +2353,12 @@ function placeFavBar() {
 }
 const FAB = 44, FAB_GAP = 8;
 function placeFab() { // coloca el botón estrella (fracciones mx,my) y abre la barra al lado donde cabe
-  const bar = $('#favBar'), fab = $('#favFab'), ar = $('#chartArea'); if (!bar || !fab || !ar) return;
+  const bar = $('#favBar'), fab = $('#favFab'), ar = $('#chartArea'); if (!bar || !ar) return;
+  if (!fab) { // celular: la barra sale justo arriba de la píldora
+    const pb = $('#favPillBtn'), ab = ar.getBoundingClientRect(), r = pb ? pb.getBoundingClientRect() : null, bw = bar.offsetWidth, bh = bar.offsetHeight || 44;
+    const cx = r ? r.left + r.width / 2 - ab.left : 20; bar.style.left = clamp(cx - bw / 2, 8, Math.max(8, ar.clientWidth - bw - 8)) + 'px'; bar.style.top = Math.max(8, ar.clientHeight - bh - 8) + 'px'; bar.style.bottom = 'auto';
+    bar.style.transformOrigin = 'center bottom'; bar.style.setProperty('--fb-from', '0px'); return;
+  }
   const aw = ar.clientWidth, ah = ar.clientHeight, mw = Math.max(0, aw - FAB), mh = Math.max(0, ah - FAB);
   const fx = FB.mx == null ? 10 : clamp(FB.mx * mw, 0, mw), fy = FB.my == null ? Math.max(0, ah - FAB - 84) : clamp(FB.my * mh, 0, mh);
   fab.style.left = fx + 'px'; fab.style.top = fy + 'px'; fab.style.bottom = 'auto';
@@ -2364,7 +2370,7 @@ function placeFab() { // coloca el botón estrella (fracciones mx,my) y abre la 
   bar.style.setProperty('--fb-from', origin.startsWith('right') ? '14px' : origin.startsWith('left') ? '-14px' : '0px');
 }
 let fbOpen = false; // celular: la barra va plegada tras un botón flotante con una estrella
-function setFbOpen(v) { fbOpen = !!v; const b = $('#favBar'), f = $('#favFab'); if (b) { b.classList.toggle('open', fbOpen); b.inert = !fbOpen; } if (f) { f.classList.toggle('open', fbOpen); f.setAttribute('aria-expanded', String(fbOpen)); } }
+function setFbOpen(v) { fbOpen = !!v; const pb = $('#favPillBtn'); if (pb) { pb.classList.toggle('on', fbOpen); pb.setAttribute('aria-expanded', String(fbOpen)); } const b = $('#favBar'), f = $('#favFab'); if (b) { b.classList.toggle('open', fbOpen); b.inert = !fbOpen; } if (f) { f.classList.toggle('open', fbOpen); f.setAttribute('aria-expanded', String(fbOpen)); } }
 function wireFab(fab) { // mantener presionado = el botón se "agarra" y se puede mover · toque corto = abrir/cerrar
   let st = null;
   const arm = () => { if (!st || st.moved) return; st.armed = true; fab.classList.add('drag'); if (fbOpen) setFbOpen(false); navigator.vibrate?.(10); };
@@ -2387,13 +2393,14 @@ function renderFavBar() {
   const on = !PANE && FB.show, mob = !deskMQ.matches;
   if (!on) { if (bar) bar.remove(); if (fab) fab.remove(); return; }
   if (!bar) { bar = document.createElement('div'); bar.id = 'favBar'; bar.className = 'favbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Herramientas favoritas'); ar.appendChild(bar); }
-  if (mob && !fab) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 22); ar.appendChild(fab); wireFab(fab); }
+  if (fab && mob) { fab.remove(); fab = null; } // celular: la estrella vive en la píldora de abajo (#favPillBtn)
+  if (false) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 22); ar.appendChild(fab); wireFab(fab); }
   if (!mob && fab) { fab.remove(); fab = null; }
   bar.classList.toggle('fb-mobile', mob);
   const tools = favTools();
   bar.innerHTML = (mob ? '' : '<span class="fb-grip" title="Arrastra para mover · clic derecho: ocultar" aria-label="Mover barra"><svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></g></svg></span>')
     + (tools.length ? tools.map(t => `<button type="button" class="fb-btn${drawTool === t[0] ? ' on' : ''}" data-fav-tool="${t[0]}" title="${esc(t[1])}" aria-label="${esc(t[1])}">${SV(t[3], 22)}</button>`).join('') : '<span class="fb-empty">Marca ★ en las herramientas para tenerlas aquí</span>');
-  if (mob) { setFbOpen(fbOpen); if (fab) fab.classList.toggle('active', !!drawTool); } else { bar.classList.remove('open'); bar.inert = false; }
+  if (mob) { setFbOpen(fbOpen); if (fab) fab.classList.toggle('active', !!drawTool); const pb = $('#favPillBtn'); if (pb) pb.classList.toggle('active', !!drawTool); placeFab(); } else { bar.classList.remove('open'); bar.inert = false; }
   placeFavBar();
 }
 function setFavBar(show) { FB.show = !!show; syncUi(); renderFavBar(); toast(FB.show ? 'Barra de favoritos visible' : 'Barra de favoritos oculta · clic derecho sobre el gráfico para mostrarla'); }
