@@ -15,8 +15,9 @@
         const g = glyph(b); if (!g) continue; const kk = kOf(b); let s = st.get(kk); if (!s) st.set(kk, s = {x: 1, v: 0});
         let target = 1; if (mouse !== Infinity) { const r = b.getBoundingClientRect(), d = Math.abs(mouse - (r.top + r.height / 2)); target = 1 + (MAX - 1) * Math.max(0, 1 - d / (range || RANGE)); }
         for (let i = 0; i < 4; i++) { const a = (K * (target - s.x) - C * s.v) / M, h = dt / 4; s.v += a * h; s.x += s.v * h; }
-        if (Math.abs(s.x - 1) < .003 && Math.abs(s.v) < .02 && target === 1) { s.x = 1; s.v = 0; if (g.style.transform) { g.style.transform = ''; b.style.zIndex = ''; b.style.removeProperty('--dk'); } continue; }
-        busy = true; g.style.transition = 'none'; g.style.transform = `scale(${s.x.toFixed(3)})`; b.style.setProperty('--dk', s.x.toFixed(3)); b.style.zIndex = s.x > 1.001 ? '3' : ''; // sin will-change: así el icono vectorial se vuelve a dibujar nítido en cada tamaño (no se pixela)
+        const vOnly = b.classList.contains('theme-sw'); // sol/luna: ya usan transform para girar al cambiar de tema → crecen con la variable --dk (CSS «scale»)
+        if (Math.abs(s.x - 1) < .003 && Math.abs(s.v) < .02 && target === 1) { s.x = 1; s.v = 0; if (g.style.transform || b.style.getPropertyValue('--dk')) { if (!vOnly) g.style.transform = ''; b.style.zIndex = ''; b.style.removeProperty('--dk'); } continue; }
+        busy = true; if (!vOnly) { g.style.transition = 'none'; g.style.transform = `scale(${s.x.toFixed(3)})`; } b.style.setProperty('--dk', s.x.toFixed(3)); b.style.zIndex = s.x > 1.001 ? '3' : ''; // sin will-change: así el icono vectorial se vuelve a dibujar nítido en cada tamaño (no se pixela)
       }
       raf = busy ? requestAnimationFrame(frame) : 0;
     }

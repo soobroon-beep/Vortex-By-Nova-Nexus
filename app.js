@@ -219,7 +219,7 @@ function merge(s) {
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
   o.tabs = Array.isArray(o.tabs) ? o.tabs.filter(t => t && typeof t.s === 'string' && /^[\w.:\-/]{2,32}$/.test(t.s)).slice(0, 8).map((t, i) => ({id: /^[a-z0-9]{3,12}$/.test(t.id) ? t.id : 't' + i + Date.now().toString(36).slice(-4), s: t.s, i: INTERVALS.includes(t.i) ? t.i : '1h', c: CTYPES.some(x => x[0] === t.c) ? t.c : 'candles'})) : [];
-  o.tab = typeof o.tab === 'string' ? o.tab.slice(0, 12) : '';
+  o.tab = typeof o.tab === 'string' ? o.tab.slice(0, 12) : ''; o.tabRev = Number.isFinite(+o.tabRev) ? +o.tabRev : 0;
   if (typeof o.symbol !== 'string') o.symbol = o.symbols[0];
   return o;
 }
@@ -1926,15 +1926,15 @@ function renderTabs() {
 function loadTabChart() { clearTransient(); closeWS(); candles = []; ind = {}; updateChartHeader(); renderFrames(); syncCtypeBtn(); render(); loadCandles(); }
 function switchTab(id) {
   const t = state.tabs.find(x => x.id === id); if (!t || id === state.tab) return;
-  tabTouch(); hideTabPrev(); state.tab = id; state.symbol = t.s; state.interval = t.i; state.ctype = t.c; save(); renderTabs(); loadTabChart();
+  tabTouch(); hideTabPrev(); state.tab = id; state.tabRev = Date.now(); state.symbol = t.s; state.interval = t.i; state.ctype = t.c; save(); renderTabs(); loadTabChart();
 }
 function newTab() {
   if (state.tabs.length >= MAX_TABS) { toast(`Máximo ${MAX_TABS} pestañas`); return; }
-  tabTouch(); const id = 't' + Date.now().toString(36).slice(-6); state.tabs.push({id, s: state.symbol, i: state.interval, c: state.ctype || 'candles'}); state.tab = id; save(); renderTabs(); openSheet(); // elige la moneda para la pestaña nueva
+  tabTouch(); const id = 't' + Date.now().toString(36).slice(-6); state.tabs.push({id, s: state.symbol, i: state.interval, c: state.ctype || 'candles'}); state.tab = id; state.tabRev = Date.now(); save(); renderTabs(); openSheet(); // elige la moneda para la pestaña nueva
 }
 function closeTab(id) {
   if (state.tabs.length < 2) return; const i = state.tabs.findIndex(x => x.id === id); if (i < 0) return; const wasOn = id === state.tab;
-  state.tabs.splice(i, 1);
+  state.tabs.splice(i, 1); state.tabRev = Date.now();
   if (wasOn) { const n = state.tabs[Math.min(i, state.tabs.length - 1)]; state.tab = n.id; state.symbol = n.s; state.interval = n.i; state.ctype = n.c; save(); renderTabs(); loadTabChart(); } else { save(); renderTabs(); }
 }
 function hideTabPrev() { if (tabPrevEl) { tabPrevEl.remove(); tabPrevEl = null; } }
@@ -2898,7 +2898,7 @@ function renderCore() {
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
   const SH = symHeadH(); document.getElementById('chartArea').style.setProperty('--sh', SH + 'px'); // la franja con el nombre y el precio de la moneda va arriba del gráfico
   const CBH = (() => { // PC: la franja de temporalidades y botones va encima del gráfico (cristal translúcido); el precio empieza debajo de ella
-    const v = $('#chartView'), b = v && v.querySelector('.chart-bar'), on = deskMQ.matches && !document.body.classList.contains('pane') && b && b.offsetParent !== null, hh = on ? b.offsetHeight : 0;
+    const v = $('#chartView'), b = v && v.querySelector('.chart-bar'), tb = $('#chartTabs'), on = deskMQ.matches && !document.body.classList.contains('pane') && b && b.offsetParent !== null, hh = on ? b.offsetHeight + (tb && tb.offsetParent !== null ? tb.offsetHeight : 0) : 0; // también la franja de pestañas (cristal translúcido)
     if (v && v.style.getPropertyValue('--cbh') !== hh + 'px') v.style.setProperty('--cbh', hh + 'px'); return hh; })();
   const left = 6, axisH = 22, top0 = 6 + CBH; let right = 64;
   if (!deskMQ.matches && candles.length) { // celular: la columna de precios solo tan ancha como sus números (poco margen)
@@ -4322,25 +4322,20 @@ function renderPrefs() {
     if (e.target.closest('[data-news]')) openNews();
   };
   const onChange = e => { if (e.target.id === 'moveLvl') { state.moveAlerts = sanMoveAlerts({...state.moveAlerts, pct: +e.target.value}); save(); renderPrefs(); if (window.VortexPush) VortexPush.sync(true); return; } const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
-  for (const r of [$('#settingsView'), $('#prefsPop'), $('#alertsView')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
-  // Campana: abre o cierra el panel de notificaciones y preferencias
-  const pop = $('#prefsPop'), btns = [$('#setPrefs')]; // Preferencias (hora, fecha, formato) desde Configuración
-  const setOpen = on => { pop.hidden = !on; btns.forEach(b => b && b.classList.toggle('active', on)); if (on) renderPrefs(); };
-  btns.forEach(b => b && b.addEventListener('click', e => { e.stopPropagation(); setOpen(pop.hidden); }));
-  pop.querySelector('[data-pp-close]').onclick = () => setOpen(false);
-  document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('#prefsPop, #setPrefs')) setOpen(false); }, true);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pop.hidden) setOpen(false); });
+  for (const r of [$('#settingsView'), $('#customView'), $('#alertsView')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
+  // Hora, fecha y formato: se despliega dentro de Personalización › Apariencia (mismo estilo que el resto de la app)
+  const fb = $('#cuFmt'), fp = $('#prefsBox');
+  if (fb && fp) fb.addEventListener('click', () => { const open = fp.hidden; fp.hidden = !open; fb.setAttribute('aria-expanded', String(open)); if (open) renderPrefs(); });
 }
 /* ───────── Personalización de la aplicación: tema, aspecto del gráfico, barra de favoritos e íconos de la app (los íconos los dibuja pwa.js en #appInstall) ───────── */
 function renderCustom() {
   const box = $('#customBox'); if (!box) return;
   const ic = (c, d) => `<span class="sg-ic" style="--c:${c}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg></span>`;
   const chev = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
-  box.innerHTML = `<div class="pref-list">`
+  box.innerHTML = ``
     + `<div class="pref-row">${ic('#f5a623', state.light ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>' : '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>')}<div class="pref-l"><b>Tema claro</b><small>${state.light ? 'Activo · apágalo para el tema oscuro' : 'Ahora usas el tema oscuro'}</small></div><div class="pref-c"><button type="button" class="toggle${state.light ? ' on' : ''}" data-cu="theme" role="switch" aria-checked="${!!state.light}" aria-label="Tema claro"></button></div></div>`
     + `<button type="button" class="pref-row pref-link" data-cu="style">${ic('#548fff', '<path d="M6 20V10M12 20V4M18 20v-7"/>')}<div class="pref-l"><b>Aspecto del gráfico</b><small>Colores de velas, fondo, cuadrícula, cursor y línea de alertas</small></div><div class="pref-c">${chev}</div></button>`
-    + `<div class="pref-row">${ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>')}<div class="pref-l"><b>Barra de herramientas favoritas</b><small>Tus herramientas de dibujo con estrella, siempre a la mano</small></div><div class="pref-c"><button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button></div></div>`
-    + `</div>`;
+    + `<div class="pref-row">${ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>')}<div class="pref-l"><b>Barra de herramientas favoritas</b><small>Tus herramientas de dibujo con estrella, siempre a la mano</small></div><div class="pref-c"><button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button></div></div>`;
 }
 {
   const cv = $('#customView');
@@ -5211,6 +5206,7 @@ function reconcile(local, remote) { // mezcla de dos dispositivos que cambiaron 
   }
   if (L.drawings && typeof L.drawings === 'object') { out.drawings = out.drawings && typeof out.drawings === 'object' ? out.drawings : {}; for (const [k, arr] of Object.entries(L.drawings)) { const cur = Array.isArray(out.drawings[k]) ? out.drawings[k] : []; const ids = new Set(cur.map(d => d && d.id)); const extra = (Array.isArray(arr) ? arr : []).filter(d => d && !ids.has(d.id)); if (extra.length) out.drawings[k] = [...cur, ...extra].slice(-300); } }
   if (Array.isArray(L.designs)) { out.designs = Array.isArray(out.designs) ? out.designs : []; for (const d of L.designs) if (d && !out.designs.some(x => x.id === d.id)) out.designs.push(d); }
+  if (Array.isArray(L.tabs) && L.tabs.length && (+L.tabRev || 0) > (+remote.tabRev || 0)) { out.tabs = L.tabs; out.tab = L.tab; out.tabRev = +L.tabRev; } // pestañas de gráficos: las que se cambiaron más recientemente mandan
   if (Array.isArray(L.alerts)) { out.alerts = Array.isArray(out.alerts) ? out.alerts : []; for (const a of L.alerts) if (a && !out.alerts.some(x => x.id === a.id)) out.alerts.push(a); }
   out.rev = Math.max(Date.now(), (+L.rev || 0), (+remote.rev || 0)) + 1;
   return out;

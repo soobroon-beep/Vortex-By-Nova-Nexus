@@ -206,7 +206,9 @@
   function renderList() {
     const now = Date.now(), list = st.items.filter(i => (st.filter === 'todas' || (i.cats || [i.cat]).includes(st.filter)) && (!st.hi || i.impact === 'alto'));
     const box = $('#nwList'); if (!box) return;
-    if (!list.length) { box.innerHTML = st.items.length ? '<div class="nw-empty">No hay noticias con este filtro.</div>' : ''; renderStatus(now); return; }
+    if (!list.length) { box.dataset.sig = ''; box.innerHTML = st.items.length ? '<div class="nw-empty">No hay noticias con este filtro.</div>' : ''; renderStatus(now); return; }
+    const sig = list.slice(0, st.shown).map(i => i.id || i.title).join('|') + '#' + list.length + '#' + st.shown + '#' + st.lastSeen;
+    if (box.dataset.sig === sig && box.childElementCount) { renderStatus(now); return; } box.dataset.sig = sig; // misma lista: no se vuelve a dibujar (sin parpadeo)
     box.innerHTML = list.slice(0, st.shown).map(i => {
       const isNew = st.lastSeen && i.t > st.lastSeen;
       return `<article class="nw-item ${i.impact === 'alto' ? 'hi' : ''}"><div class="nw-meta"><span class="nw-chip c-${i.cat}">${CAT_LABEL[i.cat] || i.cat}</span>${i.impact === 'alto' ? '<span class="nw-imp" title="Alto impacto en el mercado">● Alto impacto</span>' : ''}${isNew ? '<span class="nw-new">NUEVA</span>' : ''}<span class="nw-time" data-t="${i.t}">${relTime(i.t, now)}</span></div>
@@ -222,16 +224,19 @@
     if (st.loading) return; const now0 = Date.now();
     if (!force && st.updated && now0 - st.updated < 45e3) return; // recién actualizado
     st.loading = true; st.ok = 0; renderStatus(now0);
-    const lists = {}; let done = 0;
+    const lists = {}; let done = 0; const hadItems = st.items.length > 0;
+    /* Mientras llegan las fuentes NO se repinta la lista (antes cada fuente reemplazaba todo y la lista aparecía, se vaciaba y volvía a salir).
+       Solo si no había nada que mostrar se pinta lo primero que llegue; al terminar se pinta una sola vez, mezclado con lo anterior. */
+    const partial = () => { st.per = Object.assign({}, st.per, lists); if (!hadItems && !st.items.length) { st.items = mergeItems(Object.values(st.per), Date.now()); renderAll(); } };
     // 1) Archivo generado por el servidor (mismo origen, sin CORS) → casi siempre funciona.
     const stat = (async () => { try { const r = await fetchWithTimeout('news-data.json?_=' + Math.floor(Date.now() / 6e4), FETCH_TIMEOUT), j = await r.json(), n = Date.now();
-      const its = (j.items || []).filter(i => i && i.title && Number.isFinite(i.t) && n - i.t <= MAX_AGE_MS && looksSpanish(i.title)); if (its.length) { lists.static = its; st.ok++; st.staticAt = j.at || 0; st.per = Object.assign({}, st.per, lists); st.items = mergeItems(Object.values(lists), Date.now()); renderAll(); } } catch {} })();
+      const its = (j.items || []).filter(i => i && i.title && Number.isFinite(i.t) && n - i.t <= MAX_AGE_MS && looksSpanish(i.title)); if (its.length) { lists.static = its; st.ok++; st.staticAt = j.at || 0; partial(); } } catch {} })();
     await Promise.all([stat, ...SOURCES.map(async src => {
       const raw = await loadSource(src); done++;
       if (raw) { st.ok++; lists[src.id] = buildItems(raw, src, Date.now()); } else if (st.per[src.id]) lists[src.id] = st.per[src.id]; // si una fuente falla se conserva lo último que dio
-      const all = Object.values(lists); if (all.length) { st.per = Object.assign({}, st.per, lists); st.items = mergeItems(all, Date.now()); renderAll(); } // se pinta a medida que llega cada fuente
+      if (Object.keys(lists).length) partial();
     })]);
-    st.loading = false; st.per = Object.assign({}, st.per, lists); if (Object.keys(lists).length) st.items = mergeItems(Object.values(lists), Date.now());
+    st.loading = false; st.per = Object.assign({}, st.per, lists); if (Object.keys(lists).length) st.items = mergeItems(Object.values(st.per), Date.now()); // lo nuevo + lo último de cada fuente: la lista nunca se encoge de golpe
     if (st.ok) { st.updated = Date.now(); st.fails = 0; saveCache(); } else st.fails++;
     renderAll();
   }

@@ -266,7 +266,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     [/bot lab|crear (un )?bot|backtest|paper/, 'Nova Bot Lab', 'botLabView', '#rrBotLab', null, 'Crea, prueba y simula bots (versión de PC).'],
     [/discord/, 'Discord', 'discordView', '#rrDiscord', '#dcOpenFromSettings', 'Únete a Nova Nexus y manda tus avisos a tu canal.'],
     [/tema|modo oscuro|modo claro/, 'Tema claro/oscuro', null, '#rrTheme', '#themeBtn', 'Cambia entre claro y oscuro.'],
-    [/preferencia|zona horaria|formato|decimales/, 'Preferencias', 'settingsView', '#setPrefs', '#setPrefs', 'Hora, fecha y formato de precios.'],
+    [/preferencia|zona horaria|formato|decimales/, 'Hora, fecha y formato', 'customView', '#cuFmt', '#cuFmt', 'En Personalización › Apariencia.'],
     [/instalar|icono de la app/, 'Instalar la app', 'customView', '#appInstall', '#appInstall', 'Elige el ícono e instálala en tu celular.'],
     [/iniciar sesion|cuenta de google|login/, 'Iniciar sesión', null, '#rrAccount', '#accountBtn', 'Con Google: tu configuración viaja a todos tus dispositivos.'],
     [/saldo/, 'Saldo de la cuenta', null, '[data-acct-open]', '[data-acct-open]', 'La barra que te anima a usar stop loss.'],

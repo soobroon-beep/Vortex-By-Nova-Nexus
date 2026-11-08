@@ -729,3 +729,23 @@ body[data-tier="infinity"] .prem-tag{display:none!important}
 #notifBox .pref-row:has(.pref-sel) .pref-l{flex:1 1 60%}
 #notifBox .pref-row:has(.pref-sel) .pref-c{max-width:100%;width:100%;justify-content:flex-start}
 #notifBox .pref-row:has(.pref-sel) .pref-sel{flex:1;max-width:320px}
+/* Personalización › Apariencia: «Hora, fecha y formato» se despliega dentro de la misma lista */
+.cu-list #customBox>.pref-row+.pref-row{border-top:1px solid var(--line)}
+.cu-acc .cu-chev{transition:transform .25s}.cu-acc[aria-expanded=true] .cu-chev{transform:rotate(180deg)}
+.cu-fmt{border-top:1px solid var(--line);background:rgba(255,255,255,.02);animation:cuIn .22s ease-out}
+.light .cu-fmt{background:rgba(0,0,0,.02)}
+.cu-fmt .pref-list{border:0;border-radius:0;background:none}
+.cu-fmt .pref-row{padding-left:22px}
+.cu-fmt .pref-ex{margin:4px 14px 12px 22px}
+@keyframes cuIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+/* Nova Bot Lab: operación abierta junto al nombre del bot */
+.bl-open{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:1px 7px 1px 6px;border-radius:999px;font-style:normal;font-size:10px;font-weight:700;letter-spacing:.2px;vertical-align:1px;border:1px solid currentColor;background:color-mix(in srgb,currentColor 12%,transparent)}
+.bl-open.s-long{color:#20bf9f}.bl-open.s-short{color:#f06b79}
+.bl-open i{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 0 0 currentColor;animation:blOpen 1.8s ease-out infinite}
+@keyframes blOpen{0%{box-shadow:0 0 0 0 color-mix(in srgb,currentColor 60%,transparent)}100%{box-shadow:0 0 0 6px transparent}}
+@media (prefers-reduced-motion:reduce){.bl-open i{animation:none}}
+.cu-fmt .pref-row{flex-wrap:wrap;row-gap:8px}
+.cu-fmt .pref-l{flex:1 1 100%}
+.cu-fmt .pref-c{max-width:100%;width:100%;justify-content:flex-start}
+.cu-fmt .seg{display:flex;flex-wrap:nowrap;width:100%}.cu-fmt .seg button{flex:1;min-width:0;white-space:nowrap}
+.cu-fmt .pref-sel{width:100%;max-width:none;flex:1}

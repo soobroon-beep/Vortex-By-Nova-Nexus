@@ -253,6 +253,7 @@ body.light .theme-ico .ti-moon{transform:rotate(90deg) scale(.3);opacity:0}
 body.light .theme-sw .ti-sun{transform:none;opacity:1}
 body.light .theme-sw .ti-moon{transform:rotate(90deg) scale(.3);opacity:0}
 .icon-btn.theme-sw{display:grid;place-items:center}
+.right-rail .rr-theme>svg{scale:var(--dk,1)} /* efecto dock del botón de tema (dock.js pone --dk) */
 @media (prefers-reduced-motion:reduce){.theme-sw>svg{transition:none}}
 .prefs-pop{position:fixed;z-index:90;right:calc(var(--rail-w,52px) + 10px);top:60px;bottom:16px;width:min(380px,calc(100vw - 24px));display:flex;flex-direction:column;border-radius:18px;overflow:hidden;
   background:linear-gradient(145deg,rgba(255,255,255,.08),rgba(255,255,255,.02)),var(--surface);border:1px solid var(--glass-line,var(--line));
@@ -930,6 +931,11 @@ body.botlab-wide #botLabView{grid-column:2/4;grid-row:1;z-index:5;background:var
 @media(min-width:1024px){
   #chartView .chart-bar{position:relative;z-index:6;background:rgba(5,7,12,.45);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:calc(-1 * var(--cbh,0px))}
   .light #chartView .chart-bar{background:rgba(255,255,255,.5);border-bottom-color:rgba(20,40,80,.08)}
+  /* La franja de pestañas también es cristal oscuro translúcido: el gráfico pasa por debajo de las dos */
+  #chartView .chart-tabs{position:relative;z-index:6;background:rgba(5,7,12,.45);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4)}
+  .light #chartView .chart-tabs{background:rgba(255,255,255,.5)}
+  #chartView .chart-tabs .ctab:not(.on){background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.08)}
+  .light #chartView .chart-tabs .ctab:not(.on){background:rgba(255,255,255,.55);border-color:rgba(20,40,80,.1)}
   #chartView .chart-bar .timeframes,#chartView .chart-bar .chart-toolbar{background:transparent!important;border-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;box-shadow:none!important}
   #chartView .chart-bar .timeframes button.active{background:rgba(255,255,255,.08)!important;border-color:transparent!important}
   #chartArea #chartSymHead{top:calc(6px + var(--cbh,0px))}

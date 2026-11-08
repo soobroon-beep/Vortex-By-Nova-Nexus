@@ -62,18 +62,24 @@
   /* El service worker también necesita saber a quién avisar si el sistema cambia la suscripción con la app cerrada (evento pushsubscriptionchange). */
   const meta = on => { try { caches.open('vortex-meta').then(c => on ? c.put('push-meta', new Response(JSON.stringify({id: cfg.id, url: url(), key: cfg.key || ''}))) : c.delete('push-meta')).catch(() => {}); } catch {} };
   async function enable() {
-    if (!ok) { toast(ios && !standalone ? 'En iPhone primero añade VORTEX a la pantalla de inicio y ábrela desde ahí' : 'Este navegador no permite notificaciones push'); return; }
+    if (!ok) { toast(ios && !standalone ? 'En iPhone primero añade VORTEX a la pantalla de inicio y ábrela desde ahí' : 'Este navegador no permite notificaciones push'); return false; }
     const perm = await Notification.requestPermission();
-    if (perm !== 'granted') { toast('Necesito tu permiso de notificaciones (Ajustes del celular → Apps → Chrome/VORTEX → Notificaciones)'); return; }
+    if (perm !== 'granted') { toast(isPC ? 'Necesito tu permiso: toca el candado junto a la dirección → Notificaciones → Permitir' : 'Necesito tu permiso de notificaciones (Ajustes del celular → Apps → Chrome/VORTEX → Notificaciones)'); return false; }
     try {
       const reg = await navigator.serviceWorker.ready, {key} = await api('/vapid');
       let sub = await reg.pushManager.getSubscription();
       if (sub && cfg.key && cfg.key !== key) { await sub.unsubscribe(); sub = null; } // el servidor cambió de claves
       if (!sub) sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64ToU8(key)});
-      cfg.on = true; cfg.key = key; store(cfg); meta(true); await sync(true);
+      cfg.on = true; cfg.noPush = false; cfg.key = key; store(cfg); meta(true); await sync(true);
       if (!lastErr) toast('Notificaciones activadas: te aviso aunque VORTEX esté cerrada');
-    } catch (e) { lastErr = e.message || String(e); toast('No se pudo activar: ' + lastErr); }
-    render();
+    } catch (e) {
+      const m = e.message || String(e);
+      /* En PC, Brave (y algunos Chromium) bloquean el servicio push de Google: «Registration failed - push service error».
+         Se quedan activos el sonido y las notificaciones con la app abierta, y se explica cómo habilitar la app cerrada. */
+      if (/push service|registration failed|AbortError|not supported/i.test(m + ' ' + (e.name || ''))) { cfg.noPush = true; store(cfg); lastErr = ''; toast(isBrave ? 'Activadas con VORTEX abierta. Brave bloquea los avisos con la app cerrada (mira cómo habilitarlos abajo)' : 'Activadas con VORTEX abierta. Tu navegador no permite avisos con la app cerrada'); }
+      else { lastErr = m; toast('No se pudo activar: ' + m); }
+    }
+    render(); return !!cfg.on || !!cfg.noPush;
   }
   async function disable() {
     cfg.on = false; store(cfg); meta(false);
@@ -89,16 +95,18 @@
   /* Un solo interruptor: «Activar notificaciones» enciende sonido + vibración + notificaciones del sistema + avisos con la app cerrada.
      Si el navegador no permite push (p. ej. iPhone sin instalar), enciende lo demás y explica cómo tener también la app cerrada. */
   const soundOn = () => ((B.prefs() || {}).sound) !== 'off';
-  const master = () => ok ? !!cfg.on : soundOn();
+  const isBrave = !!navigator.brave, isPC = !/android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+  const master = () => ok && !cfg.noPush ? !!cfg.on : soundOn(); // sin push (navegador que lo bloquea): «activado» = sonido + notificaciones con la app abierta
   async function turnOn() {
     if (B.setSound) B.setSound(true);
-    if (ok) { await enable(); return; }
+    if (ok) { const on = await enable(); if (!on && B.setSound) B.setSound(false); render(); return; }
     try { if (window.Notification && Notification.permission === 'default') await Notification.requestPermission(); } catch {}
     toast(ios && !standalone ? 'Notificaciones activadas. Para recibirlas con la app cerrada en iPhone, añade VORTEX a la pantalla de inicio' : 'Notificaciones activadas');
     render();
   }
   async function turnOff() {
     if (B.setSound) B.setSound(false);
+    if (cfg.noPush) { cfg.noPush = false; store(cfg); }
     if (ok && cfg.on) { await disable(); return; }
     render(); toast('Notificaciones desactivadas');
   }
@@ -106,15 +114,18 @@
     const box = document.getElementById('pushBox'); if (!box) return;
     const on = master(), n = priceAlerts().filter(a => a.on).length, mv = !!(st().moveAlerts || {}).on;
     const why = !on ? 'Un solo botón: sonido, vibración y aviso en tu celular aunque VORTEX esté cerrada.'
+      : cfg.noPush ? (isBrave ? 'Activas con VORTEX abierta. Para recibirlas también con la app cerrada en Brave: abre brave://settings/privacy, enciende «Usar los servicios de Google para la mensajería push», reinicia Brave y toca Reintentar.' : 'Activas con VORTEX abierta. Este navegador no permite avisos con la app cerrada; en Chrome o Edge sí funcionan.')
       : !ok ? (ios && !standalone ? 'Activas con la app abierta. Para la app cerrada: Compartir → Añadir a pantalla de inicio.' : 'Activas con la app abierta. Este navegador no permite avisos con la app cerrada.')
       : lastErr ? '⚠ ' + lastErr : `Activas, también con la app cerrada · vigilando ${n} alerta${n === 1 ? '' : 's'} de precio${mv ? ' y movimientos bruscos' : ''}`;
     box.innerHTML = `<div class="setting-row nt-master${on ? ' on' : ''}"><div><b>Activar notificaciones</b><small>${why}</small></div><button class="toggle ${on ? 'on' : ''}" id="pushOn" type="button" aria-label="Activar notificaciones" aria-pressed="${on}"></button></div>`
+      + (on && cfg.noPush ? `<div class="setting-row"><div><b>Avisos con la app cerrada</b><small>Bloqueados por el navegador</small></div><button class="small-button" id="pushRetry" type="button">Reintentar</button></div>` : '')
       + (on && ok && cfg.on ? `<div class="setting-row"><div><b>Probar</b><small>Manda una notificación de prueba a este celular</small></div><button class="small-button" id="pushTest" type="button">Enviar</button></div>` : '');
     if (on !== lastMaster) { lastMaster = on; if (B.renderPrefs) try { B.renderPrefs(); } catch {} } // «Qué te avisamos» cambia según esté encendido
   }
   document.addEventListener('click', e => {
     if (e.target.closest('#pushOn')) { master() ? turnOff() : turnOn(); }
     else if (e.target.closest('#pushTest')) testPush();
+    else if (e.target.closest('#pushRetry')) enable();
   });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(true); }); // al volver a la app trae lo que disparó el servidor
   setInterval(() => sync(false), 10000); // si cambian tus alertas, se mandan al servidor en ≤10 s

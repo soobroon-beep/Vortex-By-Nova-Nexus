@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.11', d: '8 nov 2026', t: 'Pestañas de cristal y bots con operación abierta', items: [
+    'Las pestañas de gráficos son de cristal oscuro como la barra de temporalidades y se guardan en tu cuenta tal como las dejas.',
+    'Nova Bot Lab marca con un indicador Long/Short los bots que tienen una operación abierta.',
+    'Hora, fecha y formato ahora están en Personalización › Apariencia; Noticias ya no parpadea al abrirse y en Brave las notificaciones funcionan con la app abierta.'
+  ]},
   {v: '3.10', d: '8 nov 2026', t: 'Notificaciones con un solo botón y menú de tu cuenta', items: [
     'Alertas › Avisos: «Activar notificaciones» enciende todo de una vez (sonido, vibración y avisos con la app cerrada). En «Qué te avisamos» están juntos precio, indicador, movimientos bruscos (con su sensibilidad) y señales del Screener.',
     'Alertas tiene botón ‹ para volver, pestañas más cortas (Mis alertas · Avisos · Historial) y en Discord primero el servidor Nova Nexus y luego el envío de avisos.',
