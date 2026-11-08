@@ -106,6 +106,10 @@
       const r = await fetch(URL_, {signal: ctl.signal}); clearTimeout(to);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json(); if (!j || typeof j !== 'object' || j.error) throw new Error(j && j.error || 'sin datos');
+      if (!j.dom || j.dom.partial) try { // el navegador sí llega a CoinGecko aunque el servidor no
+        const g = (await (await fetch('https://api.coingecko.com/api/v3/global')).json()).data;
+        if (g) j.dom = {btc: g.market_cap_percentage.btc, eth: g.market_cap_percentage.eth, usdt: g.market_cap_percentage.usdt, usdc: g.market_cap_percentage.usdc, cap: g.total_market_cap.usd, capChg: g.market_cap_change_percentage_24h_usd};
+      } catch {}
       st.d = j; st.at = Date.now(); try { localStorage.setItem(LS, JSON.stringify({at: st.at, d: j})); } catch {}
     } catch (e) { if (!st.d) st.err = 'No se pudieron cargar los datos macro ahora. Revisa tu conexión y toca «Actualizar».'; }
     st.loading = false; render();

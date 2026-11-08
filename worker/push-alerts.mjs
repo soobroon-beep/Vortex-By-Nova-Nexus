@@ -199,7 +199,9 @@ async function yahoo(sym) {
       for (let i = 0; i < t.length; i++) if (Number.isFinite(q.close[i])) pts.push([t[i] * 1000, q.close[i]]);
       const m = res.meta || {}, last = Number.isFinite(m.regularMarketPrice) ? m.regularMarketPrice : (pts.length ? pts[pts.length - 1][1] : NaN);
       if (!Number.isFinite(last) || pts.length < 2) continue;
-      if (pts.length && Math.abs(pts[pts.length - 1][1] - last) > 1e-9 && (m.regularMarketTime || 0) * 1000 - pts[pts.length - 1][0] > 3600e3) pts.push([(m.regularMarketTime || 0) * 1000, last]);
+      const day = t => Math.floor(t / 864e5), dd = []; // una vela por día (Yahoo a veces repite la última)
+      for (const p of pts) { if (dd.length && day(dd[dd.length - 1][0]) === day(p[0])) dd[dd.length - 1] = p; else dd.push(p); }
+      pts.length = 0; pts.push(...dd); if (pts.length) pts[pts.length - 1][1] = last;
       const prev = pts.length >= 2 ? pts[pts.length - 2][1] : NaN, wk = pts.length >= 6 ? pts[pts.length - 6][1] : NaN, mo = pts.length >= 22 ? pts[pts.length - 22][1] : NaN;
       return {last, prev, d1: (last / prev - 1) * 100, w1: (last / wk - 1) * 100, m1: (last / mo - 1) * 100, at: (m.regularMarketTime || 0) * 1000, state: m.marketState || '', spark: pts.slice(-60).map(p => +p[1].toFixed(4))};
     } catch {}
@@ -213,12 +215,14 @@ async function macroData() {
     (async () => { try { const r = await fetch('https://api.alternative.me/fng/?limit=60', {cf: {cacheTtl: 900, cacheEverything: true}}), j = await r.json(), d = (j.data || []).map(x => +x.value).filter(Number.isFinite);
       if (d.length) out.fng = {last: d[0], prev: d[1], w1: d[7], label: (j.data[0] || {}).value_classification || '', spark: d.slice(0, 60).reverse()}; } catch {} })(),
     (async () => { try { const r = await fetch('https://api.coingecko.com/api/v3/global', {headers: {accept: 'application/json', 'user-agent': 'VORTEX-Market/1.0'}, cf: {cacheTtl: 600, cacheEverything: true}}), j = await r.json(), g = j && j.data;
-      if (g) out.dom = {btc: g.market_cap_percentage.btc, eth: g.market_cap_percentage.eth, usdt: g.market_cap_percentage.usdt, usdc: g.market_cap_percentage.usdc, cap: g.total_market_cap.usd, capChg: g.market_cap_change_percentage_24h_usd}; } catch {} })()
+      if (g) out.dom = {btc: g.market_cap_percentage.btc, eth: g.market_cap_percentage.eth, usdt: g.market_cap_percentage.usdt, usdc: g.market_cap_percentage.usdc, cap: g.total_market_cap.usd, capChg: g.market_cap_change_percentage_24h_usd}; } catch {}
+      if (!out.dom) try { const r = await fetch('https://api.coinpaprika.com/v1/global', {cf: {cacheTtl: 600, cacheEverything: true}}), g = await r.json();
+        if (g && Number.isFinite(g.bitcoin_dominance_percentage)) out.dom = {btc: g.bitcoin_dominance_percentage, cap: g.market_cap_usd, capChg: g.market_cap_change_24h, partial: true}; } catch {} })()
   ]);
   return out;
 }
 async function macroRoute(env, json, cors) {
-  const cache = caches.default, key = new Request('https://vortex-cache.local/macro-v1');
+  const cache = caches.default, key = new Request('https://vortex-cache.local/macro-v2');
   const hit = await cache.match(key); if (hit) { const b = await hit.text(); return new Response(b, {headers: {...cors, 'content-type': 'application/json', 'x-cache': 'hit'}}); }
   const d = await macroData(), body = JSON.stringify(d);
   const good = MACRO_SYMS.filter(([k]) => d[k]).length;
