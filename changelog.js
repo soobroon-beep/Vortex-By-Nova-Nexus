@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.4', d: '8 nov 2026', t: 'Claudio, agente de trading autónomo', items: [
+    'Nuevo en Nova Bot Lab (PC): Claudio, un agente que corre 24/7 en el servidor, evalúa cada vela de 1 h de 8 criptomonedas con Jev en una sola llamada y opera con capital virtual.',
+    'Riesgo fijo en el código: drawdown máx. 15 %, pérdida diaria máx. 3 %, 20 % por posición, ¼ de Kelly e interruptor de emergencia.',
+    'Cada noche mide su calibración (Brier), revisa oportunidades perdidas y se recalibra solo si mejora fuera de muestra.'
+  ]},
   {v: '3.3', d: '8 nov 2026', t: 'Barra flotante del gráfico', items: [
     'En el celular la barra del gráfico es flotante: muestra solo tu temporalidad actual y la estrella de favoritos; la flecha despliega todo lo demás.',
     'Mantén la agarradera y arrástrala donde quieras: se queda ahí para siempre en tu celular.'

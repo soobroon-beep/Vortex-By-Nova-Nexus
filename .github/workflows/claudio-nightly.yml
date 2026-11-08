@@ -1,0 +1,23 @@
+name: Claudio · revisión nocturna
+# Cada noche (00:15 hora del centro de México): puntuación de Brier, oportunidades perdidas y recalibración de la probabilidad de Jev con
+# validación fuera de muestra. Solo cambia la calibración; los límites de riesgo están congelados en el código.
+on:
+  schedule: [{cron: '15 6 * * *'}]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: claudio, cancel-in-progress: false}
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: node --test tests/claudio.test.js
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12
+      - run: node scripts/claudio-run.js
+        env:
+          MODE: nightly
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

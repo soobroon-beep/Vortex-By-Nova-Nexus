@@ -1,0 +1,25 @@
+name: Claudio · agente de trading (cada hora)
+# Cada hora, al cerrar la vela de 1 h, Claudio lee el mercado (velas + libro de órdenes de Binance), pide a Jev UNA decisión para todos los
+# candidatos y avanza su sesión con capital virtual. NO envía órdenes reales. Requiere FIREBASE_SERVICE_ACCOUNT; JEV_API_KEY es opcional
+# (sin ella usa el evaluador local con el mismo esquema). Sin Firebase termina sin hacer nada.
+on:
+  schedule: [{cron: '2 * * * *'}]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: claudio, cancel-in-progress: false}
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: node --test tests/claudio.test.js tests/claudio-run.test.js
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12
+      - run: node scripts/claudio-run.js
+        env:
+          MODE: tick
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}

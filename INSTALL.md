@@ -67,3 +67,11 @@ Android: Chrome necesita permiso de notificaciones y conviene quitarle la optimi
 ## Optimizador ampliado
 
 El reentrenamiento (diario en el servidor y «Optimizar ahora» en el panel) ajusta ahora: stop loss, take profit, trailing, tiempo máximo en operación, filtros de volumen/volatilidad, periodos de los indicadores, desviaciones de Bollinger y umbrales de RSI/ADX/volumen. No toca el tamaño de la posición ni los parámetros de tus indicadores propios. Cuantos más parámetros se ajustan, mayor ventaja fuera de muestra se exige para proponer una candidata (control de sobreajuste). Nunca reemplaza la versión principal.
+
+## Claudio (agente de trading autónomo)
+
+1. Sube los cambios a `main`: el flujo «Deploy Firestore rules» publica la regla que permite guardar el documento `claudio`.
+2. El secreto `FIREBASE_SERVICE_ACCOUNT` (el mismo de Nova Bot Lab) basta para que Claudio corra cada hora (`.github/workflows/claudio.yml`) y cada noche (`claudio-nightly.yml`).
+3. Opcional: crea el secreto `JEV_API_KEY` con tu clave de console.typesafe.ai para usar Jev real; sin ella usa el evaluador local con el mismo esquema.
+4. En VORTEX (PC) abre Nova Bot Lab → tarjeta **Claudio** → «Encender a Claudio». Empieza plano en la siguiente vela de 1 h. Simulación con capital virtual: no envía órdenes reales.
+Pruebas: `node --test tests/claudio.test.js tests/claudio-run.test.js`.

@@ -102,7 +102,7 @@
   const desk = () => matchMedia('(min-width:1024px)').matches; // Nova Bot Lab es solo para la versión de PC
   function render() {
     if (!root || !desk()) return; stopReplayIf(); const keep = root.scrollTop; document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches); // antes de dibujar: las gráficas del dashboard usan el ancho real
-    if (view === 'lib') { libView(); dashBind(); dashWatch(); } else if (view === 'new') newView(); else if (view === 'edit') editView(); else if (view === 'bot') botView(); else if (view === 'cmp') cmpView(); else if (view === 'risk') riskView();
+    if (view === 'lib') { libView(); dashBind(); dashWatch(); } else if (view === 'new') newView(); else if (view === 'edit') editView(); else if (view === 'bot') botView(); else if (view === 'cmp') cmpView(); else if (view === 'risk') riskView(); else if (view === 'claudio' && window.CCTClaudioUI) window.CCTClaudioUI.view(root, head);
     root.scrollTop = view === 'lib' ? keep : root.scrollTop; document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches);
   }
   const stopReplayIf = () => { if (replay.timer && view !== 'bot') { clearInterval(replay.timer); replay.timer = 0; replay.on = false; } };
@@ -191,6 +191,7 @@
   function libView() {
     const list = S.bots.filter(b => showArch ? true : b.status !== 'archived').sort((a, b) => b.updatedAt - a.updatedAt), tested = S.bots.filter(b => runOf(b));
     root.innerHTML = head('NOVA BOT LAB', 'AI Trading Laboratory · backtest y simulación, sin dinero real') + `<div class="bl-actions"><button class="bl-btn" data-a="new">${IC.plus}Crear nuevo bot</button><button class="bl-btn ghost" data-a="import">Importar</button><button class="bl-btn ghost" data-a="risk">Panel de riesgo</button><button class="bl-btn ghost" data-a="cmp" ${sel.size >= 2 ? '' : 'disabled'}>Comparar (${sel.size})</button><label class="bl-chk"><input type="checkbox" id="blArch" ${showArch ? 'checked' : ''}> Archivados</label></div>
+      ${window.CCTClaudioUI ? window.CCTClaudioUI.card() : ''}
       ${dashHtml()}
       ${list.length ? list.map(b => { const v = mainSpec(b); return `<div class="bl-card ${b.status}"><label class="bl-sel"><input type="checkbox" data-sel="${b.id}" ${sel.has(b.id) ? 'checked' : ''}></label><div class="bl-card-m" data-a="open" data-id="${b.id}"><div class="bl-card-t"><b>${esc(b.name)}</b><span class="bl-chip s-${b.status}">${ST[b.status] || b.status}</span></div><small>${esc(v.symbol)} · ${esc(v.interval)} · v${b.mainV} · ${b.method === 'nl' ? 'lenguaje natural' : b.method === 'nova' ? 'Nova' : b.method === 'indicador' ? 'indicador propio' : 'constructor'}${b.desc ? ' · ' + esc(b.desc.slice(0, 70)) : ''}</small><div class="bl-card-s">${miniStats(b)}</div></div><div class="bl-card-b"><button class="bl-mini" data-a="dup" data-id="${b.id}">Duplicar</button><button class="bl-mini" data-a="pause" data-id="${b.id}">${b.status === 'paused' ? 'Reanudar' : 'Pausar'}</button><button class="bl-mini" data-a="arch" data-id="${b.id}">${b.status === 'archived' ? 'Restaurar' : 'Archivar'}</button><button class="bl-mini" data-a="exp" data-id="${b.id}">Exportar</button><button class="bl-mini danger" data-a="del" data-id="${b.id}">Eliminar</button></div></div>`; }).join('') : `<div class="bl-empty">${IC.robot}<p><b>Aún no tienes bots.</b></p><p class="bl-dim">Crea uno escribiendo tu estrategia en español, armándola con el constructor o partiendo de Nova Nexus. Cada bot se prueba con datos históricos reales y se evalúa fuera de muestra.</p></div>`}
       <p class="bl-foot">Los resultados históricos y la simulación no son una promesa de ganancia. No se ejecutan órdenes reales.</p>`;
@@ -587,7 +588,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
 
   /* ----- Eventos ----- */
   const ACT = {
-    newBack() { view = 'new'; render(); }, wide() { wide = !wide; render(); }, new() { nl = {hist: [], spec: null, busy: false, msgs: []}; view = 'new'; render(); }, lib() { view = 'lib'; replay.on = false; clearInterval(replay.timer); replay.timer = 0; render(); },
+    claudio() { view = 'claudio'; render(); }, newBack() { view = 'new'; render(); }, wide() { wide = !wide; render(); }, new() { nl = {hist: [], spec: null, busy: false, msgs: []}; view = 'new'; render(); }, lib() { view = 'lib'; replay.on = false; clearInterval(replay.timer); replay.timer = 0; render(); },
     mA() { view = 'nl'; nlView(); }, mB() { startDraft(B.defaultSpec(), {id: null, method: 'visual'}); }, mC() { view = 'ind'; indView(); }, indScan, indOk() { const sp = indSpec(), v = B.validateSpec(sp); if (!v.ok) return toast(v.errors[0]); const b = newBot(sp, 'indicador', 'Señales de ' + (sp.entry.long[0].a.sname || 'mi indicador')); S.bots.push(b); touch(b); cur = b.id; tab = 'sum'; view = 'bot'; render(); runAndShow(b, 1); }, indEdit() { startDraft(indSpec(), {id: null, method: 'indicador'}); },
     preset(el) { const sp = B.PRESETS[el.dataset.k](); startDraft(sp, {id: null, method: el.dataset.k === 'novaNexus' ? 'nova' : 'visual'}); },
     nlOk() { const b = newBot(nl.spec, 'nl', nl.hist.filter(h => h.role === 'user').map(h => h.content).join(' / ').slice(0, 300)); S.bots.push(b); touch(b); cur = b.id; tab = 'sum'; view = 'bot'; render(); runAndShow(b, 1); },
@@ -634,7 +635,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
 
   /* ----- Arranque ----- */
   function init() {
-    root = $('#botLabRoot'); if (!root) return; S = readLocal(); bind(); render();
+    root = $('#botLabRoot'); if (!root) return; S = readLocal(); bind(); if (window.CCTClaudioUI) window.CCTClaudioUI.onChange = () => { if (view === 'lib') render(); }; render();
     const open = () => { S = merge(S, readLocal()); setTimeout(() => { if (view === 'lib') render(); }, 30); pullCloud(); paperTick(); };
     const rb = $('#rrBotLab'); rb && rb.addEventListener('click', open);
     paperTick(); setInterval(() => { if (!document.hidden) paperTick(); }, 60000);
