@@ -46,6 +46,10 @@ function sanAcct(a) { // saldo de la cuenta para la barra de progreso (USD)
   const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {}, n = v => Number.isFinite(+v) && +v >= 0 && +v < 1e12 ? Math.round(+v * 100) / 100 : 0;
   return {start: n(q.start), cur: n(q.cur), auto: q.auto !== false};
 }
+function sanRisk(a) { // calculadora de riesgo: % por operación, apalancamiento, comisión, capital manual y si se muestra en los dibujos Long/Short
+  const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {}, n = (v, lo, hi, d) => Number.isFinite(+v) && +v >= lo && +v <= hi ? +v : d;
+  return {pct: n(q.pct, .01, 100, 1), lev: Math.round(n(q.lev, 1, 200, 10)), fee: n(q.fee, 0, 1, .05), cap: n(q.cap, 0, 1e12, 0), show: q.show !== false};
+}
 function sanMoveAlerts(a) { // avisos de movimientos bruscos del precio
   const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {};
   return {on: q.on !== false, pct: Math.max(0.5, Math.min(25, Math.round((+q.pct || 2) * 10) / 10)), sound: q.sound !== false};
@@ -182,7 +186,7 @@ function merge(s) {
     o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 80).map(t => ({n: t.n.slice(0, 24), ...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})})) : [];
   }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
-  o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.discord = sanDiscord(o.discord);
+  o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.risk = sanRisk(o.risk); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.discord = sanDiscord(o.discord);
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
   { // Nova Nexus: queda un solo indicador, el completo (Pine, en Mis indicadores). El módulo nativo antiguo se apaga y, si estaba encendido, se pasa al completo para no perderlo
@@ -1069,6 +1073,7 @@ async function fetchKlinesAny(key, tf, signal, limit = 1000) { // el exchange va
   return {cs: data.map(bnRow), src: 'binance'};
 }
 async function loadCandles(silent = false) {
+  if (replay && !silent) replayExit(false); // cambiar de moneda o temporalidad termina la repetición
   if (fetchCtl) fetchCtl.abort();
   fetchCtl = new AbortController();
   const sym = state.symbol, tf = state.interval;
@@ -1085,6 +1090,67 @@ async function loadCandles(silent = false) {
     if (!silent && srcOf(sym) === 'dom') { setFeedback(e.message || 'Sin datos de dominancia'); render(); return; }
     if (!silent) { setFeedback(`No se pudieron cargar las velas de ${SOURCES[srcOf(sym)] || 'Binance'}${srcOf(sym) !== 'binance' ? ' ni de Binance Spot' : ''}. No se muestran datos simulados.`); render(); }
   }
+}
+/* ───────── Repetición de mercado (replay): eliges un punto del pasado y las velas avanzan una a una, como en vivo ───────── */
+let replay = null, replayPick = false;
+const RP_SPEEDS = [[1, 1000], [2, 500], [5, 200], [10, 100], [25, 40]];
+function replayStart() {
+  if (replay) { replayExit(true); return; }
+  if (candles.length < 60) { toast('Espera a que carguen las velas'); return; }
+  if (currentView !== 'chartView') switchView('chartView');
+  replayPick = true; document.body.classList.add('rp-picking'); replayBar(); toast('Toca el gráfico donde quieres que empiece la repetición');
+}
+function replayBegin(idx) {
+  replayPick = false; document.body.classList.remove('rp-picking');
+  const all = candles.slice(); idx = Math.max(30, Math.min(all.length - 2, Math.round(idx)));
+  replay = {all, idx, playing: false, speed: 0, timer: 0, start: idx, live: null, trades: []};
+  stopMotion(); pan = 0; replayApply(); replayBar(); toast('Repetición lista: dale ▶ o avanza vela por vela');
+}
+function replayApply() {
+  if (!replay) return; candles = replay.all.slice(0, replay.idx + 1); recalc(); updateChartHeader(); pineKey = ''; schedulePine(); scheduleRender(); replayBar();
+}
+function replayStep(n = 1) {
+  if (!replay) return; if (replay.idx >= replay.all.length - 1) { replayPause(); toast('Llegaste al presente: sal de la repetición para ver el gráfico en vivo'); return; }
+  const was = replay.idx; replay.idx = Math.min(replay.all.length - 1, replay.idx + n); if (pan > 0) pan += replay.idx - was; replayApply();
+}
+function replayBack(n = 1) { if (!replay) return; replay.idx = Math.max(30, replay.idx - n); replayApply(); }
+function replayPlay() { if (!replay) return; if (replay.playing) return replayPause(); replay.playing = true; clearInterval(replay.timer); replay.timer = setInterval(() => replayStep(1), RP_SPEEDS[replay.speed][1]); replayBar(); }
+function replayPause() { if (!replay) return; replay.playing = false; clearInterval(replay.timer); replayBar(); }
+function replaySpeed() { if (!replay) return; replay.speed = (replay.speed + 1) % RP_SPEEDS.length; if (replay.playing) { clearInterval(replay.timer); replay.timer = setInterval(() => replayStep(1), RP_SPEEDS[replay.speed][1]); } replayBar(); }
+function replayLive(k) { if (!replay) return; const a = replay.all, last = a[a.length - 1]; if (k.t === last.t) a[a.length - 1] = k; else if (k.t > last.t) a.push(k); replayBar(); } // sigue guardando el vivo para cuando salgas
+function replayExit(reload = true) {
+  replayPick = false; document.body.classList.remove('rp-picking');
+  if (replay) { clearInterval(replay.timer); const all = replay.all; replay = null; candles = all; recalc(); updateChartHeader(); pineKey = ''; schedulePine(); }
+  replayBar(); if (reload) { pan = 0; scheduleRender(); loadCandles(true); }
+}
+function replayBar() {
+  const area = $('#chartArea'); if (!area) return; let bar = $('#rpBar');
+  const btn = $('#replayBtn'); if (btn) btn.classList.toggle('on', !!(replay || replayPick));
+  if (!replay && !replayPick) { if (bar) bar.remove(); return; }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'rpBar'; bar.className = 'rp-bar'; area.appendChild(bar); bar.addEventListener('pointerdown', e => e.stopPropagation()); bar.addEventListener('click', e => { const b = e.target.closest('[data-rp]'); if (!b) return; const a = b.dataset.rp; if (a === 'play') replayPlay(); else if (a === 'next') replayStep(1); else if (a === 'next10') replayStep(10); else if (a === 'prev') replayBack(1); else if (a === 'speed') replaySpeed(); else if (a === 'pick') { replayPause(); const all = replay ? replay.all : null; if (all) { candles = all; replay = null; } replayPick = true; document.body.classList.add('rp-picking'); recalc(); scheduleRender(); replayBar(); } else if (a === 'exit') replayExit(true); }); }
+  const ic = d => `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">${d}</svg>`;
+  if (replayPick) { bar.innerHTML = `<span class="rp-tag">Repetición</span><span class="rp-hint">Toca el gráfico donde quieres empezar</span><button data-rp="exit" class="rp-x" aria-label="Cancelar">${ic('<path d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z"/>')}</button>`; return; }
+  const k = replay.all[replay.idx], d = new Date(k.t), z = n => String(n).padStart(2, '0'), done = replay.idx - replay.start, left = replay.all.length - 1 - replay.idx;
+  const when = `${z(d.getDate())}/${z(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)} ${z(d.getHours())}:${z(d.getMinutes())}`;
+  bar.innerHTML = `<span class="rp-tag">Repetición</span>
+    <button data-rp="pick" title="Elegir otro punto de inicio" aria-label="Elegir otro punto de inicio">${ic('<path d="M12 3a9 9 0 1 1-8.5 6h2.1A7 7 0 1 0 12 5V3z"/><path d="M3 4v5h5z"/>')}</button>
+    <button data-rp="prev" title="Retroceder una vela" aria-label="Retroceder una vela">${ic('<path d="M6 5h2v14H6zM20 5v14L9 12z"/>')}</button>
+    <button data-rp="play" class="rp-play" title="${replay.playing ? 'Pausa' : 'Reproducir'}" aria-label="${replay.playing ? 'Pausa' : 'Reproducir'}">${replay.playing ? ic('<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>') : ic('<path d="M8 5v14l11-7z"/>')}</button>
+    <button data-rp="next" title="Avanzar una vela" aria-label="Avanzar una vela">${ic('<path d="M4 5v14l11-7zM16 5h2v14h-2z"/>')}</button>
+    <button data-rp="next10" title="Avanzar 10 velas" aria-label="Avanzar 10 velas" class="rp-txt">+10</button>
+    <button data-rp="speed" title="Velocidad" class="rp-txt rp-spd">${RP_SPEEDS[replay.speed][0]}×</button>
+    <span class="rp-info"><b>${when}</b><small>${done} vela${done === 1 ? '' : 's'} · faltan ${left}</small></span>
+    <button data-rp="exit" class="rp-x" title="Salir y volver al vivo" aria-label="Salir de la repetición">${ic('<path d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z"/>')}</button>`;
+}
+{ // elegir el punto de inicio: un toque/clic en el gráfico mientras se elige
+  const area = $('#chartArea');
+  if (area) area.addEventListener('pointerdown', e => {
+    if (!replayPick || e.target.closest('#rpBar, .chart-symhead, .chart-controls, .favbar, .fav-fab')) return;
+    const r = area.getBoundingClientRect(), x = e.clientX - r.left; if (!geo || !geo.step) return;
+    e.preventDefault(); e.stopImmediatePropagation(); replayBegin(geo.start + (x - geo.left) / geo.step - .5);
+  }, true);
+  document.addEventListener('keydown', e => { if (!replay || /input|textarea|select/i.test((e.target.tagName || ''))) return; if (e.key === ' ') { e.preventDefault(); replayPlay(); } else if (e.key === 'ArrowRight' && e.shiftKey) { e.preventDefault(); replayStep(1); } else if (e.key === 'Escape') replayExit(true); });
+  const b = $('#replayBtn'); if (b) b.addEventListener('click', replayStart);
 }
 function setLive(on) { $('#liveDot').classList.toggle('on', !!on); }
 function closeWS() { wsGen++; wsOpen = false; clearInterval(wsPing); if (ws) { ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null; try { ws.close(); } catch {} } ws = null; setLive(false); }
@@ -1117,6 +1183,7 @@ function connectWS() {
   };
 }
 function applyKline(k) {
+  if (replay) { replayLive(k); return; } // en repetición el gráfico no se mueve con el precio en vivo
   const n = candles.length; if (!n) return;
   const last = candles[n - 1];
   if (k.t === last.t) candles[n - 1] = k;
@@ -2058,6 +2125,47 @@ function renderPop() {
 }
 const sbIc = (k, s = 20) => SV(SBI[k], s);
 function applyBarPos(bar) { if (selPos) { bar.style.left = selPos.x + 'px'; bar.style.top = selPos.y + 'px'; bar.style.bottom = 'auto'; bar.style.transform = 'none'; } }
+/* ───────── Calculadora de riesgo ───────── */
+const riskCap = () => { const R = state.risk || {}, A = state.acct || {}; return R.cap > 0 ? R.cap : (A.cur > 0 ? A.cur : A.start > 0 ? A.start : 0); };
+const usd = v => (Math.abs(v) >= 1000 ? '$' + Math.round(v).toLocaleString('en-US') : '$' + (+v).toFixed(2));
+const fmtQty = v => v >= 1000 ? Math.round(v).toLocaleString('en-US') : v >= 1 ? (+v).toFixed(v >= 100 ? 1 : 3) : (+v).toPrecision(3);
+function openRisk(d, priceHint) {
+  document.querySelectorAll('.rk-back').forEach(x => x.remove());
+  const R = state.risk = sanRisk(state.risk), last = candles.length ? candles[candles.length - 1].c : 0, q = d && isPos(d) ? posBox(d) : null, base = symOf(state.symbol).replace(/USDT$|USDC$|USD$/, '');
+  const entry0 = q ? q.entry : (priceHint > 0 ? priceHint : last), stop0 = q ? q.stop : +(entry0 * .99).toPrecision(8), tgt0 = q ? q.target : +(entry0 * 1.02).toPrecision(8);
+  const m = document.createElement('div'); m.className = 'rk-back';
+  const fld = (id, lbl, v, step, suf) => `<label class="rk-f"><span>${lbl}</span><div><input id="${id}" type="number" inputmode="decimal" step="${step || 'any'}" value="${v}">${suf ? `<em>${suf}</em>` : ''}</div></label>`;
+  m.innerHTML = `<div class="rk-dlg" role="dialog" aria-label="Calculadora de riesgo"><div class="rk-head"><div><b>Calculadora de riesgo</b><small>${esc(symOf(state.symbol))} · ${q ? (q.entry > q.stop ? 'Long' : 'Short') + ' del dibujo' : 'precio actual'}</small></div><button class="rk-x" type="button" aria-label="Cerrar">✕</button></div>
+    <div class="rk-body"><div class="rk-in">
+      <div class="rk-sec">Tu cuenta</div>${fld('rkCap', 'Capital', riskCap() || '', 'any', 'USDT')}${fld('rkPct', 'Riesgo por operación', R.pct, '0.1', '%')}
+      <div class="rk-lev"><span>Apalancamiento</span><input id="rkLev" type="range" min="1" max="125" step="1" value="${R.lev}"><b id="rkLevV">x${R.lev}</b></div>${fld('rkFee', 'Comisión por lado', R.fee, '0.01', '%')}
+      <div class="rk-sec">Operación</div>${fld('rkE', 'Entrada', +entry0.toPrecision(8), 'any')}${fld('rkS', 'Stop loss', +(+stop0).toPrecision(8), 'any')}${fld('rkT', 'Objetivo (opcional)', +(+tgt0).toPrecision(8), 'any')}
+    </div><div class="rk-out" id="rkOut"></div></div>
+    <div class="rk-foot"><label class="rk-chk"><input type="checkbox" id="rkShow" ${R.show ? 'checked' : ''}> Mostrar el tamaño en los dibujos Long/Short</label><div class="rk-btns">${q ? '<button class="rk-b" data-rk="apply" type="button">Aplicar al dibujo</button>' : ''}<button class="rk-b main" data-rk="save" type="button">Guardar</button></div></div></div>`;
+  document.body.appendChild(m);
+  const $v = id => parseFloat(String(m.querySelector('#' + id).value).replace(',', '.'));
+  const paint = () => {
+    m.querySelector('#rkLevV').textContent = 'x' + m.querySelector('#rkLev').value;
+    const r = CCTRisk.calc({capital: $v('rkCap'), riskPct: $v('rkPct'), entry: $v('rkE'), stop: $v('rkS'), target: $v('rkT'), leverage: +m.querySelector('#rkLev').value, feePct: $v('rkFee')}), o = m.querySelector('#rkOut');
+    if (!r.ok) { o.innerHTML = `<div class="rk-empty">${esc(r.error)}</div>`; return; }
+    const big = (l, v, s, c) => `<div class="rk-kpi ${c || ''}"><small>${l}</small><b>${v}</b>${s ? `<em>${s}</em>` : ''}</div>`;
+    o.innerHTML = `<div class="rk-side ${r.long ? 'l' : 's'}">${r.long ? 'LONG' : 'SHORT'} · stop a ${r.distPct.toFixed(2)} %</div>`
+      + big('Tamaño de la posición', `${fmtQty(r.qty)} ${esc(base)}`, `≈ ${usd(r.notional)} en la operación`, 'hero')
+      + `<div class="rk-grid">${big('Margen necesario', usd(r.margin), 'con x' + r.lev)}${big('Pierdes en el stop', '−' + usd(r.loss), 'comisiones incluidas', 'neg')}${r.gain != null ? big('Ganas en el objetivo', '+' + usd(r.gain), 'R:R ' + r.rr.toFixed(2), 'pos') : big('Objetivo', '—', 'sin objetivo')}${big('Liquidación aprox.', fmt(r.liq), 'margen aislado', 'liq')}</div>`
+      + (r.warn.length ? `<ul class="rk-warn">${r.warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '<p class="rk-ok">Todo en orden: el stop está antes de la liquidación y el margen cabe en tu capital.</p>')
+      + `<p class="rk-note">Cálculo educativo para futuros con margen aislado (mantenimiento ${(CCTRisk.MMR * 100).toFixed(1)} %). El exchange puede variar un poco. No es asesoría financiera.</p>`;
+  };
+  m.addEventListener('input', paint); paint();
+  const close = () => m.remove();
+  m.querySelector('.rk-x').onclick = close; m.addEventListener('pointerdown', e => { if (e.target === m) close(); });
+  m.addEventListener('click', e => {
+    const b = e.target.closest('[data-rk]'); if (!b) return;
+    state.risk = sanRisk({pct: $v('rkPct'), lev: +m.querySelector('#rkLev').value, fee: $v('rkFee'), cap: Math.abs($v('rkCap') - ((state.acct || {}).cur || (state.acct || {}).start || 0)) < .005 ? 0 : $v('rkCap'), show: m.querySelector('#rkShow').checked});
+    if (b.dataset.rk === 'apply' && d) { const e2 = $v('rkE'), s2 = $v('rkS'), t2 = $v('rkT'); if (e2 > 0 && t2 > 0 && s2 > 0 && (s2 - e2) * (t2 - e2) < 0) patchD({a: {...d.a, p: e2}, b: {...d.b, p: t2}, sp: s2}); else { toast('Revisa entrada, stop y objetivo'); return; } }
+    save(); scheduleRender(); close(); toast(b.dataset.rk === 'apply' ? 'Dibujo actualizado con la calculadora' : 'Riesgo guardado');
+  });
+  setTimeout(() => { const i = m.querySelector(riskCap() ? '#rkS' : '#rkCap'); if (i && deskMQ.matches) i.focus(); }, 50);
+}
 function renderSelBar() {
   let bar = $('#selBar'); const d = curDraw(), show = !!d || isBrushTool(drawTool);
   if (!show) { if (bar) bar.remove(); closePop(); return; }
@@ -2074,6 +2182,7 @@ function renderSelBar() {
     + (line ? b('ds', '', 'Estilo de línea', `<svg width="30" height="8" viewBox="0 0 30 8"><path d="M1 4h28" stroke="currentColor" stroke-width="2" ${d.ds === 'dash' ? 'stroke-dasharray="6 4"' : d.ds === 'dot' ? 'stroke-dasharray="1.5 4" stroke-linecap="round"' : 'stroke-dasharray="1.5 4" stroke-linecap="round"'}/></svg>`) : '')
     + (d ? '<i class="sb-sep"></i>' + b('set', '', 'Ajustes', sbIc('set')) : '')
     + (d && SB_ALERT.has(d.type) ? b('alert', '', 'Añadir alerta a esta línea', sbIc('alert')) : '')
+    + (isPos(d) ? b('risk', '', 'Calculadora de riesgo: tamaño de la posición', SV('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11v6M8 14h2M12 14h2M8 17h2M12 17h2"/>', 20)) : '')
     + (d ? b('lock', '', d.lock ? 'Desbloquear' : 'Bloquear', sbIc(d.lock ? 'lock' : 'unlock')) + b('del', '', 'Eliminar (Supr)', sbIc('trash')) : '')
     + b('more', '', 'Más opciones', sbIc('dots'));
   bar.classList.toggle('locked', !!(d && d.lock));
@@ -2105,6 +2214,7 @@ document.addEventListener('click', e => {
   if (k === 'txtok') { sbEditText($('#sbTxt').value); return; }
   if (k === 'priceok') { const v = parseFloat(String($('#sbPrice').value).replace(',', '.')), d = curDraw(); if (d && v > 0) patchD({a: {...d.a, p: v}}); else toast('Escribe un precio válido'); return; }
   if (k === 'tplsave') { sbSaveTpl(); return; } if (k === 'tplreset') { sbResetStyle(); return; }
+  if (k === 'risk') { closePop(); openRisk(curDraw()); return; }
   if (k === 'alert') { sbAlert(); return; } if (k === 'lock') { sbLock(); return; } if (k === 'del') { closePop(); deleteSelected(); return; }
   if (k === 'clone') { sbClone(); closePop(); return; } if (k === 'copy') { sbCopy(); closePop(); return; } if (k === 'paste') { sbPaste(); closePop(); return; }
   if (k === 'front') { sbOrder(true); closePop(); return; } if (k === 'back') { sbOrder(false); closePop(); return; } if (k === 'hide') { closePop(); sbHide(); return; }
@@ -3534,6 +3644,9 @@ function drawShapeExtra(d, a, b, rightX, col) {
     if (!d.nt) tag(d.label ? d.label : `${lg ? 'Long' : 'Short'} · R:R ${(Math.abs(q.target - q.entry) / (Math.abs(q.entry - q.stop) || 1)).toFixed(2)}`, q.x1, q.yE, '#5b6b83', 'left', tc, fs);
     if (!d.no) tag(`Objetivo ${fmt(q.target)} (${pc(q.target)})`, q.x1, q.yT + (q.yT < q.yE ? -11 : 11), gc, 'left', tc, fs);
     if (!d.ns) tag(`Stop ${fmt(q.stop)} (${pc(q.stop)})`, q.x1, q.yS + (q.yS < q.yE ? -11 : 11), rc, 'left', tc, fs);
+    const RK = state.risk || {}, cap = riskCap(); // tamaño de posición según tu riesgo (calculadora)
+    if (RK.show !== false && cap > 0 && window.CCTRisk && !d.nr) { const r = CCTRisk.calc({capital: cap, riskPct: RK.pct, entry: q.entry, stop: q.stop, target: q.target, leverage: RK.lev, feePct: RK.fee});
+      if (r.ok) tag(`Tamaño ${fmtQty(r.qty)} (${usd(r.notional)}) · x${r.lev} · arriesgas ${usd(r.loss)}${r.warn.length && /liquidar/.test(r.warn[0]) ? ' · ⚠ liquidación antes del stop' : ''}`, q.x1, q.yE + (q.yS > q.yE ? 13 : -13), '#2a3446', 'left', tc, Math.max(9, fs - 1)); }
   }
 }
 function drawShapeNew(d, a, b, rightX, col, selected) {
@@ -3974,11 +4087,12 @@ area.addEventListener('contextmenu', e => {
   e.preventDefault(); document.querySelectorAll('.chart-ctx').forEach(x => x.remove());
   let ctxPrice = NaN; try { const q = local(e); if (geo && q.y >= 0) ctxPrice = +PRICE(q.y).toPrecision(8); } catch {}
   const m = document.createElement('div'); m.className = 'pop-menu chart-ctx';
-  m.innerHTML = `<button data-a="copyp">${SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 16)}<span>Copiar precio ${fmt(ctxPrice)}</span></button>${PANE ? '' : `<button data-a="alertp">${SV('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 16)}<span>Añadir alerta en ${fmt(ctxPrice)}</span></button>`}<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
+  window.__ctxPrice = ctxPrice;
+  m.innerHTML = `<button data-a="risk">${SV('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11v6M8 14h2M12 14h2M8 17h2M12 17h2"/>', 16)}<span>Calculadora de riesgo</span></button><button data-a="copyp">${SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 16)}<span>Copiar precio ${fmt(ctxPrice)}</span></button>${PANE ? '' : `<button data-a="alertp">${SV('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 16)}<span>Añadir alerta en ${fmt(ctxPrice)}</span></button>`}<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
   document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
   const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
-  m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'reset') resetChart(); else if (b.dataset.a === 'style') openChartStyle(); else if (b.dataset.a === 'copyp') copyText(String(ctxPrice), 'Precio copiado: ' + fmt(ctxPrice)); else if (b.dataset.a === 'alertp') alertAtPrice(ctxPrice); else if (b.dataset.a === 'favbar') setFavBar(!FB.show); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
+  m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'risk') { const sel = curDraw(); openRisk(isPos(sel) ? sel : null, window.__ctxPrice); } else if (b.dataset.a === 'reset') resetChart(); else if (b.dataset.a === 'style') openChartStyle(); else if (b.dataset.a === 'copyp') copyText(String(ctxPrice), 'Precio copiado: ' + fmt(ctxPrice)); else if (b.dataset.a === 'alertp') alertAtPrice(ctxPrice); else if (b.dataset.a === 'favbar') setFavBar(!FB.show); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
 });
 function syncFullscreenLabel() {} // los botones Expandir y Ajustar ya no existen (se hace con el doble toque y el botón A)
 const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} syncUi(); scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
@@ -4440,6 +4554,7 @@ function schedulePine() {
 const CAT_SYMS = 'BTC ETH BNB SOL XRP DOGE ADA AVAX LINK DOT TRX LTC BCH ATOM UNI NEAR APT ARB OP FIL INJ SUI SEI TIA RUNE AAVE MKR ALGO XLM HBAR ETC SAND MANA GALA IMX PEPE SHIB WLD FET RNDR'.split(' ').map(x => 'BINANCE:' + x + 'USDT');
 function catPreviewSvg(id) {
   if (id === 'nova-nexus') return novaPreviewSvg();
+  if (id === 'nova-lite') { const sc = scripts.find(x => x.id === 'cat:nova-lite'), u = sc && scriptPrev(sc); return u && u !== 'err' ? `<img class="nova-prev" src="${u}" alt="Vista previa de Nova LITE">` : '<div class="nova-prev ph">Generando imagen…</div>'; } // imagen real: el indicador dibujado en velas de muestra
   const bg = '<rect width="300" height="130" fill="#0b0e14"/>';
   if (id === 'nova-osc') {
     let a = '', b = '', f = ''; const n = 40, X = i => 8 + i * 7.1;
@@ -4463,7 +4578,7 @@ const catPineOf = c => state.pine.find(p => p.sid === 'cat:' + c.id);
 function catalogCards(list) {
   return (list || window.CCTCatalog || []).map(c => {
     const p = catPineOf(c);
-    return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small><button class="small-button" data-pine-retry="${p.sid}">↻ Reintentar</button>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">${I('gear', 14)} Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
+    return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)} ${c.tier === 'pro' ? '<span class="prem-tag"><svg viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>PRO</span>' : '<span class="free-tag">GRATIS</span>'}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small><button class="small-button" data-pine-retry="${p.sid}">↻ Reintentar</button>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">${I('gear', 14)} Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
   }).join('');
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-std-set]'); if (b) openStdDialog(b.dataset.stdSet); const r = e.target.closest('[data-pine-retry]'); if (r) { delete pineRes[r.dataset.pineRetry]; pineKey = ''; schedulePine(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh(); } });
