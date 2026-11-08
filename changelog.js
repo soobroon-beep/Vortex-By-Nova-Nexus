@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '2.9', d: '8 nov 2026', t: 'Derivados en vivo', items: [
+    'Junto al precio: funding con cuenta regresiva al próximo cobro, interés abierto con su cambio en 24 h y ratio long/short.',
+    'Toca esos datos para ver el detalle: funding anualizado, precio mark e índice, prima de futuros y una lectura de lo que está pasando.',
+    'Nuevos paneles en Indicadores › Derivados: Interés abierto, Funding, Ratio Long/Short (cuentas y top traders) y Delta agresivo.'
+  ]},
   {v: '2.8', d: '8 nov 2026', t: 'Operar desde el gráfico', items: [
     'Nuevo botón Operar: cuenta demo con órdenes a mercado, límite y stop, apalancamiento, TP y SL.',
     'Tus posiciones y órdenes se ven en el gráfico: arrastra el TP, el SL o la orden para moverlos, y usa ✕ para cerrar o cancelar.',

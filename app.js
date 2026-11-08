@@ -24,7 +24,7 @@ const MULTI = {
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, dchan:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
+  indicators: {derivs:true, oi:false, funding:false, lsr:false, taker:false, ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, dchan:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
   groups: [], symGroup: {}, symColor: {}, listRev: 0, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], designs: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
 };
 function sanAlert(a) {
@@ -99,6 +99,10 @@ const STD_SCHEMA = {
   stochrsi: [['rl', 'Longitud RSI', 'int', 14, 2, 100], ['sl', 'Longitud Estocástico', 'int', 14, 2, 100], ['ks', 'Suavizado %K', 'int', 3, 1, 50], ['ds', 'Suavizado %D', 'int', 3, 1, 50], ['cK', 'Color %K', 'color', '#548fff'], ['cD', 'Color %D', 'color', '#f5a623'], ['width', 'Grosor', 'int', 1, 1, 6]],
   ao: [['fast', 'Rápida', 'int', 5, 1, 100], ['slow', 'Lenta', 'int', 34, 2, 300], ['hUp', 'Color positivo', 'color', '#089981'], ['hDn', 'Color negativo', 'color', '#f23645']],
   cmf: [['len', 'Período', 'int', 20, 2, 200], ['hUp', 'Color positivo', 'color', '#089981'], ['hDn', 'Color negativo', 'color', '#f23645']],
+  oi: [['color', 'Color y opacidad', 'color', '#f0b90b'], ['width', 'Grosor', 'int', 2, 1, 6]],
+  funding: [['hUp', 'Color positivo', 'color', '#089981'], ['hDn', 'Color negativo', 'color', '#f23645']],
+  lsr: [['cA', 'Color cuentas', 'color', '#6ca5f9'], ['cT', 'Color top traders', 'color', '#f5a623'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  taker: [['hUp', 'Color compradores', 'color', '#089981'], ['hDn', 'Color vendedores', 'color', '#f23645']],
   donchian: [['len', 'Período', 'int', 20, 2, 300], ['color', 'Color y opacidad', 'color', '#4dd0e1'], ['width', 'Grosor', 'int', 1, 1, 6], ['fill', 'Relleno entre bandas', 'color', '#4dd0e114']],
   keltner: [['len', 'Período EMA', 'int', 20, 2, 300], ['mult', 'Multiplicador ATR', 'float', 2, .1, 10], ['atr', 'Período ATR', 'int', 10, 1, 200], ['color', 'Color y opacidad', 'color', '#f5c568'], ['width', 'Grosor', 'int', 1, 1, 6], ['fill', 'Relleno entre bandas', 'color', '#f5c56814']],
   ichimoku: [['t', 'Tenkan', 'int', 9, 1, 100], ['k', 'Kijun', 'int', 26, 1, 200], ['b', 'Senkou B', 'int', 52, 1, 300], ['cT', 'Color Tenkan', 'color', '#2962ff'], ['cK', 'Color Kijun', 'color', '#b71c1c'], ['cUp', 'Nube alcista', 'color', '#08998133'], ['cDn', 'Nube bajista', 'color', '#f2364533'], ['cC', 'Color Chikou', 'color', '#43a047'], ['width', 'Grosor', 'int', 1, 1, 6]],
@@ -116,7 +120,7 @@ function sanStdParams(p) {
   return o;
 }
 const stdOn = k => !!state.indicators[k] && !(state.stdHide && state.stdHide[k]); // activo y no oculto con el ojito de la leyenda
-const stdName = k => ({ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', adx: `ADX ${sp('adx', 'len')}`, cci: `CCI ${sp('cci', 'len')}`, willr: `Williams %R ${sp('willr', 'len')}`, mfi: `MFI ${sp('mfi', 'len')}`, roc: `ROC ${sp('roc', 'len')}`, stochrsi: 'Estoc. RSI', ao: 'Awesome Osc.', cmf: `CMF ${sp('cmf', 'len')}`, donchian: `Donchian ${sp('donchian', 'len')}`, keltner: `Keltner ${sp('keltner', 'len')}`, ichimoku: 'Ichimoku', psar: 'Parabolic SAR', vpvr: 'VPVR', liqmap: 'Liquidaciones (heatmap)', patterns: 'Patrones', dchan: 'Canales dinámicos', cross: 'Cruces EMA 20/50'}[k] || k);
+const stdName = k => ({derivs: 'Derivados en vivo', oi: 'Interés abierto', funding: 'Funding', lsr: 'Ratio Long/Short', taker: 'Compra/venta agresiva', ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', adx: `ADX ${sp('adx', 'len')}`, cci: `CCI ${sp('cci', 'len')}`, willr: `Williams %R ${sp('willr', 'len')}`, mfi: `MFI ${sp('mfi', 'len')}`, roc: `ROC ${sp('roc', 'len')}`, stochrsi: 'Estoc. RSI', ao: 'Awesome Osc.', cmf: `CMF ${sp('cmf', 'len')}`, donchian: `Donchian ${sp('donchian', 'len')}`, keltner: `Keltner ${sp('keltner', 'len')}`, ichimoku: 'Ichimoku', psar: 'Parabolic SAR', vpvr: 'VPVR', liqmap: 'Liquidaciones (heatmap)', patterns: 'Patrones', dchan: 'Canales dinámicos', cross: 'Cruces EMA 20/50'}[k] || k);
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
 const OLD_BG = /^#(0d1019|101725|090e19)$/i; // fondos por defecto anteriores: pasan al tema nuevo más oscuro
@@ -289,6 +293,7 @@ function switchView(id) {
   $$('.bottom-nav button').forEach(x => x.classList.toggle('active', x.dataset.view === id));
   { const ta = $('#topAlertsBtn'); if (ta) ta.classList.toggle('active', id === 'alertsView'); } // celular: Alertas vive arriba, junto a Notificaciones
   document.body.classList.toggle('chart-mode', id === 'chartView');
+  if (id === 'chartView' && typeof dvRefresh === 'function') setTimeout(() => dvRefresh(), 0);
   if (id !== 'chartView') document.body.classList.remove('expanded');
   if (id === 'chartView') requestAnimationFrame(() => { if (!candles.length) loadCandles(); render(); });
   if (id === 'watchView') renderWatch();
@@ -1083,7 +1088,7 @@ async function loadCandles(silent = false) {
     const r = await fetchKlinesAny(sym, tf, fetchCtl.signal);
     if (sym !== state.symbol || tf !== state.interval) return;
     candles = r.cs; dataSrc = r.src;
-    recalc();
+    recalc(); setTimeout(() => dvRefresh(), 0);
     if (!silent) { stopMotion(); visible = defaultVisible(); pan = 0; const ca = $('#chartArea'); if (ca) { ca.classList.remove('swap-in'); void ca.offsetWidth; ca.classList.add('swap-in'); } }
     setFeedback(''); updateChartHeader(); render(); connectWS(); return true;
   } catch (e) {
@@ -1203,6 +1208,11 @@ document.addEventListener('visibilitychange', () => {
 /* Miniaturas muy básicas de cada indicador común (viewBox 40×24; la línea toma el color del indicador) */
 const W = 'M2 18C8 17 11 11 17 12S27 7 38 4', Wb = 'M2 20C8 19 11 14 17 15S27 10 38 7';
 const IND_ART = {
+  derivs: '<rect x="2" y="6" width="10" height="12" rx="3"/><rect x="15" y="6" width="10" height="12" rx="3" opacity=".7"/><rect x="28" y="6" width="10" height="12" rx="3" opacity=".45"/>',
+  oi: '<path d="M2 18c6-1 8-6 13-7s8 3 12 0 7-7 11-8"/><path d="M2 21h36" opacity=".25"/>',
+  funding: '<path d="M4 12v-5M10 12v-3M16 12v-6M22 12v3M28 12v5M34 12v-2" stroke-width="3.2"/><path d="M2 12h36" opacity=".3"/>',
+  lsr: '<path d="M2 12h36" opacity=".3" stroke-dasharray="2 2"/><path d="M2 9c6 0 8 6 14 5s9-8 14-6 6 4 8 3"/><path d="M2 15c6 1 10-4 15-3s9 5 13 3 6-2 8-3" opacity=".6"/>',
+  taker: '<path d="M4 12V6M9 12v4M14 12V4M19 12v6M24 12V8M29 12v3M34 12V5" stroke-width="3.2"/>',
   ema20: `<path d="${W}"/>`, ema50: `<path d="${W}"/>`, sma200: `<path d="M2 16C12 15 22 12 38 8"/>`, wma20: `<path d="${W}"/>`,
   bollinger: '<path d="M2 8C12 4 24 9 38 5M2 20C12 16 24 21 38 17" opacity=".7"/><path d="M2 14C12 10 24 15 38 11"/>',
   rsi: '<path d="M2 17l6-6 5 4 6-9 6 8 5-4 8 3"/><path d="M2 6h36M2 19h36" opacity=".25" stroke-dasharray="2 2"/>',
@@ -1254,6 +1264,11 @@ const indicatorMeta = [
   ['stochrsi','Estocástico RSI','%K y %D del RSI en panel inferior','#548fff'],
   ['ao','Awesome Oscillator','Histograma SMA 5 − SMA 34 del punto medio','#089981'],
   ['cmf','Chaikin Money Flow','Flujo de dinero de Chaikin (20) en panel inferior','#2ec4b6'],
+  ['derivs','Derivados en vivo','Funding, interés abierto, ratio long/short y prima junto al precio (futuros de Binance)','#f0b90b'],
+  ['oi','Interés abierto','Contratos abiertos de futuros en USD, en panel inferior','#f0b90b'],
+  ['funding','Funding','Tasa de financiamiento de cada 8 h (verde = largos pagan, rojo = cortos pagan)','#089981'],
+  ['lsr','Ratio Long/Short','Cuentas en largo vs. en corto y posiciones de los top traders (1 = equilibrio)','#6ca5f9'],
+  ['taker','Compra/venta agresiva','Volumen de órdenes a mercado: compradores menos vendedores (delta de futuros)','#2ec4b6'],
   ['macd','MACD 12 26 9','Línea, señal e histograma en panel inferior','#548fff'],
   ['stoch','Estocástico 14 3 3','%K y %D en panel inferior (niveles 20/80)','#548fff'],
   ['atr','ATR 14','Rango verdadero medio (Wilder) en panel inferior','#e07b53'],
@@ -1307,7 +1322,7 @@ function recalc() {
   ind = {ema20: ema(c, sp('ema20', 'len')), ema50: ema(c, sp('ema50', 'len')), sma200: sma(c, sp('sma200', 'len')), bbU: up, bbL: lo, rsi: rsi(c, sp('rsi', 'len'))};
   ind.nn = null; calcNova(); calcExtra(); schedulePine();
 }
-const PANELS = ['macd', 'stoch', 'atr', 'obv', 'adx', 'cci', 'willr', 'mfi', 'roc', 'stochrsi', 'ao', 'cmf'];
+const PANELS = ['macd', 'stoch', 'atr', 'obv', 'adx', 'cci', 'willr', 'mfi', 'roc', 'stochrsi', 'ao', 'cmf', 'oi', 'funding', 'lsr', 'taker'];
 function calcExtra() { // indicadores de la fase 2: solo se calculan los activados
   const I = state.indicators, T = window.CCTIndicators, n = candles.length;
   if (!T || !n) return;
@@ -1328,6 +1343,7 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.stochrsi = I.stochrsi ? T.stochRsi(candles, sp('stochrsi', 'rl'), sp('stochrsi', 'sl'), sp('stochrsi', 'ks'), sp('stochrsi', 'ds')) : null;
   ind.ao = I.ao ? T.awesome(candles, sp('ao', 'fast'), sp('ao', 'slow')) : null;
   ind.cmf = I.cmf ? T.cmf(candles, sp('cmf', 'len')) : null;
+  dvCalc();
   ind.donchian = I.donchian ? T.donchian(candles, sp('donchian', 'len')) : null;
   ind.keltner = I.keltner ? T.keltner(candles, sp('keltner', 'len'), sp('keltner', 'mult'), sp('keltner', 'atr')) : null;
   ind.ichimoku = I.ichimoku ? T.ichimoku(candles, sp('ichimoku', 't'), sp('ichimoku', 'k'), sp('ichimoku', 'b')) : null;
@@ -1436,10 +1452,11 @@ function renderIndicators() { const l = $('#indicatorList'); if (l) { const sc =
 const IB_CATS = [['active', 'En el gráfico', '<path d="M4 19V5M4 19h16"/><path d="m7 15 4-4 3 3 5-6"/>'], ['free', 'Gratuitos', '<path d="M12 3 4 7v5c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V7z"/><path d="m9 12 2 2 4-4"/>'],
   ['trend', 'Tendencia', '<path d="M3 17 9 11l4 4 8-8"/><path d="M15 7h6v6"/>'], ['osc', 'Osciladores', '<path d="M2 12c2.5-6 5-6 7.5 0s5 6 7.5 0 3-4 5-2"/>'], ['volume', 'Volumen', '<path d="M5 20v-6M10 20V8M15 20v-9M20 20V4"/>'],
   ['volat', 'Volatilidad y canales', '<path d="M3 8c4-3 8 3 18-2M3 16c4-3 8 3 18-2"/>'], ['struct', 'Estructura y patrones', '<path d="M3 18 9 6l5 8 3-5 4 9"/>'],
+  ['deriv', 'Derivados', '<path d="M3 17 8 12l4 3 4-6 5 4"/><circle cx="8" cy="12" r="1.4"/><circle cx="16" cy="9" r="1.4"/><path d="M3 21h18"/>'],
   ['nova', 'Nova Nexus', '<path d="M12 2 14.6 9.4 22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6z"/>'], ['mine', 'Mis indicadores', '<path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6"/>']];
 const STD_CAT = {ema20: 'trend', ema50: 'trend', sma200: 'trend', wma20: 'trend', vwap: 'trend', supertrend: 'trend', cross: 'trend', ichimoku: 'trend', psar: 'trend',
   rsi: 'osc', macd: 'osc', stoch: 'osc', stochrsi: 'osc', cci: 'osc', willr: 'osc', roc: 'osc', ao: 'osc', volume: 'volume', obv: 'volume', mfi: 'volume', cmf: 'volume', vpvr: 'volume',
-  bollinger: 'volat', donchian: 'volat', keltner: 'volat', atr: 'volat', adx: 'volat', dchan: 'volat', patterns: 'struct', liqmap: 'struct'};
+  bollinger: 'volat', donchian: 'volat', keltner: 'volat', atr: 'volat', adx: 'volat', dchan: 'volat', patterns: 'struct', liqmap: 'struct', derivs: 'deriv', oi: 'deriv', funding: 'deriv', lsr: 'deriv', taker: 'deriv'};
 const FREE_GROUPS = ['trend', 'osc', 'volume', 'volat', 'struct'];
 let ibCat = 'free', ibQ = '';
 const ibNorm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -1490,11 +1507,12 @@ document.addEventListener('click', e => {
 function ibRefresh() { const sl = $('#sheetList'); if (sheetMode !== 'indicators' || !sl || !$('#sheet').classList.contains('open')) return; const l = sl.querySelector('.ib-list'), y = l ? l.scrollTop : 0; sl.innerHTML = indBrowser(); const n = sl.querySelector('.ib-list'); if (n) n.scrollTop = y; }
 function syncLiqBtn() { const b = $('#liqBtn'); if (!b) return; const on = !!state.indicators.liqmap; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }
 { const b = $('#liqBtn'); if (b) b.addEventListener('click', () => { state.indicators.liqmap = !state.indicators.liqmap; if (state.stdHide) delete state.stdHide.liqmap; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast(state.indicators.liqmap ? 'Heatmap de liquidaciones activado (estimado)' : 'Heatmap de liquidaciones apagado'); }); }
-function countIndicators() { syncLiqBtn(); const n = Object.entries(state.indicators).filter(([k, v]) => v && !k.startsWith('nn')).length + (novaOn() ? 1 : 0); $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
+function countIndicators() { syncLiqBtn(); const n = Object.entries(state.indicators).filter(([k, v]) => v && !k.startsWith('nn') && k !== 'derivs').length + (novaOn() ? 1 : 0); $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-ind]'); if (!b) return;
   state.indicators[b.dataset.ind] = !state.indicators[b.dataset.ind]; if (state.stdHide) delete state.stdHide[b.dataset.ind];
   save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); }
+  if (/^(derivs|oi|funding|lsr|taker)$/.test(b.dataset.ind)) dvRefresh(true);
   if (['indicators', 'novaSet'].includes(sheetMode) && $('#sheet').classList.contains('open')) renderSheet();
   scheduleRender();
 });
@@ -1837,7 +1855,7 @@ $$('[data-panel]').forEach(b => b.onclick = () => openSheet(b.dataset.panel === 
 $('#goChart').onclick = () => switchView('chartView');
 function selectSymbol(s) {
   state.symbol = s; save(); closeSheet(); clearTransient(); closeWS(); candles = []; ind = {};
-  updateChartHeader(); switchView('chartView'); loadCandles(); if (window.CCTTrade) CCTTrade.symChanged();
+  updateChartHeader(); switchView('chartView'); loadCandles(); if (window.CCTTrade) CCTTrade.symChanged(); dvClose(); dvFs = ''; setTimeout(() => dvRefresh(true), 50);
 }
 
 /* ───────── Pestañas de gráficos: varios gráficos abiertos, cada uno con su moneda, temporalidad y tipo de vela ───────── */
@@ -3210,7 +3228,11 @@ const PANEL_DEF = { // paneles adicionales: etiqueta, series [valores, color], r
   roc: {label: () => `ROC ${sp('roc', 'len')}`, series: D => [[D, sp('roc', 'color')]], levels: () => [0]},
   stochrsi: {label: () => `Estoc. RSI ${sp('stochrsi', 'rl')} ${sp('stochrsi', 'sl')}`, series: D => [[D.k, sp('stochrsi', 'cK')], [D.d, sp('stochrsi', 'cD')]], levels: () => [20, 80], range: [0, 100]},
   ao: {label: () => 'AO', series: () => [], hist: true, levels: () => [0], hUp: () => sp('ao', 'hUp'), hDn: () => sp('ao', 'hDn')},
-  cmf: {label: () => `CMF ${sp('cmf', 'len')}`, series: () => [], hist: true, levels: () => [0], hUp: () => sp('cmf', 'hUp'), hDn: () => sp('cmf', 'hDn')}
+  cmf: {label: () => `CMF ${sp('cmf', 'len')}`, series: () => [], hist: true, levels: () => [0], hUp: () => sp('cmf', 'hUp'), hDn: () => sp('cmf', 'hDn')},
+  oi: {label: () => `Interés abierto ${dvBig(dvLast(ind.oi))}`, series: D => [[D, sp('oi', 'color')]], levels: () => []},
+  funding: {label: () => { const v = dvLast(ind.funding); return `Funding ${v == null ? '' : (v >= 0 ? '+' : '') + v.toFixed(4) + '%'}`; }, series: () => [], hist: true, levels: () => [0], hUp: () => sp('funding', 'hUp'), hDn: () => sp('funding', 'hDn')},
+  lsr: {label: () => { const a = dvLast(ind.lsr && ind.lsr.acc), t = dvLast(ind.lsr && ind.lsr.top); return `Long/Short ${a == null ? '' : 'cuentas ' + a.toFixed(2)}${t == null ? '' : ' · top ' + t.toFixed(2)}`; }, series: D => [[D.acc, sp('lsr', 'cA')], [D.top, sp('lsr', 'cT')]], levels: () => [1]},
+  taker: {label: () => { const v = dvLast(ind.taker); return `Delta agresivo ${v == null ? '' : (v >= 0 ? '+' : '−') + dvBig(Math.abs(v), true)}`; }, series: () => [], hist: true, levels: () => [0], hUp: () => sp('taker', 'hUp'), hDn: () => sp('taker', 'hDn')}
 };
 function drawSubPanel(key, top0, H, lo, hi, o) {
   const {left, w, right, line, text} = o, top = top0 + 4, height = H - 10, fmtV = v => v == null ? '—' : Math.abs(v) >= 1000 ? v.toLocaleString('en-US', {maximumFractionDigits: 0}) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(6);
@@ -4849,6 +4871,82 @@ function applyState(data, soft = false) {
 
 /* ───────── Cuenta de Google + guardado en la nube (Firebase Auth + Firestore) ───────── */
 function loadScript(src) { return new Promise((ok, fail) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => fail(Error('No se pudo cargar ' + src)); document.head.appendChild(el); }); }
+/* ───────── Derivados en vivo: chips junto al precio, ventana con el detalle y paneles (interés abierto, funding, long/short, delta) ───────── */
+const DV_CRYPTO = new Set(['binance', 'binancef', 'bybit', 'bybitf', 'okx', 'okxf', 'coinbase', 'bingx', 'bingxf', 'kucoin', 'gate', 'mexc', 'bitget', 'htx', 'kraken']);
+function dvSym() { // símbolo de futuros perpetuos de Binance para el activo del gráfico (los datos de Binance sirven de referencia para cualquier exchange)
+  if (!window.CCTDerivs || !DV_CRYPTO.has(srcOf(state.symbol))) return null;
+  const [b, q] = splitSym(state.symbol); if (!b || !['USDT', 'USDC', 'USD', 'FDUSD', ''].includes(q || '')) return null;
+  const fs = String(b).replace(/[^A-Z0-9]/gi, '').toUpperCase() + 'USDT'; return CCTDerivs.unsupported(fs) ? null : fs;
+}
+function dvLast(a) { if (!a) return null; for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; }
+function dvBig(v, plain) { if (v == null || !Number.isFinite(v)) return ''; const a = Math.abs(v), u = plain ? '' : '$'; return a >= 1e9 ? u + (v / 1e9).toFixed(2) + ' mil M' : a >= 1e6 ? u + (v / 1e6).toFixed(2) + ' M' : a >= 1e3 ? u + (v / 1e3).toFixed(1) + ' K' : u + v.toFixed(2); }
+const DV_PANES = ['oi', 'funding', 'lsr', 'taker'];
+function dvCalc() {
+  const fs = dvSym(), iv = IV_MS[state.interval] || 36e5, I = state.indicators;
+  for (const k of DV_PANES) ind[k] = null;
+  if (!fs || !candles.length || replay) return;
+  const want = DV_PANES.filter(k => I[k]);
+  for (const k of want) ind[k] = CCTDerivs.series(fs, iv, k, candles);
+  if (want.length) CCTDerivs.loadSeries(fs, iv, want);
+}
+let dvTimer = 0, dvTickT = 0, dvFs = '';
+function dvPriceChg24() { const n = candles.length, iv = IV_MS[state.interval] || 36e5; if (!n) return NaN; const k = Math.min(n - 1, Math.round(864e5 / iv)); return k > 0 ? (candles[n - 1].c / candles[n - 1 - k].c - 1) * 100 : NaN; }
+function dvCountdown(t) { const ms = t - Date.now(); if (!(ms > 0)) return '—'; const h = Math.floor(ms / 36e5), m = Math.floor(ms % 36e5 / 6e4), sc = Math.floor(ms % 6e4 / 1e3); return `${h}:${String(m).padStart(2, '0')}:${String(sc).padStart(2, '0')}`; }
+function dvRender() {
+  const head = $('#chartSymHead'); if (!head) return;
+  let box = $('#dvChips'); const fs = dvSym(), on = !!state.indicators.derivs && !replay;
+  if (!on || !fs) { if (box) { box.remove(); scheduleRender(); } return; }
+  if (!box) { box = document.createElement('button'); box.type = 'button'; box.id = 'dvChips'; box.className = 'dv-chips'; box.title = 'Derivados en vivo · toca para ver el detalle'; head.appendChild(box); box.addEventListener('pointerdown', e => e.stopPropagation()); box.addEventListener('click', e => { e.stopPropagation(); dvOpen(); }); }
+  const S = CCTDerivs.summary(fs);
+  if (!S) { box.innerHTML = '<span class="dv-c dim">Derivados…</span>'; return; }
+  const fc = S.fund >= 0 ? 'up' : 'dn', oc = !Number.isFinite(S.oiChg) ? '' : S.oiChg >= 0 ? 'up' : 'dn';
+  const before = box.offsetHeight;
+  box.innerHTML = `<span class="dv-c"><i>Funding</i><b class="${fc}">${S.fund >= 0 ? '+' : ''}${S.fund.toFixed(4)}%</b><em data-dv-cd>${dvCountdown(S.next)}</em></span>`
+    + `<span class="dv-c"><i>Int. abierto</i><b>${dvBig(S.oiUsd)}</b>${Number.isFinite(S.oiChg) ? `<em class="${oc}">${S.oiChg >= 0 ? '+' : ''}${S.oiChg.toFixed(1)}%</em>` : ''}</span>`
+    + (Number.isFinite(S.ls) ? `<span class="dv-c"><i>Long/Short</i><b>${S.ls.toFixed(2)}</b><em>${S.longPct.toFixed(0)}% L</em></span>` : '');
+  if (box.offsetHeight !== before) scheduleRender(); // si la franja cambió de alto, la leyenda se acomoda
+}
+async function dvRefresh(force) {
+  const fs = dvSym(); if (!fs) { dvRender(); return; }
+  if (fs !== dvFs) { dvFs = fs; dvRender(); }
+  if (!state.indicators.derivs && !DV_PANES.some(k => state.indicators[k])) return;
+  if (document.hidden || currentView !== 'chartView') return;
+  const S = CCTDerivs.summary(fs); if (force || !S || Date.now() - S.at > 25e3) await CCTDerivs.loadSummary(fs);
+  dvRender(); const p = $('#dvPop'); if (p) dvFill(p);
+}
+function dvClose() { const p = $('#dvPop'); if (p) p.remove(); document.removeEventListener('pointerdown', dvAway, true); }
+function dvAway(e) { if (!e.target.closest('#dvPop, #dvChips')) dvClose(); }
+function dvOpen() {
+  if ($('#dvPop')) { dvClose(); return; }
+  const p = document.createElement('div'); p.id = 'dvPop'; p.className = 'dv-pop'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Derivados en vivo');
+  $('#chartArea').appendChild(p); dvFill(p); if (!CCTDerivs.summary(dvSym() || '')) dvRefresh(true); p.addEventListener('pointerdown', e => e.stopPropagation()); p.addEventListener('wheel', e => e.stopPropagation(), {passive: true});
+  const hb = $('#chartSymHead').getBoundingClientRect(), ab = $('#chartArea').getBoundingClientRect(); p.style.top = (hb.bottom - ab.top + 6) + 'px'; p.style.left = Math.max(6, hb.left - ab.left) + 'px';
+  p.addEventListener('click', e => { if (e.target.closest('[data-dv-x]')) dvClose(); if (e.target.closest('[data-ind]')) setTimeout(() => { dvFill(p); dvRefresh(); }, 30); });
+  setTimeout(() => document.addEventListener('pointerdown', dvAway, true));
+}
+function dvFill(p) {
+  const fs = dvSym(), S = fs && CCTDerivs.summary(fs), pct = (v, d = 2) => Number.isFinite(v) ? (v >= 0 ? '+' : '') + v.toFixed(d) + '%' : '—', cls = v => !Number.isFinite(v) ? '' : v >= 0 ? 'up' : 'dn';
+  const row = (k, v, sub) => `<div class="dv-row"><span>${k}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  const tg = (k, t) => `<button type="button" class="dv-tg ${state.indicators[k] ? 'on' : ''}" data-ind="${k}">${state.indicators[k] ? '✓ ' : '+ '}${t}</button>`;
+  p.innerHTML = `<div class="dv-hd"><div><b>Derivados en vivo</b><small>${esc(fs || '')} · perpetuo de Binance</small></div><button type="button" class="dv-x" data-dv-x aria-label="Cerrar">✕</button></div>`
+    + (S ? `<div class="dv-grid">`
+      + row('Funding actual', `<span class="${cls(S.fund)}">${pct(S.fund, 4)}</span>`, `Anualizado ${pct(S.fund * 3 * 365, 1)}`)
+      + row('Próximo cobro', `<span data-dv-cd>${dvCountdown(S.next)}</span>`, S.fund >= 0 ? 'Pagan los largos' : 'Pagan los cortos')
+      + row('Interés abierto', dvBig(S.oiUsd), `${dvBig(S.oi, true)} contratos · 24 h <span class="${cls(S.oiChg)}">${pct(S.oiChg, 1)}</span>`)
+      + row('Long/Short (cuentas)', Number.isFinite(S.ls) ? S.ls.toFixed(2) : '—', Number.isFinite(S.longPct) ? `${S.longPct.toFixed(1)}% en largo · ${(100 - S.longPct).toFixed(1)}% en corto` : '')
+      + row('Precio mark', fmt(S.mark), `Índice ${fmt(S.idx)}`)
+      + row('Prima (basis)', `<span class="${cls(S.basis)}">${pct(S.basis, 3)}</span>`, S.basis >= 0 ? 'Futuros por encima del spot' : 'Futuros por debajo del spot')
+      + `</div>${(() => { const r = CCTDerivs.reading(S, dvPriceChg24()); return r ? `<p class="dv-read">${esc(r)}</p>` : ''; })()}`
+      : `<p class="dv-read">${fs ? 'Cargando datos de futuros…' : 'Este activo no tiene futuros perpetuos en Binance.'}</p>`)
+    + `<div class="dv-sub">Ver en el gráfico</div><div class="dv-tgs">${tg('oi', 'Interés abierto')}${tg('funding', 'Funding')}${tg('lsr', 'Long/Short')}${tg('taker', 'Delta agresivo')}</div>`
+    + `<p class="dv-note">Datos públicos de Binance Futuros. Lectura educativa, no es una recomendación.</p>`;
+}
+setInterval(() => { document.querySelectorAll('[data-dv-cd]').forEach(el => { const S = dvFs && CCTDerivs.summary(dvFs); if (S) el.textContent = dvCountdown(S.next); }); }, 1000);
+if (window.CCTDerivs) {
+  CCTDerivs.on(() => { clearTimeout(dvTickT); dvTickT = setTimeout(() => { if (candles.length && DV_PANES.some(k => state.indicators[k])) { dvCalc(); scheduleRender(); } dvRender(); }, 60); });
+  dvTimer = setInterval(() => dvRefresh(), 30e3);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) dvRefresh(); });
+}
 if (window.CCTTrade) {
   CCTTrade.bind({sym: () => state.symbol, price: s => { const v = s === state.symbol && candles.length && !replay ? candles[candles.length - 1].c : curPrice(s); return +v; }, fmt, render: scheduleRender, toast, base: s => base(s), go: s => { if (s !== state.symbol) selectSymbol(s); }});
   const tb = $('#tradeBtn'); if (tb) tb.addEventListener('click', () => CCTTrade.toggle());
