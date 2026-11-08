@@ -63,6 +63,7 @@ async function main() {
   let tfs = forced ? timeframes(new Date(now), forced) : dueTfs(now, state);
   if (!forced && tfs.length) { // ahora el servidor VORTEX (Cloudflare) manda el Screener al empezar cada hora; esto es solo el respaldo
     let srv = null; try { const r = await fetch('https://vortex-push.soobroon.workers.dev/scr/state'); if (r.ok) srv = await r.json(); } catch {}
+    console.log('Estado del servidor:', JSON.stringify(srv));
     tfs = tfs.filter(tf => {
       if (srv && (+srv[tf] || 0) >= slotOf(tf, now)) { state[tf] = slotOf(tf, now); console.log(`${tf}: ya lo mandó el servidor`); return false; }
       const mins = (now - slotOf(tf, now) * SLOT_MS[tf]) / 6e4; if (srv && mins < 25) { console.log(`${tf}: el servidor aún tiene tiempo de mandarlo (${mins.toFixed(0)} min)`); return false; }
