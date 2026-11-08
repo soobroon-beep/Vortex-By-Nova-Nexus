@@ -933,7 +933,8 @@ body.botlab-wide #botLabView{grid-column:2/4;grid-row:1;z-index:5;background:var
   #chartView .chart-bar .timeframes,#chartView .chart-bar .chart-toolbar{background:transparent!important;border-color:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;box-shadow:none!important}
   #chartView .chart-bar .timeframes button.active{background:rgba(255,255,255,.08)!important;border-color:transparent!important}
   #chartArea #chartSymHead{top:calc(6px + var(--cbh,0px))}
-  #chartArea .chart-label{top:calc(61px + var(--cbh,0px))}
+  #chartArea .chart-label{top:calc(8px + var(--sh,0px) + var(--cbh,0px))!important}
+  #chartArea .draw-hint{top:calc(10px + var(--cbh,0px))}
 }
 @media(max-width:1023px){
   .chart-toolbar{background:rgba(6,9,15,.5);-webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);border-color:rgba(255,255,255,.06)}
