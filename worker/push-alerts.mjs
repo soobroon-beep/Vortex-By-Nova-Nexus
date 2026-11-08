@@ -187,6 +187,45 @@ async function aiRoute(req, env, path, json, cors) {
 
 /* ───────── HTTP ───────── */
 const MKT_HOSTS = new Set(['open-api.bingx.com', 'api.kucoin.com', 'api.mexc.com', 'api.gateio.ws', 'api.bitget.com', 'api.huobi.pro', 'api.kraken.com', 'api.bybit.com', 'www.okx.com', 'api.exchange.coinbase.com', 'api.binance.com', 'fapi.binance.com']);
+
+/* ───────── Panel macro: índices, materias primas, bonos, miedo/codicia y dominancia (datos públicos, con caché) ───────── */
+const MACRO_SYMS = [['dxy', 'DX-Y.NYB'], ['spx', '^GSPC'], ['ndx', '^IXIC'], ['gold', 'GC=F'], ['oil', 'CL=F'], ['us10y', '^TNX'], ['vix', '^VIX']];
+async function yahoo(sym) {
+  for (const host of ['query1', 'query2']) {
+    try {
+      const r = await fetch(`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=3mo&interval=1d`, {headers: {'user-agent': 'Mozilla/5.0 (VORTEX)', accept: 'application/json'}, cf: {cacheTtl: 300, cacheEverything: true}});
+      if (!r.ok) continue; const j = await r.json(), res = j && j.chart && j.chart.result && j.chart.result[0]; if (!res) continue;
+      const q = res.indicators.quote[0], t = res.timestamp || [], pts = [];
+      for (let i = 0; i < t.length; i++) if (Number.isFinite(q.close[i])) pts.push([t[i] * 1000, q.close[i]]);
+      const m = res.meta || {}, last = Number.isFinite(m.regularMarketPrice) ? m.regularMarketPrice : (pts.length ? pts[pts.length - 1][1] : NaN);
+      if (!Number.isFinite(last) || pts.length < 2) continue;
+      if (pts.length && Math.abs(pts[pts.length - 1][1] - last) > 1e-9 && (m.regularMarketTime || 0) * 1000 - pts[pts.length - 1][0] > 3600e3) pts.push([(m.regularMarketTime || 0) * 1000, last]);
+      const prev = pts.length >= 2 ? pts[pts.length - 2][1] : NaN, wk = pts.length >= 6 ? pts[pts.length - 6][1] : NaN, mo = pts.length >= 22 ? pts[pts.length - 22][1] : NaN;
+      return {last, prev, d1: (last / prev - 1) * 100, w1: (last / wk - 1) * 100, m1: (last / mo - 1) * 100, at: (m.regularMarketTime || 0) * 1000, state: m.marketState || '', spark: pts.slice(-60).map(p => +p[1].toFixed(4))};
+    } catch {}
+  }
+  return null;
+}
+async function macroData() {
+  const out = {at: Date.now()};
+  await Promise.all([
+    ...MACRO_SYMS.map(async ([k, s]) => { out[k] = await yahoo(s); }),
+    (async () => { try { const r = await fetch('https://api.alternative.me/fng/?limit=60', {cf: {cacheTtl: 900, cacheEverything: true}}), j = await r.json(), d = (j.data || []).map(x => +x.value).filter(Number.isFinite);
+      if (d.length) out.fng = {last: d[0], prev: d[1], w1: d[7], label: (j.data[0] || {}).value_classification || '', spark: d.slice(0, 60).reverse()}; } catch {} })(),
+    (async () => { try { const r = await fetch('https://api.coingecko.com/api/v3/global', {headers: {accept: 'application/json', 'user-agent': 'VORTEX-Market/1.0'}, cf: {cacheTtl: 600, cacheEverything: true}}), j = await r.json(), g = j && j.data;
+      if (g) out.dom = {btc: g.market_cap_percentage.btc, eth: g.market_cap_percentage.eth, usdt: g.market_cap_percentage.usdt, usdc: g.market_cap_percentage.usdc, cap: g.total_market_cap.usd, capChg: g.market_cap_change_percentage_24h_usd}; } catch {} })()
+  ]);
+  return out;
+}
+async function macroRoute(env, json, cors) {
+  const cache = caches.default, key = new Request('https://vortex-cache.local/macro-v1');
+  const hit = await cache.match(key); if (hit) { const b = await hit.text(); return new Response(b, {headers: {...cors, 'content-type': 'application/json', 'x-cache': 'hit'}}); }
+  const d = await macroData(), body = JSON.stringify(d);
+  const good = MACRO_SYMS.filter(([k]) => d[k]).length;
+  if (good >= 3) await cache.put(key, new Response(body, {headers: {'content-type': 'application/json', 'cache-control': 'public, max-age=300'}}));
+  return new Response(body, {headers: {...cors, 'content-type': 'application/json', 'x-cache': 'miss'}});
+}
+
 export default {
   async fetch(req, env) {
     const allowed = String(env.ALLOWED_ORIGIN || DEFAULT_ORIGINS).split(',').map(s => s.trim()).filter(Boolean);
@@ -198,6 +237,7 @@ export default {
     if (req.method === 'GET' && path === '/') return json({ok: true, app: 'VORTEX push', note: 'Notificaciones de alertas con la app cerrada'});
     if (!ok) return json({error: 'Origen no permitido'}, 403);
     if (path === '/ai' || path.startsWith('/ai/')) return aiRoute(req, env, path, json, cors);
+    if (req.method === 'GET' && path === '/macro') return macroRoute(env, json, cors);
     if (req.method === 'GET' && path === '/mkt') { // datos PÚBLICOS de exchanges que bloquean CORS (BingX, KuCoin, MEXC…): solo GET, sin llaves, solo hosts permitidos
       let t; try { t = new URL(new URL(req.url).searchParams.get('u') || ''); } catch { return json({error: 'URL inválida'}, 400); }
       if (t.protocol !== 'https:' || !MKT_HOSTS.has(t.host)) return json({error: 'Exchange no permitido'}, 403);
