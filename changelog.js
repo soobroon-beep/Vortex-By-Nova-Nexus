@@ -1,5 +1,11 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '2.8', d: '8 nov 2026', t: 'Operar desde el gráfico', items: [
+    'Nuevo botón Operar: cuenta demo con órdenes a mercado, límite y stop, apalancamiento, TP y SL.',
+    'Tus posiciones y órdenes se ven en el gráfico: arrastra el TP, el SL o la orden para moverlos, y usa ✕ para cerrar o cancelar.',
+    'Clic derecho en el gráfico: «Comprar en…» o «Vender en…» deja la orden lista en ese precio.',
+    'Planes con fondos animados y la nueva lista de lo que incluye Gratis, Plus e Infinity.'
+  ]},
   {v: '2.7', d: '8 nov 2026', t: 'Panel macro y planes', items: [
     'Panel macro en Noticias: dólar (DXY), S&P 500, Nasdaq, bono a 10 años, VIX, oro, petróleo, miedo y codicia y dominancia, con su lectura para la cripto.',
     'Nuevos planes: Gratis, Plus (suscriptores de YouTube) e Infinity (cuenta BingX con el código YCXE5W). Se ven en Configuración › Tu plan.'

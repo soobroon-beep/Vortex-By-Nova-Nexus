@@ -626,6 +626,7 @@ $('#popRows').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key
 
 /* ───────── Alertas de precio ───────── */
 const alertPrice = {}; // último precio conocido por símbolo (para alertas fuera del seguimiento)
+let trHit = [], trDrag = null; // operaciones demo: zonas tocables y arrastre en curso
 let selAlertId = null, alDrag = null, alConfirm = null; // alerta seleccionada en el gráfico, arrastre en curso y confirmación pendiente
 const alDiscordReady = () => { try { return !!(window.CCT_discordStore && CCT_discordStore.get().url); } catch { return false; } };
 const TONE_SEQ = {beep: [[880, 0, .6, 'sine']], chime: [[988, 0, .35, 'sine'], [1319, .16, .55, 'sine']], pulse: [[440, 0, .14, 'triangle'], [440, .22, .14, 'triangle'], [440, .44, .14, 'triangle']], alarm: [[780, 0, .18, 'square'], [620, .2, .18, 'square'], [780, .4, .18, 'square']]};
@@ -1189,7 +1190,7 @@ function applyKline(k) {
   if (k.t === last.t) candles[n - 1] = k;
   else if (k.t > last.t) { candles.push(k); if (pan > 0) pan += 1; }
   else return;
-  recalc(); updateChartHeader(); checkAlerts(state.symbol, k.c);
+  recalc(); updateChartHeader(); checkAlerts(state.symbol, k.c); if (window.CCTTrade) CCTTrade.tick(state.symbol, k.c);
   if (currentView === 'chartView') scheduleRender();
 }
 document.addEventListener('visibilitychange', () => {
@@ -1836,7 +1837,7 @@ $$('[data-panel]').forEach(b => b.onclick = () => openSheet(b.dataset.panel === 
 $('#goChart').onclick = () => switchView('chartView');
 function selectSymbol(s) {
   state.symbol = s; save(); closeSheet(); clearTransient(); closeWS(); candles = []; ind = {};
-  updateChartHeader(); switchView('chartView'); loadCandles();
+  updateChartHeader(); switchView('chartView'); loadCandles(); if (window.CCTTrade) CCTTrade.symChanged();
 }
 
 /* ───────── Pestañas de gráficos: varios gráficos abiertos, cada uno con su moneda, temporalidad y tipo de vela ───────── */
@@ -3075,6 +3076,33 @@ function renderCore() {
       if (live && alDrag.p != null) { const ny = ln(alDrag.p, .95, CS.alertW + 1, [6, 4]); if (ny != null) { const dl = (alDrag.p - lastP) / lastP * 100; tag(ny, fmt(alDrag.p), true); g.setLineDash([]); g.font = '11px system-ui'; g.globalAlpha = .9; g.fillStyle = acol; g.textAlign = 'left'; g.fillText(`${dl >= 0 ? '+' : ''}${dl.toFixed(2)}%`, left + 28, ny - 5); } }
     }
     g.restore(); }
+  // operaciones de la cuenta demo: entrada, TP, SL, órdenes y liquidación (se arrastran para moverlas; × las cierra o quita)
+  trHit = [];
+  if (window.CCTTrade && !replay) { const TL = CCTTrade.lines(state.symbol); if (TL.length) {
+    g.save(); g.font = '600 11px system-ui'; const COL = {pos: null, tp: '#20bf9f', sl: '#f06b79', liq: '#f0b90b', ord: '#548fff'}, uFmt = v => (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2);
+    for (const L of TL) {
+      const dragNow = trDrag && trDrag.id === L.id && trDrag.kind === L.kind, price = dragNow && trDrag.p != null ? trDrag.p : L.price, yy = Math.round(Y(price)) + .5;
+      if (!(yy > plotTop && yy < plotTop + plotH)) continue;
+      const col = L.kind === 'pos' ? (L.side > 0 ? up : down) : COL[L.kind];
+      g.globalAlpha = L.kind === 'liq' ? .55 : L.pend ? .6 : .9; g.strokeStyle = col; g.lineWidth = L.kind === 'pos' ? 1.4 : 1; g.setLineDash(L.kind === 'pos' ? [] : L.kind === 'liq' ? [2, 4] : [6, 4]);
+      g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+      // etiqueta a la izquierda: texto · PnL · ×  (en posición también +TP / +SL)
+      const parts = [{t: L.txt, k: 'lbl'}]; if (Number.isFinite(L.pnl)) parts.push({t: uFmt(L.pnl) + (L.sub ? ' ' + L.sub : ''), k: 'pnl', c: L.pnl >= 0 ? up : down});
+      if (L.addTp) parts.push({t: '+TP', k: 'addtp'}); if (L.addSl) parts.push({t: '+SL', k: 'addsl'}); if (L.x) parts.push({t: '✕', k: 'x'});
+      const totW = parts.reduce((s0, q) => s0 + g.measureText(q.t).width + 17, 0); let x0 = Math.max(left + 8, w - right - 14 - totW); const hh = 20, ty = yy - hh / 2; // etiquetas pegadas a la derecha, junto a la escala
+      for (const pt of parts) {
+        const tw = g.measureText(pt.t).width + 14, isBtn = pt.k !== 'lbl' && pt.k !== 'pnl';
+        g.fillStyle = pt.k === 'lbl' ? col : isBtn ? (bg || '#0b0f18') : (bg || '#0b0f18'); g.globalAlpha = pt.k === 'lbl' ? .95 : .92; roundRect(x0, ty, tw, hh, 4); g.fill(); g.globalAlpha = 1;
+        g.strokeStyle = col; g.lineWidth = 1; roundRect(x0 + .5, ty + .5, tw - 1, hh - 1, 4); g.stroke();
+        g.fillStyle = pt.k === 'lbl' ? (L.kind === 'liq' ? '#1a1300' : '#fff') : pt.c || text; g.textAlign = 'left'; g.fillText(pt.t, x0 + 7, yy + 4);
+        if (pt.k !== 'pnl') trHit.push({x: x0, y: ty, w: tw, h: hh, id: L.id, kind: L.kind, act: pt.k === 'lbl' ? (L.drag ? 'drag' : 'sel') : pt.k});
+        x0 += tw + 3;
+      }
+      g.fillStyle = col; g.fillRect(w - right + 2, yy - 9, right - 3, 18); g.fillStyle = L.kind === 'liq' ? '#1a1300' : '#fff'; g.font = '11px system-ui'; g.fillText(fmt(price), w - right + 5, yy + 3.5); g.font = '600 11px system-ui';
+      if (L.drag) trHit.push({line: 1, yy, id: L.id, kind: L.kind});
+    }
+    g.restore();
+  } }
   // etiqueta de último precio
   const lastC = candles[n - 1], ly = Y(lastC.c);
   if (ly > plotTop && ly < plotTop + plotH) {
@@ -3862,6 +3890,12 @@ area.addEventListener('pointerdown', e => { stopMotion();
     if (hnd) { gest.mode = 'handle'; gest.handle = hnd.key; }
     else if (d && !d.lock && !DOPT.lock && !DOPT.hide && !d.hide && distToDrawing(d, pt) < 18) startDMove(d, pt);
   }
+  if (gest.mode === 'pending' && !drawTool && !PANE && trHit.length) { // botones y líneas de las operaciones demo
+    const b = trHit.find(q => !q.line && pt.x >= q.x && pt.x <= q.x + q.w && pt.y >= q.y && pt.y <= q.y + q.h);
+    if (b && b.act !== 'drag' && b.act !== 'sel') { gest.mode = 'trbtn'; gest.tr = b; clearTimeout(gest.timer); }
+    else { const tol = e.pointerType === 'mouse' ? 6 : 14, ln = b ? trHit.find(q => q.line && q.id === b.id && q.kind === b.kind) : trHit.filter(q => q.line).sort((u, v) => Math.abs(u.yy - pt.y) - Math.abs(v.yy - pt.y)).find(q => Math.abs(q.yy - pt.y) <= tol);
+      if (ln) { gest.mode = 'trmove'; gest.tr = {id: ln.id, kind: ln.kind, dy: pt.y - ln.yy}; } }
+  }
   if (gest.mode === 'pending' && !drawTool && !PANE && selAlertId) { const al = alertHit(pt, e); if (al && al.id === selAlertId) { gest.mode = 'almove'; gest.al = {id: al.id}; gest.snapY = pt.y - Y(al.price); } } // línea de alerta seleccionada: arrastrarla cambia su precio
   if (gest.mode === 'pending' && !drawTool)
     gest.timer = setTimeout(() => { if (gest && !gest.moved && gest.mode === 'pending') { gest.mode = 'cross'; cross = pt; navigator.vibrate?.(8); scheduleRender(); } }, 380);
@@ -3920,6 +3954,7 @@ area.addEventListener('pointermove', e => {
     scheduleRender(); return;
   }
   if (gest.mode === 'cross') { cross = pt; scheduleRender(); }
+  else if (gest.mode === 'trmove') { if (!gest.moved) return; trDrag = {id: gest.tr.id, kind: gest.tr.kind, p: clamp(PRICE(pt.y - gest.tr.dy), 1e-12, 1e15)}; scheduleRender(); }
   else if (gest.mode === 'almove') { if (!gest.moved) return; alDrag = {id: gest.al.id, p: clamp(PRICE(pt.y - (gest.snapY || 0)), 1e-12, 1e15)}; gest.al.p = alDrag.p; scheduleRender(); }
   else if (gest.mode === 'dmove') {
     if (!gest.moved) return; const d = getDrawings().find(x => x.id === gest.dm.id); if (!d) return;
@@ -3961,6 +3996,8 @@ function endPointer(e, cancelled) {
   if (gs.mode === 'brush') { const live = brushLive; brushLive = null; if (!cancelled) commitBrush(live); scheduleRender(); return; }
   if (cancelled) { cross = null; preview = null; scheduleRender(); return; }
   if (gs.mode === 'cross') { cross = null; scheduleRender(); return; }
+  if (gs.mode === 'trbtn') { const q = gs.tr; if (!gs.moved && window.CCTTrade) { if (q.act === 'x') CCTTrade.xLine(q.id, q.kind); else if (q.act === 'addtp') CCTTrade.addTpSl(q.id, 'tp'); else if (q.act === 'addsl') CCTTrade.addTpSl(q.id, 'sl'); } return; }
+  if (gs.mode === 'trmove') { const d = trDrag; trDrag = null; if (gs.moved && d && d.p != null && window.CCTTrade) CCTTrade.moveLine(d.id, d.kind, d.p); else scheduleRender(); return; }
   if (gs.mode === 'almove') { if (gs.moved && gs.al.p != null) askMoveAlert(gs.al.id, gs.al.p); else { alDrag = null; scheduleRender(); } return; }
   if (gs.mode === 'handle') { save(); render(); return; }
   if (gs.mode === 'dmove') { if (gs.moved) { save(); updateDrawUI(); render(); return; } selectedId = gs.picked ? gs.dm.id : (distToDrawing(getDrawings().find(x => x.id === gs.dm.id) || {}, local(e)) < 13 ? selectedId : null); updateDrawUI(); render(); return; }
@@ -4088,11 +4125,11 @@ area.addEventListener('contextmenu', e => {
   let ctxPrice = NaN; try { const q = local(e); if (geo && q.y >= 0) ctxPrice = +PRICE(q.y).toPrecision(8); } catch {}
   const m = document.createElement('div'); m.className = 'pop-menu chart-ctx';
   window.__ctxPrice = ctxPrice;
-  m.innerHTML = `<button data-a="risk">${SV('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11v6M8 14h2M12 14h2M8 17h2M12 17h2"/>', 16)}<span>Calculadora de riesgo</span></button><button data-a="copyp">${SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 16)}<span>Copiar precio ${fmt(ctxPrice)}</span></button>${PANE ? '' : `<button data-a="alertp">${SV('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 16)}<span>Añadir alerta en ${fmt(ctxPrice)}</span></button>`}<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
+  m.innerHTML = (window.CCTTrade && ctxPrice > 0 ? `<button data-a="trbuy" class="ctx-buy">${SV('<path d="M12 19V5M6 11l6-6 6 6"/>', 16)}<span>Comprar en ${fmt(ctxPrice)}</span></button><button data-a="trsell" class="ctx-sell">${SV('<path d="M12 5v14M6 13l6 6 6-6"/>', 16)}<span>Vender en ${fmt(ctxPrice)}</span></button>` : '') + `<button data-a="risk">${SV('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11v6M8 14h2M12 14h2M8 17h2M12 17h2"/>', 16)}<span>Calculadora de riesgo</span></button><button data-a="copyp">${SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 16)}<span>Copiar precio ${fmt(ctxPrice)}</span></button>${PANE ? '' : `<button data-a="alertp">${SV('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 16)}<span>Añadir alerta en ${fmt(ctxPrice)}</span></button>`}<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
   document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
   const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
-  m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'risk') { const sel = curDraw(); openRisk(isPos(sel) ? sel : null, window.__ctxPrice); } else if (b.dataset.a === 'reset') resetChart(); else if (b.dataset.a === 'style') openChartStyle(); else if (b.dataset.a === 'copyp') copyText(String(ctxPrice), 'Precio copiado: ' + fmt(ctxPrice)); else if (b.dataset.a === 'alertp') alertAtPrice(ctxPrice); else if (b.dataset.a === 'favbar') setFavBar(!FB.show); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
+  m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'trbuy' || b.dataset.a === 'trsell') { CCTTrade.at(b.dataset.a === 'trbuy' ? 1 : -1, window.__ctxPrice); return; } if (b.dataset.a === 'risk') { const sel = curDraw(); openRisk(isPos(sel) ? sel : null, window.__ctxPrice); } else if (b.dataset.a === 'reset') resetChart(); else if (b.dataset.a === 'style') openChartStyle(); else if (b.dataset.a === 'copyp') copyText(String(ctxPrice), 'Precio copiado: ' + fmt(ctxPrice)); else if (b.dataset.a === 'alertp') alertAtPrice(ctxPrice); else if (b.dataset.a === 'favbar') setFavBar(!FB.show); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
 });
 function syncFullscreenLabel() {} // los botones Expandir y Ajustar ya no existen (se hace con el doble toque y el botón A)
 const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} syncUi(); scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
@@ -4812,6 +4849,11 @@ function applyState(data, soft = false) {
 
 /* ───────── Cuenta de Google + guardado en la nube (Firebase Auth + Firestore) ───────── */
 function loadScript(src) { return new Promise((ok, fail) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => fail(Error('No se pudo cargar ' + src)); document.head.appendChild(el); }); }
+if (window.CCTTrade) {
+  CCTTrade.bind({sym: () => state.symbol, price: s => { const v = s === state.symbol && candles.length && !replay ? candles[candles.length - 1].c : curPrice(s); return +v; }, fmt, render: scheduleRender, toast, base: s => base(s), go: s => { if (s !== state.symbol) selectSymbol(s); }});
+  const tb = $('#tradeBtn'); if (tb) tb.addEventListener('click', () => CCTTrade.toggle());
+  window.CCT_trHit = () => { const r = $('#priceCanvas').getBoundingClientRect(); return trHit.map(q => Object.assign({}, q, {px: r.left, py: r.top})); }; // para pruebas
+}
 function renderAccount() {
   const box = $('#accountBox'), top = $('#accountBtn');
   if (window.CCTPlans) CCTPlans.setUser(fbUser);
