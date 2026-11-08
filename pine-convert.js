@@ -131,14 +131,14 @@
     const st = step(works ? (probs.length ? 'Listo: funciona con partes aproximadas' : 'Listo: convertido y funcionando') : res && res.ok ? 'Guardado, pero no se ve nada en el gráfico' : 'Guardado, pero todavía no funciona en el gráfico',
       sid ? (works ? 'Se guardó en «Mis indicadores» (en tu cuenta) con su imagen y ya está en el gráfico' : res && res.ok ? 'Se guardó en «Mis indicadores». Pega el código completo y conviértelo de nuevo.' : 'Se guardó en «Mis indicadores» para que no se pierda; puedes reintentarlo después') : 'No se pudo guardar', works ? (probs.length ? 'warn' : 'ok') : 'err');
     st.key = 'done';
-    if (box) { const go = box.querySelector('.pc-go'), cn = box.querySelector('.pc-cancel'); go.textContent = works ? 'Ver en el gráfico' : 'Cerrar'; cn.textContent = 'Cerrar'; box.querySelector('.pc-note').textContent = works ? `Listo en ${Math.round((Date.now() - job.t0) / 1000)} s` : 'Puedes abrirlo desde Mis indicadores y probar «Convertir de nuevo».'; }
+    if (box) { const go = box.querySelector('.pc-go'), cn = box.querySelector('.pc-cancel'); go.textContent = works ? 'Ver en el gráfico' : 'Entendido'; cn.textContent = 'Cerrar'; cn.hidden = !works; box.querySelector('.pc-note').textContent = works ? `Listo en ${Math.round((Date.now() - job.t0) / 1000)} s` : 'Puedes abrirlo desde Mis indicadores y probar «Convertir de nuevo».'; }
     job.after = () => { close(); if (works && window.CCT_switchView) { try { window.CCT_switchView('chartView'); } catch {} } };
     paint();
     if (job.bg) { toast(works ? `«${job.name}» convertido y en el gráfico` : `«${job.name}» guardado, pero no se pudo convertir`); try { window.CCT_notify && window.CCT_notify('Convertidor de Pine', works ? `«${job.name}» está listo en tu gráfico` : `«${job.name}» no se pudo convertir`); } catch {} }
   }
   function fail(msg) {
     if (!job) return; job.done = true; step(msg, '', 'err');
-    if (box) { box.querySelector('.pc-go').textContent = 'Cerrar'; box.querySelector('.pc-cancel').textContent = 'Cerrar'; }
+    if (box) { box.querySelector('.pc-go').textContent = 'Cerrar'; box.querySelector('.pc-cancel').hidden = true; }
     job.after = () => close(); paint();
   }
 
