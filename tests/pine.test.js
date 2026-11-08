@@ -278,3 +278,31 @@ test('ta.adx(len) es igual al ADX de ta.dmi (los modelos de IA lo usan mucho)', 
   const r = P.run('//@version=5\nindicator("a")\nplot(ta.adx(14))\n[a, b, x] = ta.dmi(14, 14)\nplot(x)', c);
   assert.ok(r.ok); assert.deepEqual(r.plots[0].values, r.plots[1].values); assert.ok(Number.isFinite(r.plots[0].values.at(-1)));
 });
+
+/* Mejoras del convertidor (scripts reales de TradingView que antes fallaban) */
+{
+  const P2 = require('../pine.js'); let sd = 7; const rn = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  const cs2 = []; let px = 100; for (let i = 0; i < 300; i++) { const o = px, c = o + (rn() - .5) * 4; cs2.push({t: Date.UTC(2024, 0, 1) + i * 36e5, o, h: Math.max(o, c) + rn(), l: Math.min(o, c) - rn(), c, v: 100 + rn() * 900}); px = c; }
+  const R = code => P2.run('//@version=5\nindicator("t")\n' + code, cs2, {interval: '1h', symbol: 'BTCUSDT'});
+  test('hour(time, zona), dayofweek(time) y time_close() como funciones', () => {
+    const r = R('plot(hour(time, "UTC"))\nplot(hour(time, "UTC+3"))\nplot(dayofweek(time))\nplot(time_close("D") - time)');
+    assert.ok(r.ok, r.error && r.error.msg); const a = r.plots[0].values, b = r.plots[1].values;
+    assert.equal(b[5], (a[5] + 3) % 24); assert.ok(r.plots[2].values.every(v => v >= 1 && v <= 7)); assert.ok(r.plots[3].values.every(v => v > 0 && v <= 864e5));
+  });
+  test('ta.vwap(fuente, ancla, mult) devuelve [vwap, banda superior, banda inferior]', () => {
+    const r = R('[v, up, dn] = ta.vwap(hlc3, timeframe.change("D"), 1)\nplot(v)\nplot(up)\nplot(dn)'); assert.ok(r.ok, r.error && r.error.msg);
+    const i = 200; assert.ok(r.plots[1].values[i] >= r.plots[0].values[i] && r.plots[0].values[i] >= r.plots[2].values[i]);
+  });
+  test('un parámetro llamado «color» o «size» no tapa color.new / size.small', () => {
+    const r = R('f(color, size) => color.new(color, 50)\nc = f(color.red, 2)\nplot(close, color=c)\nplotshape(true, size=size.small)'); assert.ok(r.ok, r.error && r.error.msg);
+  });
+  test('fill(plot1=…, plot2=…) con nombres', () => { const r = R('a = plot(high)\nb = plot(low)\nfill(plot1=a, plot2=b, color=color.new(color.blue, 80))'); assert.ok(r.ok, r.error && r.error.msg); assert.equal(r.fills.length, 1); });
+  test('request.security con temporalidad que Binance no tiene (3 h, 2 D) pide velas armadas', () => {
+    const r = R('x = request.security(syminfo.tickerid, "180", close)\ny = request.security(syminfo.tickerid, "2D", close)\nplot(x)\nplot(y)'); assert.ok(r.ok, r.error && r.error.msg);
+    assert.deepEqual(r.needs.map(n => n.interval).sort(), ['x180', 'x2880']);
+  });
+  test('indicadores gratuitos extra: todos corren sin errores', () => {
+    global.self = global; require('../free-ind.js'); const d = []; for (let i = 0; i < 30; i++) d.push({t: Date.UTC(2024, 0, 1) + i * 864e5, o: 100, h: 104, l: 96, c: 101, v: 1000});
+    for (const f of global.CCTFree) { const r = P2.run(f.code, cs2, {interval: '1h', symbol: 'BTCUSDT', sec: {'BTCUSDT|1d': d}}); assert.ok(r.ok, f.id + ': ' + (r.error && r.error.msg)); assert.equal(r.warnings.filter(w => w.level === 'unsupported').length, 0, f.id); }
+  });
+}

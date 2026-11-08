@@ -399,7 +399,7 @@ const CONSTS = Object.assign(Object.create(null), {
   'timeframe.isintraday': c => (TF_MIN[c.interval] || 60) < 1440, 'timeframe.isdaily': c => c.interval === '1d' || c.interval === '3d', 'timeframe.isweekly': c => c.interval === '1w', 'timeframe.ismonthly': c => c.interval === '1M',
   'timeframe.isdwm': c => (TF_MIN[c.interval] || 60) >= 1440, 'timeframe.isseconds': false, 'timeframe.isminutes': c => (TF_MIN[c.interval] || 60) < 1440,
   'syminfo.ticker': c => c.symbol, 'syminfo.tickerid': c => 'BINANCE:' + c.symbol, 'syminfo.prefix': 'BINANCE', 'syminfo.currency': c => /USDT$/.test(c.symbol) ? 'USDT' : 'USD',
-  'syminfo.basecurrency': c => c.symbol.replace(/USDT$|USD$/, ''), 'syminfo.type': 'crypto', 'syminfo.mintick': c => c.mintick, 'syminfo.pointvalue': 1, 'syminfo.session': '24x7', 'syminfo.timezone': 'Etc/UTC',
+  'syminfo.basecurrency': c => c.symbol.replace(/USDT$|USD$/, ''), 'syminfo.root': c => c.symbol.replace(/USDT$|USDC$|USD$|BUSD$/, ''), 'syminfo.prefix': 'BINANCE', 'syminfo.ticker': c => c.symbol, 'syminfo.type': 'crypto', 'syminfo.mintick': c => c.mintick, 'syminfo.pointvalue': 1, 'syminfo.session': '24x7', 'syminfo.timezone': 'Etc/UTC',
   'chart.fg_color': hexCol('D1D4DC'), 'chart.bg_color': hexCol('131722'), 'chart.is_standard': true, 'chart.is_heikinashi': false, 'chart.is_renko': false,
   'display.none': 0, 'display.pane': 1, 'display.data_window': 2, 'display.price_scale': 4, 'display.status_line': 8, 'display.all': 15, 'display.pine_screener': 16,
   'dayofweek.sunday': 1, 'dayofweek.monday': 2, 'dayofweek.tuesday': 3, 'dayofweek.wednesday': 4, 'dayofweek.thursday': 5, 'dayofweek.friday': 6, 'dayofweek.saturday': 7,
@@ -464,6 +464,9 @@ function evMem(n, env) {
   }
   const o = ev(n.obj, env);
   if (o && typeof o === 'object' && o._t) { const v = o[n.prop]; return v === undefined ? null : v; }
+  if (parts && n._full in CONSTS) { const c = CONSTS[n._full]; return typeof c === 'function' ? c(ctx) : c; } // p. ej. un parámetro llamado «size» o «color» y luego size.small / color.red
+  if (parts && CONST_DYN[n._full]) return CONST_DYN[n._full](ctx, env.frame.state(n));
+  if (parts && parts.length === 2 && ENUM_NS.has(parts[0])) return parts[1];
   if (isna(o)) throw new PineError(`Se leyó el campo «${n.prop}» de un objeto na`, n.line);
   throw new PineError(`No se puede leer «.${n.prop}» de este valor`, n.line);
 }
@@ -623,6 +626,7 @@ function callUser(fnNode, call, env, recv) {
 }
 const B = Object.create(null);
 const def = (name, sig, f, opt) => { B[name] = Object.assign({sig, f}, opt || {}); };
+const PARAM_ALIAS = {plot1: 'hline1', plot2: 'hline2', series: 'series', top_value: 'hline1', bottom_value: 'hline2'}; // fill(plot1=…, plot2=…) usa los mismos huecos que hline1/hline2
 function callBuiltin(b, name, n, env, recv) {
   const ctx = env.ctx, sig = b.sig, vals = []; let pos = 0, transp;
   if (recv !== undefined) vals[pos++] = recv;
@@ -630,7 +634,7 @@ function callBuiltin(b, name, n, env, recv) {
     const v = ev(a.e, env);
     if (a.name === 'transp' && !name.startsWith('color.')) { transp = v; continue; } // sintaxis antigua: transp=NN en plot/fill/bgcolor/…
     if (a.name) {
-      const ix = sig ? sig.indexOf(a.name) : -1;
+      let ix = sig ? sig.indexOf(a.name) : -1; if (ix < 0 && sig && PARAM_ALIAS[a.name]) ix = sig.indexOf(PARAM_ALIAS[a.name]);
       if (ix < 0) { if (!b.lenient) warn(ctx, n.line, `El parámetro «${a.name}» de ${name}() no está soportado; se ignora`, name + ':' + a.name); continue; }
       vals[ix] = v;
     } else vals[pos++] = v;
@@ -666,6 +670,7 @@ function evCall(n, env) {
     const ns = Array.isArray(recv) ? 'array' : recv && recv._kind ? recv._kind : typeof recv === 'string' ? 'str' : null;
     const b = ns && B[ns + '.' + f.prop];
     if (b) return callBuiltin(b, ns + '.' + f.prop, n, env, recv);
+    { const dp = dotted(f), nm = dp && dp.join('.'); if (nm && B[nm]) return callBuiltin(B[nm], nm, n, env); if (dp && dp.length === 2 && dp[1] === 'new' && ctx.types.has(dp[0])) return newObj(ctx.types.get(dp[0]), n, env); } // la variable tapaba un espacio de nombres (color.new con un parámetro «color»)
     throw new PineError(`El método «${f.prop}» no está soportado para este valor`, n.line);
   }
   throw new PineError(`«${f.name || 'expresión'}» no es una función`, n.line);
@@ -868,7 +873,18 @@ def('ta.adx', ['diLength', 'adxSmoothing'], (a, c) => { const t = B['ta.dmi'].f(
 CONST_DYN['ta.tr'] = (ctx) => trV(ctx, ctx.bar, false);
 CONST_DYN['ta.vwap'] = (ctx, st) => { const c = ctx.candles[ctx.bar]; if (st.bar !== ctx.bar) { const d = Math.floor(c.t / 864e5); if (d !== st.day) { st.day = d; st.pv = 0; st.v = 0; } st.pv += (c.h + c.l + c.c) / 3 * c.v; st.v += c.v; st.bar = ctx.bar; } return st.v ? st.pv / st.v : null; };
 CONST_DYN['ta.obv'] = (ctx, st) => { if (st.bar !== ctx.bar) { const c = ctx.candles[ctx.bar], p = ctx.candles[ctx.bar - 1], ch = p ? c.c - p.c : 0; st.o = (st.o || 0) + (ch > 0 ? c.v : ch < 0 ? -c.v : 0); st.bar = ctx.bar; } return st.o; };
-def('ta.vwap', ['source'], (a, c) => { const ctx = c.ctx, k = ctx.candles[ctx.bar], s = c.st; if (s.bar !== ctx.bar) { const d = Math.floor(k.t / 864e5); if (d !== s.day) { s.day = d; s.pv = 0; s.v = 0; } if (!isna(a[0])) { s.pv += a[0] * k.v; s.v += k.v; } s.bar = ctx.bar; } return s.v ? s.pv / s.v : null; });
+def('ta.vwap', ['source', 'anchor', 'stdev_mult'], (a, c) => { // ta.vwap(src) · ta.vwap(src, anchor) · ta.vwap(src, anchor, mult) → [vwap, banda superior, banda inferior]
+  const ctx = c.ctx, k = ctx.candles[ctx.bar], s = c.st;
+  if (s.bar !== ctx.bar) {
+    const reset = a[1] === undefined ? Math.floor(k.t / 864e5) !== s.day : !!a[1] && !isna(a[1]); s.day = Math.floor(k.t / 864e5);
+    if (reset || s.v === undefined) { s.pv = 0; s.v = 0; s.pv2 = 0; }
+    if (!isna(a[0])) { s.pv += a[0] * k.v; s.v += k.v; s.pv2 += a[0] * a[0] * k.v; } s.bar = ctx.bar;
+  }
+  const vw = s.v ? s.pv / s.v : null;
+  if (a[2] === undefined) return vw;
+  const sd = s.v ? Math.sqrt(Math.max(0, s.pv2 / s.v - vw * vw)) : null, m = isna(a[2]) ? 1 : a[2];
+  return new Tup([vw, vw === null ? null : vw + sd * m, vw === null ? null : vw - sd * m]);
+});
 
 /* Generales */
 def('na', ['x'], a => isna(a[0]));
@@ -1037,12 +1053,36 @@ def('time', ['timeframe', 'session', 'timezone'], (a, c) => {
   return ps;
 });
 
+/* hour(time, timezone), minute(), dayofmonth()… como funciones (además de las variables de la vela actual) */
+const tzFull = new Map();
+function zoned(t, tz) { // {y, mo, d, h, mi, s, dow} de un instante en una zona horaria («UTC+3», «GMT-5», «America/New_York»…)
+  if (isna(t)) return null; tz = tz === undefined || isna(tz) || tz === '' ? 'UTC' : String(tz);
+  const m = /^(?:UTC|GMT)([+-])(\d{1,2})(?::?(\d{2}))?$/i.exec(tz); let off = /^(UTC|GMT|Etc\/UTC|Etc\/GMT|Z)$/i.test(tz) ? 0 : m ? (m[1] === '-' ? -1 : 1) * (+m[2] * 60 + +(m[3] || 0)) : null;
+  if (off === null) { let f = tzFull.get(tz); if (f === undefined) { try { f = new Intl.DateTimeFormat('en-US', {timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric'}); } catch { f = null; } tzFull.set(tz, f); }
+    if (f) { const o = {}; for (const q of f.formatToParts(new Date(t))) o[q.type] = q.value; off = Math.round((Date.UTC(+o.year, +o.month - 1, +o.day, +o.hour % 24, +o.minute, +o.second) - Math.floor(t / 1000) * 1000) / 6e4); } else off = 0; }
+  const d = new Date(t + off * 6e4); return {y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours(), mi: d.getUTCMinutes(), s: d.getUTCSeconds(), dow: d.getUTCDay() + 1, ms: d.getTime()};
+}
+for (const [nm, f] of [['hour', z => z.h], ['minute', z => z.mi], ['second', z => z.s], ['dayofmonth', z => z.d], ['dayofweek', z => z.dow], ['month', z => z.mo], ['year', z => z.y], ['weekofyear', z => { const s0 = Date.UTC(z.y, 0, 1); return Math.floor((z.ms - s0) / 864e5 / 7) + 1; }]])
+  def(nm, ['time', 'timezone'], (a, c) => { const t = a[0] === undefined ? c.ctx.candles[c.ctx.bar].t : a[0], z = zoned(t, a[1]); return z ? f(z) : null; });
+def('time_close', ['timeframe', 'session', 'timezone'], (a, c) => {
+  const ctx = c.ctx, t = ctx.candles[ctx.bar].t, tf = isna(a[0]) || a[0] === undefined || a[0] === '' ? tfPeriod(ctx.interval) : a[0], ps = periodStart(t, tf); if (ps === null) return null;
+  if (!isna(a[1]) && a[1] !== undefined && a[1] !== '' && !inSession(t, a[1], a[2])) return null;
+  const m = /^(\d*)([A-Za-z]?)$/.exec(String(tf).trim()), k = m && m[1] !== '' ? +m[1] : 1, u = m ? m[2] : '';
+  if (u === '' || u === 'm') return ps + k * 6e4; if (u === 'h' || u === 'H') return ps + k * 36e5; if (u === 'D' || u === 'd') return ps + k * 864e5; if (u === 'W' || u === 'w') return ps + k * 6048e5;
+  if (u === 'M') { const d = new Date(ps); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + k, 1); } return ps + ctx.ms;
+});
+/* request.security_lower_tf: aproximación con la vela del gráfico (un solo elemento en el array) */
+def('request.security_lower_tf', ['symbol', 'timeframe', 'expression', 'ignore_invalid_symbol', 'currency', 'ignore_invalid_timeframe', 'calc_bars_count'], (a, c) => {
+  warn(c.ctx, c.line, 'request.security_lower_tf() usa la vela del gráfico (aproximación: no hay velas menores aquí)', 'sltf', 'fix'); return isna(a[2]) ? [] : [a[2]];
+}, {lenient: true});
+
+def('str.match', ['source', 'regex'], a => { if (isna(a[0]) || isna(a[1])) return ''; try { const m = new RegExp(String(a[1])).exec(String(a[0])); return m ? m[0] : ''; } catch { return ''; } });
 /* timeframe.* y request.* */
 def('timeframe.in_seconds', ['timeframe'], (a, c) => { const m = TF_MIN[a[0] === undefined || a[0] === '' ? c.ctx.interval : a[0]] || (isNaN(+a[0]) ? null : +a[0]); return m ? m * 60 : null; });
 def('timeframe.change', ['timeframe'], (a, c) => {
   const ctx = c.ctx, t = ctx.candles[ctx.bar].t, p = ctx.bar > 0 ? ctx.candles[ctx.bar - 1].t : null, tf = String(a[0]);
   if (p === null) return true;
-  const key = (x) => { const d = new Date(x); if (/^(1?D|1d)$/i.test(tf)) return Math.floor(x / 864e5); if (/^(1?W|1w)$/i.test(tf)) return Math.floor((x / 864e5 + 3) / 7); if (/^(1?M|1M)$/.test(tf)) return d.getUTCFullYear() * 12 + d.getUTCMonth(); const m = /^(\d+)$/.test(tf) ? +tf : TF_MIN[tf]; return m ? Math.floor(x / (m * 60000)) : null; };
+  const key = (x) => { const d = new Date(x); if (/^(1?D|1d)$/i.test(tf)) return Math.floor(x / 864e5); if (/^(1?W|1w)$/i.test(tf)) return Math.floor((x / 864e5 + 3) / 7); if (/^(1?M|1M)$/.test(tf)) return d.getUTCFullYear() * 12 + d.getUTCMonth(); const mo = /^(\d+)M$/.exec(tf); if (mo) return Math.floor((d.getUTCFullYear() * 12 + d.getUTCMonth()) / +mo[1]); const dd = /^(\d+)D$/i.exec(tf); if (dd) return Math.floor(x / 864e5 / +dd[1]); const ww = /^(\d+)W$/i.exec(tf); if (ww) return Math.floor((x / 864e5 + 3) / 7 / +ww[1]); const hh = /^(\d+)[hH]$/.exec(tf); const m = hh ? +hh[1] * 60 : /^(\d+)$/.test(tf) ? +tf : TF_MIN[tf]; return m ? Math.floor(x / (m * 60000)) : null; };
   const k1 = key(t), k0 = key(p); if (k1 === null) { warn(ctx, c.line, `timeframe.change('${tf}') no soportado`, 'tfc', 'unsupported'); ctx.incomplete = true; return null; }
   return k1 !== k0;
 });
@@ -1557,14 +1597,16 @@ const freshOut = name => ({meta: {kind: 'indicator', title: name || 'Script', ov
    sobre las velas pedidas (sin dibujar) y se anota el valor de cada llamada a request.security en cada vela; luego se
    asigna a las velas del gráfico con las reglas de lookahead de TradingView. Las velas las aporta la aplicación (opts.sec). */
 const TFMS = Object.assign(Object.create(null), {'1m': 6e4, '3m': 18e4, '5m': 3e5, '15m': 9e5, '30m': 18e5, '1h': 36e5, '2h': 72e5, '4h': 144e5, '6h': 216e5, '8h': 288e5, '12h': 432e5, '1d': 864e5, '3d': 2592e5, '1w': 6048e5, '1M': 2592e6, '3M': 7776e6, '12M': 31536e6});
+const tfms = k => TFMS[k] || (/^x\d+$/.test(k) ? +k.slice(1) * 6e4 : 0);
 const MIN2KEY = {1: '1m', 3: '3m', 5: '5m', 15: '15m', 30: '30m', 60: '1h', 120: '2h', 240: '4h', 360: '6h', 480: '8h', 720: '12h'};
 function tfKey(tf, ctx) {
   if (isna(tf) || tf === '') return ctx.interval;
   const m = /^(\d*)([A-Za-z]?)$/.exec(String(tf).trim()); if (!m) return null;
   const k = m[1] === '' ? 1 : +m[1], u = m[2];
-  if (u === '' || u === 'm') return MIN2KEY[k] || null;
-  if (u === 'h' || u === 'H') return MIN2KEY[k * 60] || null;
-  if (u === 'D' || u === 'd') return k === 1 ? '1d' : k === 3 ? '3d' : null;
+  const syn = mm => mm >= 1 && mm <= 525600 && Number.isInteger(mm) ? 'x' + mm : null; // temporalidad que Binance no tiene (3 h, 2 D, 45 min…): se arma juntando velas menores
+  if (u === '' || u === 'm') return MIN2KEY[k] || syn(k);
+  if (u === 'h' || u === 'H') return MIN2KEY[k * 60] || syn(k * 60);
+  if (u === 'D' || u === 'd') return k === 1 ? '1d' : k === 3 ? '3d' : syn(k * 1440);
   if (u === 'W' || u === 'w') return k === 1 ? '1w' : null;
   if (u === 'M') return k === 1 ? '1M' : k === 3 ? '3M' : k === 12 ? '12M' : null;
   return null;
@@ -1591,7 +1633,7 @@ function evSecurity(n, env) {
   const j = run.j[ctx.bar]; if (j < 0) return null;
   let v;
   if (look === 'lookahead_on' || ctx.bar === ctx.n - 1) v = arr[j];
-  else { const hEnd = j + 1 < data.length ? data[j + 1].t : data[j].t + TFMS[tfk], last = ctx.candles[ctx.bar].t + ctx.ms >= hEnd; v = last ? arr[j] : (j > 0 ? arr[j - 1] : null); }
+  else { const hEnd = j + 1 < data.length ? data[j + 1].t : data[j].t + tfms(tfk), last = ctx.candles[ctx.bar].t + ctx.ms >= hEnd; v = last ? arr[j] : (j > 0 ? arr[j - 1] : null); }
   if (v === undefined) return null; return v instanceof Tup ? new Tup(v.a.slice()) : v;
 }
 /* Recorte para corridas secundarias: solo se ejecutan las sentencias de las que dependen los argumentos de request.security
@@ -1615,7 +1657,7 @@ function sliceForSecurity(ast) {
 }
 function runSecondary(parent, sym, tfk, key, data) {
   const c2 = {candles: data, n: data.length, bar: 0, steps: 0, deadline: parent.deadline, warnings: [], wkeys: new Set(), fns: parent.fns, types: parent.types, enums: parent.enums, methods: parent.methods, frames: new Map(), frameList: [], depth: 0, ctrl: null,
-    legacy: parent.legacy, incomplete: false, interval: tfk, symbol: sym, mintick: parent.mintick, ms: TFMS[tfk], opts: {inputs: parent.opts.inputs}, pal: new Map(), out: freshOut(), secondary: true, rec: new Map(), secRuns: new Map(), ast: parent.ast};
+    legacy: parent.legacy, incomplete: false, interval: tfk, symbol: sym, mintick: parent.mintick, ms: tfms(tfk), opts: {inputs: parent.opts.inputs}, pal: new Map(), out: freshOut(), secondary: true, rec: new Map(), secRuns: new Map(), ast: parent.ast};
   loopProgram(sliceForSecurity(parent.ast), c2);
   const j = new Int32Array(parent.n); let k = -1;
   for (let i = 0; i < parent.n; i++) { const t = parent.candles[i].t; while (k + 1 < data.length && data[k + 1].t <= t) k++; j[i] = k; }

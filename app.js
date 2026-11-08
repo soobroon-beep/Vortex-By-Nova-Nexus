@@ -1353,15 +1353,73 @@ function calcNova() {
 }
 const NN_KEYS = indicatorMeta.map(m => m[0]).filter(k => k.startsWith('nn')), novaOn = () => NN_KEYS.some(k => state.indicators[k]);
 let indTab = 'std';
-const indTabs = () => `<div class="ind-tabs"><button data-indtab="std" class="${indTab === 'std' ? 'active' : ''}">Comunes</button><button data-indtab="mine" class="${indTab === 'mine' ? 'active' : ''}">Mis indicadores</button></div>`;
+const indTabs = () => `<div class="ind-tabs"><button data-indtab="std" class="${indTab === 'std' ? 'active' : ''}">Gratuitos</button><button data-indtab="mine" class="${indTab === 'mine' ? 'active' : ''}">Mis indicadores</button></div>`;
 const LEGACY_IND = ['ema50', 'sma200', 'wma20', 'cross']; // la lista muestra una sola EMA (con período editable); estos solo aparecen si ya los tenías encendidos
-const indicatorRows = () => { document.body.dataset.indtab = indTab; return indTabs() + (indTab === 'std'
+const indicatorRows = () => indBrowser();
+const indicatorRowsOld = () => { document.body.dataset.indtab = indTab; return indTabs() + (indTab === 'std'
   ? indicatorMeta.filter(m => !m[0].startsWith('nn') && !(LEGACY_IND.includes(m[0]) && !state.indicators[m[0]])).map(([key, title, desc, col]) =>
     `<div class="setting-row ind-row">${indArt(key, col)}<div><b>${title}</b><small>${desc}</small></div><div class="script-btns">${STD_SCHEMA[key] ? `<button class="small-button" data-std-set="${key}" aria-label="Ajustes de ${title}">${I('gear', 16)}</button>` : ''}<button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div></div>`).join('')
   : catalogCards() + pineSection()); };
-document.addEventListener('change', e => { const s = e.target.closest('[data-pine-pane]'); if (!s) return; const p = state.pine.find(x => x.sid === s.dataset.pinePane); if (!p) return; if (s.value) p.pane = s.value; else delete p.pane; save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); scheduleRender(); });
-document.addEventListener('click', e => { const t = e.target.closest('[data-indtab]'); if (!t) return; indTab = t.dataset.indtab; renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); });
-function renderIndicators() { $('#indicatorList').innerHTML = indicatorRows(); }
+document.addEventListener('change', e => { const s = e.target.closest('[data-pine-pane]'); if (!s) return; const p = state.pine.find(x => x.sid === s.dataset.pinePane); if (!p) return; if (s.value) p.pane = s.value; else delete p.pane; save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh(); scheduleRender(); });
+document.addEventListener('click', e => { const t = e.target.closest('[data-indtab]'); if (!t) return; indTab = t.dataset.indtab; renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh(); });
+function renderIndicators() { const l = $('#indicatorList'); if (l) { const sc = l.querySelector('.ib-list'), y = sc ? sc.scrollTop : 0; l.innerHTML = indicatorRows(); const n = l.querySelector('.ib-list'); if (n) n.scrollTop = y; } }
+
+/* ───────── Explorador de indicadores (por categorías, con buscador) ───────── */
+const IB_CATS = [['active', 'En el gráfico', '<path d="M4 19V5M4 19h16"/><path d="m7 15 4-4 3 3 5-6"/>'], ['free', 'Gratuitos', '<path d="M12 3 4 7v5c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V7z"/><path d="m9 12 2 2 4-4"/>'],
+  ['trend', 'Tendencia', '<path d="M3 17 9 11l4 4 8-8"/><path d="M15 7h6v6"/>'], ['osc', 'Osciladores', '<path d="M2 12c2.5-6 5-6 7.5 0s5 6 7.5 0 3-4 5-2"/>'], ['volume', 'Volumen', '<path d="M5 20v-6M10 20V8M15 20v-9M20 20V4"/>'],
+  ['volat', 'Volatilidad y canales', '<path d="M3 8c4-3 8 3 18-2M3 16c4-3 8 3 18-2"/>'], ['struct', 'Estructura y patrones', '<path d="M3 18 9 6l5 8 3-5 4 9"/>'],
+  ['nova', 'Nova Nexus', '<path d="M12 2 14.6 9.4 22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6z"/>'], ['mine', 'Mis indicadores', '<path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6"/>']];
+const STD_CAT = {ema20: 'trend', ema50: 'trend', sma200: 'trend', wma20: 'trend', vwap: 'trend', supertrend: 'trend', cross: 'trend', ichimoku: 'trend', psar: 'trend',
+  rsi: 'osc', macd: 'osc', stoch: 'osc', stochrsi: 'osc', cci: 'osc', willr: 'osc', roc: 'osc', ao: 'osc', volume: 'volume', obv: 'volume', mfi: 'volume', cmf: 'volume', vpvr: 'volume',
+  bollinger: 'volat', donchian: 'volat', keltner: 'volat', atr: 'volat', adx: 'volat', dchan: 'volat', patterns: 'struct', liqmap: 'struct'};
+const FREE_GROUPS = ['trend', 'osc', 'volume', 'volat', 'struct'];
+let ibCat = 'free', ibQ = '';
+const ibNorm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const ibIc = d => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+function ibItems() {
+  const out = [];
+  for (const [key, title, desc, col] of indicatorMeta) { if (key.startsWith('nn') || (LEGACY_IND.includes(key) && !state.indicators[key])) continue; out.push({kind: 'std', key, title, desc, col, cat: STD_CAT[key] || 'trend', on: !!state.indicators[key], premium: key === 'liqmap'}); }
+  for (const f of window.CCTFree || []) { const p = state.pine.find(x => x.sid === 'free:' + f.id); out.push({kind: 'free', key: f.id, sid: 'free:' + f.id, title: f.name, desc: f.desc, col: f.col, art: f.art, cat: f.cat, on: !!(p && p.on), p}); }
+  for (const c of window.CCTCatalog || []) { const p = catPineOf(c); out.push({kind: 'cat', c, title: c.name, desc: c.desc, cat: 'nova', on: !!(p && p.on)}); }
+  for (const x of userScripts()) { const p = state.pine.find(q => q.sid === x.id); out.push({kind: 'mine', x, title: x.name, desc: '', cat: 'mine', on: !!(p && p.on), p}); }
+  return out;
+}
+function ibCard(it) {
+  const tog = (attr, on, t) => `<button class="toggle ${on ? 'on' : ''}" ${attr} aria-label="${esc(t)}" aria-pressed="${!!on}"></button>`;
+  if (it.kind === 'std') return `<div class="ib-card ${it.on ? 'on' : ''}">${indArt(it.key, it.col)}<div class="ib-t"><b>${esc(it.title)}${it.premium ? ' <span class="prem-tag"><svg viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>PRO</span>' : ''}</b><small>${esc(it.desc)}</small></div><div class="ib-act">${STD_SCHEMA[it.key] ? `<button class="ib-ib" data-std-set="${it.key}" aria-label="Ajustes de ${esc(it.title)}">${I('gear', 15)}</button>` : ''}${tog(`data-ind="${it.key}"`, it.on, it.title)}</div></div>`;
+  if (it.kind === 'free') return `<div class="ib-card ${it.on ? 'on' : ''}">${indArt(it.art, it.col)}<div class="ib-t"><b>${esc(it.title)}</b><small>${esc(it.desc)}</small></div><div class="ib-act">${it.p ? `<button class="ib-ib" data-pine-set="${it.sid}" aria-label="Ajustes de ${esc(it.title)}">${I('gear', 15)}</button>` : ''}${tog(`data-free="${it.key}"`, it.on, it.title)}</div></div>`;
+  if (it.kind === 'cat') return catalogCards([it.c]);
+  const x = it.x, p = it.p, r = p && pineRes[p.sid]; let st = `${x.lines} líneas · ${Math.max(1, Math.round(x.size / 1024))} KB`;
+  if (p && p.on && r && !r.ok) st = `<span class="pine-err">Error${r.error.line ? ' · línea ' + r.error.line : ''}: ${esc(r.error.msg)}</span>`;
+  else if (p && p.on && r && r.ok) { const u = r.warnings.filter(w => w.level === 'unsupported').length; st += u ? ` · <span class="pine-warn">${u} parte(s) sin soporte</span>` : ' · <span class="ib-okt">funcionando</span>'; }
+  else if (p && p.on && !r) st += ' · calculando…';
+  const bad = (p && r && (!r.ok || r.warnings.some(w => w.level === 'unsupported'))) || scriptPrev(x) === 'err';
+  return `<div class="ib-card mine ${it.on ? 'on' : ''}"><div class="ib-thumb">${prevImg(x)}</div><div class="ib-t"><b>${esc(x.name)}</b><small>${st}</small>
+    <div class="ib-btns">${p ? `<button class="ib-pill" data-pine-set="${x.id}">${I('gear', 13)} Ajustes</button><button class="ib-pill" data-pine-del="${x.id}">Quitar del gráfico</button>` : `<button class="ib-pill main" data-pine-add="${x.id}">＋ Al gráfico</button>`}${bad ? `<button class="ib-pill warn" data-pine-conv="${x.id}">${I('wrench', 13)} Convertir de nuevo</button>` : ''}<button class="ib-pill" data-ib-view="${x.id}">Código</button><button class="ib-pill del" data-ib-del="${x.id}" aria-label="Eliminar ${esc(x.name)}">${I('trash', 13)}</button></div></div>${p ? `<div class="ib-act">${tog(`data-pine-tog="${x.id}"`, p.on, x.name)}</div>` : ''}</div>`;
+}
+function ibList() {
+  const all = ibItems(), q = ibNorm(ibQ).trim(), sec = (t, a) => a.length ? `<div class="ib-sec">${t}</div>${a.map(ibCard).join('')}` : '';
+  if (q) { const hit = all.filter(it => ibNorm(it.title + ' ' + it.desc).includes(q)); return hit.length ? `<div class="ib-sec">${hit.length} resultado${hit.length === 1 ? '' : 's'}</div>` + hit.map(ibCard).join('') : `<div class="ib-empty">Nada coincide con «${esc(ibQ)}».<br>¿Lo tienes en TradingView? Importa su código Pine y se convierte aquí.</div>`; }
+  if (ibCat === 'active') { const on = all.filter(it => it.on); return on.length ? on.map(ibCard).join('') : '<div class="ib-empty">No tienes indicadores en el gráfico.<br>Elige uno en «Gratuitos» o en «Mis indicadores».</div>'; }
+  if (ibCat === 'free') return FREE_GROUPS.map(g => sec(IB_CATS.find(c => c[0] === g)[1], all.filter(it => (it.kind === 'std' || it.kind === 'free') && it.cat === g))).join('');
+  if (ibCat === 'mine') { const m = all.filter(it => it.kind === 'mine'); return `<div class="ib-import"><div><b>Importa tus indicadores de TradingView</b><small>Pega el código Pine o sube el archivo: se convierte, se prueba en tus velas y se corrige solo si hace falta. Queda guardado en tu cuenta con su imagen.</small></div><div class="ib-btns"><button class="ib-pill main" data-pine-new="1">${I('clipboard', 13)} Pegar código</button><button class="ib-pill" data-ib-file="1">Subir archivo .pine</button></div></div>` + (m.length ? m.map(ibCard).join('') : '<div class="ib-empty">Aún no tienes scripts propios.</div>'); }
+  return all.filter(it => it.cat === ibCat).map(ibCard).join('');
+}
+function indBrowser() {
+  const all = ibItems(), n = c => c === 'active' ? all.filter(i => i.on).length : c === 'free' ? all.filter(i => i.kind === 'std' || i.kind === 'free').length : all.filter(i => i.cat === c).length;
+  return `<div class="ib"><div class="ib-top"><label class="ib-search">${ibIc('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>')}<input id="ibQ" type="search" placeholder="Buscar indicador…" autocomplete="off" value="${esc(ibQ)}"></label><button class="ib-new" data-pine-new="1">${ibIc('<path d="M12 5v14M5 12h14"/>')}<span>Importar Pine</span></button></div>
+    <div class="ib-main"><nav class="ib-cats" aria-label="Categorías">${IB_CATS.map(([k, t, ic]) => `<button data-ibcat="${k}" class="${ibCat === k && !ibQ ? 'on' : ''}${k === 'trend' || k === 'osc' || k === 'volume' || k === 'volat' || k === 'struct' ? ' sub' : ''}">${ibIc(ic)}<span>${t}</span><em>${n(k)}</em></button>`).join('')}</nav><div class="ib-list">${ibList()}</div></div></div>`;
+}
+document.addEventListener('input', e => { if (e.target.id !== 'ibQ') return; ibQ = e.target.value; const l = e.target.closest('.ib').querySelector('.ib-list'); if (l) { l.innerHTML = ibList(); l.scrollTop = 0; } e.target.closest('.ib').querySelectorAll('[data-ibcat]').forEach(b => b.classList.toggle('on', !ibQ && b.dataset.ibcat === ibCat)); });
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-ibcat]'); if (c) { ibCat = c.dataset.ibcat; ibQ = ''; const box = c.closest('.ib'); const qi = box.querySelector('#ibQ'); if (qi) qi.value = ''; box.querySelectorAll('[data-ibcat]').forEach(b => b.classList.toggle('on', b === c)); const l = box.querySelector('.ib-list'); l.innerHTML = ibList(); l.scrollTop = 0; return; }
+  const f = e.target.closest('[data-free]'); if (f) { const sid = 'free:' + f.dataset.free, p = state.pine.find(x => x.sid === sid); if (p) p.on = !p.on; else { if (activePine().length >= PINE_MAX) { toast(`Máximo ${PINE_MAX} scripts activos`); return; } state.pine.push({sid, on: true, inputs: {}}); } save(); countIndicators(); pineKey = ''; schedulePine(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh(); scheduleRender(); return; }
+  const cv = e.target.closest('[data-pine-conv]'); if (cv) { const x = scripts.find(y => y.id === cv.dataset.pineConv); if (x && window.CCTConvert) { closeSheet(); if (!candles.length) { toast('Abre un gráfico y espera a que carguen las velas'); return; } CCTConvert.open(x.code, x.name, {replaceId: x.id}); } return; }
+  const v = e.target.closest('[data-ib-view]'); if (v) { viewScriptId = v.dataset.ibView; openSheet('script'); return; }
+  const fl = e.target.closest('[data-ib-file]'); if (fl) { $('#scriptFile').click(); return; }
+  const d = e.target.closest('[data-ib-del]'); if (d) { const x = scripts.find(y => y.id === d.dataset.ibDel); if (x && confirm(`¿Eliminar «${x.name}» de tus indicadores?`)) { scripts = scripts.filter(y => y.id !== x.id); state.pine = state.pine.filter(q => q.sid !== x.id); delete pineRes[x.id]; save(); saveScripts(); renderScripts(); countIndicators(); scheduleRender(); ibRefresh(); } }
+});
+function ibRefresh() { const sl = $('#sheetList'); if (sheetMode !== 'indicators' || !sl || !$('#sheet').classList.contains('open')) return; const l = sl.querySelector('.ib-list'), y = l ? l.scrollTop : 0; sl.innerHTML = indBrowser(); const n = sl.querySelector('.ib-list'); if (n) n.scrollTop = y; }
 function syncLiqBtn() { const b = $('#liqBtn'); if (!b) return; const on = !!state.indicators.liqmap; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }
 { const b = $('#liqBtn'); if (b) b.addEventListener('click', () => { state.indicators.liqmap = !state.indicators.liqmap; if (state.stdHide) delete state.stdHide.liqmap; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast(state.indicators.liqmap ? 'Heatmap de liquidaciones activado (estimado)' : 'Heatmap de liquidaciones apagado'); }); }
 function countIndicators() { syncLiqBtn(); const n = Object.entries(state.indicators).filter(([k, v]) => v && !k.startsWith('nn')).length + (novaOn() ? 1 : 0); $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
@@ -1376,7 +1434,7 @@ document.addEventListener('click', e => {
 /* ───────── Hojas inferiores (activo / añadir / dibujar / indicadores) ───────── */
 function openSheet(mode = 'select') {
   if (mode === 'select' || mode === 'add') { sheetMode = mode; openSym(mode); return; }
-  sheetMode = mode;
+  sheetMode = mode; $('#sheet').dataset.mode = mode;
   $('#sheetTitle').textContent = {add: 'Añadir a seguimiento', tools: 'Herramientas de dibujo', indicators: 'Indicadores', select: 'Seleccionar criptomoneda', script: 'Código del script', paste: 'Pegar script de Pine', pine: 'Convertir script de Pine', pineSet: 'Script de Pine', novaSet: 'Nova Nexus'}[mode];
   $('#sheetSearch').style.display = ['tools', 'indicators', 'script', 'paste', 'pine', 'pineSet', 'novaSet'].includes(mode) ? 'none' : 'block';
   $('#sheetSearch').value = '';
@@ -1557,7 +1615,7 @@ function renderSheet() {
   }
   if (sheetMode === 'paste') {
     list.innerHTML = `<input id="pasteName" class="paste-name" placeholder="Nombre (opcional)" autocomplete="off"><textarea id="pasteCode" placeholder="Pega aquí tu código Pine…" spellcheck="false"></textarea><button class="primary" id="pasteSave">Guardar script</button>`;
-    $('#pasteSave').onclick = () => { const code = $('#pasteCode').value; if (addScript(code, $('#pasteName').value.trim() || 'Script pegado')) closeSheet(); };
+    $('#pasteSave').onclick = () => { const code = $('#pasteCode').value; if (!code.trim()) { toast('Pega primero el código'); return; } closeSheet(); convertPine(code, $('#pasteName').value.trim() || 'Script pegado'); };
     return;
   }
   if (sheetMode === 'tools') {
@@ -4128,33 +4186,52 @@ document.addEventListener('keydown', e => {
 
 
 /* ───────── Mis scripts (Pine): guardado local + cuenta ───────── */
-const SCRIPTS_KEY = 'cct_scripts_v1', SCRIPTS_MAX = 600 * 1024;
+const SCRIPTS_KEY = 'cct_scripts_v1', SCRIPTS_MAX = 3 * 1024 * 1024, SCRIPTS_DOC_MAX = 990000;
+/* Los scripts se guardan comprimidos (gzip + base64, prefijo «gz1:») cuando son grandes: el código Pine se reduce 5-8 veces y así caben muchos más en tu cuenta (1 documento de máx. 1 MB) */
+async function packStr(raw) {
+  if (raw.length < 200000 || typeof CompressionStream === 'undefined') return raw;
+  try { const buf = await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer(), u = new Uint8Array(buf); let b = ''; for (let i = 0; i < u.length; i += 0x8000) b += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return 'gz1:' + btoa(b); } catch { return raw; }
+}
+async function unpackStr(str) {
+  if (typeof str !== 'string' || !str.startsWith('gz1:')) return str;
+  const bin = atob(str.slice(4)), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+}
 const scriptsKey = () => uid ? `${SCRIPTS_KEY}_${uid}` : SCRIPTS_KEY;
-const readScripts = () => { const o = readLocal(scriptsKey()); return Array.isArray(o.items) ? o.items : []; };
-const catalogScripts = () => (window.CCTCatalog || []).map(c => ({id: 'cat:' + c.id, name: c.name, code: c.code, size: 0, lines: c.code.split('\n').length, addedAt: 0, builtin: true}));
+const readScripts = () => { const o = readLocal(scriptsKey()); if (typeof o.gz === 'string') { unpackStr(o.gz).then(raw => { try { const arr = JSON.parse(raw); if (Array.isArray(arr) && !scripts.some(x => !x.builtin)) { scripts = withCatalog(arr); renderScripts(); } } catch {} }).catch(() => {}); return []; } return Array.isArray(o.items) ? o.items : []; };
+const catalogScripts = () => (window.CCTCatalog || []).map(c => ({id: 'cat:' + c.id, name: c.name, code: c.code, size: 0, lines: c.code.split('\n').length, addedAt: 0, builtin: true}))
+  .concat((window.CCTFree || []).map(f => ({id: 'free:' + f.id, name: f.name, code: f.code, size: 0, lines: f.code.split('\n').length, addedAt: 0, builtin: true, free: true})));
 const withCatalog = arr => catalogScripts().concat((Array.isArray(arr) ? arr : []).filter(x => x && !x.builtin && !String(x.id).startsWith('cat:')));
 const userScripts = () => scripts.filter(x => !x.builtin && !x.temp); // los de prueba del Laboratorio IA (temp) no se guardan
 let scripts = withCatalog(readScripts()), viewScriptId = null, scriptsRemote = '', scriptsTimer = 0;
 const scriptsBytes = arr => arr.reduce((a, x) => a + (x.size || 0), 0);
-function saveScripts() {
-  try { localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); } catch { toast('No se pudo guardar en este dispositivo (almacenamiento lleno)'); }
-  pushScripts();
+function saveScripts() { saveScriptsLocal(); pushScripts(); }
+function saveScriptsLocal() {
+  const raw = JSON.stringify(userScripts());
+  try { localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); }
+  catch { packStr(raw).then(p => { try { localStorage.setItem(scriptsKey(), JSON.stringify(p.startsWith('gz1:') ? {gz: p} : {items: userScripts()})); } catch { toast('No se pudo guardar en este dispositivo (almacenamiento lleno)'); } }); }
 }
 function pushScripts() {
   if (!uid || !db || !fbUser) return;
   clearTimeout(scriptsTimer);
   scriptsTimer = setTimeout(async () => {
     const str = JSON.stringify(userScripts()); if (str === scriptsRemote) return; scriptsRemote = str;
-    try { await db.doc(`users/${uid}/data/scripts`).set({items: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); }
+    const packed = await packStr(str); if (packed.length > SCRIPTS_DOC_MAX) { scriptsRemote = ''; toast('Tus scripts ya no caben en la cuenta: borra alguno que no uses'); return; }
+    try { await db.doc(`users/${uid}/data/scripts`).set({items: packed, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); }
     catch { scriptsRemote = ''; toast('No se pudieron guardar los scripts en tu cuenta'); }
   }, 1200);
 }
-function addScript(code, fallbackName) {
+function convertPine(code, name) { // convertidor profesional (pasos + corrección con IA); sin él, se guarda directo
+  if (window.CCTConvert) { if (!candles.length) { toast('Abre un gráfico y espera a que carguen las velas'); return; } window.CCTConvert.open(code, name); }
+  else addScript(code, name);
+}
+window.CCT_toast = t => toast(t);
+function addScript(code, fallbackName, quiet) {
   code = String(code || '').replace(/\r\n?/g, '\n');
   if (!code.trim()) { toast('El script está vacío'); return false; }
-  const same = scripts.find(x => x.code === code); if (same) { toast('Ese script ya estaba guardado'); return same.id; }
+  const same = scripts.find(x => x.code === code); if (same) { if (!quiet) toast('Ese script ya estaba guardado'); return same.id; }
   const size = new Blob([code]).size;
-  if (scriptsBytes(scripts) + size > SCRIPTS_MAX) { toast('Se pasa del límite de 600 KB de scripts por cuenta'); return false; }
+  if (scriptsBytes(userScripts()) + size > SCRIPTS_MAX) { toast('Se pasa del límite de 3 MB de scripts por cuenta: borra alguno que no uses'); return false; }
   const m = code.match(/indicator\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/) || code.match(/strategy\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/);
   const sid = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   scripts.push({id: sid, name: (m ? m[1] : fallbackName || 'Script').slice(0, 80), code, size, lines: code.split('\n').length, addedAt: Date.now()});
@@ -4262,6 +4339,12 @@ async function pineSecCandles(sym, itv) {
   const key = sym + '|' + itv, hit = pineSecCache.get(key); if (hit && Date.now() - hit.at < 30000) return hit.data;
   let data = [];
   try {
+    if (/^x\d+$/.test(itv)) { // temporalidad sin velas propias en Binance (3 h, 2 D, 45 min…): se juntan velas de la mayor temporalidad que la divide
+      const M = +itv.slice(1), base = [[10080, '1w'], [4320, '3d'], [1440, '1d'], [720, '12h'], [480, '8h'], [360, '6h'], [240, '4h'], [120, '2h'], [60, '1h'], [30, '30m'], [15, '15m'], [5, '5m'], [3, '3m'], [1, '1m']].find(([b]) => b <= M && M % b === 0);
+      const raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${base[1]}&limit=1000`), out = [], span = M * 6e4;
+      for (const d of raw) { const t = Math.floor(d[0] / span) * span, last = out[out.length - 1], c = {t, o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}; if (last && last.t === t) { last.h = Math.max(last.h, c.h); last.l = Math.min(last.l, c.l); last.c = c.c; last.v += c.v; } else out.push(c); }
+      data = out; pineSecCache.set(key, {at: Date.now(), data}); return data;
+    }
     const agg = itv === '3M' ? 'q' : itv === '12M' ? 'y' : null, raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${agg ? '1M' : itv}&limit=1000`);
     let cs = raw.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}));
     if (agg) { const out = [], bucket = t => { const d = new Date(t); return agg === 'y' ? d.getUTCFullYear() : d.getUTCFullYear() * 4 + Math.floor(d.getUTCMonth() / 3); }; for (const c of cs) { const b = bucket(c.t), last = out[out.length - 1]; if (last && last.b === b) { last.h = Math.max(last.h, c.h); last.l = Math.min(last.l, c.l); last.c = c.c; last.v += c.v; } else out.push({b, t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v}); } cs = out.map(({b, ...r}) => r); }
@@ -4287,7 +4370,7 @@ async function pineRunOne(p) {
   pineBusy[p.sid] = false; res._key = key; pineRes[p.sid] = res;
   if (!res.ok && /tard/.test((res.error && res.error.msg) || '') && !pineRetried.has(p.sid)) { pineRetried.add(p.sid); setTimeout(() => { pineKey = ''; schedulePine(); }, 3000); } else if (res.ok) pineRetried.delete(p.sid); if (res.stats) pineLastMs = Math.max(pineLastMs * .5, res.stats.ms); // los scripts pesados se recalculan con menos frecuencia
   if (pineDirty[p.sid]) { pineDirty[p.sid] = false; pineKey = ''; schedulePine(); }
-  if ((sheetMode === 'indicators' && $('#sheet').classList.contains('open'))) { renderIndicators(); if (sheetMode === 'indicators') $('#sheetList').innerHTML = indicatorRows(); }
+  if ((sheetMode === 'indicators' && $('#sheet').classList.contains('open'))) { renderIndicators(); if (sheetMode === 'indicators') ibRefresh(); }
   scheduleRender();
 }
 // Estilo y visibilidad elegidos en la ventana de configuración (no obligan a recalcular el script)
@@ -4340,7 +4423,7 @@ async function genPrev(x) {
   } catch { u = 'err'; }
   prevBusy.delete(x.id); prevStore[x.id] = {h, u};
   try { localStorage.setItem(PREV_KEY, JSON.stringify(prevStore)); } catch { for (const k of Object.keys(prevStore)) if (k !== x.id) delete prevStore[k]; try { localStorage.setItem(PREV_KEY, JSON.stringify(prevStore)); } catch {} }
-  if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows();
+  if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh();
   renderIndicators();
 }
 const prevImg = x => { const u = scriptPrev(x); return u && u !== 'err' ? `<img class="pine-prev" alt="Imagen de ${esc(x.name)}" src="${u}">` : `<div class="pine-prev ph">${u === 'err' ? 'Sin imagen: el script no se pudo calcular' : 'Generando imagen…'}</div>`; };
@@ -4377,13 +4460,13 @@ function catPreviewSvg(id) {
   return `<svg class="nova-prev" viewBox="0 0 300 130" xmlns="http://www.w3.org/2000/svg">${bg}<rect x="39" y="5" width="222" height="120" fill="none" stroke="#8a6bff"/><rect x="40" y="6" width="220" height="13" fill="#1c1c3d"/><text x="48" y="16" font-size="9" fill="#a5a5ff" font-weight="700">SÍMBOLO</text><text x="130" y="16" font-size="9" fill="#a5a5ff" font-weight="700">SEÑAL</text><text x="200" y="16" font-size="9" fill="#a5a5ff" font-weight="700">SCORE</text>${rows}</svg>`;
 }
 const catPineOf = c => state.pine.find(p => p.sid === 'cat:' + c.id);
-function catalogCards() {
-  return (window.CCTCatalog || []).map(c => {
+function catalogCards(list) {
+  return (list || window.CCTCatalog || []).map(c => {
     const p = catPineOf(c);
     return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small><button class="small-button" data-pine-retry="${p.sid}">↻ Reintentar</button>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">${I('gear', 14)} Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
   }).join('');
 }
-document.addEventListener('click', e => { const b = e.target.closest('[data-std-set]'); if (b) openStdDialog(b.dataset.stdSet); const r = e.target.closest('[data-pine-retry]'); if (r) { delete pineRes[r.dataset.pineRetry]; pineKey = ''; schedulePine(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); } });
+document.addEventListener('click', e => { const b = e.target.closest('[data-std-set]'); if (b) openStdDialog(b.dataset.stdSet); const r = e.target.closest('[data-pine-retry]'); if (r) { delete pineRes[r.dataset.pineRetry]; pineKey = ''; schedulePine(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh(); } });
 document.addEventListener('click', async e => {
   const b = e.target.closest('[data-cat-add]'); if (!b) return;
   const c = (window.CCTCatalog || []).find(x => x.id === b.dataset.catAdd); if (!c) return;
@@ -4393,7 +4476,7 @@ document.addEventListener('click', async e => {
   if (c.id === 'nova-scr') { const r = await pineRunRaw(c.code, {interval: state.interval, symbol: symOf(state.symbol), timeLimitMs: 12000}); if (r && r.ok) r.inputs.filter(i => i.type === 'symbol').forEach((i, k) => { inputs[i.key] = CAT_SYMS[k] || ''; }); }
   if (!state.pine.some(p => p.sid === sid)) state.pine.push({sid, on: true, inputs});
   save(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); toast(c.id === 'nova-scr' ? 'Añadido: calcula 40 símbolos, puede tardar unos segundos' : 'Añadido al gráfico');
-  if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows();
+  if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh();
 });
 
 function pineSection() {
@@ -4514,11 +4597,12 @@ function renderPineEditor(list) {
   $('#pineName').value = pineDraft.name; $('#pineCode').value = pineDraft.code;
   $('#pineCode').oninput = () => { pineDraft.code = $('#pineCode').value; }; $('#pineName').oninput = () => { pineDraft.name = $('#pineName').value; };
   $('#pineExample').onclick = () => { pineDraft.code = PINE_EXAMPLE; $('#pineCode').value = PINE_EXAMPLE; };
-  $('#pineFile').onclick = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.pine,.txt,text/plain'; i.onchange = async () => { const f = i.files[0]; if (!f) return; if (f.size > 600000) { toast('Archivo demasiado grande'); return; } pineDraft.code = await f.text(); if (!pineDraft.name) pineDraft.name = f.name.replace(/\.[^.]+$/, ''); renderPineEditor(list); }; i.click(); };
+  $('#pineFile').onclick = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.pine,.txt,text/plain'; i.onchange = async () => { const f = i.files[0]; if (!f) return; if (f.size > SCRIPTS_MAX) { toast('Archivo demasiado grande (máx. 3 MB)'); return; } pineDraft.code = await f.text(); if (!pineDraft.name) pineDraft.name = f.name.replace(/\.[^.]+$/, ''); renderPineEditor(list); }; i.click(); };
   $('#pineRun').onclick = async () => {
     const code = $('#pineCode').value, msg = $('#pineMsg'), btn = $('#pineRun');
     if (!code.trim()) { msg.innerHTML = '<div class="pine-box err">Pega primero el código.</div>'; return; }
     if (!candles.length) { msg.innerHTML = '<div class="pine-box err">Abre un gráfico y espera a que carguen las velas.</div>'; return; }
+    if (window.CCTConvert) { closeSheet(); convertPine(code, pineDraft.name.trim() || 'Script de Pine'); pineDraft.code = ''; pineDraft.name = ''; return; }
     if (activePine().length >= PINE_MAX) { msg.innerHTML = `<div class="pine-box err">Máximo ${PINE_MAX} scripts activos a la vez. Apaga o quita alguno.</div>`; return; }
     btn.disabled = true; btn.textContent = 'Interpretando…';
     const key = `${state.symbol}|${state.interval}|${candles[0].t}`;
@@ -4570,7 +4654,7 @@ document.addEventListener('click', e => {
   const p = state.pine.find(x => x.sid === (d.pineDel || d.pineTog)); if (!p) return;
   if (d.pineDel) { state.pine = state.pine.filter(x => x !== p); delete pineRes[p.sid]; }
   else { if (!p.on && activePine().length >= PINE_MAX) { toast(`Máximo ${PINE_MAX} scripts activos`); return; } p.on = !p.on; if (p.on) { pineKey = ''; schedulePine(); } }
-  save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); scheduleRender();
+  save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh(); scheduleRender();
 });
 function drawPinePane(x, top0, H, lo, hi, o) {
   if (!x) return; const {left, w, right, line, text, step, plotW} = o, r = x.r, top = top0 + 4, height = H - 10;
@@ -4593,8 +4677,8 @@ function drawPinePane(x, top0, H, lo, hi, o) {
 $('#pasteScript').onclick = () => openSheet('paste');
 $('#scriptFile').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  if (f.size > SCRIPTS_MAX) { toast('El archivo es demasiado grande (máx. 600 KB)'); return; }
-  addScript(await f.text(), f.name.replace(/\.[^.]+$/, ''));
+  if (f.size > SCRIPTS_MAX) { toast('El archivo es demasiado grande (máx. 3 MB)'); return; }
+  convertPine(await f.text(), f.name.replace(/\.[^.]+$/, ''));
 };
 
 /* ───────── Aplicar estado completo (importar / nube) ───────── */
@@ -4694,15 +4778,15 @@ async function onUser(user) {
       } catch {}
     }, () => {});
     const sref = db.doc(`users/${uid}/data/scripts`), ssnap = await sref.get();
-    if (ssnap.exists && ssnap.data().items) { scriptsRemote = ssnap.data().items; try { scripts = withCatalog(JSON.parse(scriptsRemote)); localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); renderScripts(); } catch {} }
+    if (ssnap.exists && ssnap.data().items) { try { scriptsRemote = await unpackStr(ssnap.data().items); scripts = withCatalog(JSON.parse(scriptsRemote)); saveScriptsLocal(); renderScripts(); } catch {} }
     else { // la cuenta aún no tiene scripts: se suben los de este dispositivo (los de la cuenta local + los guardados antes de iniciar sesión)
       const have = new Set(scripts.map(x => x.id)); for (const x of anonScripts) if (!have.has(x.id)) scripts.push(x);
-      if (scripts.length) { scriptsRemote = JSON.stringify(scripts); try { localStorage.setItem(scriptsKey(), JSON.stringify({items: scripts})); } catch {} await sref.set({items: scriptsRemote, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); renderScripts(); }
+      if (userScripts().length) { scriptsRemote = JSON.stringify(userScripts()); saveScriptsLocal(); await sref.set({items: await packStr(scriptsRemote), updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); renderScripts(); }
     }
-    unsubScripts = sref.onSnapshot(sn => { // scripts cambiados desde otro dispositivo
+    unsubScripts = sref.onSnapshot(async sn => { // scripts cambiados desde otro dispositivo
       if (sn.metadata.hasPendingWrites || !sn.exists) return;
-      const str = sn.data().items; if (!str || str === scriptsRemote) return;
-      try { const arr = JSON.parse(str); if (!Array.isArray(arr)) return; scriptsRemote = str; scripts = withCatalog(arr); localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); renderScripts(); refreshPineAfterSync(); } catch {}
+      let str = sn.data().items; if (!str) return; try { str = await unpackStr(str); } catch { return; } if (str === scriptsRemote) return;
+      try { const arr = JSON.parse(str); if (!Array.isArray(arr)) return; scriptsRemote = str; scripts = withCatalog(arr); saveScriptsLocal(); renderScripts(); refreshPineAfterSync(); } catch {}
     }, () => {});
     refreshPineAfterSync();
     syncStatus = 'Guardado en tu cuenta · ' + syncSummary();
@@ -4798,8 +4882,8 @@ async function forceSync() {
       else {
         await cloudPushNow(true); // sube (y mezcla con lo más nuevo de la cuenta si otro dispositivo guardó algo)
         const sref = db.doc(`users/${uid}/data/scripts`), local = JSON.stringify(userScripts());
-        if (local !== scriptsRemote) { await sref.set({items: local, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); scriptsRemote = local; } // scripts nuevos o borrados aquí
-        else { const sn = await sref.get({source: 'server'}), str = sn.exists ? sn.data().items : ''; if (str && str !== scriptsRemote) { const arr = JSON.parse(str); if (Array.isArray(arr)) { scriptsRemote = str; scripts = withCatalog(arr); saveScriptsLocal(); renderScripts(); } } } // sin cambios locales: se baja lo de la cuenta
+        if (local !== scriptsRemote) { await sref.set({items: await packStr(local), updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); scriptsRemote = local; } // scripts nuevos o borrados aquí
+        else { const sn = await sref.get({source: 'server'}), str = sn.exists ? await unpackStr(sn.data().items) : ''; if (str && str !== scriptsRemote) { const arr = JSON.parse(str); if (Array.isArray(arr)) { scriptsRemote = str; scripts = withCatalog(arr); saveScriptsLocal(); renderScripts(); } } } // sin cambios locales: se baja lo de la cuenta
         msg = /^No se pudo/.test(syncStatus) ? 'No se pudo guardar en la nube; sigue guardado en este dispositivo' : 'Todo guardado en tu cuenta y actualizado ✓';
       }
     } else msg = 'Guardado en este dispositivo. Inicia sesión para guardarlo también en tu cuenta';
@@ -4964,6 +5048,18 @@ window.CCT_ai = {
     if (res && res.ok && candles.length) { res._key = `${state.symbol}|${state.interval}|${candles[0].t}`; pineRes[sid] = res; } else delete pineRes[sid];
     if (!x.temp) saveScripts(); if (!state.pine.some(p => p.sid === sid)) state.pine.push({sid, on: true, inputs: {}}); else state.pine.find(p => p.sid === sid).on = true;
     save(); renderIndicators(); countIndicators(); if (!x.temp) renderScripts(); pineKey = ''; schedulePine(); scheduleRender(); return true;
+  },
+  saveConverted(code, name, res, onChart, replaceId) { // lo usa el convertidor: guarda en «Mis indicadores» (cuenta + imagen) y, si funciona, lo pone en el gráfico
+    let sid; const old = replaceId && scripts.find(y => y.id === replaceId && !y.builtin);
+    if (old) { old.code = code; old.size = new Blob([code]).size; old.lines = code.split('\n').length; old.temp = false; sid = old.id; delete prevStore[sid]; saveScripts(); renderScripts(); setTimeout(() => genPrev(old), 300); }
+    else sid = addScript(code, name, true); if (!sid) return null;
+    const x = scripts.find(y => y.id === sid); if (x && name && x.name !== name && !/indicator\s*\(/.test(code)) x.name = name;
+    if (onChart) {
+      if (res && res.ok && candles.length) { res._key = `${state.symbol}|${state.interval}|${candles[0].t}`; pineRes[sid] = res; }
+      const ex = state.pine.find(p => p.sid === sid); if (ex) ex.on = true; else if (activePine().length < PINE_MAX) state.pine.push({sid, on: true, inputs: {}}); else toast(`Máximo ${PINE_MAX} scripts activos: se guardó pero no se puso en el gráfico`);
+      save(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); scheduleRender();
+    }
+    return sid;
   },
   toggle(sid, on) { const p = state.pine.find(q => q.sid === sid); if (p) p.on = on; else if (on) state.pine.push({sid, on: true, inputs: {}}); save(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); scheduleRender(); },
   res: sid => pineRes[sid] || null
