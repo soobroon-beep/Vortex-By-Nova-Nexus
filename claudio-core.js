@@ -297,5 +297,17 @@
     rep.calibAfter = Object.assign({}, s.calib); s.nightly.push(rep); if (s.nightly.length > 30) s.nightly.splice(0, s.nightly.length - 30); ev(s, now, 'nocturno', rep.note);
     return rep;
   }
-  return {VERSION, TF, IV, LIMITS, CALIB_BOUNDS, REGIMES, buildState, bookFeatures, jevSchema, jevRequest, parseJev, localEval, jevEvaluator, kelly, sizeOrder, decide, preOrderCheck, portfolioOf, newSession, step, stats, nightly, verify, estTokens};
+  /* Aplica la configuración del operador (encendido, reinicio, interruptor, reanudar) sobre la sesión. Igual en la app y en el servidor. */
+  function prepare(cfg, prev, now, symbols) {
+    cfg = cfg || {}; let s = prev;
+    if (!s || (cfg.resetAt && cfg.resetAt > (s.createdAt || 0))) { s = newSession({startT: now, capital: +cfg.capital > 0 ? +cfg.capital : 10000, symbols}); s.createdAt = now; s.events.push({t: now, kind: 'inicio', text: `Claudio encendido con ${s.capital} USDT virtuales · universo: ${s.symbols.join(', ')}`}); }
+    if (!!cfg.kill !== !!s.kill) { s.kill = !!cfg.kill; s.events.push({t: now, kind: 'riesgo', text: s.kill ? 'Interruptor de emergencia ACTIVADO: se cierran posiciones y no hay entradas.' : 'Interruptor de emergencia desactivado.'}); }
+    if (cfg.resume && s.halted && cfg.resume > (s.resumedAt || 0)) { s.halted = false; s.resumedAt = cfg.resume; s.peak = portfolioOf(s).equity; s.events.push({t: now, kind: 'riesgo', text: 'Reanudado por el operador tras el límite de drawdown (nuevo pico = patrimonio actual).'}); }
+    return s;
+  }
+  /* Copia ligera para guardar en la cuenta (sin perder el libro de operaciones ni la calibración) */
+  function slim(s) { if (!s) return s; const o = Object.assign({}, s); o.preds = s.preds.slice(-700); o.events = s.events.slice(-150); o.curve = thin(s.curve.slice(), 300); return o; }
+  /* Elige la sesión más avanzada entre dos copias (la del navegador y la del servidor) */
+  function newer(a, b) { if (!a) return b || null; if (!b) return a; if ((a.createdAt || 0) !== (b.createdAt || 0)) return (a.createdAt || 0) > (b.createdAt || 0) ? a : b; return (b.lastT || 0) > (a.lastT || 0) ? b : a; }
+  return {prepare, slim, newer, VERSION, TF, IV, LIMITS, CALIB_BOUNDS, REGIMES, buildState, bookFeatures, jevSchema, jevRequest, parseJev, localEval, jevEvaluator, kelly, sizeOrder, decide, preOrderCheck, portfolioOf, newSession, step, stats, nightly, verify, estTokens};
 });

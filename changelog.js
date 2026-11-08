@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.8', d: '8 nov 2026', t: 'Claudio estable y bots guardados en tu cuenta', items: [
+    'Claudio ya no se apaga solo: su encendido y su progreso se guardan en tu cuenta junto con tus bots, y avanza en tu navegador con VORTEX abierto (y en el servidor cuando no).',
+    'Al encender un bot empieza en cero. En Resumen y Operaciones se separa «En vivo» (desde que lo encendiste) de «Historia» (backtest).',
+    'Nueva sección «Cambios aplicados» en cada bot: qué consejo o edición se aplicó en cada versión y cómo le fue. Personajes sin fondo.'
+  ]},
   {v: '3.7', d: '8 nov 2026', t: 'Varios bots encendidos a la vez', items: [
     'Cada bot (y Claudio) tiene su interruptor en la lista: enciende varios a la vez para comparar estrategias en vivo.',
     'Personajes espaciales a color para tus bots: robot, astronauta, alien, cohete, planeta, estrella, OVNI, luna, cometa, pulpo, satélite y vórtice.',

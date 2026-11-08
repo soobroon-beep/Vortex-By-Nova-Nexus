@@ -10,7 +10,7 @@
   const of = b => { const l = (b && b.look) || {}, h = hash(b && b.id), ic = OLD[l.icon] || l.icon; return {color: l.color || COLORS[h % COLORS.length][0], icon: ICONS[ic] ? ic : KEYS[h % KEYS.length]}; };
   const svg = (k, s) => `<img src="icons/bots/${ICONS[OLD[k] || k] ? (OLD[k] || k) : 'robot'}.png" width="${s}" height="${s}" alt="" draggable="false" loading="lazy">`;
   /* Avatar: cuadro redondeado con degradado del color elegido y el icono en blanco */
-  const avatar = (look, size) => { size = size || 34; return `<span class="bl-av" style="--av:${look.color};width:${size}px;height:${size}px">${svg(look.icon, Math.round(size * .8))}</span>`; };
+  const avatar = (look, size) => { size = size || 34; return `<span class="bl-av" style="--av:${look.color};width:${size}px;height:${size}px">${svg(look.icon, size)}</span>`; };
   const picker = look => `<div class="bl-look"><div class="bl-look-prev">${avatar(look, 46)}</div><div class="bl-look-c"><small>Color</small><div class="bl-sw">${COLORS.map(([c, n]) => `<button type="button" title="${n}" data-a="lk" data-t="color" data-v="${c}" class="${look.color === c ? 'on' : ''}" style="--c:${c}"></button>`).join('')}</div>
     <small>Icono</small><div class="bl-ics">${KEYS.map(k => `<button type="button" title="${ICONS[k]}" data-a="lk" data-t="icon" data-v="${k}" class="${look.icon === k ? 'on' : ''}" style="--c:${look.color}">${svg(k, 30)}</button>`).join('')}</div></div></div>`;
   root.CCTBotLook = {COLORS, ICONS, KEYS, of, avatar, picker, svg};

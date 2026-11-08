@@ -29,10 +29,7 @@ function compact(s) { // mantiene el documento bajo el tope de Firestore (1 MiB)
 function summary(s) { const st = K.stats(s); return {equity: st.equity, retPct: st.retPct, ddPct: st.ddPct, open: st.open, trades: st.n, lastT: s.lastT, by: s.lastBy, kill: !!s.kill, halted: !!s.halted, calibV: s.calib.v}; }
 /* Una sesión: cfg = documento «claudio» de la app; prev = sesión anterior (o null). Devuelve la sesión avanzada. */
 async function runOne(cfg, prev, mode, deps) {
-  const now = deps.now || Date.now(); let s = prev;
-  if (!s || (cfg.resetAt && cfg.resetAt > (s.createdAt || 0))) { s = K.newSession({startT: now, capital: +cfg.capital > 0 ? +cfg.capital : 10000, symbols: R.symbols()}); s.createdAt = now; s.events.push({t: now, kind: 'inicio', text: `Claudio encendido con ${s.capital} USDT virtuales · universo: ${s.symbols.join(', ')}`}); }
-  if (!!cfg.kill !== !!s.kill) { s.kill = !!cfg.kill; s.events.push({t: now, kind: 'riesgo', text: s.kill ? 'Interruptor de emergencia ACTIVADO desde la app: se cierran posiciones y no hay entradas.' : 'Interruptor de emergencia desactivado desde la app.'}); }
-  if (cfg.resume && s.halted && cfg.resume > (s.resumedAt || 0)) { s.halted = false; s.resumedAt = cfg.resume; s.peak = K.portfolioOf(s).equity; s.events.push({t: now, kind: 'riesgo', text: 'Reanudado por el operador tras el límite de drawdown (nuevo pico = patrimonio actual).'}); }
+  const now = deps.now || Date.now(), s = K.prepare(cfg, prev, now, R.symbols());
   if (mode === 'nightly') K.nightly(s, now);
   else await K.step(s, deps.feed, deps.evaluate, now);
   return s;
@@ -45,8 +42,12 @@ async function main() {
   const feed = makeFeed(null, now), evaluate = K.jevEvaluator({apiKey: process.env.JEV_API_KEY || '', model: process.env.JEV_MODEL || 'jev-latest'});
   let n = 0;
   for (const u of await db.collection('users').listDocuments()) {
-    const cd = await u.collection('data').doc('claudio').get(); if (!cd.exists) continue; const cfg = cd.data() || {}; if (!cfg.enabled) continue;
+    // La configuración y la copia del navegador viajan dentro de tu documento «botlab» (botlab.claudio); el documento «claudio» se mantiene por compatibilidad.
+    let app = null; try { const bd = await u.collection('data').doc('botlab').get(); if (bd.exists) app = (JSON.parse(bd.data().items || '{}') || {}).claudio || null; } catch {}
+    let legacy = null; try { const cd = await u.collection('data').doc('claudio').get(); if (cd.exists) legacy = cd.data(); } catch {}
+    const cfg = app && app.cfg && (!legacy || (app.cfg.at || 0) >= (legacy.at || 0)) ? app.cfg : (legacy || {}); if (!cfg.enabled) continue;
     const sd = await u.collection('data').doc('claudio_server').get(); let prev = null; if (sd.exists) { try { prev = JSON.parse(sd.data().s || 'null'); } catch {} }
+    prev = K.newer(prev, app && app.s);
     try {
       const s = await runOne(cfg, prev, MODE, {feed, evaluate, now}), str = compact(s);
       await u.collection('data').doc('claudio_server').set({s: str, summary: summary(s), updatedAt: admin.firestore.FieldValue.serverTimestamp()}); n++;

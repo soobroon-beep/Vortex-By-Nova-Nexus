@@ -97,3 +97,11 @@ test('ciclo nocturno: Brier, oportunidades perdidas y recalibración acotada que
   if (rep.changed) assert.ok(rep.holdout.new < rep.holdout.old); else assert.equal(s.calib.v, 1);
   assert.equal(JSON.stringify(K.LIMITS), lim); assert.equal(s.nightly.length, 1);
 });
+
+test('prepare/newer/slim: la copia más avanzada gana, un reinicio crea sesión nueva y la copia ligera conserva el libro', () => {
+  const a = K.prepare({enabled: true, capital: 5000}, null, T0, ['AAA']), b = JSON.parse(JSON.stringify(a)); b.lastT = a.lastT + H;
+  assert.equal(K.newer(a, b), b); assert.equal(K.newer(b, a), b); assert.equal(K.newer(null, a), a);
+  const r = K.prepare({enabled: true, capital: 777, resetAt: T0 + 5}, b, T0 + 10, ['AAA']); assert.equal(r.capital, 777); assert.equal(K.newer(b, r), r);
+  assert.ok(K.prepare({kill: true}, r, T0 + 20, ['AAA']).kill);
+  r.preds = Array.from({length: 3000}, (_, i) => ({i})); const sl = K.slim(r); assert.equal(sl.preds.length, 700); assert.equal(sl.ledger, r.ledger); assert.equal(r.preds.length, 3000);
+});

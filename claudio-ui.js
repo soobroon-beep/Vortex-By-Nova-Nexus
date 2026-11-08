@@ -13,36 +13,37 @@
   const FACE = `<svg viewBox="0 0 48 48" width="42" height="42" aria-hidden="true"><defs><linearGradient id="clg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#20bf9f"/></linearGradient></defs><rect x="6" y="10" width="36" height="30" rx="10" fill="url(#clg)"/><rect x="11" y="17" width="26" height="14" rx="7" fill="#05070c"/><circle cx="18.5" cy="24" r="2.6" fill="#7cf3d6"/><circle cx="29.5" cy="24" r="2.6" fill="#7cf3d6"/><path d="M24 10V5" stroke="#9fb3ff" stroke-width="2.4" stroke-linecap="round"/><circle cx="24" cy="4.5" r="2.4" fill="#f0b90b"/><path d="M19 35h10" stroke="#05070c" stroke-width="2.2" stroke-linecap="round"/></svg>`;
   let st = {mode: null, cfg: null, s: null, at: null, busy: false, err: '', tab: 'live', loaded: 0}, root = null, head = null, timer = 0;
 
-  /* ───────── Datos: cuenta (servidor) o modo local ───────── */
+  /* ───────── Datos ─────────
+     La configuración (encendido, interruptor, capital) y la sesión viven en tu documento de Nova Bot Lab (se guarda en tu cuenta igual que tus bots).
+     El navegador avanza a Claudio mientras VORTEX está abierto; el servidor (GitHub Actions, cada hora) lo avanza cuando no lo está. Siempre se usa la copia más avanzada. */
+  const LAB = () => window.CCTBotLabUI && window.CCTBotLabUI.claudio ? window.CCTBotLabUI : null;
   const cloud = () => { try { return H().claudio && H().claudio(); } catch { return null; } };
-  const readLocal = () => { try { return JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch { return null; } };
-  const writeLocal = o => { try { localStorage.setItem(LKEY, JSON.stringify(o)); } catch {} };
+  const readLegacy = () => { try { return JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch { return null; } };
+  function persist() { const L = LAB(); if (L) L.claudio({cfg: st.cfg, s: K.slim(st.s)}); }
   async function load() {
-    if (st.loading) return; st.loading = true; const c = cloud(); st.err = '';
-    if (c) { st.mode = 'cuenta'; try { const [cfg, srv] = await Promise.all([c.cfg(), c.server()]); st.cfg = cfg || {enabled: false}; st.s = srv && srv.s; st.at = srv && srv.at; } catch (e) { st.err = 'No se pudo leer tu cuenta: ' + e.message; } }
-    else { st.mode = 'local'; const L = readLocal() || {cfg: {enabled: false, capital: 10000}, s: null}; st.cfg = L.cfg; st.s = L.s; st.at = L.at || null; }
-    st.loaded = Date.now(); st.loading = false; paint(); if (!(root && root.querySelector('.cl-view')) && typeof UI.onChange === 'function') UI.onChange();
-    if (st.mode === 'local' && st.cfg.enabled) tickLocal();
+    if (st.loading) return; st.loading = true; st.err = '';
+    const L = LAB(), saved = (L && L.claudio()) || readLegacy() || {cfg: {enabled: false, capital: 10000, at: 0}, s: null};
+    st.cfg = Object.assign({enabled: false, capital: 10000, at: 0}, saved.cfg); st.s = K.newer(st.s, saved.s);
+    const c = cloud(); st.mode = c ? 'cuenta' : 'local';
+    if (c) { try { const srv = await c.server(); if (srv && srv.s) { const n = K.newer(st.s, srv.s); if (n === srv.s) st.at = srv.at; st.s = n; } } catch {} }
+    st.loaded = Date.now(); st.loading = false; persist(); paint(); if (!(root && root.querySelector('.cl-view')) && typeof UI.onChange === 'function') UI.onChange();
+    if (st.cfg.enabled) tick();
   }
   const binBook = async sym => { const r = await fetch(`https://api.binance.com/api/v3/depth?symbol=${encodeURIComponent(sym)}&limit=20`); if (!r.ok) throw new Error('HTTP ' + r.status); const d = await r.json(); return {t: Date.now(), bids: d.bids.map(x => [+x[0], +x[1]]), asks: d.asks.map(x => [+x[0], +x[1]])}; };
   const binCandles = async (sym, n) => { if (H().history) return H().history(sym, '1h', n); const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(sym)}&interval=1h&limit=${Math.min(1000, n)}`); if (!r.ok) throw new Error('HTTP ' + r.status); const now = Date.now(); return (await r.json()).filter(d => d[6] < now).map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})); };
-  async function tickLocal() { // modo sin cuenta: el mismo núcleo, en tu navegador
-    if (st.busy || st.mode !== 'local' || !st.cfg.enabled) return; st.busy = true; paint();
+  async function tick() { // el mismo núcleo que el servidor, en tu navegador (solo PC)
+    if (st.busy || !st.cfg.enabled || !matchMedia('(min-width:1024px)').matches) return; st.busy = true; paint();
     try {
-      const now = Date.now(); let s = st.s;
-      if (!s || (st.cfg.resetAt && st.cfg.resetAt > (s.createdAt || 0))) { s = K.newSession({startT: now, capital: +st.cfg.capital || 10000, symbols: RS.symbols()}); s.createdAt = now; s.events.push({t: now, kind: 'inicio', text: `Claudio encendido (modo local) con ${s.capital} USDT virtuales`}); }
-      s.kill = !!st.cfg.kill; if (st.cfg.resume && s.halted && st.cfg.resume > (s.resumedAt || 0)) { s.halted = false; s.resumedAt = st.cfg.resume; s.peak = K.portfolioOf(s).equity; }
+      const now = Date.now(), s = K.prepare(st.cfg, st.s, now, RS.symbols());
       await K.step(s, {candles: binCandles, book: binBook}, K.jevEvaluator({}), now);
-      if (s.nightly.length === 0 || now - s.nightly[s.nightly.length - 1].t > 864e5) K.nightly(s, now);
-      st.s = s; st.at = now; writeLocal({cfg: st.cfg, s, at: now});
-    } catch (e) { st.err = 'Modo local: ' + e.message; }
-    st.busy = false; paint();
+      if (!s.nightly.length || now - s.nightly[s.nightly.length - 1].t > 864e5) K.nightly(s, now);
+      st.s = s; st.at = now; persist();
+    } catch (e) { st.err = 'No se pudo leer el mercado: ' + e.message; }
+    st.busy = false; paint(); if (!(root && root.querySelector('.cl-view')) && typeof UI.onChange === 'function') UI.onChange();
   }
   async function setCfg(patch) {
-    st.cfg = Object.assign({}, st.cfg, patch); const c = cloud();
-    if (c) { try { const clean = Object.assign({}, st.cfg); delete clean.updatedAt; await c.setCfg(clean); toast('Guardado en tu cuenta. Claudio lo aplicará en su próxima vela (cada hora).'); } catch (e) { st.err = 'No se pudo guardar: ' + e.message; } }
-    else { writeLocal({cfg: st.cfg, s: st.s, at: st.at}); tickLocal(); }
-    paint();
+    st.cfg = Object.assign({}, st.cfg, patch, {at: Date.now()}); persist(); paint();
+    if (st.cfg.enabled) tick();
   }
   const toast = t => { try { (H().toast || window.toast || (() => {}))(t); } catch {} };
 
@@ -52,12 +53,12 @@
     if (!c.enabled) return ['off', 'Apagado'];
     if (c.kill || (s && s.kill)) return ['kill', 'Interruptor activado'];
     if (s && s.halted) return ['halt', 'Detenido por drawdown'];
-    if (!s) return ['wait', st.mode === 'cuenta' ? 'Esperando la primera vela del servidor' : 'Iniciando'];
+    if (!s) return ['on', 'Encendido'];
     return ['on', 'Operando 24/7 (simulación)'];
   }
   function card() {
     const s = st.s, [k, label] = status(), stt = s ? K.stats(s) : null;
-    if (!st.loaded || (cloud() ? st.mode !== 'cuenta' : st.mode !== 'local') || Date.now() - st.loaded > 6e4) setTimeout(load, 0); // si iniciaste sesión después, se vuelve a leer de tu cuenta
+    if (!st.loaded || Date.now() - st.loaded > 6e4) setTimeout(load, 0);
     return `<div class="cl-card" data-a="claudio" role="button" tabindex="0"><div class="cl-face">${FACE}</div><div class="cl-card-m"><div class="cl-card-t"><b>Claudio</b><span class="cl-chip k-${k}">${esc(k === 'on' ? 'En vivo' : label)}</span></div>
       <small>Agente autónomo · ${RS.CANDIDATES.length} monedas · 1 h</small></div><span class="bl-row-v ${stt ? cls(stt.retPct) : ''}">${stt ? pct(stt.retPct) : '—'}</span><span class="bl-row-go">›</span><button type="button" class="bl-tg ${(st.cfg || {}).enabled && !(st.cfg || {}).kill ? 'on' : ''}" data-a="clToggle" title="Encender / apagar a Claudio" aria-pressed="${!!(st.cfg || {}).enabled}"><i></i></button></div>`;
   }
@@ -112,13 +113,13 @@
   }
   function paint() {
     if (!root || !root.isConnected || !root.querySelector('.cl-view')) return; const box = root.querySelector('.cl-view'), s = st.s, c = st.cfg || {}, [k, label] = status();
-    const ctl = `<div class="cl-ctl"><span class="cl-chip k-${k}">${esc(label)}</span><small class="bl-dim">${st.mode === 'cuenta' ? `Servidor 24/7 · última actualización ${st.at ? ago(st.at) : '—'}` : 'Modo local: solo avanza con la app abierta. Inicia sesión para que corra 24/7 en el servidor.'}</small>
+    const ctl = `<div class="cl-ctl"><span class="cl-chip k-${k}">${esc(label)}</span><small class="bl-dim">${st.mode === 'cuenta' ? 'Guardado en tu cuenta · corre en tu navegador con VORTEX abierto y en el servidor cada hora' : 'Sin sesión iniciada: solo avanza con VORTEX abierto en esta PC'} · ${s && s.lastT ? 'última vela ' + ago(s.lastT) + ' · próxima decisión en ' + Math.max(1, Math.ceil((Math.floor(Date.now() / 36e5) * 36e5 + 36e5 - Date.now()) / 6e4)) + ' min' : 'primera decisión al cerrar la vela de 1 h'}</small>
       <div class="cl-btns">${c.enabled ? `<button class="bl-btn ghost" data-cl="off">Apagar</button>` : `<button class="bl-btn" data-cl="on">Encender a Claudio</button>`}
       ${c.enabled ? (c.kill ? `<button class="bl-btn ghost" data-cl="unkill">Quitar interruptor</button>` : `<button class="bl-btn cl-kill" data-cl="kill">Interruptor de emergencia</button>`) : ''}
-      ${s && s.halted ? `<button class="bl-btn ghost" data-cl="resume">Reanudar tras drawdown</button>` : ''}<button class="bl-btn ghost" data-cl="reset">Reiniciar</button>${st.mode === 'local' && c.enabled ? `<button class="bl-btn ghost" data-cl="tick" ${st.busy ? 'disabled' : ''}>${st.busy ? 'Leyendo el mercado…' : 'Actualizar ahora'}</button>` : `<button class="bl-btn ghost" data-cl="reload">Actualizar</button>`}</div></div>`;
+      ${s && s.halted ? `<button class="bl-btn ghost" data-cl="resume">Reanudar tras drawdown</button>` : ''}<button class="bl-btn ghost" data-cl="reset">Reiniciar</button>${c.enabled ? `<button class="bl-btn ghost" data-cl="tick" ${st.busy ? 'disabled' : ''}>${st.busy ? 'Leyendo el mercado…' : 'Actualizar ahora'}</button>` : `<button class="bl-btn ghost" data-cl="reload">Actualizar</button>`}</div></div>`;
     const tabs = [['live', 'En vivo'], ['ledger', 'Operaciones'], ['night', 'Revisión nocturna'], ['res', 'Investigación']];
     box.innerHTML = ctl + (st.err ? `<p class="bl-dim warn">${esc(st.err)}</p>` : '') + `<div class="bl-tabs" role="tablist">${tabs.map(([x, l]) => `<button role="tab" class="${st.tab === x ? 'on' : ''}" data-cl="tab" data-k="${x}">${l}</button>`).join('')}</div>`
-      + (st.tab === 'res' ? tabResearch() : !s ? `<div class="bd-hero"><div class="bd-hero-ic">${FACE}</div><h3>${c.enabled ? 'Claudio está encendido' : 'Claudio está listo'}</h3><p>${c.enabled ? (st.mode === 'cuenta' ? 'El servidor lo arranca en la próxima ejecución horaria (minuto :02). Empieza plano y solo decide con velas que cierren después de encenderlo.' : 'Leyendo el mercado…') : 'Agente autónomo 24/7: investiga, evalúa cada vela con Jev en una sola llamada y opera con capital virtual bajo límites de riesgo fijos.'}</p></div>`
+      + (st.tab === 'res' ? tabResearch() : !s ? `<div class="bd-hero"><div class="bd-hero-ic">${FACE}</div><h3>${c.enabled ? 'Claudio está encendido' : 'Claudio está listo'}</h3><p>${c.enabled ? 'Leyendo el mercado… Empieza sin operaciones y solo decide con velas que cierren después de encenderlo.' : 'Agente autónomo 24/7: investiga, evalúa cada vela con Jev en una sola llamada y opera con capital virtual bajo límites de riesgo fijos.'}</p></div>`
         : st.tab === 'ledger' ? tabLedger(s) : st.tab === 'night' ? tabNight(s) : tabLive(s))
       + '<p class="bl-foot">Simulación con capital virtual: Claudio no envía órdenes reales ni usa tus claves de exchange. Los resultados simulados no garantizan resultados reales. No es asesoría financiera.</p>';
   }
@@ -126,7 +127,7 @@
     root = r; head = headFn; r.innerHTML = headFn('CLAUDIO', 'Agente de trading autónomo · cerebro Opus 5.5 + reflejo Jev', 'lib') + '<div class="cl-view"></div>';
     if (!r.__clBound) { r.__clBound = true; r.addEventListener('click', onClick); }
     paint(); if (!st.loaded || Date.now() - st.loaded > 6e4) load();
-    clearInterval(timer); timer = setInterval(() => { if (!root || !root.querySelector('.cl-view')) return clearInterval(timer); st.mode === 'local' ? tickLocal() : load(); }, 5 * 6e4);
+    clearInterval(timer); timer = setInterval(() => { if (!root || !root.querySelector('.cl-view')) return clearInterval(timer); tick(); }, 5 * 6e4);
   }
   async function onClick(e) {
     const el = e.target.closest('[data-cl]'); if (!el || !root.contains(el) || el.disabled) return; e.preventDefault(); const a = el.dataset.cl;
@@ -137,7 +138,7 @@
     if (a === 'unkill') return setCfg({kill: false});
     if (a === 'resume') { if (!confirm('¿Reanudar después del límite de drawdown? El nuevo pico será el patrimonio actual.')) return; return setCfg({resume: Date.now()}); }
     if (a === 'reset') { const cap = +prompt('Reiniciar a Claudio desde cero. Capital virtual (USDT):', String(st.cfg && st.cfg.capital || 10000)); if (!(cap >= 100)) return; return setCfg({enabled: true, kill: false, capital: cap, resetAt: Date.now()}); }
-    if (a === 'tick') return tickLocal();
+    if (a === 'tick') return tick();
     if (a === 'reload') return load();
   }
   /* Estilos propios (mínimos, sobre las clases de Nova Bot Lab) */
@@ -155,5 +156,7 @@
     .bd-ev i.cl-ev-entrada{background:#20bf9f}.bd-ev i.cl-ev-cierre{background:#548fff}.bd-ev i.cl-ev-riesgo,.bd-ev i.cl-ev-veto{background:#f06b79}.bd-ev i.cl-ev-escalada{background:#f0b90b}.bd-ev i.cl-ev-nocturno{background:#c084fc}.bd-ev i.cl-ev-inicio,.bd-ev i.cl-ev-datos{background:#8796ab}`;
   document.head.appendChild(css);
   async function toggle() { if (!st.loaded) await load(); const on = !(st.cfg && st.cfg.enabled && !st.cfg.kill); await setCfg(on ? {enabled: true, kill: false, capital: (st.cfg && st.cfg.capital) || 10000} : {enabled: false}); if (typeof UI.onChange === 'function') UI.onChange(); }
+  setInterval(() => { if (st.loaded) load(); }, 5 * 6e4); // sigue avanzando aunque el panel esté cerrado
+  setTimeout(() => { if (!st.loaded) load(); }, 6000);
   const UI = window.CCTClaudioUI = {card, view, state: () => st, load, toggle, isOn: () => !!(st.cfg && st.cfg.enabled && !st.cfg.kill), onChange: null};
 })();
