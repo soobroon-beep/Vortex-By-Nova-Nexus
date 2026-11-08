@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Se muestran en Configuración → Acerca de (las más importantes de cada versión). */
 window.CCT_CHANGELOG = [
+  {v: '2.4', d: '7 nov 2026', t: 'Diseño minimalista e íconos nuevos', items: [
+    'Botones y tarjetas planos, sin reflejos blancos en las esquinas.',
+    'Temporalidades y botones del gráfico sobre cristal oscuro translúcido.',
+    'Nuevo ícono de IA (AI con estrella) y nuevo ícono de Nexus Lens: una lupa revisando velas.'
+  ]},
   {v: '2.3', d: '7 nov 2026', t: 'Calendario en vivo y nuevo look', items: [
     'Próximo evento económico en la barra inferior: nombre en español, previsto y anterior, cuenta regresiva con segundos y una línea que avanza mientras se acerca. Al tocarlo se abre la tarjeta completa.',
     'Mapa de calor de liquidaciones ahora es un botón Premium junto a Indicadores y Plantilla, también en el celular.',
