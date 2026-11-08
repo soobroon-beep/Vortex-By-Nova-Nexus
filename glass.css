@@ -947,3 +947,4 @@ body.botlab-wide #botLabView{grid-column:2/4;grid-row:1;z-index:5;background:var
 /* Ícono de IA con degradado (cian → violeta → magenta) */
 .ai-ic{overflow:visible}
 .bottom-nav button .ai-ic{filter:none!important}
+.sheet{box-shadow:0 -20px 60px rgba(0,0,0,.45)!important;border-color:rgba(255,255,255,.08)!important}
