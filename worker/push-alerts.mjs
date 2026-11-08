@@ -6,11 +6,12 @@
 // · Solo escribe en el KV cuando algo cambia (el plan gratis permite 1000 escrituras al día).
 // Se publica solo con .github/workflows/deploy-push-worker.yml (configuración en worker/wrangler-push.toml).
 
+import * as SCR from './screener.mjs';
 const DEFAULT_ORIGINS = 'https://soobroon-beep.github.io';
 const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com', 'https://api1.binance.com'];
 const MOVE_TOP = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT'];
 const MOVE_WIN = [[5, '5 min', 1], [60, '1 h', 2.5]], MOVE_COOL = 15 * 60000;
-const MAX_ALERTS = 50, MAX_DEVICES = 20, APP_URL = 'https://soobroon-beep.github.io/CriptoChart-Terminal/';
+const MAX_ALERTS = 50, MAX_DEVICES = 20, APP_URL = 'https://soobroon-beep.github.io/Vortex-By-Nova-Nexus/';
 
 /* ───────── utilidades ───────── */
 const enc = new TextEncoder();
@@ -34,6 +35,7 @@ export function sanAlert(a) {
   if (['app', 'discord', 'both'].includes(a.notify)) o.notify = a.notify;
   return o;
 }
+export function sanScr(x) { const q = x && typeof x === 'object' ? x : {}; return {on: q.on === true, h1: q.h1 !== false, h4: q.h4 !== false}; }
 export function sanMove(m) { const q = m && typeof m === 'object' ? m : {}; return {on: q.on !== false, pct: Math.max(0.5, Math.min(25, +q.pct || 2))}; }
 function sanSub(s) {
   if (!s || typeof s.endpoint !== 'string' || !/^https:\/\//.test(s.endpoint) || s.endpoint.length > 1000) return null;
@@ -239,6 +241,8 @@ export default {
     if (req.method === 'OPTIONS') return new Response(null, {status: 204, headers: cors});
     const path = new URL(req.url).pathname;
     if (req.method === 'GET' && path === '/') return json({ok: true, app: 'VORTEX push', note: 'Notificaciones de alertas con la app cerrada'});
+    if (req.method === 'GET' && path === '/scr/state') { const st = (await env.KV.get('scr', 'json')) || {}; return json({ok: true, '1h': st['1h'] || 0, '4h': st['4h'] || 0, last: st.last || {}, now: Date.now()}); }
+    if (path.startsWith('/scr/') && req.method === 'POST') return scrInternal(req, env, path);
     if (!ok) return json({error: 'Origen no permitido'}, 403);
     if (path === '/ai' || path.startsWith('/ai/')) return aiRoute(req, env, path, json, cors);
     if (req.method === 'GET' && path === '/macro') return macroRoute(env, json, cors);
@@ -263,8 +267,9 @@ export default {
       if (b.subOnly) { if (!cur.sub) return json({ok: false, error: 'Dispositivo sin registrar'}, 404); cur.sub = sub; cur.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(cur)); if (!ids.includes(id)) await env.KV.put('devs', JSON.stringify([...ids, id])); return json({ok: true}); } // el celular renovó su suscripción: se conservan alertas y ajustes
       const incoming = (Array.isArray(b.alerts) ? b.alerts : []).map(sanAlert).filter(Boolean).slice(0, MAX_ALERTS);
       const m = mergeAlerts(incoming, cur.alerts, b.since);
-      const d = {sub, alerts: m.alerts, move: sanMove(b.move), priceOn: b.priceOn !== false, moveLast: cur.moveLast || {}, updated: Date.now()};
-      await env.KV.put('dev:' + id, JSON.stringify(d));
+      const d = {sub, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), priceOn: b.priceOn !== false, moveLast: cur.moveLast || {}, updated: cur.updated || Date.now()};
+      const same = JSON.stringify({...d, updated: 0}) === JSON.stringify({...cur, updated: 0});
+      if (!same) { d.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(d)); } // sin cambios no se escribe (el plan gratis permite 1000 escrituras al día)
       if (!ids.includes(id)) { if (ids.length >= MAX_DEVICES) return json({error: 'Demasiados dispositivos'}, 429); await env.KV.put('devs', JSON.stringify([...ids, id])); }
       return json({ok: true, back: m.back, now: Date.now()});
     }
@@ -276,6 +281,70 @@ export default {
     }
     return json({error: 'No encontrado'}, 404);
   },
-  async scheduled(event, env, ctx) { ctx.waitUntil(tick(env, event.scheduledTime || Date.now()).then(r => console.log('ronda', JSON.stringify(r)))); }
+  async scheduled(event, env, ctx) {
+    const now = event.scheduledTime || Date.now();
+    ctx.waitUntil(tick(env, now).then(r => console.log('ronda', JSON.stringify(r))).catch(e => console.error('ronda', e.message)));
+    ctx.waitUntil(scrKick(env, now).catch(e => console.error('screener', e.message)));
+  }
 };
 export {tick};
+
+/* ───────── Screener programado (ver worker/screener.mjs) ───────── */
+const J = (o, status = 200) => new Response(JSON.stringify(o), {status, headers: {'content-type': 'application/json'}});
+async function intToken(env) { let t = await env.KV.get('int'); if (!t) { t = b64u(crypto.getRandomValues(new Uint8Array(24))); await env.KV.put('int', t); } return t; }
+// llamada interna: por el enlace a sí mismo (cada llamada tiene su propio límite de CPU); si no existe, en la misma ejecución
+async function self(env, path, body) {
+  const tok = await intToken(env), init = {method: 'POST', headers: {'content-type': 'application/json', 'x-vx-int': tok}, body: JSON.stringify(body || {})};
+  const r = env.SELF ? await env.SELF.fetch('https://vortex-push.internal' + path, init) : await scrInternal(new Request('https://x' + path, init), env, path);
+  if (!r.ok) throw new Error(path + ' HTTP ' + r.status); return r.json();
+}
+async function scrKick(env, now = Date.now()) {
+  const st = (await env.KV.get('scr', 'json')) || {}, tf = SCR.dueTf(st, now); if (!tf) return null;
+  if (st.lock && now - st.lock < 4 * 6e4) return null; // otra ronda ya está trabajando
+  st.lock = now; await env.KV.put('scr', JSON.stringify(st));
+  return self(env, '/scr/run', {tf, now});
+}
+async function pool(items, n, fn) { const out = []; let k = 0; await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => { while (k < items.length) { const i = k++; out[i] = await fn(items[i]).catch(e => ({error: e.message})); } })); return out; }
+async function scrInternal(req, env, path) {
+  if (req.headers.get('x-vx-int') !== await intToken(env)) return J({error: 'No autorizado'}, 403);
+  let b = {}; try { b = await req.json(); } catch {}
+  const tf = b.tf === '4h' ? '4h' : '1h', now = +b.now || Date.now();
+  if (path === '/scr/top') return J({top: await SCR.topSymbols(SCR.TOP_N)});
+  if (path === '/scr/chunk') { // unas cuantas monedas por llamada para no pasar los 10 ms de CPU
+    const rows = [], fail = [];
+    for (const t of (b.syms || []).slice(0, 6)) { try { const sg = await SCR.scanOne(t.symbol, tf, now); if (sg) rows.push({symbol: t.symbol, price: Number.isFinite(sg.price) ? sg.price : t.price, sg}); } catch (e) { fail.push(t); } }
+    return J({rows, fail});
+  }
+  if (path === '/scr/push') { // notificación a los celulares que activaron las señales del Screener
+    const ids = (await env.KV.get('devs', 'json')) || []; let sent = 0; const v = await vapidKeys(env), msg = b.msg;
+    for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (!d || !d.sub || !d.scr || !d.scr.on || d.scr[tf === '1h' ? 'h1' : 'h4'] === false) continue; try { const s0 = await sendPush(d.sub, msg, v); if (s0 < 300) sent++; } catch {} }
+    return J({sent});
+  }
+  if (path === '/scr/run') {
+    const st = (await env.KV.get('scr', 'json')) || {}, slot = SCR.slotOf(tf, now);
+    const release = async (why) => { st.lock = 0; st.err = {at: Date.now(), tf, why}; await env.KV.put('scr', JSON.stringify(st)); return J({ok: false, why}); };
+    if ((+st[tf] || 0) >= slot) return J({ok: true, skip: 'ya enviado'});
+    let top, c = await env.KV.get('scrtop', 'json'); // la lista del top se guarda 3 h (leerla de Binance es lo que más CPU gasta)
+    if (c && Date.now() - c.at < 3 * 36e5 && Array.isArray(c.top) && c.top.length >= 10) top = c.top;
+    else { try { top = (await self(env, '/scr/top', {tf})).top; if (top && top.length >= 10) await env.KV.put('scrtop', JSON.stringify({at: Date.now(), top})); } catch (e) { return release('top: ' + e.message); } }
+    if (!top || top.length < 10) return release('top vacío');
+    const chunks = []; for (let i = 0; i < top.length; i += SCR.CHUNK) chunks.push(top.slice(i, i + SCR.CHUNK));
+    const res = await pool(chunks, 6, c => self(env, '/scr/chunk', {tf, now, syms: c}));
+    let rows = [], retry = [];
+    res.forEach((r, i) => { if (r && !r.error) { rows.push(...r.rows); retry.push(...r.fail); } else retry.push(...chunks[i]); });
+    if (retry.length) { const r2 = await pool(retry.map(t => [t]), 6, c => self(env, '/scr/chunk', {tf, now, syms: c})); r2.forEach((r, i) => { if (r && !r.error) { rows.push(...r.rows); if (r.fail.length) retry[i] = null; else retry[i] = 'ok'; } }); }
+    const failed = retry.filter(x => x !== 'ok').length, done = top.length - failed;
+    if (done < top.length * .6) return release(`solo ${done}/${top.length} monedas`);
+    SCR.sortRows(rows);
+    let discord = false, pushed = 0;
+    if (rows.length) {
+      try { discord = await SCR.postDiscord(String(env.DISCORD_WEBHOOK || '').trim(), SCR.F.signalEmbeds(tf, rows, top.map(t => t.symbol))); } catch (e) { console.error('discord', e.message); }
+      try { const t = SCR.pushText(tf, rows); pushed = (await self(env, '/scr/push', {tf, msg: {title: t.title, body: t.body, tag: 'scr-' + tf, url: APP_URL + '#screener'}})).sent; } catch (e) { console.error('push', e.message); }
+    }
+    st[tf] = slot; st.lock = 0; st.err = null; st.last = Object.assign(st.last || {}, {[tf]: {at: Date.now(), n: rows.length, of: done, discord, pushed}});
+    await env.KV.put('scr', JSON.stringify(st));
+    return J({ok: true, tf, n: rows.length, of: done, discord, pushed});
+  }
+  return J({error: 'No encontrado'}, 404);
+}
+export {scrKick, scrInternal};

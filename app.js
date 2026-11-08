@@ -50,6 +50,7 @@ function sanRisk(a) { // calculadora de riesgo: % por operación, apalancamiento
   const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {}, n = (v, lo, hi, d) => Number.isFinite(+v) && +v >= lo && +v <= hi ? +v : d;
   return {pct: n(q.pct, .01, 100, 1), lev: Math.round(n(q.lev, 1, 200, 10)), fee: n(q.fee, 0, 1, .05), cap: n(q.cap, 0, 1e12, 0), show: q.show !== false};
 }
+function sanScrPush(a) { const q = a && typeof a === 'object' ? a : {}; return {on: q.on === true, h1: q.h1 !== false, h4: q.h4 !== false}; } // señales del Screener al celular
 function sanMoveAlerts(a) { // avisos de movimientos bruscos del precio
   const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {};
   return {on: q.on !== false, pct: Math.max(0.5, Math.min(25, Math.round((+q.pct || 2) * 10) / 10)), sound: q.sound !== false};
@@ -190,7 +191,7 @@ function merge(s) {
     o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 80).map(t => ({n: t.n.slice(0, 24), ...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})})) : [];
   }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
-  o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.risk = sanRisk(o.risk); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.discord = sanDiscord(o.discord);
+  o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.risk = sanRisk(o.risk); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.scrPush = sanScrPush(o.scrPush); o.discord = sanDiscord(o.discord);
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
   { // Nova Nexus: queda un solo indicador, el completo (Pine, en Mis indicadores). El módulo nativo antiguo se apaga y, si estaba encendido, se pasa al completo para no perderlo
@@ -308,7 +309,7 @@ let alTab = 'list';
 function setAlTab(t) {
   alTab = t; $$('#alertsView [data-altab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.altab === t)));
   $$('#alertsView [data-alpane]').forEach(p => { p.hidden = p.dataset.alpane !== t; });
-  if (t === 'how') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } else if (t === 'move') renderMoveAlerts();
+  if (t === 'how') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } else if (t === 'move') { renderMoveAlerts(); renderScrPush(); scrStatus(); }
 }
 function alTabCount() { const n = (state.alerts || []).filter(a => a.on).length, e = $('#alTabN'); if (e) e.textContent = n ? String(n) : ''; }
 function openAlerts(t) { switchView('alertsView'); setAlTab(t || alTab); }
@@ -808,6 +809,29 @@ function renderMoveAlerts() {
     state.moveAlerts = sanMoveAlerts(M); save(); renderMoveAlerts();
   });
   renderMoveAlerts();
+}
+/* Señales del Screener al celular: las calcula el servidor al empezar cada hora (1h) y cada 4 h, aunque la app esté cerrada */
+let scrSrv = null;
+async function scrStatus() { try { const r = await fetch('https://vortex-push.soobroon.workers.dev/scr/state'); if (r.ok) { scrSrv = await r.json(); renderScrPush(); } } catch {} }
+function renderScrPush() {
+  const box = $('#scrPushBox'); if (!box) return; const S = state.scrPush || {}, pushOn = !!(window.VortexPush && VortexPush.on);
+  const last = tf => { const l = scrSrv && scrSrv.last && scrSrv.last[tf]; return l ? `Último análisis ${new Date(l.at).toLocaleString([], {hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'})}: ${l.n} con señal de ${l.of}` : 'Se analiza al empezar cada ' + (tf === '1h' ? 'hora' : '4 horas'); };
+  const tg = (id, on, lbl) => `<button class="toggle ${on ? 'on' : ''}" id="${id}" type="button" aria-label="${lbl}" aria-pressed="${on}"></button>`;
+  box.innerHTML = `<div class="section-label">SEÑALES DEL SCREENER</div>
+    <div class="setting-row"><div><b>Avisarme las señales al celular</b><small>LONG, SHORT y RANGO del top 50 por volumen, con la app cerrada${pushOn ? '' : '. Primero activa «Avisos con la app cerrada» en «Cómo te aviso»'}</small></div>${tg('scrOn', !!S.on, 'Señales del Screener al celular')}</div>`
+    + (S.on ? `<div class="setting-row"><div><b>Temporalidad 1 hora</b><small>${esc(last('1h'))}</small></div>${tg('scrH1', S.h1 !== false, 'Señales de 1 hora')}</div>
+    <div class="setting-row"><div><b>Temporalidad 4 horas</b><small>${esc(last('4h'))}</small></div>${tg('scrH4', S.h4 !== false, 'Señales de 4 horas')}</div>` : '')
+    + `<p class="small-note">Solo llega aviso cuando hay al menos una cripto con señal. También se publican en el canal #vortex de Discord.</p>`;
+}
+{
+  const sb = $('#scrPushBox');
+  if (sb) sb.addEventListener('click', e => {
+    const t = e.target.closest('#scrOn, #scrH1, #scrH4'); if (!t) return; const S = {...(state.scrPush || {})};
+    if (t.id === 'scrOn') { S.on = !S.on; if (S.on && !(window.VortexPush && VortexPush.on)) toast('Activa «Avisos con la app cerrada» para recibirlas con la app cerrada'); }
+    else if (t.id === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false;
+    state.scrPush = sanScrPush(S); save(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true);
+  });
+  renderScrPush();
 }
 
 /* ───────── Alertas con indicadores ─────────

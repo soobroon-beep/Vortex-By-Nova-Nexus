@@ -4,9 +4,14 @@ main = "push-alerts.mjs"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
-# Revisa alertas y movimientos bruscos cada minuto
+# Revisa alertas, movimientos bruscos y (al empezar cada hora) el Screener 1h/4h, cada minuto
 [triggers]
 crons = ["* * * * *"]
+
+# Enlace a sí mismo: el Screener reparte el trabajo en llamadas pequeñas (cada una con su propio límite de CPU)
+[[services]]
+binding = "SELF"
+service = "vortex-push"
 
 # KV «vortex-push»: alertas, suscripciones y claves VAPID (se crean solas)
 [[kv_namespaces]]

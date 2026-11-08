@@ -6,7 +6,7 @@ name: Publicar servidor de avisos (vortex-push)
 on:
   push:
     branches: [main]
-    paths: ['worker/push-alerts.mjs', 'worker/wrangler-push.toml', '.github/workflows/deploy-push-worker.yml']
+    paths: ['worker/push-alerts.mjs', 'worker/screener.mjs', 'worker/wrangler-push.toml', 'nova-nexus.js', 'discord-format.js', '.github/workflows/deploy-push-worker.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,14 +20,17 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22}
       - name: Pruebas del Worker
-        run: node --test tests/push-worker.test.js
+        run: node --test tests/push-worker.test.js tests/worker-screener.test.js
       - name: Publicar en Cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
             echo "Falta el secreto CLOUDFLARE_API_TOKEN (Settings → Secrets and variables → Actions). No se publica nada."; exit 0
           fi
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
           npx --yes wrangler@4 deploy --config worker/wrangler-push.toml
+          # el webhook del canal #vortex pasa del secreto de GitHub al del servidor (nunca queda en el código)
+          if [ -n "$DISCORD_WEBHOOK" ]; then printf '%s' "$DISCORD_WEBHOOK" | npx --yes wrangler@4 secret put DISCORD_WEBHOOK --config worker/wrangler-push.toml; fi

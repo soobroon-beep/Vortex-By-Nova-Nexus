@@ -24,7 +24,7 @@
     return j;
   }
   const priceAlerts = () => (st().alerts || []).filter(a => a.kind !== 'ind').map(a => ({id: a.id, symbol: a.symbol, on: a.on, price: a.price, dir: a.dir, cond: a.cond, repeat: a.repeat, wait: a.wait, exp: a.exp, expired: a.expired, note: a.note, notify: a.notify, firedAt: a.firedAt || 0, firedPrice: a.firedPrice}));
-  const payload = () => ({alerts: priceAlerts(), move: {on: !!(st().moveAlerts || {}).on, pct: (st().moveAlerts || {}).pct || 2}, priceOn: !((B.prefs() || {}).n && B.prefs().n.price === false)});
+  const payload = () => ({alerts: priceAlerts(), move: {on: !!(st().moveAlerts || {}).on, pct: (st().moveAlerts || {}).pct || 2}, scr: {on: !!(st().scrPush || {}).on, h1: (st().scrPush || {}).h1 !== false, h4: (st().scrPush || {}).h4 !== false}, priceOn: !((B.prefs() || {}).n && B.prefs().n.price === false)});
 
   function applyBack(back) { // alertas que el servidor disparó mientras la app estaba cerrada
     let ch = false;

@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.1', d: '8 nov 2026', t: 'Avisos del Screener puntuales', items: [
+    'Las señales del Screener (1h y 4h) ahora las manda el servidor VORTEX al empezar cada hora, sin depender de GitHub: llegan a tiempo y sin saltarse horas.',
+    'Nuevo: recibe esas señales también como notificación en tu celular (Alertas › Movimientos y señales).',
+    'Al tocar una notificación se abre VORTEX en su dirección correcta.'
+  ]},
   {v: '3.0', d: '8 nov 2026', t: 'Diario de trading y libro de órdenes', items: [
     'Diario de trading: cada operación de la cuenta demo se anota sola con captura del gráfico al abrir y al cerrar. También puedes agregar tus operaciones reales.',
     'Estadísticas del diario: % ganadoras, factor de beneficio, esperanza, R promedio, curva de capital, calendario de ganancias y resultados por activo, día y motivo de cierre.',

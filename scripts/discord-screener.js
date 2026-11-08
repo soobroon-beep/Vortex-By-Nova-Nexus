@@ -60,7 +60,17 @@ async function main() {
   if (!url) { console.log('Falta el secreto DISCORD_WEBHOOK (Settings → Secrets and variables → Actions). No se envía nada.'); return; }
   if (!HOOK.test(url)) throw new Error('DISCORD_WEBHOOK no parece un webhook de Discord');
   const forced = String(process.env.TF || '').trim(), state = readState(), now = Date.now();
-  const tfs = forced ? timeframes(new Date(now), forced) : dueTfs(now, state);
+  let tfs = forced ? timeframes(new Date(now), forced) : dueTfs(now, state);
+  if (!forced && tfs.length) { // ahora el servidor VORTEX (Cloudflare) manda el Screener al empezar cada hora; esto es solo el respaldo
+    let srv = null; try { const r = await fetch('https://vortex-push.soobroon.workers.dev/scr/state'); if (r.ok) srv = await r.json(); } catch {}
+    tfs = tfs.filter(tf => {
+      if (srv && (+srv[tf] || 0) >= slotOf(tf, now)) { state[tf] = slotOf(tf, now); console.log(`${tf}: ya lo mandó el servidor`); return false; }
+      const mins = (now - slotOf(tf, now) * SLOT_MS[tf]) / 6e4; if (srv && mins < 25) { console.log(`${tf}: el servidor aún tiene tiempo de mandarlo (${mins.toFixed(0)} min)`); return false; }
+      return true;
+    });
+    fs.writeFileSync(STATE, JSON.stringify(state));
+    if (!tfs.length) return;
+  }
   if (!tfs.length) { console.log('Nada pendiente: ya se envió la franja actual (1h y 4h).'); return; }
   const top = await topSymbols(TOP_N);
   for (const tf of tfs) {
