@@ -9,9 +9,10 @@
   root.innerHTML = `
     <div class="sg-label">App en tu celular</div>
     <div class="pwa-card">
-      <div class="pwa-preview"><span class="pwa-prev-ic"><img data-app-icon width="64" height="64" alt="Ícono seleccionado"></span><div class="pwa-prev-t"><b>VORTEX</b><small id="appIconName"></small><span class="pwa-prev-k">Ícono de la app</span></div><button class="primary" id="installApp" type="button">Instalar aplicación</button></div>
+      <div class="pwa-preview"><span class="pwa-prev-ic"><img data-app-icon width="64" height="64" alt="Ícono seleccionado"></span><div class="pwa-prev-t"><b>VORTEX</b><small id="appIconName"></small><span class="pwa-prev-k">Ícono de la app · toca uno para cambiarlo</span></div></div>
       <div class="pwa-icons" role="group" aria-label="Ícono de la aplicación"></div>
       <button type="button" class="pwa-more" id="pwaMore" aria-expanded="false"><span>Ver los ${icons.variants.length} íconos</span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button class="primary" id="installApp" type="button">Instalar aplicación</button>
       <p id="installStatus" class="small-note" role="status" aria-live="polite"></p>
       <details id="installHelp"><summary>Cómo instalar o cambiar el ícono</summary>
         <p><b>Android:</b> abre esta página en Chrome, elige un ícono y toca Instalar aplicación. Si no aparece el aviso, usa el menú ⋮ → Instalar aplicación o Añadir a pantalla de inicio.</p>
@@ -37,7 +38,7 @@
   }
   function render() {
     icons.apply(icons.selected);
-    grid.querySelectorAll('button').forEach((b, i) => { const on = b.dataset.icon === icons.selected; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('pin', on && i >= 11); }); // el elegido se ve aunque esté más abajo
+    grid.querySelectorAll('button').forEach((b, i) => { const on = b.dataset.icon === icons.selected; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('pin', on && i >= 12); }); // el elegido se ve aunque esté más abajo
     root.querySelector('#appIconName').textContent = icons.variants.find(v => v[0] === icons.selected)[1];
     button.textContent = icons.selected !== icons.initial ? 'Preparar instalación' : standalone() ? 'Ver instrucciones de instalación' : promptEvent ? 'Instalar aplicación' : ios ? 'Ver pasos para iPhone / iPad' : 'Ver cómo instalar';
   }
