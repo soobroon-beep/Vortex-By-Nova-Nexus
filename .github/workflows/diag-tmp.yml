@@ -1,0 +1,7 @@
+name: Diagnóstico temporal
+on: workflow_dispatch
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -s https://vortex-push.soobroon.workers.dev/scr/diag; echo; curl -s https://vortex-push.soobroon.workers.dev/scr/state
