@@ -1,5 +1,11 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '2.5', d: '7 nov 2026', t: 'Indicadores y convertidor de Pine', items: [
+    'Nuevo explorador de indicadores por categorías, con buscador.',
+    'Convertidor de Pine profesional: prueba tu script en tus velas y, si algo falla, la IA lo corrige sola (hasta 3 intentos).',
+    'Tus indicadores quedan guardados en tu cuenta con su imagen; ahora caben hasta 3 MB de scripts.',
+    'Nuevos indicadores gratuitos: SMA, Media de Hull, Cruce dorado, Pivotes diarios, Fibonacci automático y Volumen con media.'
+  ]},
   {v: '2.4', d: '7 nov 2026', t: 'Inteligencia artificial', items: [
     'Nexus Pixel: tu asistente con IA dentro del gráfico. Conversa contigo, dibuja canales, soportes y rangos, y te ayuda en toda la app.',
     'Analizar gráfico con IA: lee tu gráfico y todos tus indicadores, y puedes seguir preguntándole.',
