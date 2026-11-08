@@ -100,10 +100,10 @@
 
   async function aiFix(code, probs, res, L) {
     if (!L) throw new Error('La IA no está disponible');
-    const big = code.split('\n').length > 220, sup = supported();
+    const big = code.split('\n').length > 220 || job.tries < MAX_TRIES, sup = supported(); // parches (solo lo que falla); el script completo solo en el último intento de un script corto
     const sys = (L.PINE_GUIDE || '') + (sup ? '\nFUNCIONES DISPONIBLES EN EL MOTOR (usa SOLO estas): ' + sup : '')
       + '\nTAREA: eres un convertidor experto de Pine Script. Te doy un script que funciona en TradingView pero en el motor de VORTEX falla en lo que se indica. Corrígelo para que funcione aquí SIN cambiar su lógica, sus cálculos, sus inputs, sus nombres ni sus colores. '
-      + 'Reemplaza solo lo que no existe por código equivalente (por ejemplo, funciones de librerías «import» se reescriben dentro del script; request.security con símbolos que no son de Binance se cambia por el símbolo del gráfico). No inventes funciones.'
+      + 'Reemplaza solo lo que no existe por código equivalente (por ejemplo, funciones de librerías «import» se reescriben dentro del script con su misma fórmula; request.security con símbolos que no son de Binance se cambia por el símbolo del gráfico). No inventes funciones. NO toques las líneas que no tienen problema: no reordenes argumentos, no cambies comillas, formato ni comentarios.'
       + (big ? '\nEl script es largo: NO lo reescribas completo. Responde SOLO con bloques de cambio con este formato EXACTO:\n<<<<<<< SEARCH\n(líneas exactas del código actual)\n=======\n(líneas nuevas)\n>>>>>>> REPLACE'
              : '\nResponde con 1 línea explicando el cambio y después el script COMPLETO corregido en un bloque ```pine.');
     const lines = code.split('\n'), ctxLines = new Set();

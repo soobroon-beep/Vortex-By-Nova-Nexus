@@ -3,14 +3,14 @@
 (function (root) {
   'use strict';
   root.CCTFree = [
-    {id: 'sma', cat: 'trend', col: '#4dd0e1', name: 'SMA', desc: 'Media móvil simple con período y fuente editables', art: 'ema', code: `//@version=5
+    {id: 'sma', cat: 'trend', col: '#4dd0e1', name: 'SMA', desc: 'Media móvil simple con período y fuente editables', art: 'ema20', code: `//@version=5
 indicator("SMA", overlay=true)
 len = input.int(50, "Período", minval=1)
 src = input.source(close, "Fuente")
 col = input.color(#4dd0e1, "Color")
 plot(ta.sma(src, len), "SMA", col, 2)
 `},
-    {id: 'hma', cat: 'trend', col: '#ffb74d', name: 'Media de Hull (HMA)', desc: 'Media muy rápida y suave que reduce el retraso; cambia de color según su pendiente', art: 'ema', code: `//@version=5
+    {id: 'hma', cat: 'trend', col: '#ffb74d', name: 'Media de Hull (HMA)', desc: 'Media muy rápida y suave que reduce el retraso; cambia de color según su pendiente', art: 'ema20', code: `//@version=5
 indicator("Media de Hull", "HMA", overlay=true)
 len = input.int(55, "Período", minval=2)
 src = input.source(close, "Fuente")
