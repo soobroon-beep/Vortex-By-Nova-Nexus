@@ -9,6 +9,8 @@
   const isStrategyMsg = m => /strategy/i.test(m);
   const problems = res => !res ? ['No se pudo ejecutar'] : !res.ok ? [(res.error.line ? 'Línea ' + res.error.line + ': ' : '') + res.error.msg]
     : (res.warnings || []).filter(w => w.level === 'unsupported' && !isStrategyMsg(w.msg)).map(w => (w.line ? 'Línea ' + w.line + ': ' : '') + w.msg);
+  const drawsSomething = r => !!r && r.ok && ((r.plots || []).some(p => p.values.some(v => v !== null)) || (r.shapes || []).length || (r.labels || []).length || (r.lines || []).length || (r.boxes || []).length || (r.tables || []).length || (r.polylines || []).length || (r.fills || []).length || (r.candles || []).length || (r.hlines || []).length || [...(r.bgcolors || []), ...(r.barcolors || [])].some(e => e && e.pts && e.pts.length));
+  const drawCalls = code => (code.match(/\b(plot|plotshape|plotchar|plotcandle|plotbar|bgcolor|barcolor|fill|hline|line\.new|label\.new|box\.new|table\.new|polyline\.new)\s*\(/g) || []).length;
   const versionOf = code => { const m = /@version\s*=\s*(\d+)/.exec(code); return m ? +m[1] : null; };
   const nameOf = (code, fb) => { const m = code.match(/(?:indicator|strategy|study)\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/); return (m ? m[1] : fb || 'Script de Pine').slice(0, 80); };
   const fnCount = code => (code.match(/^\s*(?:export\s+)?(?:method\s+)?[A-Za-z_]\w*\s*\([^()\n]*\)\s*=>/gm) || []).length;
@@ -70,7 +72,7 @@
     const A = window.CCT_ai, L = window.CCTLLM;
     PENDING = ['Compilar', 'Comprobar que se ejecuta en tus velas'];
     const s1 = step('Se leyó tu script de Pine', `${job.lines} líneas${job.v ? ', Pine v' + job.v : ''}`, 'ok'); s1.key = 'read';
-    const nf = fnCount(job.code); step(nf ? `Se encontraron ${nf} funciones` : 'Sin funciones propias', '', 'ok').key = 'fn';
+    await tick(); const nf = fnCount(job.code); step(nf ? `Se encontraron ${nf} funciones` : 'Sin funciones propias', '', 'ok').key = 'fn'; await tick();
     if (job.v && job.v < 4) step('Pine antiguo (v' + job.v + ')', 'Se adapta automáticamente al formato actual', 'warn');
     let s = step('Compilando…'); s.key = 'Compilar'; await tick();
     let res = await A.run(job.code, job.name); if (job.cancel) return;
@@ -78,7 +80,7 @@
     else if (res && res.error && /velas/.test(res.error.msg)) { return fail(res.error.msg); }
     else set(s, 'err', 'No compiló', res && res.error ? (res.error.line ? 'Línea ' + res.error.line + ': ' : '') + res.error.msg : '');
     let probs = problems(res);
-    if (res && res.ok) { const s2 = step('Comprobando en tus velas…'); s2.key = 'Comprobar que se ejecuta en tus velas'; set(s2, probs.length ? 'warn' : 'ok', probs.length ? `Funciona, pero ${probs.length} parte(s) no funcionan todavía` : `Se ejecuta en ${res.stats && res.stats.bars || 'todas las'} velas sin errores`, probs.length ? probs[0] : ''); }
+    if (res && res.ok) { await tick(); const s2 = step('Comprobando en tus velas…'); await tick(); s2.key = 'Comprobar que se ejecuta en tus velas'; set(s2, probs.length ? 'warn' : 'ok', probs.length ? `Funciona, pero ${probs.length} parte(s) no funcionan todavía` : `Se ejecuta en ${res.stats && res.stats.bars || 'todas las'} velas sin errores`, probs.length ? probs[0] : ''); }
     PENDING = [];
     while (probs.length && job.tries < MAX_TRIES) {
       if (job.cancel) return;
@@ -96,7 +98,7 @@
     }
     finish(res, probs);
   }
-  const tick = () => new Promise(r => setTimeout(r, 30));
+  const tick = () => new Promise(r => setTimeout(r, 380));
 
   async function aiFix(code, probs, res, L) {
     if (!L) throw new Error('La IA no está disponible');
@@ -121,9 +123,13 @@
 
   function finish(res, probs) {
     const A = window.CCT_ai; job.done = true;
-    const works = res && res.ok, sid = A.saveConverted(job.code, job.name, works ? res : null, works, job.opts.replaceId);
-    const st = step(works ? (probs.length ? 'Listo: funciona con partes aproximadas' : 'Listo: convertido y funcionando') : 'Guardado, pero todavía no funciona en el gráfico',
-      sid ? (works ? 'Se guardó en «Mis indicadores» (en tu cuenta) con su imagen y ya está en el gráfico' : 'Se guardó en «Mis indicadores» para que no se pierda; puedes reintentarlo después') : 'No se pudo guardar', works ? (probs.length ? 'warn' : 'ok') : 'err');
+    if (res && res.ok && !drawsSomething(res)) {
+      const dc = drawCalls(job.code);
+      step('El script no dibuja nada', dc ? 'Se ejecutó sin errores, pero en estas velas no produjo ninguna línea, forma ni etiqueta.' : `Parece incompleto: no tiene ninguna instrucción que dibuje (plot, label.new, box.new…). ¿Copiaste el código completo? Tiene ${job.lines} líneas.`, 'warn');
+    }
+    const works = res && res.ok && drawsSomething(res), sid = A.saveConverted(job.code, job.name, works ? res : null, works, job.opts.replaceId);
+    const st = step(works ? (probs.length ? 'Listo: funciona con partes aproximadas' : 'Listo: convertido y funcionando') : res && res.ok ? 'Guardado, pero no se ve nada en el gráfico' : 'Guardado, pero todavía no funciona en el gráfico',
+      sid ? (works ? 'Se guardó en «Mis indicadores» (en tu cuenta) con su imagen y ya está en el gráfico' : res && res.ok ? 'Se guardó en «Mis indicadores». Pega el código completo y conviértelo de nuevo.' : 'Se guardó en «Mis indicadores» para que no se pierda; puedes reintentarlo después') : 'No se pudo guardar', works ? (probs.length ? 'warn' : 'ok') : 'err');
     st.key = 'done';
     if (box) { const go = box.querySelector('.pc-go'), cn = box.querySelector('.pc-cancel'); go.textContent = works ? 'Ver en el gráfico' : 'Cerrar'; cn.textContent = 'Cerrar'; box.querySelector('.pc-note').textContent = works ? `Listo en ${Math.round((Date.now() - job.t0) / 1000)} s` : 'Puedes abrirlo desde Mis indicadores y probar «Convertir de nuevo».'; }
     job.after = () => { close(); if (works && window.CCT_switchView) { try { window.CCT_switchView('chartView'); } catch {} } };

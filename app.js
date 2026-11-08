@@ -1614,7 +1614,7 @@ function renderSheet() {
     list.innerHTML = `<p class="small-note">${esc(sc.name)} · ${sc.lines} líneas${sc.code.length > MAXV ? ' · se muestran los primeros 30,000 caracteres (el script completo está guardado)' : ''}</p><pre class="code">${esc(shown)}</pre>`; return;
   }
   if (sheetMode === 'paste') {
-    list.innerHTML = `<input id="pasteName" class="paste-name" placeholder="Nombre (opcional)" autocomplete="off"><textarea id="pasteCode" placeholder="Pega aquí tu código Pine…" spellcheck="false"></textarea><button class="primary" id="pasteSave">Guardar script</button>`;
+    list.innerHTML = `<input id="pasteName" class="paste-name" placeholder="Nombre (opcional)" autocomplete="off"><textarea id="pasteCode" placeholder="Pega aquí tu código Pine…" spellcheck="false"></textarea><div class="paste-actions"><button class="primary" id="pasteSave" style="margin:0">Convertir y guardar</button></div>`;
     $('#pasteSave').onclick = () => { const code = $('#pasteCode').value; if (!code.trim()) { toast('Pega primero el código'); return; } closeSheet(); convertPine(code, $('#pasteName').value.trim() || 'Script pegado'); };
     return;
   }
