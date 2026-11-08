@@ -6,13 +6,15 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const fin = Number.isFinite;
   let A = load(), H = {sym: () => '', price: () => NaN, fmt: v => String(v), render: () => {}, toast: () => {}, base: s => s};
-  let ui = Object.assign({open: false, type: 'market', lev: 10, amt: '', unit: 'usdt', tpOn: false, slOn: false, tab: 'pos'}, loadUi());
+  let ui = Object.assign({open: false, type: 'market', lev: 10, amt: '', unit: 'usdt', tpOn: false, slOn: false, tab: 'pos', mode: 'demo'}, loadUi());
+  /* Modo real: tu exchange conectado (exchange.js) con «Permitir operar en vivo». Cada orden pide confirmación. */
+  const X = () => root.CCTExchange, real = () => ui.mode === 'real' && !!(X() && X().canTrade()), xs = () => (X() ? X().snap() : {}) || {};
   const last = {}; let panel = null, timer = 0, listT = 0;
 
   function load() { try { return E.san(JSON.parse(localStorage.getItem(LS) || 'null')); } catch { return E.newAcct(); } }
   function loadUi() { try { return JSON.parse(localStorage.getItem(LSU) || '{}') || {}; } catch { return {}; } }
   const save = () => { try { localStorage.setItem(LS, JSON.stringify(A)); } catch {} };
-  const saveUi = () => { try { const {open, type, lev, unit, tpOn, slOn, tab} = ui; localStorage.setItem(LSU, JSON.stringify({open, type, lev, unit, tpOn, slOn, tab})); } catch {} };
+  const saveUi = () => { try { const {open, type, lev, unit, tpOn, slOn, tab, mode} = ui; localStorage.setItem(LSU, JSON.stringify({open, type, lev, unit, tpOn, slOn, tab, mode})); } catch {} };
   const px = s => { const v = +H.price(s); return v > 0 ? v : NaN; };
   const f = v => fin(v) ? H.fmt(v) : '—';
   const usd = (v, sign) => fin(v) ? (sign && v > 0 ? '+' : v < 0 ? '−' : '') + '$' + Math.abs(v).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '—';
@@ -42,7 +44,7 @@
   function poll() { const syms = new Set([...A.pos.map(p => p.sym), ...A.ord.map(o => o.sym)]); for (const s of syms) tick(s, px(s)); }
 
   /* ───────── líneas para el gráfico ───────── */
-  function lines(sym) {
+  function lines(sym) { if (real()) return []; // en modo real no se dibujan las líneas de la demo
     const out = [], L = px(sym);
     for (const p of A.pos) if (p.sym === sym) {
       const pn = fin(L) ? E.upnl(p, L) : NaN, roe = pn / E.margin(p) * 100;
@@ -76,7 +78,7 @@
   const svg = (p, s = 16) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   function shell() {
     panel = document.createElement('div'); panel.className = 'tr-panel'; panel.hidden = true; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Operar · cuenta demo');
-    panel.innerHTML = `<div class="tr-head"><div><b>Operar</b><span class="tr-demo">Cuenta demo</span></div><div class="tr-eq" data-tr-eq></div><button type="button" class="tr-jr" data-tr-journal title="Diario de trading">Diario</button><button type="button" class="tr-x" data-tr-close aria-label="Cerrar">✕</button></div>
+    panel.innerHTML = `<div class="tr-head"><div><b>Operar</b><span class="tr-mode" data-tr-mode></span></div><div class="tr-eq" data-tr-eq></div><button type="button" class="tr-jr" data-tr-journal title="Diario de trading">Diario</button><button type="button" class="tr-x" data-tr-close aria-label="Cerrar">✕</button></div>
       <div class="tr-body">
         <div class="tr-seg" data-tr-types>${[['market', 'Mercado'], ['limit', 'Límite'], ['stop', 'Stop']].map(([k, l]) => `<button type="button" data-tr-type="${k}">${l}</button>`).join('')}</div>
         <label class="tr-f tr-price"><span>Precio</span><input type="text" inputmode="decimal" data-tr-in="price" autocomplete="off"><button type="button" class="tr-mini" data-tr-last>Último</button></label>
@@ -107,7 +109,7 @@
     const qty = ui.unit === 'usdt' ? a * ui.lev / e : a; return {qty, notional: qty * e, margin: qty * e / ui.lev, e};
   }
   function renderCalc() {
-    if (!panel) return; const s = sizing(), box = $p('[data-tr-calc]'), sym = H.sym(), av = E.available(A, px);
+    if (!panel) return; const s = sizing(), box = $p('[data-tr-calc]'), sym = H.sym(), av = avail();
     let h = `<span>Disponible <b>${usd(av)}</b></span>`;
     if (s) {
       h += `<span>Tamaño <b>${qf(s.qty)} ${esc(coin(sym))}</b> · ${usd(s.notional)}</span><span>Margen <b>${usd(s.margin)}</b></span>`;
@@ -120,10 +122,12 @@
     const lbl = ui.type === 'market' ? ['Long a mercado', 'Short a mercado'] : ui.type === 'limit' ? ['Long límite', 'Short límite'] : ['Long stop', 'Short stop'];
     $p('[data-tr-bl]').textContent = lbl[0]; $p('[data-tr-sl]').textContent = lbl[1];
   }
+  const avail = () => real() ? +xs().free : E.available(A, px);
   function renderLive() { if (!panel || panel.hidden) return; renderEq(); renderList(); renderCalc(); }
-  function renderEq() { const eq = E.equity(A, px), net = eq - A.start; $p('[data-tr-eq]').innerHTML = `<b>${usd(eq)}</b><small class="${net >= 0 ? 'up' : 'dn'}">${usd(net, true)} · ${(net / A.start * 100).toFixed(2)}%</small>`; }
+  function renderEq() { if (real()) { const S = xs(); $p('[data-tr-eq]').innerHTML = `<b>${usd(+S.equity)}</b><small class="${S.err ? 'dn' : ''}">${S.err ? 'Revisa tu conexión' : 'Saldo real'}</small>`; return; } const eq = E.equity(A, px), net = eq - A.start; $p('[data-tr-eq]').innerHTML = `<b>${usd(eq)}</b><small class="${net >= 0 ? 'up' : 'dn'}">${usd(net, true)} · ${(net / A.start * 100).toFixed(2)}%</small>`; }
   function renderList() {
     const box = $p('[data-tr-list]'); if (!box) return;
+    if (real()) return renderListReal(box);
     $p('[data-tr-n="pos"]').textContent = A.pos.length || ''; $p('[data-tr-n="ord"]').textContent = A.ord.length || '';
     panel.querySelectorAll('[data-tr-tab]').forEach(b => b.classList.toggle('on', b.dataset.trTab === ui.tab));
     let h = '';
@@ -138,8 +142,27 @@
     box.innerHTML = h;
     const st = E.stats(A); $p('[data-tr-stats]').textContent = st.n ? `${st.n} operaciones · ${st.win.toFixed(0)}% ganadoras` : 'Saldo inicial ' + usd(A.start);
   }
+  function renderListReal(box) { // posiciones y órdenes de tu exchange (se actualizan cada minuto y después de cada orden)
+    const S = xs(), P = S.positions || [], O = S.orders || [], n2 = v => fin(+v) ? +v : NaN;
+    $p('[data-tr-n="pos"]').textContent = P.length || ''; $p('[data-tr-n="ord"]').textContent = O.length || '';
+    panel.querySelectorAll('[data-tr-tab]').forEach(b => b.classList.toggle('on', b.dataset.trTab === ui.tab));
+    let h = '';
+    if (ui.tab === 'pos') h = P.length ? P.map((p, i) => { const L = String(p.side).toLowerCase() === 'long', pn = n2(p.unrealizedPnl), sym = String(p.symbol || '').split(':')[0];
+      return `<div class="tr-row"><div class="tr-r1"><b class="${L ? 'up' : 'dn'}">${L ? 'Long' : 'Short'}</b> <b>${esc(sym)}</b> <small>${fin(n2(p.leverage)) ? n2(p.leverage) + 'x · ' : ''}${qf(Math.abs(n2(p.contracts)))}</small><span class="tr-pn ${pn >= 0 ? 'up' : 'dn'}">${usd(pn, true)}<small>${fin(n2(p.percentage)) ? (n2(p.percentage) >= 0 ? '+' : '') + n2(p.percentage).toFixed(2) + '%' : ''}</small></span></div>
+        <div class="tr-r2"><span>Entrada <b>${f(n2(p.entryPrice))}</b></span><span>Precio <b>${f(n2(p.markPrice))}</b></span><span>Liq. <b>${f(n2(p.liquidationPrice))}</b></span></div>
+        <div class="tr-r3"><button type="button" data-tr-xhalf="${i}">Cerrar 50%</button><button type="button" class="dn" data-tr-xclose="${i}">Cerrar a mercado</button></div></div>`; }).join('') : `<div class="tr-empty">${S.err ? esc(S.err) : 'Sin posiciones abiertas en tu exchange.'}</div>`;
+    else if (ui.tab === 'ord') h = O.length ? O.map((o, i) => `<div class="tr-row"><div class="tr-r1"><b class="${o.side === 'buy' ? 'up' : 'dn'}">${o.side === 'buy' ? 'Compra' : 'Venta'} ${esc(o.type || '')}</b> <b>${esc(String(o.symbol || '').split(':')[0])}</b> <small>${qf(+o.amount || 0)}</small><button type="button" class="tr-cancel" data-tr-xcancel="${i}">Cancelar</button></div><div class="tr-r2"><span>Precio <b>${f(n2(o.price || o.triggerPrice || o.stopPrice))}</b></span></div></div>`).join('') : '<div class="tr-empty">Sin órdenes pendientes en tu exchange.</div>';
+    else h = '<div class="tr-empty">El historial real está en Nexus Lens (barra derecha) y en tu exchange.</div>';
+    box.innerHTML = h; $p('[data-tr-stats]').textContent = S.at ? 'Actualizado ' + new Date(S.at).toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit'}) : 'Leyendo tu exchange…';
+  }
+  function renderMode() {
+    const el = $p('[data-tr-mode]'), x = X() && X().info(), can = !!(X() && X().canTrade());
+    if (!can && ui.mode === 'real') ui.mode = 'demo';
+    el.innerHTML = can ? `<span class="tr-seg tr-msw"><button type="button" data-tr-m="demo" class="${ui.mode !== 'real' ? 'on' : ''}">Demo</button><button type="button" data-tr-m="real" class="${ui.mode === 'real' ? 'on real' : ''}">Real · ${esc(x.name)}</button></span>` : `<span class="tr-demo">Cuenta demo</span>${x ? '' : '<button type="button" class="tr-mini" data-ex-open>Conectar exchange</button>'}`;
+    panel.classList.toggle('is-real', real()); $p('[data-tr-reset]').hidden = real();
+  }
   function renderPanel() {
-    if (!panel || panel.hidden) return;
+    if (!panel || panel.hidden) return; renderMode();
     panel.querySelectorAll('[data-tr-type]').forEach(b => b.classList.toggle('on', b.dataset.trType === ui.type));
     $p('.tr-price').hidden = ui.type === 'market';
     $p('[data-tr-unit]').textContent = ui.unit === 'usdt' ? 'USDT' : coin(H.sym());
@@ -152,6 +175,13 @@
     const s = sizing(), sym = H.sym(); if (!s) { H.toast(ui.type === 'market' ? 'Escribe el monto' : 'Escribe el precio y el monto'); return; }
     const o = {sym, side, qty: s.qty, lev: ui.lev, type: ui.type, price: ui.type === 'market' ? undefined : s.e, tp: ui.tpOn ? num('tp') : null, sl: ui.slOn ? num('sl') : null};
     if (ui.type !== 'market') { const L = px(sym); if (fin(L)) o.type = side > 0 ? (s.e <= L ? 'limit' : 'stop') : (s.e >= L ? 'limit' : 'stop'); }
+    if (real()) { // orden REAL: siempre se confirma
+      const x = X().info(), msg = `ORDEN REAL en ${x.name}\n\n${side > 0 ? 'COMPRA (Long)' : 'VENTA (Short)'} ${qf(s.qty)} ${coin(sym)}\n${o.type === 'market' ? 'A mercado (~' + f(s.e) + ')' : (o.type === 'limit' ? 'Límite en ' : 'Stop en ') + f(s.e)}\nValor ${usd(s.notional)} · ${ui.lev}x · margen ${usd(s.margin)}${o.tp ? '\nTP ' + f(o.tp) : ''}${o.sl ? '\nSL ' + f(o.sl) : ''}\n\n¿Enviar la orden?`;
+      if (!root.confirm(msg)) return;
+      H.toast('Enviando orden a ' + x.name + '…');
+      X().order(o).then(() => { H.toast(`Orden enviada a ${x.name}`); ui.tab = o.type === 'market' ? 'pos' : 'ord'; renderList(); }, e => H.toast('No se pudo: ' + (e.message || e)));
+      return;
+    }
     const r = E.place(A, o, px); if (r.error) { H.toast(r.error); return; }
     if (r.ord) H.toast(`Orden ${r.ord.type === 'limit' ? 'límite' : 'stop'} de ${side > 0 ? 'compra' : 'venta'} en ${f(r.ord.price)}`);
     changed(r.ev.filter(e => e.k !== 'placed'));
@@ -164,8 +194,11 @@
     const ty = t.closest('[data-tr-type]'); if (ty) { ui.type = ty.dataset.trType; if (ui.type !== 'market' && !(num('price') > 0)) inp('price').value = rp(px(H.sym())); saveUi(); renderPanel(); return; }
     if (t.closest('[data-tr-last]')) { inp('price').value = rp(px(H.sym())); renderCalc(); return; }
     if (t.closest('[data-tr-unit]')) { const s = sizing(); ui.unit = ui.unit === 'usdt' ? 'coin' : 'usdt'; if (s) inp('amt').value = ui.unit === 'usdt' ? +s.margin.toFixed(2) : +s.qty.toPrecision(6); saveUi(); renderPanel(); return; }
-    const pc = t.closest('[data-tr-pct]'); if (pc) { const av = Math.max(0, E.available(A, px)) * +pc.dataset.trPct / 100 * .998, e2 = entryPrice(); inp('amt').value = ui.unit === 'usdt' ? av.toFixed(2) : (e2 > 0 ? +(av * ui.lev / e2).toPrecision(6) : ''); renderCalc(); return; }
+    const pc = t.closest('[data-tr-pct]'); if (pc) { const av = Math.max(0, avail() || 0) * +pc.dataset.trPct / 100 * .998, e2 = entryPrice(); inp('amt').value = ui.unit === 'usdt' ? av.toFixed(2) : (e2 > 0 ? +(av * ui.lev / e2).toPrecision(6) : ''); renderCalc(); return; }
     const sd = t.closest('[data-tr-side]'); if (sd) return submit(+sd.dataset.trSide);
+    const md = t.closest('[data-tr-m]'); if (md) { ui.mode = md.dataset.trM; saveUi(); if (ui.mode === 'real') X().refresh().then(renderLive); renderPanel(); H.render(); return; }
+    const xc = t.closest('[data-tr-xclose], [data-tr-xhalf]'); if (xc) { const P = xs().positions || [], p = P[+(xc.dataset.trXclose || xc.dataset.trXhalf)], fr = xc.dataset.trXhalf != null ? .5 : 1; if (!p) return; if (!root.confirm(`¿Cerrar ${fr < 1 ? 'el 50% de ' : ''}tu ${String(p.side).toLowerCase() === 'long' ? 'Long' : 'Short'} REAL de ${String(p.symbol).split(':')[0]} a mercado?`)) return; X().closePosition(p, fr).then(() => H.toast('Posición cerrada'), e => H.toast('No se pudo: ' + e.message)); return; }
+    const xo = t.closest('[data-tr-xcancel]'); if (xo) { const o = (xs().orders || [])[+xo.dataset.trXcancel]; if (o) X().cancel(o).then(() => H.toast('Orden cancelada'), e => H.toast('No se pudo: ' + e.message)); return; }
     const tb = t.closest('[data-tr-tab]'); if (tb) { ui.tab = tb.dataset.trTab; saveUi(); renderList(); return; }
     const cp = t.closest('[data-tr-closep]'); if (cp) { const p = A.pos.find(x => x.id === cp.dataset.trClosep); if (p && confirmClose(p)) changed(E.closePos(A, p.id, px(p.sym))); return; }
     const hf = t.closest('[data-tr-half]'); if (hf) { const p = A.pos.find(x => x.id === hf.dataset.trHalf); if (p) changed(E.closePos(A, p.id, px(p.sym), .5)); return; }
@@ -187,7 +220,7 @@
   function toggle(on) {
     if (!panel) shell(); ui.open = on == null ? panel.hidden : !!on; panel.hidden = !ui.open; saveUi();
     const b = document.getElementById('tradeBtn'); if (b) { b.classList.toggle('on', ui.open); b.setAttribute('aria-pressed', ui.open); }
-    if (ui.open) renderPanel();
+    if (ui.open) { renderPanel(); if (real()) X().refresh(); }
   }
   // clic derecho en el gráfico → boleta lista con ese precio (límite o stop según el lado)
   function at(side, price) {
@@ -201,7 +234,7 @@
   }
 
   function bind(h) {
-    Object.assign(H, h); clearInterval(timer); timer = setInterval(poll, 2000); if (root.CCTJournal) setTimeout(() => CCTJournal.sync(A), 0);
+    Object.assign(H, h); if (X()) X().onChange(() => { if (panel && !panel.hidden) { renderMode(); renderLive(); } }); clearInterval(timer); timer = setInterval(poll, 2000); if (root.CCTJournal) setTimeout(() => CCTJournal.sync(A), 0);
     if (ui.open) setTimeout(() => toggle(true), 0);
   }
   const symChanged = () => { if (panel && !panel.hidden) { inp('price').value = ''; if (ui.type !== 'market') inp('price').value = rp(px(H.sym())); renderPanel(); } };

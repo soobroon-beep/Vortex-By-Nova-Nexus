@@ -129,7 +129,7 @@ const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle |
 /* Preferencias de interfaz que también viajan a la cuenta: altura de paneles, tamaño de paneles, opciones del dibujo (imán, bloquear…) y color/ícono de la app */
 function sanUi(u) {
   const q = u && typeof u === 'object' && !Array.isArray(u) ? u : {}, o = {};
-  const sanPanes = c => { const r = {}; if (c && typeof c === 'object') { if (c.paneH && typeof c.paneH === 'object' && !Array.isArray(c.paneH)) { const h = {}; for (const [k, v] of Object.entries(c.paneH).slice(0, 24)) if (/^[A-Za-z0-9:_-]{1,40}$/.test(k) && Number.isFinite(v) && v >= 20 && v <= 3000) h[k] = Math.round(v); r.paneH = h; } if (Number.isFinite(c.paneScale) && c.paneScale >= .6 && c.paneScale <= 3) r.paneScale = c.paneScale; if (Array.isArray(c.order)) r.order = c.order.filter(k => typeof k === 'string' && /^[A-Za-z0-9:_-]{1,40}$/.test(k)).slice(0, 64); } return r; };
+  const sanPanes = c => { const r = {}; if (c && typeof c === 'object') { if (c.paneH && typeof c.paneH === 'object' && !Array.isArray(c.paneH)) { const h = {}; for (const [k, v] of Object.entries(c.paneH).slice(0, 24)) if (/^[A-Za-z0-9:_-]{1,40}$/.test(k) && Number.isFinite(v) && ((v > 0 && v <= 1) || (v >= 20 && v <= 3000))) h[k] = v <= 1 ? +v.toFixed(4) : Math.round(v); r.paneH = h; } if (c.man && typeof c.man === 'object' && !Array.isArray(c.man)) { const m = {}; for (const [k, v] of Object.entries(c.man).slice(0, 24)) if (/^[A-Za-z0-9:_-]{1,40}$/.test(k) && Array.isArray(v) && v.length === 2 && v.every(Number.isFinite) && v[1] > v[0]) m[k] = [+v[0], +v[1]]; r.man = m; } if (Number.isFinite(c.paneScale) && c.paneScale >= .6 && c.paneScale <= 3) r.paneScale = c.paneScale; if (Array.isArray(c.order)) r.order = c.order.filter(k => typeof k === 'string' && /^[A-Za-z0-9:_-]{1,40}$/.test(k)).slice(0, 64); } return r; };
   if (q.panes && typeof q.panes === 'object') { o.panes = {}; for (const k of ['pc', 'movil']) if (q.panes[k]) o.panes[k] = sanPanes(q.panes[k]); } // tamaño de paneles: uno para PC y otro para móvil
   if (q.dopt && typeof q.dopt === 'object' && !Array.isArray(q.dopt)) { const d = {}; for (const k of ['magnet', 'stay', 'lock', 'hide']) if (typeof q.dopt[k] === 'boolean') d[k] = q.dopt[k]; o.dopt = d; }
   if (typeof q.icon === 'string' && /^[a-z][a-z0-9]{2,11}$/.test(q.icon)) o.icon = q.icon;
@@ -2692,18 +2692,25 @@ let paneOrder = (() => { try { const o = JSON.parse(localStorage.getItem('cct_pa
 let paneLayout = {bot: [], top: [], main: [], mainBase: 0}, mainCount = 0; // paneles de abajo y de arriba tal como se dibujaron: [{key, h}], para poder arrastrarlos
 const orderPanes = keys => { const ix = k => { const i = paneOrder.indexOf(k); return i < 0 ? 1e6 : i; }; return keys.map((k, i) => [k, i]).sort((a, b) => ix(a[0]) - ix(b[0]) || a[1] - b[1]).map(x => x[0]); };
 const savePaneOrder = () => { try { localStorage.setItem('cct_paneOrder_v1', JSON.stringify(paneOrder)); } catch {} if (typeof syncUi === 'function') syncUi(); };
+/* Rango vertical que dejaste en los paneles acotados (osciladores de Pine, RSI, estocástico): se guarda y se queda igual al cambiar de moneda, recargar o abrir en otro dispositivo */
+const PANE_KEEP = k => /^pine:|^(rsi|stoch)$/.test(k);
+let paneManSaved = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneMan_v1') || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; } })();
+const paneManKeep = () => paneManSaved;
+function savePaneMan(key) { if (!PANE_KEEP(key)) return; const pm = paneMan[key]; if (pm) paneManSaved[key] = [+pm.min.toPrecision(8), +pm.max.toPrecision(8)]; else delete paneManSaved[key]; try { localStorage.setItem('cct_paneMan_v1', JSON.stringify(paneManSaved)); } catch {} if (typeof syncUi === 'function') syncUi(); }
+let paneRefH = 0; // alto disponible para gráfico + paneles (para guardar la altura de cada panel como proporción y no como píxeles)
 const savePaneH = () => { try { localStorage.setItem('cct_paneH_v1', JSON.stringify(paneH)); } catch {} if (typeof syncUi === 'function') syncUi(); };
 const paneScale0 = () => { try { const v = parseFloat(localStorage.getItem('cct_paneScale')); return v >= .6 && v <= 3 ? v : 1.25; } catch { return 1.25; } };
 let paneScale = paneScale0();
 const devClass = () => (window.matchMedia && matchMedia('(min-width: 1024px)').matches ? 'pc' : 'movil');
 function syncUi() { // vuelca las preferencias de interfaz al estado (que se guarda en el dispositivo y en la cuenta)
-  const panes = Object.assign({}, (state.ui || {}).panes); panes[devClass()] = {paneH, paneScale, order: paneOrder}; // cada tipo de dispositivo guarda su propio tamaño
+  const panes = Object.assign({}, (state.ui || {}).panes); panes[devClass()] = {paneH, paneScale, order: paneOrder, man: paneManKeep()}; // cada tipo de dispositivo guarda su propio tamaño
   state.ui = sanUi({panes, dopt: DOPT, favBar: FB, favs: FAVS, prefs: PR, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
 }
 function applyUi() { // al recibir el estado de la cuenta: aplica sus preferencias de interfaz en este dispositivo
   const u = state.ui || {};
   const pn = (u.panes || {})[devClass()] || {}; // solo se aplica el tamaño guardado para este tipo de dispositivo
   if (pn.paneH) { paneH = {...pn.paneH}; try { localStorage.setItem('cct_paneH_v1', JSON.stringify(paneH)); } catch {} }
+  if (pn.man) { paneManSaved = {...pn.man}; try { localStorage.setItem('cct_paneMan_v1', JSON.stringify(paneManSaved)); } catch {} }
   if (Array.isArray(pn.order)) { paneOrder = pn.order.slice(0, 64); try { localStorage.setItem('cct_paneOrder_v1', JSON.stringify(paneOrder)); } catch {} }
   if (pn.paneScale) { paneScale = pn.paneScale; try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} }
   if (u.dopt) { Object.assign(DOPT, u.dopt); try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} }
@@ -2830,7 +2837,7 @@ function render() { renderCore(); syncLegend(); syncLegToggle(); }
     nh = Math.max(36, Math.min(drag.max, nh)); dy = drag.dir === 'up' ? drag.h0 - nh : nh - drag.h0;
     paneH[drag.key] = nh; drag.el.style.top = (drag.top0 + dy) + 'px'; scheduleRender();
   });
-  const end = () => { if (!drag) return; drag.el.classList.remove('on'); drag = null; gripDrag = false; box.classList.remove('dragging'); savePaneH(); legSig = ''; scheduleRender(); };
+  const end = () => { if (!drag) return; drag.el.classList.remove('on'); if (paneRefH > 0 && paneH[drag.key] > 1) paneH[drag.key] = +(paneH[drag.key] / paneRefH).toFixed(4); drag = null; gripDrag = false; box.classList.remove('dragging'); savePaneH(); legSig = ''; scheduleRender(); };
   box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
   box.addEventListener('dblclick', e => { const el = e.target.closest('.pane-grip'); if (!el) return; delete paneH[el.dataset.gk]; savePaneH(); legSig = ''; scheduleRender(); toast('Altura automática'); });
 })();
@@ -2888,7 +2895,7 @@ function renderCore() {
   const text = css.getPropertyValue('--muted').trim(), line = css.getPropertyValue('--line').trim(), bg = css.getPropertyValue('--bg').trim(), drawCol = css.getPropertyValue('--draw').trim() || '#e9c36e', fg = css.getPropertyValue('--text').trim();
   syncNovaCols(); const CS = cstyle(), up = CS.up, down = CS.down;
   g.clearRect(0, 0, w, h); if (CS.bg) { g.fillStyle = CS.bg; g.fillRect(0, 0, w, h); }
-  const gridCol = CS.grid || line; grips = []; paneHit = []; { const sk = state.symbol + '|' + state.interval; if (paneMan._k !== sk) paneMan = {_k: sk}; }
+  const gridCol = CS.grid || line; grips = []; paneHit = []; { const sk = state.symbol + '|' + state.interval; if (paneMan._k !== sk) { paneMan = {_k: sk}; for (const [k, v] of Object.entries(paneManSaved)) paneMan[k] = {min: v[0], max: v[1]}; } }
   const n = candles.length; if (!n) { geo = null; return; }
 
   const pineKeyNow = `${state.symbol}|${state.interval}|${candles[0].t}`;
@@ -2907,13 +2914,14 @@ function renderCore() {
     right = Math.max(38, Math.min(64, Math.ceil(mw) + 11));
   }
   const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH0 = stdOn('rsi') ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH0 = 0; // el volumen ya no tiene panel propio: se dibuja sobre las velas, abajo del gráfico
-  const cap = Math.max(40, h - axisH - 80 - top0); let rsiH = rsiH0 && paneH.rsi ? clamp(paneH.rsi, 40, cap) : rsiH0, volH = volH0 && paneH.vol ? clamp(paneH.vol, 36, cap) : volH0;
+  paneRefH = Math.max(1, h - axisH - top0); const PHX = {}; for (const [k, v] of Object.entries(paneH)) PHX[k] = v > 0 && v <= 1 ? Math.round(v * paneRefH) : v; // alturas guardadas como proporción → mismo tamaño relativo en cualquier ventana
+  const cap = Math.max(40, h - axisH - 80 - top0); let rsiH = rsiH0 && PHX.rsi ? clamp(PHX.rsi, 40, cap) : rsiH0, volH = volH0 && PHX.vol ? clamp(PHX.vol, 36, cap) : volH0;
   const panelKeys = [...PANELS.filter(k => stdOn(k) && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
-  const isC = k => paneH[k] > 0;
+  const isC = k => PHX[k] > 0;
   const tblOnly = x => !!(x && x.r && x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length);
-  const tblW = panelKeys.length + pTop.length > 3 ? 2 : 4, wBot = panelKeys.map(k => k.startsWith('pine:') && tblOnly(pr.find(x => 'pine:' + x.p.sid === k)) ? tblW : 1), wTop = pTop.map(x => tblOnly(x) ? tblW : 1), wSum = wBot.map((x, i) => isC(panelKeys[i]) ? 0 : x).concat(wTop.map((x, i) => isC('pine:' + pTop[i].p.sid) ? 0 : x)).reduce((a, b) => a + b, 0), nAuto = panelKeys.filter(k => !isC(k)).length + pTop.filter(x => !isC('pine:' + x.p.sid)).length, customSum = panelKeys.filter(isC).reduce((s2, k) => s2 + clamp(paneH[k], 40, cap), 0) + pTop.filter(x => isC('pine:' + x.p.sid)).reduce((s2, x) => s2 + clamp(paneH['pine:' + x.p.sid], 40, cap), 0);
+  const tblW = panelKeys.length + pTop.length > 3 ? 2 : 4, wBot = panelKeys.map(k => k.startsWith('pine:') && tblOnly(pr.find(x => 'pine:' + x.p.sid === k)) ? tblW : 1), wTop = pTop.map(x => tblOnly(x) ? tblW : 1), wSum = wBot.map((x, i) => isC(panelKeys[i]) ? 0 : x).concat(wTop.map((x, i) => isC('pine:' + pTop[i].p.sid) ? 0 : x)).reduce((a, b) => a + b, 0), nAuto = panelKeys.filter(k => !isC(k)).length + pTop.filter(x => !isC('pine:' + x.p.sid)).length, customSum = panelKeys.filter(isC).reduce((s2, k) => s2 + clamp(PHX[k], 40, cap), 0) + pTop.filter(x => isC('pine:' + x.p.sid)).reduce((s2, x) => s2 + clamp(PHX['pine:' + x.p.sid], 40, cap), 0);
   const panelBudget = Math.max(0, Math.min(h - axisH - (wSum > nAuto ? 120 : 170) - rsiH - volH - customSum, h * Math.min(.85, .6 + (psc - 1) * .25 + (wSum > nAuto ? .2 : 0)) - rsiH - volH - customSum));
-  const unitH = wSum ? Math.max(56, Math.min(clamp(h * .16, 52, 110) * psc, panelBudget / wSum)) : 0; let hBot = wBot.map((x, i) => isC(panelKeys[i]) ? Math.round(clamp(paneH[panelKeys[i]], 40, cap)) : Math.round(Math.max(56, unitH * x))), hTop = wTop.map((x, i) => isC('pine:' + pTop[i].p.sid) ? Math.round(clamp(paneH['pine:' + pTop[i].p.sid], 40, cap)) : Math.round(Math.max(56, unitH * x)));
+  const unitH = wSum ? Math.max(56, Math.min(clamp(h * .16, 52, 110) * psc, panelBudget / wSum)) : 0; let hBot = wBot.map((x, i) => isC(panelKeys[i]) ? Math.round(clamp(PHX[panelKeys[i]], 40, cap)) : Math.round(Math.max(56, unitH * x))), hTop = wTop.map((x, i) => isC('pine:' + pTop[i].p.sid) ? Math.round(clamp(PHX['pine:' + pTop[i].p.sid], 40, cap)) : Math.round(Math.max(56, unitH * x)));
   { // todos los paneles (volumen, RSI, los de abajo y los de arriba) deben caber en el lienzo: si no, el último (p. ej. el oscilador) quedaba fuera de pantalla y parecía que no se había agregado
     const sum = a => a.reduce((x, y) => x + y, 0), minPlot = Math.max(110, Math.round(h * .3)), room = Math.max(0, h - axisH - top0 - minPlot), tot = rsiH + volH + sum(hBot) + sum(hTop);
     if (tot > room && tot > 0) {
@@ -4060,8 +4068,8 @@ area.addEventListener('pointermove', e => {
     const f = clamp(Math.exp((e.clientX - gest.x0) / 180), .1, 12); visible = clamp(gest.vis0 / f, 15, 400); scheduleRender();
   }
   else if (gest.mode === 'pan') {
+    if (gest.inPane) { const q = gest.inPane, dy = (e.clientY - gest.y0) / q.H * (q.max0 - q.min0); paneMan[q.key] = {min: q.min0 + dy, max: q.max0 + dy}; gest.paneMoved = q.key; scheduleRender(); return; } // dentro del oscilador: solo se mueve el oscilador (sube/baja su rango), las velas se quedan quietas
     const p0 = pan; pan = gest.pan0 + (e.clientX - gest.x0) / geo.step; const tn = performance.now(); if (gest.tl) { const dt = tn - gest.tl; if (dt > 0) gest.vel = .6 * (gest.vel || 0) + .4 * ((pan - p0) / dt); } gest.tl = tn;
-    if (gest.inPane) { const q = gest.inPane, dy = (e.clientY - gest.y0) / q.H * (q.max0 - q.min0); paneMan[q.key] = {min: q.min0 + dy, max: q.max0 + dy}; } // panel: sube/baja el rango para ver sobrecompra, sobreventa…
     if (priceMan) { if (gest.pm0 == null) gest.pm0 = {min: priceMan.min, max: priceMan.max}; const dy = (e.clientY - gest.y0) / geo.plotH * (gest.pm0.max - gest.pm0.min); priceMan = {min: gest.pm0.min + dy, max: gest.pm0.max + dy}; } // con escala manual también se mueve en vertical
     scheduleRender();
   }
@@ -4081,7 +4089,8 @@ function endPointer(e, cancelled) {
   if (gs.mode === 'almove') { if (gs.moved && gs.al.p != null) askMoveAlert(gs.al.id, gs.al.p); else { alDrag = null; scheduleRender(); } return; }
   if (gs.mode === 'handle') { save(); render(); return; }
   if (gs.mode === 'dmove') { if (gs.moved) { save(); updateDrawUI(); render(); return; } selectedId = gs.picked ? gs.dm.id : (distToDrawing(getDrawings().find(x => x.id === gs.dm.id) || {}, local(e)) < 13 ? selectedId : null); updateDrawUI(); render(); return; }
-  if (gs.mode === 'scaleP') { if (!gs.moved) { const now = Date.now(); if (now - lastAxisTap < 320) { lastAxisTap = 0; delete paneMan[gs.pane.key]; render(); } else lastAxisTap = now; } return; } // doble toque = escala automática
+  if (gs.paneMoved) savePaneMan(gs.paneMoved);
+  if (gs.mode === 'scaleP') { if (gs.moved) savePaneMan(gs.pane.key); if (!gs.moved) { const now = Date.now(); if (now - lastAxisTap < 320) { lastAxisTap = 0; delete paneMan[gs.pane.key]; savePaneMan(gs.pane.key); render(); } else lastAxisTap = now; } return; } // doble toque = escala automática
   if (gs.mode === 'scaleY' || gs.mode === 'scaleX') {
     if (!gs.moved) { const now = Date.now(); if (now - lastAxisTap < 320) { lastAxisTap = 0; if (gs.mode === 'scaleY') { priceMan = null; updateAutoBtn(); } else visible = defaultVisible(); render(); } else lastAxisTap = now; }
     return;
@@ -4141,7 +4150,7 @@ $('#zoomOut').onclick = () => glide({visible: clamp((glideT && glideT.visible !=
 
 /* Clic derecho sobre el gráfico (como en TradingView): Restablecer gráfico = vuelve el zoom, el desplazamiento, la escala de precio y las alturas de los paneles a su tamaño original */
 function resetChart() {
-  priceMan = null; paneMan = {_k: state.symbol + '|' + state.interval}; if (typeof paneH === 'object') { for (const k of Object.keys(paneH)) delete paneH[k]; savePaneH(); }
+  priceMan = null; paneMan = {_k: state.symbol + '|' + state.interval}; paneManSaved = {}; try { localStorage.removeItem('cct_paneMan_v1'); } catch {} if (typeof paneH === 'object') { for (const k of Object.keys(paneH)) delete paneH[k]; savePaneH(); }
   updateAutoBtn(); legSig = ''; glide({visible: defaultVisible(), pan: 0}); scheduleRender(); toast('Gráfico restablecido');
 }
 /* ───────── Diseños: guardar la configuración completa del gráfico (indicadores, colores, orden, fondo, tamaños…) y aplicarla en cualquier gráfico ─────────
@@ -5038,7 +5047,13 @@ if (window.CCTTrade) {
   const tb = $('#tradeBtn'); if (tb) tb.addEventListener('click', () => CCTTrade.toggle());
   window.CCT_trHit = () => { const r = $('#priceCanvas').getBoundingClientRect(); return trHit.map(q => Object.assign({}, q, {px: r.left, py: r.top})); }; // para pruebas
 }
+/* Puente para exchange.js: documentos privados de tu cuenta (Firestore) y separador de pares */
+window.CCT_split = s => splitSym(s);
+window.CCTCloudPriv = {ready: () => !!(uid && db && fbUser), get: async n => { const sn = await db.doc(`users/${uid}/data/${n}`).get(); return sn.exists ? sn.data() : null; }, set: (n, o) => db.doc(`users/${uid}/data/${n}`).set(o)};
+function exSub() { const x = window.CCTExchange && CCTExchange.info(), s = x && CCTExchange.snap(); $$('[data-ex-sub]').forEach(el => { el.textContent = x ? `${x.name} conectado · ${s && s.err ? 'revisa la conexión' : Number.isFinite(s && s.equity) ? 'saldo $' + s.equity.toLocaleString('es-MX', {maximumFractionDigits: 2}) : 'leyendo saldo…'}` : 'Conecta BingX, Binance, Bybit o cualquier otro'; }); }
+if (window.CCTExchange) CCTExchange.onChange(s => { exSub(); if (acctMenu) paintAcctMenu(); if (Number.isFinite(s.equity) && s.equity >= 0 && !s.err && !(state.acct && state.acct.auto === false)) { const v = Math.round(s.equity * 100) / 100, A = state.acct || {}; if (A.cur !== v || !(A.start > 0)) { state.acct = sanAcct({start: A.start > 0 ? A.start : v, cur: v, auto: true}); save(); if (typeof renderAcct === 'function') renderAcct(); } } }); // el saldo real de tu exchange alimenta la barra de saldo de la cuenta
 function renderAccount() {
+  exSub(); if (fbUser && window.CCTExchange) CCTExchange.cloudSync(uid);
   const box = $('#accountBox'), top = $('#accountBtn');
   if (window.CCTPlans) CCTPlans.setUser(fbUser);
   queueMicrotask(() => { const r = $('#rrAccount'); if (!r) return; r.hidden = top.hidden; const t = fbUser ? 'Cuenta' : 'Iniciar sesión'; r.dataset.tip = t; r.setAttribute('aria-label', t); r.classList.toggle('on-acc', !!fbUser); });
@@ -5068,6 +5083,7 @@ function paintAcctMenu() {
   const plan = window.CCTPlans ? CCTPlans.TIERS[CCTPlans.real ? CCTPlans.real() : CCTPlans.current()] : null;
   acctMenu.innerHTML = `<div class="am-head">${fbUser.photoURL ? `<img class="am-av" src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : `<span class="am-av">${I('user', 26)}</span>`}<div class="am-t"><b>${esc(fbUser.displayName || 'Cuenta de Google')}</b><small>${esc(fbUser.email || '')}</small></div></div>
     <div class="am-sync">${I('check', 14)}<span>${esc(syncStatus || 'Todo se guarda en tu cuenta')}</span></div>
+    <button type="button" class="am-it" data-ex-open>${SV('<path d="M7 7h11l-3-3M17 17H6l3 3"/>', 17)}<span>${window.CCTExchange && CCTExchange.connected() ? esc(CCTExchange.info().name) : 'Conectar exchange'}</span>${window.CCTExchange && CCTExchange.connected() ? '<em class="am-plan am-ok">Conectado</em>' : ''}</button>
     ${plan ? `<button type="button" class="am-it" data-plans-open>${SV('<path d="M3 8.5 7.5 12 12 5l4.5 7L21 8.5 19 18H5z"/>', 17)}<span>Tu plan</span><em class="am-plan">${esc(plan.n)}</em></button>` : ''}
     <button type="button" class="am-it danger" id="signOutBtn">${I('power', 17)}<span>Cerrar sesión</span></button>`;
   acctMenu.querySelector('#signOutBtn').onclick = () => { closeAcctMenu(); signOut(); };
@@ -5085,7 +5101,7 @@ function toggleAcctMenu(anchor) {
   if (acctMenu) { closeAcctMenu(); return; }
   acctAnchor = anchor; acctMenu = document.createElement('div'); acctMenu.className = 'acct-menu'; acctMenu.setAttribute('role', 'menu'); acctMenu.setAttribute('aria-label', 'Tu cuenta');
   document.body.appendChild(acctMenu); paintAcctMenu();
-  acctMenu.addEventListener('click', e => { if (e.target.closest('[data-plans-open]')) closeAcctMenu(); });
+  acctMenu.addEventListener('click', e => { if (e.target.closest('[data-plans-open], [data-ex-open]')) closeAcctMenu(); });
   setTimeout(() => { document.addEventListener('pointerdown', acctAway, true); document.addEventListener('keydown', acctKey, true); });
 }
 $('#accountBtn').onclick = () => { if (fbUser) toggleAcctMenu($('#accountBtn')); else signIn(); };

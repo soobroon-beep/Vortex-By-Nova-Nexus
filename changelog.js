@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.12', d: '8 nov 2026', t: 'Conecta tu exchange una sola vez', items: [
+    'Nuevo «Conectar exchange» (menú de tu cuenta y Configuración › Cuenta): elige entre más de 100 exchanges (BingX, Binance, Bybit, OKX, Bitget…), pega tu API una vez y queda guardada en tu cuenta.',
+    'Con el exchange conectado, la barra de saldo usa tu saldo real, Nexus Lens se conecta solo (BingX) y, si permites operar en vivo, Operar tiene modo Real con confirmación en cada orden.',
+    'El oscilador guarda su altura y su posición, y al arrastrar dentro de él solo se mueve el oscilador (las velas se quedan quietas). «Plantilla» ahora se llama «Plantillas».'
+  ]},
   {v: '3.11', d: '8 nov 2026', t: 'Pestañas de cristal y bots con operación abierta', items: [
     'Las pestañas de gráficos son de cristal oscuro como la barra de temporalidades y se guardan en tu cuenta tal como las dejas.',
     'Nova Bot Lab marca con un indicador Long/Short los bots que tienen una operación abierta.',

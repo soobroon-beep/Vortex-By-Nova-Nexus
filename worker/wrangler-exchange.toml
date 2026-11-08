@@ -1,0 +1,5 @@
+# Puente de VORTEX con los exchanges (reenvía consultas ya firmadas en tu dispositivo). Lo publica .github/workflows/deploy-exchange-worker.yml.
+name = "vortex-exchange"
+main = "exchange-proxy.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = true

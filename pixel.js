@@ -249,7 +249,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
   }
   const PLACES = [ // [palabras, nombre, sección, selector PC, selector celular, explicación]
     [/indicador/, 'Indicadores', 'chartView', '[data-panel="indicators"]', '[data-panel="indicators"]', 'Ahí agregas EMA, RSI, Bollinger, tus scripts Pine y Nova Nexus.'],
-    [/plantilla|diseno guardad/, 'Plantilla', 'chartView', '#designsBtn', '#designsBtn', 'Guarda y aplica la configuración completa de tu gráfico.'],
+    [/plantilla|diseno guardad/, 'Plantillas', 'chartView', '#designsBtn', '#designsBtn', 'Guarda y aplica la configuración completa de tu gráfico.'],
     [/temporalidad|marco de tiempo|timeframe|1h|4h/, 'Temporalidades', 'chartView', '#timeframes', '#tfBtn', 'Cambia entre 1m, 5m, 1h, 4h, 1D…'],
     [/tipo de vela|velas heikin|heikin|linea de precio/, 'Tipo de vela', 'chartView', '#ctypeBtn', '#moreBtn', 'Velas, Heikin Ashi, línea y más.'],
     [/dividir|varios graficos|2 graficos|layout/, 'Dividir el gráfico', 'chartView', '#layoutBtn', '#moreBtn', 'Hasta 5 gráficos a la vez.'],

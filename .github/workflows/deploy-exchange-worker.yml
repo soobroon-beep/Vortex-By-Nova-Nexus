@@ -1,0 +1,32 @@
+name: Publicar puente de exchanges (vortex-exchange)
+# Publica worker/exchange-proxy.mjs en tu Cloudflare como el Worker «vortex-exchange».
+# Es el que deja que VORTEX hable con tu exchange (BingX, Binance, Bybit, OKX…) desde el navegador. Tu Secret Key nunca pasa por él.
+# Usa el mismo secreto CLOUDFLARE_API_TOKEN que el servidor de avisos. Sin el secreto el flujo termina sin hacer nada (no falla).
+on:
+  push:
+    branches: [main]
+    paths: ['worker/exchange-proxy.mjs', 'worker/wrangler-exchange.toml', '.github/workflows/deploy-exchange-worker.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: deploy-exchange-worker, cancel-in-progress: false}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Pruebas del Worker
+        run: node --test tests/exchange-proxy.test.js
+      - name: Publicar en Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "Falta el secreto CLOUDFLARE_API_TOKEN (Settings → Secrets and variables → Actions). No se publica nada."; exit 0
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
+          npx --yes wrangler@4 deploy --config worker/wrangler-exchange.toml
