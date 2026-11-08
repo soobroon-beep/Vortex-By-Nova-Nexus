@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '2.6', d: '8 nov 2026', t: 'Repetición de mercado y calculadora de riesgo', items: [
+    'Repetición de mercado: elige un punto del pasado y practica viendo avanzar las velas una a una, con pausa y velocidades.',
+    'Calculadora de riesgo: tamaño de posición según tu capital y % de riesgo, margen, apalancamiento y precio de liquidación; se ve en tus dibujos Long/Short.',
+    'Nova LITE · Smart Money Concepts gratis para todos en Nova Nexus.'
+  ]},
   {v: '2.5', d: '7 nov 2026', t: 'Indicadores y convertidor de Pine', items: [
     'Nuevo explorador de indicadores por categorías, con buscador.',
     'Convertidor de Pine profesional: prueba tu script en tus velas y, si algo falla, la IA lo corrige sola (hasta 3 intentos).',

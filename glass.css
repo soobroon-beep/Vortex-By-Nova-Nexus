@@ -1110,3 +1110,4 @@ body.rp-picking #chartArea{cursor:crosshair}
 .rk-b{padding:9px 15px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:none;color:var(--text);font-weight:700;font-size:13px;cursor:pointer}
 .rk-b.main{background:var(--accent);border-color:transparent;color:#fff}
 @media(max-width:640px){.rk-body{grid-template-columns:1fr}.rk-f>div{width:140px}.rk-dlg{max-height:96vh}}
+@media(min-width:1024px){#chartArea .pbar{top:calc(10px + var(--cbh,0px))}} /* la barra del dibujo va debajo de la franja de cristal de temporalidades */
