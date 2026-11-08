@@ -241,7 +241,7 @@ export default {
     if (req.method === 'OPTIONS') return new Response(null, {status: 204, headers: cors});
     const path = new URL(req.url).pathname;
     if (req.method === 'GET' && path === '/') return json({ok: true, app: 'VORTEX push', note: 'Notificaciones de alertas con la app cerrada'});
-    if (req.method === 'GET' && path === '/scr/state') { const st = (await env.KV.get('scr', 'json')) || {}; return json({ok: true, '1h': st['1h'] || 0, '4h': st['4h'] || 0, last: st.last || {}, now: Date.now()}); }
+    if (req.method === 'GET' && path === '/scr/state') { const st = (await env.KV.get('scr', 'json')) || {}; return json({ok: true, '1h': st['1h'] || 0, '4h': st['4h'] || 0, last: st.last || {}, lock: st.lock || 0, err: st.err || null, kick: st.kick || null, now: Date.now()}); }
     if (path.startsWith('/scr/') && req.method === 'POST') return scrInternal(req, env, path);
     if (!ok) return json({error: 'Origen no permitido'}, 403);
     if (path === '/ai' || path.startsWith('/ai/')) return aiRoute(req, env, path, json, cors);
@@ -301,8 +301,9 @@ async function self(env, path, body) {
 async function scrKick(env, now = Date.now()) {
   const st = (await env.KV.get('scr', 'json')) || {}, tf = SCR.dueTf(st, now); if (!tf) return null;
   if (st.lock && now - st.lock < 4 * 6e4) return null; // otra ronda ya está trabajando
-  st.lock = now; await env.KV.put('scr', JSON.stringify(st));
-  return self(env, '/scr/run', {tf, now});
+  st.lock = now; st.kick = {at: now, tf}; await env.KV.put('scr', JSON.stringify(st));
+  try { return await self(env, '/scr/run', {tf, now}); }
+  catch (e) { const s2 = (await env.KV.get('scr', 'json')) || st; s2.lock = 0; s2.err = {at: Date.now(), tf, why: 'run: ' + String(e && e.message || e).slice(0, 200)}; await env.KV.put('scr', JSON.stringify(s2)); throw e; }
 }
 async function pool(items, n, fn) { const out = []; let k = 0; await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => { while (k < items.length) { const i = k++; out[i] = await fn(items[i]).catch(e => ({error: e.message})); } })); return out; }
 async function scrInternal(req, env, path) {
