@@ -1,5 +1,9 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '2.7', d: '8 nov 2026', t: 'Panel macro y planes', items: [
+    'Panel macro en Noticias: dólar (DXY), S&P 500, Nasdaq, bono a 10 años, VIX, oro, petróleo, miedo y codicia y dominancia, con su lectura para la cripto.',
+    'Nuevos planes: Gratis, Plus (suscriptores de YouTube) e Infinity (cuenta BingX con el código YCXE5W). Se ven en Configuración › Tu plan.'
+  ]},
   {v: '2.6', d: '8 nov 2026', t: 'Repetición de mercado y calculadora de riesgo', items: [
     'Repetición de mercado: elige un punto del pasado y practica viendo avanzar las velas una a una, con pausa y velocidades.',
     'Calculadora de riesgo: tamaño de posición según tu capital y % de riesgo, margen, apalancamiento y precio de liquidación; se ve en tus dibujos Long/Short.',

@@ -4814,6 +4814,7 @@ function applyState(data, soft = false) {
 function loadScript(src) { return new Promise((ok, fail) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => fail(Error('No se pudo cargar ' + src)); document.head.appendChild(el); }); }
 function renderAccount() {
   const box = $('#accountBox'), top = $('#accountBtn');
+  if (window.CCTPlans) CCTPlans.setUser(fbUser);
   queueMicrotask(() => { const r = $('#rrAccount'); if (!r) return; r.hidden = top.hidden; const t = fbUser ? 'Cuenta' : 'Iniciar sesión'; r.dataset.tip = t; r.setAttribute('aria-label', t); r.classList.toggle('on-acc', !!fbUser); });
   if (!cloudEnabled) {
     top.hidden = true;
