@@ -1559,3 +1559,7 @@ body.rp-picking #chartArea{cursor:crosshair}
 .bl-ck{flex:none;display:inline-grid}.bl-ck .ck-c{stroke-dasharray:95;stroke-dashoffset:95;animation:ckDraw .6s ease forwards}.bl-ck .ck-p{stroke-dasharray:30;stroke-dashoffset:30;animation:ckDraw .4s .5s ease forwards}.bl-ck.big svg{width:40px;height:40px}.bl-applied{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:center}.bl-applied>*:not(.bl-ck){grid-column:2}.bl-applied .bl-ck{grid-row:span 3}
 @keyframes ckDraw{to{stroke-dashoffset:0}}.bo-ck{font-style:normal;color:#20bf9f;margin-right:3px}.bo-ver.on .bo-ck{color:#fff}
 .tc-syms{margin-bottom:8px}
+
+/* Discord en morado · chat del asistente sin recortes (lo más reciente arriba, debajo de la caja de texto) */
+.bl-qbtn.sm.dc{color:#a5adff!important;border-color:rgba(88,101,242,.45)!important}.bl-qbtn.sm.dc.on{color:#fff!important;background:#5865f2!important;border-color:#5865f2!important;box-shadow:0 4px 14px rgba(88,101,242,.35)}
+.bl-form-top{margin:0 0 10px}.bl-chat.bl-chat-flow{max-height:none;overflow:visible}
