@@ -243,6 +243,11 @@ export default {
     if (req.method === 'GET' && path === '/') return json({ok: true, app: 'VORTEX push', note: 'Notificaciones de alertas con la app cerrada'});
     if (req.method === 'GET' && path === '/scr/state') { const st = (await env.KV.get('scr', 'json')) || {}; return json({ok: true, '1h': st['1h'] || 0, '4h': st['4h'] || 0, last: st.last || {}, lock: st.lock || 0, err: st.err || null, kick: st.kick || null, now: Date.now()}); }
     if (path.startsWith('/scr/') && req.method === 'POST') return scrInternal(req, env, path);
+    if (req.method === 'GET' && path === '/scr/diag') { // diagnóstico: qué servidores de Binance contestan desde Cloudflare
+      const hosts = ['https://data-api.binance.vision', 'https://api.binance.com', 'https://api1.binance.com', 'https://api2.binance.com', 'https://api3.binance.com', 'https://api4.binance.com', 'https://api-gcp.binance.com'], out = {};
+      await Promise.all(hosts.map(async h => { for (const q of ['/api/v3/ticker/price?symbol=BTCUSDT', '/api/v3/ticker/24hr?type=MINI&symbol=BTCUSDT', '/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=2']) { try { const r = await fetch(h + q, {headers: {'user-agent': 'VORTEX-Screener/2.0'}}); out[h.replace('https://', '') + q.split('?')[0]] = r.status; } catch (e) { out[h + q] = 'err ' + e.message; } } }));
+      return json({colo: (req.cf && req.cf.colo) || '', out});
+    }
     if (!ok) return json({error: 'Origen no permitido'}, 403);
     if (path === '/ai' || path.startsWith('/ai/')) return aiRoute(req, env, path, json, cors);
     if (req.method === 'GET' && path === '/macro') return macroRoute(env, json, cors);
