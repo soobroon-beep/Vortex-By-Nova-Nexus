@@ -2696,7 +2696,9 @@ function inertia(v) { // v en velas/ms; se frena con fricción
 function scheduleRender() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
 let g = null;
 function setupCanvas() {
-  const el = $('#priceCanvas'), r = el.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 3);
+  const el = $('#priceCanvas'), b = el.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 3);
+  // tamaño real del diseño (sin animaciones): con getBoundingClientRect una animación de escala lo medía más chico y el gráfico «brincaba»
+  const r = el.clientWidth && el.clientHeight ? {width: el.clientWidth, height: el.clientHeight} : b;
   const W = Math.round(r.width * d), H = Math.round(r.height * d);
   if (el.width !== W || el.height !== H) { el.width = W; el.height = H; }
   g = el.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0);

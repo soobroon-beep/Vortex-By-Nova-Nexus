@@ -55,7 +55,7 @@
 .view.active:not(.chart-view){animation:viewIn .5s var(--ease) both}
 @keyframes viewIn{from{opacity:0;transform:translateY(14px) scale(.985);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
 .chart-view.active{animation:chartIn .45s var(--ease) both}
-@keyframes chartIn{from{opacity:0;transform:scale(.99)}to{opacity:1;transform:none}}
+@keyframes chartIn{from{opacity:0}to{opacity:1}} /* solo opacidad: con escala el gráfico se medía 1 % más chico y luego «brincaba» al tamaño real */
 .chart-area.swap-in canvas{animation:swapIn .6s var(--ease) both}
 @keyframes swapIn{from{opacity:.0;transform:translateX(18px) scale(.985)}to{opacity:1;transform:none}}
 .nw-item{animation:itemIn .55s var(--ease) both}
