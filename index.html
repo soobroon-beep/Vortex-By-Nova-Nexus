@@ -31,7 +31,7 @@
 <div id="app">
   <header class="topbar">
     <div class="brand">
-      <svg class="brand-word" viewBox="0 0 160 44" role="img" aria-label="VORTEX · Powered by Nova Nexus">
+      <svg class="brand-word" viewBox="0 -1 160 45" role="img" aria-label="VORTEX · Powered by Nova Nexus">
         <g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round">
           <path class="ring-back" d="M8 22A72 9 0 0 1 152 22"/>
         </g>
@@ -40,7 +40,7 @@
           <path class="ring-gap" d="M152 22A72 9 0 0 1 8 22"/>
           <path class="ring-front" d="M152 22A72 9 0 0 1 8 22"/>
         </g>
-        <path class="ring-star" d="M148 8.5l1.2 2.9 2.9 1.2-2.9 1.2-1.2 2.9-1.2-2.9-2.9-1.2 2.9-1.2z"/>
+        <path class="ring-star" d="M80 .6l1.55 3.75 3.75 1.55-3.75 1.55L80 11.2l-1.55-3.75-3.75-1.55 3.75-1.55z"/>
       </svg>
     </div>
     <div class="top-actions">
@@ -59,11 +59,11 @@
     <nav class="right-rail" id="rightRail" aria-label="Paneles">
       <button class="rr-btn active" data-side="watchView" data-tip="Mi seguimiento" aria-label="Mi seguimiento"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.1"/><circle cx="4.5" cy="12" r="1.1"/><circle cx="4.5" cy="18" r="1.1"/></svg></button>
       <button class="rr-btn" data-side="newsView" data-tip="Noticias" aria-label="Noticias"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h11a1 1 0 0 1 1 1v13H6a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1z"/><path d="M17 9h3v8a2 2 0 0 1-2 2"/><path d="M8 9h6M8 13h6"/></svg></button>
-      <button class="rr-btn" data-side="screenerView" data-tip="Screener" aria-label="Screener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M7 15l3-4 3 2 4-5"/></svg></button>
-      <button class="rr-btn" data-side="lensView" data-tip="Nexus Lens · mi cuenta" aria-label="Nexus Lens · mi cuenta"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="7.4"/><path d="m15.4 15.4 5.4 5.4"/><path d="M7 8.8v5M10 6.8v5.4M13 5.4v4.8" stroke-width="1.1"/><path d="M7 10.2v2.4M10 8.2v2.4M13 6.6v2.2" stroke-width="2.6" stroke-linecap="butt"/></svg></button>
       <button class="rr-btn" data-side="alertsView" data-tip="Alertas" aria-label="Alertas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/></svg></button>
-      <button class="rr-btn" data-side="aiView" data-tip="IA" aria-label="IA"><svg class="ai-ic" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="aiG1" x1="2" y1="22" x2="22" y2="2" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#22d3ee"/><stop offset=".5" stop-color="#6d7cff"/><stop offset="1" stop-color="#d946ef"/></linearGradient></defs><g fill="none" stroke="url(#aiG1)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 4.6H6.4a3.4 3.4 0 0 0-3.4 3.4v9.6a3.4 3.4 0 0 0 3.4 3.4H16a3.4 3.4 0 0 0 3.4-3.4v-6.2"/><path d="M6.6 17.4 9 10.2l2.4 7.2M7.5 15h3"/><path d="M14.6 10.2v7.2"/></g><path fill="url(#aiG1)" stroke="none" d="M19.4 1.2c.45 2.05 1.35 2.95 3.4 3.4-2.05.45-2.95 1.35-3.4 3.4-.45-2.05-1.35-2.95-3.4-3.4 2.05-.45 2.95-1.35 3.4-3.4z"/></svg></button>
+      <button class="rr-btn" data-side="screenerView" data-tip="Screener" aria-label="Screener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M7 15l3-4 3 2 4-5"/></svg></button>
       <button class="rr-btn" id="rrBotLab" data-side="botLabView" data-tip="Nova Bot Lab" aria-label="Nova Bot Lab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 8V4.5"/><circle cx="12" cy="3.6" r="1"/><circle cx="9.3" cy="13" r="1.3" fill="currentColor" stroke="none"/><circle cx="14.7" cy="13" r="1.3" fill="currentColor" stroke="none"/><path d="M9.5 16.5h5M3 12.5v3M21 12.5v3"/></svg></button>
+      <button class="rr-btn" data-side="lensView" data-tip="Nexus Lens · mi cuenta" aria-label="Nexus Lens · mi cuenta"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="7.4"/><path d="m15.4 15.4 5.4 5.4"/><path d="M7 8.8v5M10 6.8v5.4M13 5.4v4.8" stroke-width="1.1"/><path d="M7 10.2v2.4M10 8.2v2.4M13 6.6v2.2" stroke-width="2.6" stroke-linecap="butt"/></svg></button>
+      <button class="rr-btn" data-side="aiView" data-tip="IA" aria-label="IA"><svg class="ai-ic" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="aiG1" x1="2" y1="22" x2="22" y2="2" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#22d3ee"/><stop offset=".5" stop-color="#6d7cff"/><stop offset="1" stop-color="#d946ef"/></linearGradient></defs><g fill="none" stroke="url(#aiG1)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 4.6H6.4a3.4 3.4 0 0 0-3.4 3.4v9.6a3.4 3.4 0 0 0 3.4 3.4H16a3.4 3.4 0 0 0 3.4-3.4v-6.2"/><path d="M6.6 17.4 9 10.2l2.4 7.2M7.5 15h3"/><path d="M14.6 10.2v7.2"/></g><path fill="url(#aiG1)" stroke="none" d="M19.4 1.2c.45 2.05 1.35 2.95 3.4 3.4-2.05.45-2.95 1.35-3.4 3.4-.45-2.05-1.35-2.95-3.4-3.4 2.05-.45 2.95-1.35 3.4-3.4z"/></svg></button>
       <button class="rr-btn" id="rrDiscord" data-side="discordView" data-tip="Discord · enviar señales y avisos" aria-label="Discord" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" style="fill:currentColor;stroke:none"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z"/></svg></button>
       <button class="rr-btn rr-acct-bar" id="acctBar" data-acct-bar data-acct-open data-tip="Saldo de la cuenta" aria-label="Saldo de la cuenta" type="button"><span class="ab-track"><span class="ab-fill"></span><span class="ab-mark"></span></span><span class="ab-val">—</span></button>
       <button class="rr-btn rr-end" id="rrAccount" data-tip="Iniciar sesión" aria-label="Iniciar sesión" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.8-3.6 3.7-5.4 7-5.4s6.2 1.8 7 5.4"/></svg></button>
@@ -74,11 +74,10 @@
     <aside class="tool-rail" id="toolRail" aria-label="Herramientas de dibujo"></aside>
     <!-- 1 · SEGUIMIENTO -->
     <section class="view active" id="watchView">
-      <div class="view-head">
-        <div><div class="eyebrow">MERCADOS / BINANCE SPOT</div><h1>Mi seguimiento</h1></div>
+      <div class="view-head watch-head">
         <div class="head-actions">
-          <button class="small-button" id="addSection">＋ Sección</button>
-          <button class="small-button" id="addAsset">＋ Añadir</button>
+          <button class="small-button" id="addSection"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M4 12h7M4 17h10M18 14v6M15 17h6"/></svg>Sección</button>
+          <button class="small-button add-main" id="addAsset"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Añadir cripto</button>
         </div>
       </div>
       <div class="summary">

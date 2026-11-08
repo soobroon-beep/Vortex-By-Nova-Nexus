@@ -2658,7 +2658,10 @@ function renderCore() {
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
   const SH = symHeadH(); document.getElementById('chartArea').style.setProperty('--sh', SH + 'px'); // la franja con el nombre y el precio de la moneda va arriba del gráfico
-  const left = 6, axisH = 22, top0 = 6; let right = 64;
+  const CBH = (() => { // PC: la franja de temporalidades y botones va encima del gráfico (cristal translúcido); el precio empieza debajo de ella
+    const v = $('#chartView'), b = v && v.querySelector('.chart-bar'), on = deskMQ.matches && !document.body.classList.contains('pane') && b && b.offsetParent !== null, hh = on ? b.offsetHeight : 0;
+    if (v && v.style.getPropertyValue('--cbh') !== hh + 'px') v.style.setProperty('--cbh', hh + 'px'); return hh; })();
+  const left = 6, axisH = 22, top0 = 6 + CBH; let right = 64;
   if (!deskMQ.matches && candles.length) { // celular: la columna de precios solo tan ancha como sus números (poco margen)
     g.font = '10px system-ui'; const lc = candles[candles.length - 1].c; let mw = 0;
     for (const v of [lc, lc * 1.02, lc * .98]) mw = Math.max(mw, g.measureText(fmt(v)).width);
@@ -2764,12 +2767,12 @@ function renderCore() {
   g.fillStyle = text; g.textAlign = 'center';
   for (let i = Math.ceil(lo / stride) * stride; i < hi; i += stride) {
     const xx = X(i); if (xx < left + 14 || xx > w - right - 14) continue;
-    if (CS.gridV) { g.strokeStyle = gridCol; g.beginPath(); g.moveTo(xx, top0); g.lineTo(xx, plotTop + plotH + volH + rsiH + extraH); g.stroke(); }
+    if (CS.gridV) { g.strokeStyle = gridCol; g.beginPath(); g.moveTo(xx, top0 - CBH); g.lineTo(xx, plotTop + plotH + volH + rsiH + extraH); g.stroke(); }
     g.fillText(timeLabel(candles[i].t, i > 0 ? candles[i - 1].t : null), xx, h - 7);
   }
   g.textAlign = 'left';
 
-  g.save(); g.beginPath(); g.rect(left, plotTop, plotW + 2 + (vpOn ? 0 : pineG), plotH); g.clip();
+  g.save(); g.beginPath(); { const ex = topH ? 0 : CBH; g.rect(left, plotTop - ex, plotW + 2 + (vpOn ? 0 : pineG), plotH + ex); } g.clip(); // sin paneles arriba, las velas también se ven bajo la franja de cristal
   // Nova Nexus · EMA Cloud (detrás de las velas)
   if (nn && state.indicators.nnEma) drawNovaCloud(nn, lo, hi, css);
   if (nn && nn.smc && state.indicators.nnOb) drawNovaOB(nn.smc);
@@ -4010,7 +4013,7 @@ function renderPrefs() {
     + `<button type="button" class="pref-row pref-link" id="alDiscord">${ico('#7c87ff', '<path d="M8 8.5c2.5-1 5.5-1 8 0M7.5 16c3 1.2 6 1.2 9 0"/><circle cx="9.5" cy="12.5" r="1"/><circle cx="14.5" cy="12.5" r="1"/>')}<div class="pref-l"><b>Servidor Nova Nexus</b><small>Unirte y elegir tu canal</small></div><div class="pref-c"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></div></button>`
     + `</div>`;
   const cl = window.CCT_CHANGELOG || [], cur = cl[0] || {v: '—', d: ''};
-  ab.innerHTML = `<div class="about-card"><img data-app-icon class="about-ic" width="52" height="52" alt=""><div class="about-t"><b>VORTEX</b><small>Powered by Nova Nexus</small><span class="about-v">Versión ${esc(cur.v)} <span id="buildNo"></span></span></div></div>`
+  ab.innerHTML = `<div class="about-card"><img data-app-icon class="about-ic" width="52" height="52" alt=""><div class="about-t"><svg class="brand-word wm-sm" viewBox="0 -1 160 45" role="img" aria-label="VORTEX"><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-back" d="M8 22A72 9 0 0 1 152 22"/></g><text x="80" y="29" text-anchor="middle">VORTEX</text><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-gap" d="M152 22A72 9 0 0 1 8 22"/><path class="ring-front" d="M152 22A72 9 0 0 1 8 22"/></g><path class="ring-star" d="M80 .6l1.55 3.75 3.75 1.55-3.75 1.55L80 11.2l-1.55-3.75-3.75-1.55 3.75-1.55z"/></svg><small>Powered by Nova Nexus</small><span class="about-v">Versión ${esc(cur.v)} <span id="buildNo"></span></span></div></div>`
     + `<div class="sg-label">Novedades</div><div class="cl-list">${cl.map((r, i) => `<details class="cl-ver"${i === 0 ? ' open' : ''}><summary><span class="cl-v">${esc(r.v)}</span><span class="cl-h"><b>${esc(r.t || 'Versión ' + r.v)}</b><small>${esc(r.d)}</small></span>${i === 0 ? '<span class="cl-new">Nuevo</span>' : ''}<svg class="cl-chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><ul>${r.items.map(it => `<li>${esc(it)}</li>`).join('')}</ul></details>`).join('')}</div>`;
   if (window.CCTAppIcons) try { CCTAppIcons.apply(CCTAppIcons.selected); } catch {}
   if (window.caches && caches.keys) caches.keys().then(k => { const m = k.map(x => /^cct-shell-v(\d+)$/.exec(x)).filter(Boolean).map(x => +x[1]).sort((a, b) => b - a)[0]; const e = $('#buildNo'); if (e && m) e.textContent = '· compilación ' + m; }).catch(() => {});

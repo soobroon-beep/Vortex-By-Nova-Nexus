@@ -680,3 +680,6 @@ body.pane .favbar{display:none}
 .brand-word .ring-star{fill:currentColor}
 .light .brand-word{color:#182234}.light .brand-word .ring-gap{stroke:#fff}
 @media(max-width:400px){.brand-word{width:112px;height:31px}}
+.brand-word .ring-gap{stroke:var(--bg)}
+.wm-sm{width:104px;height:29px;margin:0 0 2px -2px}.wm-sm text{letter-spacing:5px}
+.pwa-card .wm-sm .ring-gap,.about-card .wm-sm .ring-gap{stroke:var(--surface)}

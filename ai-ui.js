@@ -86,7 +86,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
   /* ───────── Llamada con transmisión a una burbuja ───────── */
   async function callLLM(messages, opts, bubble) {
     const rend = (opts && opts.render) || (t => md(t));
-    const o = Object.assign({}, opts, {onToken: t => { if (bubble) { bubble.innerHTML = rend(t) + '<span class="aiv-cursor"></span>'; scroll(); } }, onProgress: p => { if (bubble && p && p.text) bubble.innerHTML = `<p class="aiv-dim">${esc(p.text)}</p>`; }});
+    const o = Object.assign({cfg: Object.assign(LLM.load(), {provider: 'free', lab: 'free'})}, opts, {onToken: t => { if (bubble) { bubble.innerHTML = rend(t) + '<span class="aiv-cursor"></span>'; scroll(); } }, onProgress: p => { if (bubble && p && p.text) bubble.innerHTML = `<p class="aiv-dim">${esc(p.text)}</p>`; }});
     const r = await LLM.chat(messages, o); if (bubble) bubble.innerHTML = rend(r.text); return r;
   }
   const scroll = () => { const l = $('#aivLog'); if (l) l.scrollTop = l.scrollHeight; };
@@ -97,16 +97,16 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
   /* ───────── Pantalla de inicio ───────── */
   function head(title, sub) {
     const c = window.CCT_getAIContext && window.CCT_getAIContext();
-    return `<div class="aiv-top">${st.view !== 'home' ? `<button class="aiv-ib" data-act="home" aria-label="Volver">${ICONS.back}</button>` : ''}<div class="aiv-title"><b>${esc(title)}</b><small>${esc(sub || (c ? c.symbol + ' · ' + c.interval : 'Sin gráfico cargado'))}</small></div><button class="aiv-ib" data-act="cfg" aria-label="Ajustes de la IA" title="Ajustes de la IA">${ICONS.gear}</button></div>`;
+    return `<div class="aiv-top">${st.view !== 'home' ? `<button class="aiv-ib" data-act="home" aria-label="Volver">${ICONS.back}</button>` : ''}<div class="aiv-title"><b>${esc(title)}</b><small>${esc(sub || (c ? c.symbol + ' · ' + c.interval : 'Sin gráfico cargado'))}</small></div></div>`;
   }
   function home() {
     st.view = 'home';
-    root.innerHTML = head('Asistente IA', LLM.providerLabel()) + `<div class="aiv-cards">
+    root.innerHTML = head('Asistente IA', 'Análisis educativo, no asesoría financiera') + `<div class="aiv-cards">
       <button class="aiv-card aiv-pixel" data-act="pixel"><span class="aivp-glow" aria-hidden="true"></span><span class="aivp-bot" aria-hidden="true">${window.NexusPixelHead ? window.NexusPixelHead('v') : ''}<i class="aivp-sp s1"></i><i class="aivp-sp s2"></i><i class="aivp-sp s3"></i></span><span class="aivp-txt"><em>Tu bot amigo</em><b>Nexus Pixel</b><small>Platica contigo y te dibuja canales, rangos y soportes en tu gráfico.</small><span class="aivp-go">Personalizar <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg></span></span></button>
       <button class="aiv-card" data-act="chart">${ICONS.chart}<span><b>Analizar gráfico con IA</b><small>Toma una captura de tu gráfico (con indicadores y dibujos), marca soportes y resistencias, y puedes seguir preguntándole.</small></span></button>
       <button class="aiv-card" data-act="brief">${ICONS.brief}<span><b>Briefing del día</b><small>Resumen corto de eventos importantes, noticias, novedades de IA, criptos más sonadas y la opinión de la IA sobre el mercado.</small></span></button>
       <button class="aiv-card" data-act="lab">${ICONS.lab}<span><b>Laboratorio de indicadores IA</b><small>Describe un indicador con tus palabras; la IA lo programa, lo valida y lo prueba en tu gráfico.</small></span></button>
-    </div><p class="aiv-foot">Cada herramienta usa su propia IA gratuita (Pollinations): Análisis → GPT-5.4 nano con visión · Laboratorio → GPT-5.4 mini para código · Nexus Pixel → la suya de siempre. Si una no responde, pasa sola a otra. Análisis educativo, no asesoría financiera.</p>`;
+    </div>`;
   }
 
   /* ───────── 1 · Analizar gráfico ───────── */
@@ -262,7 +262,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
         err = (res && res.error && res.error.msg) || unsup(res).map(w => `línea ${w.line}: ${w.msg}`).join('; ') || 'Error desconocido'; bb.el.classList.add('typing'); bb.el.innerHTML = note(`Corrigiendo un error del código (intento ${tries + 1}/4)…`);
         msgs.push({role: 'user', content: fix(`El código falló en el intérprete de Pine de la app: «${err}»${res && res.error && res.error.line ? ' (línea ' + res.error.line + ')' : ''}. Esas funciones no existen en el intérprete: reemplázalas por cálculos con ta.*, math.* u operaciones básicas. Revisa paréntesis y comas, y que cada llamada quede en una sola línea.`)});
       }
-    } catch (e) { setMsg(bb, md('**No pude consultar el modelo de IA.** ' + LLM.friendly(e) + '\n\nPuedes cambiar de proveedor en ⚙ e intentarlo otra vez.')); setBusy(false); renderTail(); return; }
+    } catch (e) { setMsg(bb, md('**No pude consultar el modelo de IA.** ' + LLM.friendly(e) + '\n\nInténtalo otra vez en un momento.')); setBusy(false); renderTail(); return; }
     const unchanged = editing && (!code || code === base);
     setMsg(bb, md((expl || (unchanged ? '' : 'Listo, aquí está.')) + (unchanged ? '\n\n**No logré aplicar tu cambio.** El indicador quedó igual. Intenta describirlo con otras palabras o más específico (por ejemplo: «cambia el periodo de la media rápida a 12»).' : editing && patched ? `\n\n_Cambio aplicado sobre el indicador actual (${patched} bloque${patched > 1 ? 's' : ''}); ya se ve en el gráfico._` : '')) + (img && lastR && !lastR.image ? note('El modelo no pudo ver la imagen; trabajé con tu descripción.') : ''));
     if (code && !unchanged) {
@@ -338,7 +338,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     if (a === 'pxcall') { if (window.CCT_switchView) window.CCT_switchView('chartView'); setTimeout(() => { if (window.NexusPixel) window.NexusPixel.show(true); }, 350); return; }
     if (a === 'pxsave') { pixelSave(); return; }
     if (t.dataset.pxk) { const k = t.dataset.pxk, v = t.dataset.v; if (t.dataset.multi) t.classList.toggle('on'); else { root.querySelectorAll(`[data-pxk="${k}"]`).forEach(b => b.classList.toggle('on', b === t)); } if (k === 'color') { const h = root.querySelector('.pxc-prev'); if (h) h.dataset.c = v; } return; }
-    if (a === 'home') home(); else if (a === 'chart') chartView(); else if (a === 'brief') briefView(); else if (a === 'lab') labView(); else if (a === 'cfg') cfgView();
+    if (a === 'home') home(); else if (a === 'chart') chartView(); else if (a === 'brief') briefView(); else if (a === 'lab') labView(); 
     else if (a === 'cfsk') { const i = $('#cfSk'), st2 = $('#cfSrvSt'), k = i ? i.value.trim() : ''; if (!/^sk_/.test(k)) { if (st2) st2.textContent = 'Pega tu clave sk_…'; return; } if (st2) st2.textContent = 'Guardando…'; LLM.serverSetKey(k).then(() => { i.value = ''; if (st2) { st2.textContent = '✓ Guardada para siempre en tu servidor. Ya puedes usar la IA en todos tus dispositivos.'; st2.className = 'ok'; } }).catch(e => { if (st2) { st2.textContent = '✗ ' + (e.message || 'No se pudo guardar'); st2.className = 'err'; } }); return; }
     else if (a === 'reshot') analyzeChart(); else if (a === 'rebrief') makeBrief();
     else if (a === 'try') { if (L.sid && A.list().some(x => x.id === L.sid)) { A.toggle(L.sid, true); } else if (good(L.res)) L.sid = A.tryOnChart(L.code, 'Indicador IA', L.res); renderTail(); }

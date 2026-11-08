@@ -9,7 +9,7 @@
   root.innerHTML = `
     <div class="sg-label">App en tu celular</div>
     <div class="pwa-card">
-      <div class="pwa-preview"><span class="pwa-prev-ic"><img data-app-icon width="64" height="64" alt="Ícono seleccionado"></span><div class="pwa-prev-t"><b>VORTEX</b><small id="appIconName"></small><span class="pwa-prev-k">Ícono de la app · toca uno para cambiarlo</span></div></div>
+      <div class="pwa-preview"><span class="pwa-prev-ic"><img data-app-icon width="64" height="64" alt="Ícono seleccionado"></span><div class="pwa-prev-t"><svg class="brand-word wm-sm" viewBox="0 -1 160 45" role="img" aria-label="VORTEX"><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-back" d="M8 22A72 9 0 0 1 152 22"/></g><text x="80" y="29" text-anchor="middle">VORTEX</text><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-gap" d="M152 22A72 9 0 0 1 8 22"/><path class="ring-front" d="M152 22A72 9 0 0 1 8 22"/></g><path class="ring-star" d="M80 .6l1.55 3.75 3.75 1.55-3.75 1.55L80 11.2l-1.55-3.75-3.75-1.55 3.75-1.55z"/></svg><small id="appIconName"></small><span class="pwa-prev-k">Ícono de la app · toca uno para cambiarlo</span></div></div>
       <div class="pwa-icons" role="group" aria-label="Ícono de la aplicación"></div>
       <button type="button" class="pwa-more" id="pwaMore" aria-expanded="false"><span>Ver los ${icons.variants.length} íconos</span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
       <button class="primary" id="installApp" type="button">Instalar aplicación</button>
