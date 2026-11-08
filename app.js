@@ -4900,7 +4900,7 @@ async function forceSync() {
   const left = 1800 - (Date.now() - t0); if (left > 0) await new Promise(r => setTimeout(r, left)); // la animación se ve completa aunque el guardado sea rápido
   btns.forEach(b => { b.classList.remove('syncing'); b.classList.add('done'); setTimeout(() => b.classList.remove('done'), 900); }); forceBusy = false; toast(msg || 'Listo');
 }
-const saveScriptsLocal = () => { try { localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); } catch {} };
+// saveScriptsLocal está definida arriba (guarda comprimido si no cabe)
 document.addEventListener('click', e => { if (e.target.closest('#forceSync')) forceSync(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { clearTimeout(pushTimer); cloudPushNow(); } });
 window.addEventListener('pagehide', () => { clearTimeout(pushTimer); cloudPushNow(); });
