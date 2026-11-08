@@ -869,7 +869,7 @@ body.botlab-wide #botLabView{grid-column:2/4;grid-row:1;z-index:5;background:var
 .chart-toolbar .prem-btn.on .ic{color:#1a1205}
 .chart-toolbar .prem-btn.on .prem-tag{background:#1a1205;color:#f6d27a}
 .light .chart-toolbar .prem-btn{color:#8a5a12!important}.light .chart-toolbar .prem-btn .ic{color:#b07a22}
-@media(max-width:1023px){.chart-toolbar .prem-btn .prem-lbl{display:none}.chart-toolbar .prem-btn{gap:5px}}
+@media(max-width:1023px){.chart-toolbar .prem-btn .prem-lbl{display:none}.chart-toolbar .prem-btn{gap:5px;order:-1}.chart-toolbar #tfBtn{order:-2}}
 @media (prefers-reduced-motion:reduce){.chart-toolbar .prem-btn::before{animation:none}}
 
 /* ── Configuración profesional: grupos de filas con ícono de color, avisos ordenados, acerca de y novedades ── */
