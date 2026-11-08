@@ -32,9 +32,13 @@
 
   /* ───────── Modelo de bot ───────── */
   const ST = {draft: 'Borrador', tested: 'Probado', paused: 'Pausado', archived: 'Archivado', running: 'Evaluando'};
+  const LK = window.CCTBotLook, CO = window.CCTBotCoach; let newLook = null, tchart = null;
+  const lookOf = b => LK ? LK.of(b) : {color: '#548fff', icon: 'planeta'}, avOf = (b, sz) => LK ? LK.avatar(lookOf(b), sz) : '';
+  const tipsOf = b => { try { return CO && b.status !== 'archived' ? CO.tips(mainSpec(b), runOf(b), b.sweeps) : []; } catch { return []; } };
   function newBot(spec, method, desc) {
     const now = Date.now(); const sp = B.normalizeSpec(spec);
-    return {id: uidOf(), name: sp.name, desc: desc || '', status: 'draft', method, createdAt: now, updatedAt: now, lastRunAt: null, mainV: 1,
+    const id = uidOf(), look = newLook ? Object.assign({}, newLook) : (LK ? LK.of({id}) : null); newLook = null;
+    return {id, look, name: sp.name, desc: desc || '', status: 'draft', method, createdAt: now, updatedAt: now, lastRunAt: null, mainV: 1,
       versions: [{v: 1, spec: sp, at: now, note: 'Versión inicial', origin: 'usuario', state: 'principal'}], runs: [], chat: [], journal: [{t: now, kind: 'creación', text: `Bot creado (${method === 'nl' ? 'lenguaje natural' : method === 'nova' ? 'indicadores Nova' : method === 'indicador' ? 'un indicador propio' : 'constructor visual'}).`}], sweeps: {}};
   }
   const ver = (bot, v) => bot.versions.find(x => x.v === (v || bot.mainV)), mainSpec = bot => ver(bot).spec;
@@ -67,11 +71,11 @@
     await new Promise(r => setTimeout(r, 20)); const res = B.backtest(candles, sp, Object.assign({nova: window.NovaNexus, user}, extra || {})); if (uo.length) res.warnings.push(...uw, `Este bot usa tu indicador «${uo[0].sname || uo[0].sid}». Cada señal se toma en la vela donde nace, sin mirar al futuro, pero el laboratorio no puede comprobar que tu script no repinte ni que no use datos futuros (por ejemplo con request.security). Confírmalo en paper trading antes de fiarte del resultado.`); const t0 = res.equity[0].t, cs = candles.filter(c => c.t >= t0); if (cs.length) res.bhCurve = compact(cs.map(c => [c.t, sp.risk.capital * c.c / cs[0].o]), 240); return res;
   }
   async function runBot(bot, v, bars) {
-    const vv = ver(bot, v); bot.status = 'running'; save(); render();
+    const vv = ver(bot, v), prevSt = bot.status; bot.status = 'running'; save(); render();
     try { const res = await execute(vv.spec, bars), run = summarize(res, vv.v, bars); bot.runs.push(run); if (bot.runs.length > 12) bot.runs.splice(0, bot.runs.length - 12); for (let i = 0; i < bot.runs.length - 3; i++) { bot.runs[i].trades = bot.runs[i].trades.slice(0, 0); bot.runs[i].equity = []; } // solo las 3 últimas guardan el detalle
-      bot.status = bot.status === 'paused' ? 'paused' : 'tested'; if (bot.status === 'running') bot.status = 'tested'; bot.lastRunAt = Date.now();
+      bot.status = prevSt === 'paused' || prevSt === 'archived' ? prevSt : 'tested'; bot.lastRunAt = Date.now();
       log(bot, 'backtest', `Backtest v${vv.v}: ${run.metrics.n} operaciones, neto ${money(run.metrics.net)} (${pct(run.metrics.retPct)}), drawdown ${num(run.metrics.maxDDPct, 1)} %. ${run.verdict.text}`); touch(bot); return run;
-    } catch (e) { bot.status = 'draft'; touch(bot); throw e; }
+    } catch (e) { bot.status = prevSt === 'running' ? 'draft' : prevSt; touch(bot); throw e; }
   }
 
   /* ───────── Estado de la interfaz ───────── */
@@ -98,7 +102,7 @@
   const chartBox = (id, title, h, hint) => `<div class="bl-chart"><h4>${esc(title)}</h4>${hint ? note(hint) : ''}<canvas id="${id}" data-h="${h || 150}" style="width:100%;height:${h || 150}px"></canvas></div>`;
 
   /* ───────── Vistas ───────── */
-  const head = (title, sub, back, extra) => `<div class="bl-head">${back ? `<button class="bl-ib" data-a="${back}" aria-label="Volver">${IC.back}</button>` : `<span class="bl-logo">${IC.robot}</span>`}<div class="bl-title"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>${extra || ''}<button class="bl-ib bl-exp" data-a="wide" aria-label="${wide ? 'Reducir' : 'Expandir'}" title="${wide ? 'Volver al tamaño normal' : 'Expandir el laboratorio'}">${wide ? IC.shrink : IC.expand}</button></div>`;
+  const head = (title, sub, back, extra, av) => `<div class="bl-head">${back ? `<button class="bl-ib" data-a="${back}" aria-label="Volver">${IC.back}</button>` : `<span class="bl-logo">${IC.robot}</span>`}${av || ''}<div class="bl-title"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>${extra || ''}<button class="bl-ib bl-exp" data-a="wide" aria-label="${wide ? 'Reducir' : 'Expandir'}" title="${wide ? 'Volver al tamaño normal' : 'Expandir el laboratorio'}">${wide ? IC.shrink : IC.expand}</button></div>`;
   const desk = () => matchMedia('(min-width:1024px)').matches; // Nova Bot Lab es solo para la versión de PC
   function render() {
     if (!root || !desk()) return; stopReplayIf(); const keep = root.scrollTop; document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches); // antes de dibujar: las gráficas del dashboard usan el ancho real
@@ -112,7 +116,7 @@
      Todo sale de los backtests y sesiones de paper guardados; no inventa datos. Pasa el cursor (o el dedo) por las gráficas para ver los valores. */
   const PAL = ['#548fff', '#20bf9f', '#f0b90b', '#c084fc', '#f06b79', '#38bdf8', '#fb923c', '#a3e635', '#f472b6', '#2dd4bf'];
   const dash = {mode: 'bt', off: new Set(), ser: []};
-  const colOf = id => { const i = S.bots.findIndex(b => b.id === id); return PAL[(i < 0 ? 0 : i) % PAL.length]; };
+  const colOf = id => { const b = S.bots.find(x => x.id === id); if (b && LK) return lookOf(b).color; const i = S.bots.findIndex(x => x.id === id); return PAL[(i < 0 ? 0 : i) % PAL.length]; };
   function dashSeries() {
     const out = [];
     for (const b of S.bots) {
@@ -194,9 +198,9 @@
   const ds = (a, n = 40) => { if (a.length <= n) return a; const o = []; for (let i = 0; i < n; i++) o.push(a[Math.round(i * (a.length - 1) / (n - 1))]); return o; }; // curva resumida para la miniatura
   const isLive = b => (b.paper || []).some(x => x.status === 'running');
   function botRow(b) {
-    const v = mainSpec(b), c = botCurve(b), last = c ? c.pts[c.pts.length - 1][1] : null, live = isLive(b), col = last == null ? '#8796ab' : last >= 0 ? '#20bf9f' : '#f06b79';
+    const v = mainSpec(b), nt = tipsOf(b).length, c = botCurve(b), last = c ? c.pts[c.pts.length - 1][1] : null, live = isLive(b), col = last == null ? '#8796ab' : last >= 0 ? '#20bf9f' : '#f06b79';
     const state = live ? ['live', 'En vivo'] : b.status === 'archived' ? ['arch', 'Archivado'] : b.status === 'paused' ? ['pause', 'Pausado'] : runOf(b) ? ['ok', 'Probado'] : ['draft', 'Borrador'];
-    return `<div class="bl-row ${b.status === 'archived' ? 'arch' : ''}">${pick ? `<label class="bl-pick"><input type="checkbox" data-sel="${b.id}" ${sel.has(b.id) ? 'checked' : ''}></label>` : ''}<button type="button" class="bl-row-m" data-a="open" data-id="${b.id}"><span class="bl-dot d-${state[0]}" title="${state[1]}"></span><span class="bl-row-n"><b>${esc(b.name)}</b><small>${esc(v.symbol.replace('USDT', ''))} · ${esc(v.interval)} · ${state[1]}</small></span>${c ? spark(c.pts, col, 60, 26) : ''}<span class="bl-row-v ${cls(last)}">${last == null ? '—' : pct(last)}</span><span class="bl-row-go">›</span></button></div>`;
+    return `<div class="bl-row ${b.status === 'archived' ? 'arch' : ''}">${pick ? `<label class="bl-pick"><input type="checkbox" data-sel="${b.id}" ${sel.has(b.id) ? 'checked' : ''}></label>` : ''}<button type="button" class="bl-row-m" data-a="open" data-id="${b.id}"><span class="bl-avw">${avOf(b, 34)}<span class="bl-dot d-${state[0]}" title="${state[1]}"></span></span><span class="bl-row-n"><b>${esc(b.name)}</b><small>${esc(v.symbol.replace('USDT', ''))} · ${esc(v.interval)} · ${state[1]}${nt ? ` · <em class="bl-tipb">${nt} mejora${nt === 1 ? '' : 's'}</em>` : ''}</small></span>${c ? spark(c.pts, col, 60, 26) : ''}<span class="bl-row-v ${cls(last)}">${last == null ? '—' : pct(last)}</span><span class="bl-row-go">›</span></button></div>`;
   }
   function libView() {
     const act = S.bots.filter(b => b.status !== 'archived').sort((a, b) => (isLive(b) - isLive(a)) || (b.updatedAt - a.updatedAt)), arch = S.bots.filter(b => b.status === 'archived');
@@ -220,7 +224,8 @@ OPERANDO = {"k":"close|open|high|low|volume|ema|sma|rsi|atr|adx|macd|macdSignal|
 Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15m,30m,1h,2h,4h,6h,8h,12h,1d,3d,1w. Si el usuario no da stop loss o take profit, pregunta. Usa "sides":"long" salvo que pida ventas/cortos. Pon en "name" un nombre corto.`;
   function newView() {
     const ic = d => `<span class="bl-mic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg></span>`;
-    root.innerHTML = head('Crear nuevo bot', '¿Cómo quieres armarlo?', 'lib') + `<div class="bl-methods bl-methods2">
+    if (!newLook && LK) newLook = LK.of({id: uidOf()});
+    root.innerHTML = head('Crear nuevo bot', '¿Cómo quieres armarlo?', 'lib') + (LK ? `<p class="bl-sec">1 · Elige su color e icono</p>${LK.picker(newLook)}<p class="bl-sec">2 · ¿Cómo quieres armarlo?</p>` : '') + `<div class="bl-methods bl-methods2">
       <button class="bl-method" data-a="mA">${ic('<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>')}<b>Escríbelo en español <em>Recomendado</em></b><small>Ej.: «compra BTC en 1h cuando la EMA 20 cruce arriba de la 50, stop 2 %». La IA lo convierte en reglas y te las muestra antes de probar.</small></button>
       <button class="bl-method" data-a="mB">${ic('<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><path d="M16.5 13v7M13 16.5h7"/>')}<b>Arma las reglas tú</b><small>Elige indicadores, condiciones, stop loss y take profit sin programar.</small></button>
       <button class="bl-method" data-a="mC">${ic('<path d="M4 18l5-6 4 3 7-9"/><circle cx="20" cy="6" r="1.6" fill="currentColor"/>')}<b>Usa un indicador</b><small>Opera con las señales de compra/venta de tus indicadores (como tu Signals) o de Nova Nexus.</small></button></div>
@@ -337,10 +342,11 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const b = bot(); if (!b) { view = 'lib'; return render(); } const sp = mainSpec(b), run = runOf(b), live = isLive(b);
     if (!TABS.some(t => t[0] === tab)) { const g = Object.keys(SUBS).find(k => SUBS[k].some(x => x[0] === tab)); if (g) { sub[g] = tab; tab = g; } else tab = 'sum'; }
     const more = `<details class="bl-more"><summary aria-label="Más opciones">⋯</summary><div><button class="bl-mini" data-a="dup" data-id="${b.id}">Duplicar</button><button class="bl-mini" data-a="pause" data-id="${b.id}">${b.status === 'paused' ? 'Reanudar' : 'Pausar'}</button><button class="bl-mini" data-a="arch" data-id="${b.id}">${b.status === 'archived' ? 'Restaurar' : 'Archivar'}</button><button class="bl-mini" data-a="exp" data-id="${b.id}">Exportar</button><button class="bl-mini danger" data-a="del" data-id="${b.id}">Eliminar</button></div></details>`;
-    root.innerHTML = head(b.name, `${sp.symbol} · ${sp.interval} · v${b.mainV}${live ? ' · en vivo' : ''}`, 'lib', more) +
-      `<div class="bl-qa"><button class="bl-qbtn" data-a="quickRun" ${busyMsg ? 'disabled' : ''}><svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5l12 7-12 7z" fill="currentColor"/></svg>${run ? 'Volver a probar' : 'Probar'}</button><button class="bl-qbtn" data-a="vedit" data-v="${b.mainV}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Editar</button><button class="bl-qbtn ${live ? 'on' : ''}" data-a="tab" data-k="pap"><span class="bl-dot d-${live ? 'live' : 'draft'}"></span>${live ? 'En vivo' : 'Simular'}</button><button class="bl-qbtn ${marksOn ? 'on' : ''}" data-a="chartToggle"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M7 15l4-4 3 3 5-6"/></svg>${marksOn ? 'Ocultar del gráfico' : 'Ver en el gráfico'}</button></div>` +
+    const ntips = tipsOf(b).length;
+    root.innerHTML = head(b.name, `${sp.symbol} · ${sp.interval} · v${b.mainV}${live ? ' · en vivo' : (b.status === 'paused' ? ' · pausado' : '')}`, 'lib', more, avOf(b, 36)) +
+      `<div class="bl-qa"><button class="bl-qbtn" data-a="quickRun" ${busyMsg ? 'disabled' : ''}><svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5l12 7-12 7z" fill="currentColor"/></svg>${run ? 'Volver a probar' : 'Probar'}</button><button class="bl-qbtn" data-a="vedit" data-v="${b.mainV}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Editar</button><button class="bl-qbtn ${live ? 'on' : ''}" data-a="quickSim"><span class="bl-dot d-${live ? 'live' : 'draft'}"></span>${live ? 'En vivo' : 'Simular en vivo'}</button><button class="bl-qbtn ${marksOn ? 'on' : ''}" data-a="chartToggle"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M7 15l4-4 3 3 5-6"/></svg>${marksOn ? 'Ocultar del gráfico' : 'Ver en el gráfico'}</button></div>` +
       (busyMsg ? `<div class="bl-busy"><span class="bl-spin"></span>${esc(busyMsg)}</div>` : '') + (marksOn ? replayBar() : '') +
-      `<div class="bl-tabs bl-tabs5" role="tablist">${TABS.map(([k, l]) => `<button role="tab" class="${tab === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>` +
+      `<div class="bl-tabs bl-tabs5" role="tablist">${TABS.map(([k, l]) => `<button role="tab" class="${tab === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}${k === 'est' && ntips ? '<i class="bl-tabdot"></i>' : ''}</button>`).join('')}</div>` +
       (SUBS[tab] ? `<div class="bl-subs">${SUBS[tab].map(([k, l]) => `<button class="${sub[tab] === k ? 'on' : ''}" data-a="sub" data-k="${k}">${l}</button>`).join('')}</div>` : '') + `<div id="blTab"></div>`;
     const k = SUBS[tab] ? sub[tab] : tab;
     ({sum: tabSum, gr: tabGr, rob: tabRob, diary: tabDiary, ver: tabVer, pap: tabPap, cic: tabCic, ai: tabAi, est: tabEst}[k] || tabSum)(b, run);
@@ -413,7 +419,15 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const T = $('#blTab'), tr = run ? run.trades.slice().reverse() : [];
     const av = run && run.avoid || [], avBy = {}; for (const z of av) avBy[z[1]] = (avBy[z[1]] || 0) + 1;
     T.innerHTML = `<div class="bl-box"><h4>Diario de operaciones</h4>${run ? note(`${run.tradesTotal} operaciones en el backtest v${run.v}${run.tradesTotal > run.trades.length ? ` (se guardan las últimas ${run.trades.length})` : ''}. Toca una para verla en el gráfico.`) : note('Sin operaciones: ejecuta un backtest.')}${tr.length ? `<div class="bl-scroll"><table class="bl-t"><thead><tr><th>Entrada</th><th></th><th>Precio</th><th>Salida</th><th>Neto</th><th>Motivo</th><th></th></tr></thead><tbody>${tr.slice(0, 120).map((t, i) => `<tr><td>${dt(t.entryT)}</td><td>${t.side === 'long' ? 'Compra' : 'Venta'}</td><td>${num(t.entry, 4)}→${num(t.exit, 4)}</td><td>${t.open ? 'abierta' : dt(t.exitT)}</td><td class="${cls(t.net)}">${money(t.net)}</td><td class="bl-why" title="${esc(t.reasonIn || '')}">${esc(t.why || '')}</td><td><button class="bl-mini" data-a="seeTrade" data-i="${run.trades.length - 1 - i}">Ver</button></td></tr>`).join('')}</tbody></table></div>` : ''}</div>
-      ${av.length ? `<div class="bl-box"><h4>Señales descartadas</h4>${note('Veces que las reglas pedían entrar y no se entró (últimas ' + av.length + '):')}<ul class="bl-log">${Object.entries(avBy).map(([k, n]) => `<li>${esc(k)}: <b>${n}</b></li>`).join('')}</ul></div>` : ''}<div class="bl-box"><h4>Historial del bot</h4><ul class="bl-log">${b.journal.slice().reverse().slice(0, 60).map(j => `<li><small>${dt(j.t)} · ${esc(j.kind)}</small><br>${esc(j.text)}</li>`).join('')}</ul></div>`;
+      ${av.length ? `<div class="bl-box"><h4>Señales descartadas</h4>${note('Veces que las reglas pedían entrar y no se entró (últimas ' + av.length + '):')}<ul class="bl-log">${Object.entries(avBy).map(([k, n]) => `<li>${esc(k)}: <b>${n}</b></li>`).join('')}</ul></div>` : ''}<div class="bl-box"><h4>Gráfico de compras y ventas</h4><div id="blTC" class="tc"><p class="bl-dim">${run ? 'Cargando velas…' : 'Prueba el bot para ver aquí dónde compró y dónde vendió.'}</p></div></div><div class="bl-box"><h4>Historial del bot</h4><ul class="bl-log">${b.journal.slice().reverse().slice(0, 60).map(j => `<li><small>${dt(j.t)} · ${esc(j.kind)}</small><br>${esc(j.text)}</li>`).join('')}</ul></div>`;
+    mountTC(b, run);
+  }
+  async function mountTC(b, run) {
+    tchart = null; const host = $('#blTC'); if (!host || !run || !window.CCTTradeChart) return; const sp = ver(b, run.v).spec;
+    try { const C = await candlesFor(sp.symbol, sp.interval, run.reqBars || 3000); if (!host.isConnected) return;
+      const live = (b.paper || []).filter(x => x.status !== 'stopped' && x.spec.symbol === sp.symbol && x.spec.interval === sp.interval).flatMap(x => x.ledger.concat(x.open ? [Object.assign({open: true}, x.open)] : []));
+      tchart = window.CCTTradeChart.mount(host, {candles: C, trades: run.trades, live, iv: B.IV_MS[sp.interval], height: 320});
+    } catch (e) { host.innerHTML = note('No se pudieron cargar las velas: ' + (e.message || e), 'warn'); }
   }
   function cmpRows(a, bb) { return a && bb ? [['Rendimiento', pct(a.metrics.retPct), pct(bb.metrics.retPct)], ['Drawdown', num(a.metrics.maxDDPct, 1) + ' %', num(bb.metrics.maxDDPct, 1) + ' %'], ['Operaciones', a.metrics.n, bb.metrics.n], ['F. de beneficio', pf(a.metrics), pf(bb.metrics)], ['Validación', pct(a.segments.val.retPct), pct(bb.segments.val.retPct)], ['Prueba', pct(a.segments.test.retPct), pct(bb.segments.test.retPct)]] : []; }
   function worse(c, m) { return c.segments.test.retPct < m.segments.test.retPct || c.metrics.maxDDPct > m.metrics.maxDDPct * 1.25 || c.segments.val.retPct < m.segments.val.retPct; }
@@ -425,7 +439,45 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
         <div class="bl-card-b"><button class="bl-mini" data-a="vrun" data-v="${v.v}">Probar</button>${isMain ? '' : `<button class="bl-mini" data-a="vmain" data-v="${v.v}">${v.state === 'descartada' || v.v < b.mainV ? 'Restaurar como principal' : 'Hacer principal'}</button>`}${v.state === 'candidata' ? `<button class="bl-mini danger" data-a="vdisc" data-v="${v.v}">Descartar</button>` : ''}<button class="bl-mini" data-a="vedit" data-v="${v.v}">Editar copia</button></div></div>`; }).join('');
   }
   function tabEst(b) {
-    const sp = mainSpec(b); $('#blTab').innerHTML = `<div class="bl-box"><h4>Reglas exactas de la versión principal (v${b.mainV})</h4>${mdLite(B.describeSpec(sp))}<div class="bl-actions"><button class="bl-btn" data-a="vedit" data-v="${b.mainV}">Editar (crea versión candidata)</button></div></div>${note('Los indicadores Nova se usan en solo lectura: el bot nunca los modifica.')}`;
+    const sp = mainSpec(b), run = runOf(b), T = $('#blTab'), st = (b.paper || []).find(x => x.status === 'running'), live = st && PP() ? PP().stats(st) : null;
+    const sm = CO ? CO.summary(sp, run, live) : null, tips = tipsOf(b), ai = b.coach && run && b.coach.runId === run.id ? b.coach : null, la = b.lastApply;
+    const aiTips = ai && CO ? (ai.tips || []).filter(t => CO.validTip(sp, t) && !tips.some(x => JSON.stringify(x.patch) === JSON.stringify(t.patch))) : [];
+    const card = (t, k) => `<div class="bl-tip k-${esc(t.kind || 'ia')}"><div class="bl-tip-h"><span class="bl-tip-k">${esc({reglas: 'Reglas', riesgo: 'Riesgo', filtro: 'Filtro', temporalidad: 'Temporalidad', activo: 'Activo'}[t.kind] || 'IA')}</span><b>${esc(t.title)}</b></div><p>${esc(t.why)}</p><button class="bl-btn" data-a="tip" data-k="${k}" ${busyMsg ? 'disabled' : ''}>Aplicar este consejo</button></div>`;
+    T._tips = tips.concat(aiTips);
+    T.innerHTML = `<div class="bl-box"><h4>Reglas exactas de la versión principal (v${b.mainV})</h4>${mdLite(B.describeSpec(sp))}<div class="bl-actions"><button class="bl-btn ghost" data-a="vedit" data-v="${b.mainV}">Editar a mano (crea versión candidata)</button></div></div>
+      <div class="bl-box bl-coach"><div class="bl-coach-h"><span class="bl-coach-ic">${IC.robot}</span><div><h4>Consejos para mejorar este bot</h4><small class="bl-dim">La IA revisa SUS reglas y SUS resultados. Al aplicar un consejo se crea una versión nueva, se prueba y queda como principal solo si no empeora fuera de muestra.</small></div></div>
+        ${la ? `<div class="bl-applied ${la.promoted ? 'ok' : 'warn'}"><b>${la.promoted ? 'Aplicado' : 'Probado, pero no mejoró'}: ${esc(la.title)}</b><small>${la.before ? `Antes: ${pct(la.before.ret)} · ${la.before.win == null ? '—' : num(la.before.win, 0) + ' %'} aciertos · DD ${num(la.before.dd, 1)} %` : ''} → Ahora (v${la.v}): ${pct(la.after.ret)} · ${la.after.win == null ? '—' : num(la.after.win, 0) + ' %'} aciertos · DD ${num(la.after.dd, 1)} %</small><div class="bl-card-b">${la.promoted ? `<button class="bl-mini" data-a="tipUndo">Deshacer (volver a v${la.prev})</button>` : `<button class="bl-mini" data-a="tipForce">Aplicarlo de todos modos</button>`}<button class="bl-mini" data-a="tipOk">Listo</button></div></div>` : ''}
+        ${sm ? `<div class="bl-sum l-${sm.level}"><b>${esc(sm.title)}</b>${sm.lines.map(l => `<p>${esc(l)}</p>`).join('')}</div>` : ''}
+        ${ai && ai.text ? `<div class="bl-aisum"><small>Lo que vio la IA</small>${mdLite(ai.text)}</div>` : ''}
+        ${T._tips.length ? `<div class="bl-tips">${T._tips.map(card).join('')}</div>` : (run ? '<p class="bl-dim">Con sus resultados actuales no veo un cambio claro que valga la pena. Puedes pedir un análisis a la IA o probarlo en otras monedas.</p>' : '')}
+        <div class="bl-actions">${run ? `<button class="bl-btn ghost" data-a="coachAi" ${b.coachBusy ? 'disabled' : ''}>${b.coachBusy ? 'La IA está analizando…' : ai ? 'Volver a analizar con IA' : 'Analizar a fondo con IA'}</button>` : `<button class="bl-btn" data-a="quickRun">Probar para recibir consejos</button>`}${run && !b.sweeps ? `<button class="bl-btn ghost" data-a="sweep">¿En qué monedas funciona mejor?</button>` : ''}</div>
+        ${b.coachErr ? note('⚠ ' + b.coachErr, 'warn') : ''}</div>
+      ${LK ? `<details class="bl-box bl-lookbox"><summary><b>Icono y color</b>${avOf(b, 26)}</summary>${LK.picker(lookOf(b))}</details>` : ''}${note('Los indicadores Nova se usan en solo lectura: el bot nunca los modifica.')}`;
+    if (run && CO && LLM && !ai && !b.coachBusy && !b.coachTried) { b.coachTried = run.id; coachAi(b, true); }
+  }
+  /* Consejo aplicado: versión nueva → backtest → principal solo si no empeora fuera de muestra (si empeora, lo decides tú) */
+  async function applyTip(b, t, force) {
+    const old = b.mainV, m = runOf(b), sp = CO.apply(mainSpec(b), t.patch), v = B.validateSpec(sp); if (!v.ok) return toast('El consejo no es aplicable: ' + v.errors[0]);
+    const nv = Math.max(...b.versions.map(x => x.v)) + 1; b.versions.push({v: nv, spec: sp, at: Date.now(), note: 'Consejo: ' + t.title, origin: 'consejo de la IA (aplicado por ti)', state: 'candidata'}); log(b, 'consejo', `Aplicaste el consejo «${t.title}» como v${nv}.`); touch(b);
+    busyMsg = 'Probando el consejo con velas reales…'; render(); let r = null; try { r = await runBot(b, nv, (m && m.reqBars) || 3000); } catch (e) { toast('No se pudo probar: ' + (e.message || e)); } busyMsg = '';
+    if (!r) { render(); return; }
+    const promote = force || !m || !worse(r, m); if (promote) { b.versions.forEach(x => { if (x.v === b.mainV) x.state = 'anterior'; }); ver(b, nv).state = 'principal'; b.mainV = nv; log(b, 'versión', `La v${nv} (consejo «${t.title}») pasó a ser la principal.`); }
+    const k = x => x && {ret: x.metrics.retPct, win: x.metrics.winRate, dd: x.metrics.maxDDPct}; b.lastApply = {title: t.title, v: nv, prev: old, promoted: promote, before: k(m), after: k(r), tip: t}; touch(b); if (view === 'bot' && cur === b.id) render();
+  }
+  const COACH_SYS = `Eres el entrenador de UN bot de trading concreto dentro de un laboratorio de backtesting. Hablas en español sencillo. Usa SOLO las reglas y números del contexto; no inventes resultados ni prometas ganancias. Responde SOLO con JSON:
+{"resumen":"3-5 frases: cómo va este bot, qué viste en sus resultados y su mayor debilidad","tips":[{"titulo":"acción corta","por_que":"motivo con los números del contexto","patch":{...}}]}
+Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera de muestra. "patch" es un fragmento de la especificación del bot con el MISMO esquema (solo los campos que cambian; las listas de condiciones se sustituyen completas, así que incluye también las condiciones que se conservan). Puedes cambiar symbol (Binance Spot terminado en USDT) o interval si recomiendas otro activo o temporalidad.`;
+  async function coachAi(b, quiet) {
+    const run = runOf(b); if (!run || !LLM || b.coachBusy) return; b.coachBusy = true; b.coachErr = ''; if (view === 'bot' && cur === b.id && sub.est === 'est' && tab === 'est') render();
+    try {
+      const sw = b.sweeps ? '\n\nANÁLISIS EN OTROS MERCADOS:\n' + JSON.stringify(b.sweeps.rows.filter(x => !x.err).map(x => [x.symbol, x.interval, x.n, Math.round(x.retPct * 10) / 10, x.win == null ? null : Math.round(x.win)])) : '';
+      const ctx = ctxOf(b, run) + '\n\nDESGLOSE (por horario UTC de 4 h, tendencia, volatilidad y lado):\n' + JSON.stringify(run.breakdown || {}) + sw;
+      const r = await LLM.chat([{role: 'system', content: COACH_SYS}, {role: 'user', content: ctx}], {maxTokens: 1100, temperature: .2, timeout: 90000});
+      const raw = (/```json\s*([\s\S]*?)```/.exec(r.text) || [null, r.text])[1], j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+      b.coach = {runId: run.id, at: Date.now(), text: String(j.resumen || '').slice(0, 1200), tips: (j.tips || []).slice(0, 4).map(t => ({kind: 'ia', title: String(t.titulo || 'Consejo de la IA').slice(0, 90), why: String(t.por_que || '').slice(0, 400), patch: t.patch}))};
+      log(b, 'consejo', 'La IA analizó el bot y dejó ' + b.coach.tips.length + ' sugerencia(s).');
+    } catch (e) { b.coachErr = quiet ? '' : 'La IA no respondió (' + (LLM.friendly ? LLM.friendly(e) : e.message) + '). Los consejos de arriba se calculan sin IA con tus datos.'; }
+    b.coachBusy = false; touch(b); if (view === 'bot' && cur === b.id && tab === 'est') render();
   }
 
 
@@ -452,7 +504,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const T = $('#blTab'), ss = b.paper || [], vs = b.versions.filter(v => v.state !== 'descartada');
     T.innerHTML = `<div class="bl-box"><h4>Nueva sesión de paper trading</h4>${note('Prueba hacia adelante con capital virtual: el bot opera con velas que cierran DESPUÉS de empezar, con comisiones y deslizamiento. No envía órdenes reales ni toca fondos. Es la prueba que un backtest no puede dar. Congela la versión elegida; la sesión empieza plana.')}
       <div class="bl-grid">${fld('Versión a probar', `<select id="papV">${vs.map(v => `<option value="${v.v}" ${v.v === b.mainV ? 'selected' : ''}>v${v.v} ${v.v === b.mainV ? '(principal)' : '(' + v.state + ')'}</option>`).join('')}</select>`)}${fld('Capital virtual ($)', `<input id="papCap" type="number" min="100" step="100" value="${mainSpec(b).risk.capital}">`)}</div>
-      <div class="bl-actions"><button class="bl-btn" data-a="papStart">Iniciar paper trading</button></div>${note('Se actualiza al abrir el laboratorio y cada vez que cierra una vela mientras lo tienes abierto; al volver después de días se pone al día con las velas reales. Con la cuenta iniciada y el flujo de GitHub «Paper trading de bots» activo, también avanza cada hora sin la app abierta.')}</div>` +
+      <div class="bl-actions"><button class="bl-btn" data-a="papStart">Iniciar paper trading</button></div>${note('Una vez encendida sigue simulando hasta que tú la pauses o la termines (pausar el bot también la pausa). Se actualiza al abrir el laboratorio y cada vez que cierra una vela mientras lo tienes abierto; al volver después de días se pone al día con las velas reales. Con la cuenta iniciada y el flujo de GitHub «Paper trading de bots» activo, también avanza cada hora sin la app abierta.')}</div>` +
       (ss.length ? ss.slice().reverse().map(s => paperCard(b, s)).join('') : `<div class="bl-empty"><p><b>Sin sesiones todavía.</b></p><p class="bl-dim">Inicia una para ver cómo se comporta el bot en vivo, sin riesgo.</p></div>`);
     setTimeout(() => paperTick(), 50); ss.forEach(s => { const cv = $('#pc' + s.id); if (cv && s.curve.length > 1) lineChart(cv, [{pts: s.curve, color: '#4c8dff', w: 1.8, fill: 1}], {yfmt: v => '$' + num(v, 0)}); });
   }
@@ -628,7 +680,13 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
 
   /* ----- Eventos ----- */
   const ACT = {
-    claudio() { view = 'claudio'; render(); }, newBack() { view = 'new'; render(); }, wide() { wide = !wide; render(); }, new() { nl = {hist: [], spec: null, busy: false, msgs: []}; view = 'new'; render(); }, lib() { view = 'lib'; replay.on = false; clearInterval(replay.timer); replay.timer = 0; render(); },
+    claudio() { view = 'claudio'; render(); },
+    lk(el) { const b = view === 'bot' ? bot() : null, L = b ? (b.look = lookOf(b)) : (newLook = newLook || lookOf({id: uidOf()})); L[el.dataset.t] = el.dataset.v; if (b) { touch(b); render(); const d = root.querySelector('.bl-lookbox'); if (d) d.open = true; } else render(); },
+    tip(el) { const b = bot(), t = ($('#blTab')._tips || [])[+el.dataset.k]; if (b && t) applyTip(b, t); }, tipForce() { const b = bot(); if (b && b.lastApply) { const la = b.lastApply; b.versions.forEach(x => { if (x.v === b.mainV) x.state = 'anterior'; }); ver(b, la.v).state = 'principal'; b.mainV = la.v; la.promoted = true; log(b, 'versión', `La v${la.v} pasó a ser la principal (decisión tuya).`); touch(b); render(); } },
+    tipUndo() { const b = bot(), la = b && b.lastApply; if (!la) return; ver(b, la.v).state = 'descartada'; ver(b, la.prev).state = 'principal'; b.mainV = la.prev; log(b, 'versión', `Deshiciste el consejo «${la.title}»: vuelve la v${la.prev}.`); b.lastApply = null; touch(b); render(); },
+    tipOk() { const b = bot(); if (b) { b.lastApply = null; touch(b); render(); } }, coachAi() { const b = bot(); if (b) coachAi(b, false); },
+    quickSim() { const b = bot(); if (isLive(b)) { tab = 'pap'; return render(); } const r = runOf(b); if (r && r.verdict.level === 'pierde' && !confirm('Esta versión pierde dinero en el backtest. ¿Simularla en vivo de todos modos?')) return;
+      const sp = mainSpec(b), sess = PP().newSession({id: uidOf(), v: b.mainV, spec: sp, capital: sp.risk.capital, startT: Date.now()}); (b.paper = b.paper || []).push(sess); if (b.status === 'paused') b.status = r ? 'tested' : 'draft'; log(b, 'paper', `Simulación en vivo iniciada con la v${b.mainV} (capital virtual ${money(sp.risk.capital)}). Seguirá encendida hasta que la pauses o la termines.`); touch(b); tab = 'pap'; render(); paperUpdate(b, sess, true); }, newBack() { view = 'new'; render(); }, wide() { wide = !wide; render(); }, new() { nl = {hist: [], spec: null, busy: false, msgs: []}; view = 'new'; render(); }, lib() { view = 'lib'; replay.on = false; clearInterval(replay.timer); replay.timer = 0; render(); },
     mA() { view = 'nl'; nlView(); }, mB() { startDraft(B.defaultSpec(), {id: null, method: 'visual'}); }, mC() { view = 'ind'; indView(); }, indScan, indOk() { const sp = indSpec(), v = B.validateSpec(sp); if (!v.ok) return toast(v.errors[0]); const b = newBot(sp, 'indicador', 'Señales de ' + (sp.entry.long[0].a.sname || 'mi indicador')); S.bots.push(b); touch(b); cur = b.id; tab = 'sum'; view = 'bot'; render(); runAndShow(b, 1); }, indEdit() { startDraft(indSpec(), {id: null, method: 'indicador'}); },
     preset(el) { const sp = B.PRESETS[el.dataset.k](); startDraft(sp, {id: null, method: el.dataset.k === 'novaNexus' ? 'nova' : 'visual'}); },
     nlOk() { const b = newBot(nl.spec, 'nl', nl.hist.filter(h => h.role === 'user').map(h => h.content).join(' / ').slice(0, 300)); S.bots.push(b); touch(b); cur = b.id; tab = 'sum'; view = 'bot'; render(); runAndShow(b, 1); },
@@ -636,7 +694,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     addc(el) { const l = getP(draft, el.dataset.list); l.push({a: {k: 'close'}, op: 'gt', b: {k: 'ema', n: 20}}); editView(); }, rmc(el) { getP(draft, el.dataset.list).splice(+el.dataset.i, 1); editView(); },
     saveDraft, showDesc() { $('#blDesc').innerHTML = `<div class="bl-box">${mdLite(B.describeSpec(B.normalizeSpec(draft)))}</div>`; },
     open(el) { cur = el.dataset.id; tab = 'sum'; view = 'bot'; replay = Object.assign(replay, {t: null, ver: null, seg: 'all'}); marksOn = false; H.marks && H.marks(null); render(); },
-    dup(el) { dupBot(getBot(el.dataset.id)); }, pause(el) { const b = getBot(el.dataset.id); b.status = b.status === 'paused' ? (runOf(b) ? 'tested' : 'draft') : 'paused'; log(b, 'estado', b.status === 'paused' ? 'Bot pausado.' : 'Bot reanudado.'); touch(b); render(); },
+    dup(el) { dupBot(getBot(el.dataset.id)); }, pause(el) { const b = getBot(el.dataset.id), now = Date.now(); b.status = b.status === 'paused' ? (runOf(b) ? 'tested' : 'draft') : 'paused'; for (const x of b.paper || []) { if (b.status === 'paused' && x.status === 'running') { x.status = 'paused'; x.pausedAt = now; x.byBot = true; } else if (b.status !== 'paused' && x.status === 'paused' && x.byBot) { x.status = 'running'; x.byBot = false; if (x.open) (x.notes = x.notes || []).push({t: now, text: 'Se reanudó con una posición abierta: el modelo no la sigue durante la pausa; verifícala.'}); x.open = null; x.anchorT = Math.max(x.anchorT || 0, now); (x.gaps = x.gaps || []).push({from: x.pausedAt, to: now, why: 'Bot en pausa (no se opera durante ella)'}); } } log(b, 'estado', b.status === 'paused' ? 'Bot pausado (también su simulación en vivo).' : 'Bot reanudado.'); touch(b); render(); },
     arch(el) { const b = getBot(el.dataset.id); b.status = b.status === 'archived' ? (runOf(b) ? 'tested' : 'draft') : 'archived'; sel.delete(b.id); touch(b); render(); }, exp(el) { exportBot(getBot(el.dataset.id)); },
     del(el) { const b = getBot(el.dataset.id); if (!confirm(`¿Eliminar «${b.name}» y todo su historial? No se puede deshacer.`)) return; S.bots = S.bots.filter(x => x.id !== b.id); S.deleted[b.id] = Date.now(); sel.delete(b.id); if (marksOn) { marksOn = false; H.marks && H.marks(null); } save(); render(); },
     import() { const f = document.createElement('input'); f.type = 'file'; f.accept = 'application/json,.json'; f.onchange = () => { const r = new FileReader(); r.onload = () => importBot(r.result); f.files[0] && r.readAsText(f.files[0]); }; f.click(); },
@@ -658,7 +716,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     async costs() { const b = bot(), sp = mainSpec(b), run = runOf(b); $('#blCosts').innerHTML = note('Calculando…'); try { const res = await execute(Object.assign({}, sp, {costs: {feePct: sp.costs.feePct * 2, slipPct: sp.costs.slipPct * 2}}), run.reqBars); $('#blCosts').innerHTML = `<p>Con costes ×2: <b class="${cls(res.metrics.retPct)}">${pct(res.metrics.retPct)}</b> (${res.metrics.n} op.) frente a <b>${pct(run.metrics.retPct)}</b> con los costes normales.</p>`; } catch (e) { $('#blCosts').innerHTML = note('Error: ' + (e.message || e)); } },
     askq(el) { askAi(bot(), $('#blTab')._ins[+el.dataset.i]); }, accept(el) { acceptProposal(bot(), el.dataset.id); }, reject(el) { const b = bot(), m = b.chat.find(x => x.id === el.dataset.id); m.state = 'rejected'; log(b, 'experimento', 'Rechazaste una propuesta del asistente.'); touch(b); render(); },
     chartToggle() { const b = bot(); if (marksOn) { marksOn = false; replay.on = false; clearInterval(replay.timer); replay.timer = 0; replay.t = null; H.marks && H.marks(null); render(); } else chartShow(b); },
-    seeTrade(el) { const b = bot(), run = runOf(b), t = run.trades[+el.dataset.i]; replay.t = null; replay.seg = 'all'; chartShow(b, t.entryT); },
+    seeTrade(el) { const b = bot(), run = runOf(b), t = run.trades[+el.dataset.i]; if (tchart && $('#blTC')) { tchart.focus(t); $('#blTC').scrollIntoView({behavior: 'smooth', block: 'center'}); return; } replay.t = null; replay.seg = 'all'; chartShow(b, t.entryT); },
     rpPlay() { if (replay.on) { replay.on = false; clearInterval(replay.timer); replay.timer = 0; } else { replay.on = true; if (replay.t == null) rpTick(); replay.timer = setInterval(rpTick, 1100 / replay.speed); } render(); }, rpStep() { rpTick(); }, rpReset() { replay.t = null; replay.on = false; clearInterval(replay.timer); replay.timer = 0; pushMarks(); render(); }
   };
   function bind() {

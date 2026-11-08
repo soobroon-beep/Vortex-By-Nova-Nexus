@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.6', d: '8 nov 2026', t: 'Consejos de la IA para cada bot', items: [
+    'En Editar, debajo de las reglas: cómo va el bot, qué vio la IA y consejos para ESE bot (tendencia, aciertos, horario, riesgo, temporalidad y en qué moneda funciona mejor). Un clic en «Aplicar» lo prueba y lo deja como principal si no empeora.',
+    'En Operaciones, debajo del diario: gráfico de velas con cada compra, venta y salida del bot.',
+    'Elige color e icono espacial para cada bot. «Simular en vivo» se enciende con un clic y sigue encendido hasta que lo pauses o lo termines.'
+  ]},
   {v: '3.5', d: '8 nov 2026', t: 'Nova Bot Lab más sencillo', items: [
     'Al abrir Nova Bot Lab solo ves Crear, Importar, Panel de riesgo, Comparar y la lista de tus bots con su mini curva y rendimiento.',
     'Al tocar un bot aparece todo lo visual: rendimiento grande, aciertos, caída máxima, curva de capital, ranking y actividad.',
