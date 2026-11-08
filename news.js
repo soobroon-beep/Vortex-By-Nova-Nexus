@@ -167,7 +167,7 @@
   /* ───────── Interfaz ───────── */
   const $ = (s, el) => (el || document).querySelector(s), esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const CAT_LABEL = {cripto: 'Cripto', bolsa: 'Bolsa', macro: 'Macro'}, SHOW_STEP = 40;
-  const st = {items: [], per: {}, filter: ls.get('cct_news_filter') || 'todas', hi: ls.get('cct_news_hi') === '1', tab: ls.get('cct_news_tab') === 'cal' ? 'cal' : 'news', shown: SHOW_STEP, loading: false, updated: 0, lastSeen: Number(ls.get('cct_news_seen')) || 0, ok: 0, timer: 0, calMade: '', fails: 0};
+  const st = {items: [], per: {}, filter: ls.get('cct_news_filter') || 'todas', hi: ls.get('cct_news_hi') === '1', tab: ['cal', 'macro'].includes(ls.get('cct_news_tab')) ? ls.get('cct_news_tab') : 'news', shown: SHOW_STEP, loading: false, updated: 0, lastSeen: Number(ls.get('cct_news_seen')) || 0, ok: 0, timer: 0, calMade: '', fails: 0};
   let rootEl = null;
 
   function loadCache() {
@@ -177,7 +177,8 @@
 
   function shell() {
     rootEl.innerHTML = `
-      <div class="nw-tabs" role="tablist"><button role="tab" data-nw-tab="news">Noticias</button><button role="tab" data-nw-tab="cal">${CCTI.svg('calendar', 14)} Calendario económico</button></div>
+      <div class="nw-tabs" role="tablist"><button role="tab" data-nw-tab="news">Noticias</button><button role="tab" data-nw-tab="cal">${CCTI.svg('calendar', 14)} Calendario económico</button><button role="tab" data-nw-tab="macro">${CCTI.svg('bank', 14)} Macro</button></div>
+      <div id="nwMacro" class="mc-box" hidden></div>
       <div id="nwNews">
         <div class="nw-bar"><div class="nw-chips" id="nwChips"></div></div>
         <div class="nw-tools"><label class="nw-hi"><input type="checkbox" id="nwHi"> Solo alto impacto</label><span class="nw-sp"></span><button class="nw-ref" id="nwRefresh" aria-label="Actualizar noticias" title="Actualizar ahora">↻ Actualizar</button></div>
@@ -257,10 +258,10 @@
   }
 
   function setTab(t) {
-    st.tab = t === 'cal' ? 'cal' : 'news'; ls.set('cct_news_tab', st.tab);
+    st.tab = t === 'cal' || t === 'macro' ? t : 'news'; ls.set('cct_news_tab', st.tab);
     rootEl.querySelectorAll('[data-nw-tab]').forEach(b => { const on = b.dataset.nwTab === st.tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
-    $('#nwNews').hidden = st.tab !== 'news'; $('#nwCal').hidden = st.tab !== 'cal';
-    if (st.tab === 'cal') buildCalendar(); else refresh(false);
+    $('#nwNews').hidden = st.tab !== 'news'; $('#nwCal').hidden = st.tab !== 'cal'; $('#nwMacro').hidden = st.tab !== 'macro';
+    if (st.tab === 'cal') buildCalendar(); else if (st.tab === 'macro') { if (root.CCTMacro) root.CCTMacro.show($('#nwMacro')); } else refresh(false);
   }
 
   function init() {
@@ -275,7 +276,7 @@
     });
     rootEl.addEventListener('change', e => { if (e.target.id === 'nwHi') { st.hi = e.target.checked; ls.set('cct_news_hi', st.hi ? '1' : '0'); st.shown = SHOW_STEP; renderList(); } });
     // al abrir la sección (pestaña lateral en PC, botón inferior en móvil) se actualiza si hace falta
-    document.addEventListener('click', e => { if (e.target.closest('[data-side="newsView"],[data-view="newsView"]')) setTimeout(() => { if (st.tab === 'news') refresh(false); else buildCalendar(); }, 60); });
+    document.addEventListener('click', e => { if (e.target.closest('[data-side="newsView"],[data-view="newsView"]')) setTimeout(() => { if (st.tab === 'news') refresh(false); else if (st.tab === 'macro') { if (root.CCTMacro) root.CCTMacro.show($('#nwMacro')); } else buildCalendar(); }, 60); });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && viewVisible()) { if (st.tab === 'news') refresh(false); } });
     new MutationObserver(() => { if (st.tab === 'cal') buildCalendar(); }).observe(document.body, {attributes: true, attributeFilter: ['class']}); // cambia el tema → se vuelve a pintar el calendario
     window.addEventListener('pagehide', () => { const mx = st.items.reduce((m, i) => Math.max(m, i.t), 0); if (mx) ls.set('cct_news_seen', String(mx)); }); // lo visto hasta aquí; lo siguiente saldrá como NUEVA
