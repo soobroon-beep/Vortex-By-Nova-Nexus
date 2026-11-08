@@ -80,7 +80,7 @@
     if (!m) return `<div class="mc-card mc-wide off"><div class="mc-h"><b>Dominancia</b><small>Cripto</small></div><p class="mc-r">Sin datos ahora.</p></div>`;
     const st_ = (m.usdt || 0) + (m.usdc || 0), alt = Math.max(0, 100 - (m.btc || 0) - (m.eth || 0) - st_);
     const bar = (v, c) => `<i style="width:${Math.max(0, v).toFixed(2)}%;background:${c}"></i>`;
-    const capT = fin(m.cap) ? '$' + (m.cap / 1e12).toLocaleString('es-MX', {maximumFractionDigits: 2}) + ' B' : '—';
+    const capT = fin(m.cap) ? '$' + (m.cap / 1e12).toLocaleString('es-MX', {maximumFractionDigits: 2}) + ' billones' : '—';
     return `<div class="mc-card mc-wide"><div class="mc-h"><b>Dominancia</b><small>Reparto del mercado cripto</small></div>
       <div class="mc-dom">${bar(m.btc, '#f7931a')}${bar(m.eth, '#7b8cff')}${bar(st_, '#26a17b')}${bar(alt, '#8b93a7')}</div>
       <div class="mc-leg"><span><em style="background:#f7931a"></em>BTC ${nf(m.btc, 1)}%</span><span><em style="background:#7b8cff"></em>ETH ${nf(m.eth, 1)}%</span><span><em style="background:#26a17b"></em>Estables ${nf(st_, 1)}%</span><span><em style="background:#8b93a7"></em>Altcoins ${nf(alt, 1)}%</span></div>

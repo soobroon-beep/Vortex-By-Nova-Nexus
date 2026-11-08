@@ -177,7 +177,7 @@
 
   function shell() {
     rootEl.innerHTML = `
-      <div class="nw-tabs" role="tablist"><button role="tab" data-nw-tab="news">Noticias</button><button role="tab" data-nw-tab="cal">${CCTI.svg('calendar', 14)} Calendario económico</button><button role="tab" data-nw-tab="macro">${CCTI.svg('bank', 14)} Macro</button></div>
+      <div class="nw-tabs" role="tablist"><button role="tab" data-nw-tab="news">Noticias</button><button role="tab" data-nw-tab="cal" title="Calendario económico">${CCTI.svg('calendar', 14)} Calendario</button><button role="tab" data-nw-tab="macro">${CCTI.svg('bank', 14)} Macro</button></div>
       <div id="nwMacro" class="mc-box" hidden></div>
       <div id="nwNews">
         <div class="nw-bar"><div class="nw-chips" id="nwChips"></div></div>

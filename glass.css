@@ -1124,12 +1124,13 @@ body.rp-picking #chartArea{cursor:crosshair}
 .mc-mood b{display:block;font-size:18px;margin:4px 0 4px;letter-spacing:-.3px}
 .mc-mood.up b{color:var(--green)}.mc-mood.dn b{color:var(--red)}.mc-mood.flat b{color:#f0b90b}
 .mc-mood p{margin:0;font-size:12px;line-height:1.5;color:var(--muted)}
-.mc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.mc-box{container-type:inline-size}
+.mc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,168px),1fr));gap:10px}
 .mc-card{border:1px solid var(--line);background:rgba(255,255,255,.02);border-radius:14px;padding:12px 13px 11px;display:flex;flex-direction:column;gap:7px;min-width:0}
 .mc-card.off{opacity:.55}
-.mc-wide{grid-column:span 2}
-@media(max-width:520px){.mc-grid{grid-template-columns:1fr 1fr}.mc-wide{grid-column:1/-1}}
-@media(max-width:340px){.mc-grid{grid-template-columns:1fr}}
+.mc-wide{grid-column:1/-1}
+@container (min-width:560px){.mc-wide{grid-column:span 2}}
+.nw-tabs button{overflow:hidden;text-overflow:ellipsis}
 .mc-h{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
 .mc-h b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mc-h small{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
