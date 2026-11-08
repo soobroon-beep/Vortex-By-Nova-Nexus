@@ -1466,3 +1466,18 @@ body.rp-picking #chartArea{cursor:crosshair}
   #chartView .chart-toolbar{align-self:flex-start;margin-left:8px;max-width:calc(100% - 80px)}
   #chartView .px-peek{--pk-r:12px}
 }
+
+/* ───────── Celular v3: barra flotante que mueves donde quieras (agarradera · temporalidad · estrella · menú) ───────── */
+.pill-grip{display:none}
+@media(max-width:1023px){
+  #chartView .chart-area{flex:1 1 auto}
+  #chartView .chart-toolbar{position:absolute!important;order:0;margin:0!important;bottom:auto!important;right:auto!important;align-self:auto!important;max-width:calc(100% - 12px)!important;width:max-content;z-index:26;transition:box-shadow .2s,transform .15s;touch-action:none}
+  #chartView .chart-toolbar.dragging{transform:scale(1.04);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 18px 40px rgba(0,0,0,.55),0 0 0 1px rgba(84,143,255,.35)!important}
+  #chartView .pill-grip{display:inline-flex;align-items:center;justify-content:center;width:24px;height:34px;color:rgba(237,243,252,.45);cursor:grab;touch-action:none;flex:0 0 auto}
+  #chartView .chart-toolbar.dragging .pill-grip{cursor:grabbing;color:var(--accent)}
+  #chartView .chart-toolbar #moreBtn svg{transition:transform .25s}
+  #chartView .chart-toolbar #moreBtn[aria-expanded=true]{background:rgba(84,143,255,.22)!important}
+  #chartView .chart-toolbar #moreBtn[aria-expanded=true] svg{transform:rotate(180deg)}
+  #chartView.more-open .more-group [data-panel=indicators]::before{content:none}
+}
+@media(max-width:1023px){#chartView .pill-grip{order:-3}}

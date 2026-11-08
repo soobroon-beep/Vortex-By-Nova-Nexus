@@ -1,5 +1,9 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.3', d: '8 nov 2026', t: 'Barra flotante del gráfico', items: [
+    'En el celular la barra del gráfico es flotante: muestra solo tu temporalidad actual y la estrella de favoritos; la flecha despliega todo lo demás.',
+    'Mantén la agarradera y arrástrala donde quieras: se queda ahí para siempre en tu celular.'
+  ]},
   {v: '3.2', d: '8 nov 2026', t: 'Gráfico más amplio en el celular', items: [
     'La barra del gráfico ahora es una píldora de cristal oscuro debajo del gráfico (no tapa el oscilador): temporalidad, indicadores, plantilla, operar, tus herramientas favoritas ★ y deshacer.',
     'Dibujar, Liquidaciones, Repetición, Libro, Diario, Diseño y Velas están en «⋯».',

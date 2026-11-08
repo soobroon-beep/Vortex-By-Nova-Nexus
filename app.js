@@ -1029,7 +1029,7 @@ function renderFrames() {
     const was = view.classList.contains(cls); close(); if (was) return;
     // la píldora del celular está abajo: los menús se abren hacia arriba
     const r = tb.getBoundingClientRect(), vr = view.getBoundingClientRect();
-    if (r.top - vr.top > vr.height / 2) { panel.style.top = 'auto'; panel.style.bottom = (vr.bottom - r.top + 8) + 'px'; } else { panel.style.bottom = 'auto'; panel.style.top = (tb.offsetTop + tb.offsetHeight + 4) + 'px'; }
+    if (r.top - vr.top > vr.height / 2) { panel.style.top = 'auto'; panel.style.bottom = (vr.bottom - r.top + 8) + 'px'; } else { panel.style.bottom = 'auto'; panel.style.top = (r.bottom - vr.top + 8) + 'px'; }
     view.classList.add(cls); btn.setAttribute('aria-expanded', 'true');
   };
   tf.onclick = e => { e.stopPropagation(); toggle('tf-open', tf, $('#timeframes')); };
@@ -1041,16 +1041,37 @@ function renderFrames() {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   window.addEventListener('resize', close);
   // celular: en la píldora quedan solo los esenciales; lo demás pasa a «Más» (en escritorio todo vuelve a su lugar)
-  const MOVE = [...['liqBtn', 'replayBtn', 'bookBtn', 'journalBtn'].map(id => $('#' + id)), tb.querySelector('[data-panel=tools]')].filter(Boolean), home = MOVE.map(b => [b, b.nextElementSibling]);
+  // celular: la barra flotante solo lleva la temporalidad actual y la estrella; todo lo demás va en el menú que se despliega
+  const MOVE = [tb.querySelector('[data-panel=indicators]'), $('#designsBtn'), $('#tradeBtn'), tb.querySelector('[data-panel=tools]'), $('#liqBtn'), $('#replayBtn'), $('#bookBtn'), $('#journalBtn')].filter(Boolean), UNDO = $('#undoDraw');
+  const ORIG = [...tb.children], firstOwn = $('#layoutBtn'); // orden original de la barra (para volver a escritorio)
   const place = () => {
     const mob = !isDesktop(), grp = $('#moreGroup');
-    if (mob) { MOVE.forEach(b => { if (b.parentNode !== grp) grp.appendChild(b); }); if (grp.parentNode !== view) view.appendChild(grp); } // fuera de la píldora para que no lo recorte su desplazamiento
+    if (mob) { MOVE.forEach(b => { if (b.parentNode !== grp) grp.insertBefore(b, firstOwn && firstOwn.parentNode === grp ? firstOwn : null); }); if (UNDO && UNDO.parentNode !== grp) grp.appendChild(UNDO); if (grp.parentNode !== view) view.appendChild(grp); } // fuera de la barra para que no lo recorte
     else {
-      if (grp.parentNode !== tb) tb.insertBefore(grp, more.nextSibling);
-      home.slice().reverse().forEach(([b, nx]) => { if (b.parentNode === grp) tb.insertBefore(b, nx && nx.parentNode === tb ? nx : more); });
+      if ([...tb.children].some((c, i) => c !== ORIG[i]) || tb.children.length !== ORIG.length) ORIG.forEach(c => tb.appendChild(c));
     }
-    view.classList.toggle('pill-bar', mob);
+    view.classList.toggle('pill-bar', mob); pillPos();
   };
+  /* posición de la barra flotante: la mueves con la agarradera y se queda donde la dejaste (se guarda en este celular) */
+  const PK = 'cct_pill_pos_v1'; let PP = (() => { try { const v = JSON.parse(localStorage.getItem(PK) || 'null'); return v && Number.isFinite(v.x) && Number.isFinite(v.y) ? v : null; } catch { return null; } })();
+  function pillPos() {
+    if (isDesktop()) { tb.style.left = tb.style.top = ''; return; }
+    const W = view.clientWidth, Hh = view.clientHeight, w = tb.offsetWidth || 150, h = tb.offsetHeight || 40; if (!W || !Hh) return;
+    const x = PP ? PP.x * Math.max(0, W - w) : 10, y = PP ? PP.y * Math.max(0, Hh - h) : Hh - h - 34;
+    tb.style.left = clamp(x, 0, Math.max(0, W - w)) + 'px'; tb.style.top = clamp(y, 0, Math.max(0, Hh - h)) + 'px';
+  }
+  const grip = $('#pillGrip');
+  if (grip) grip.addEventListener('pointerdown', e => {
+    if (isDesktop()) return; e.preventDefault(); e.stopPropagation(); close(); if (fbOpen) setFbOpen(false);
+    const r = tb.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top; tb.classList.add('dragging'); try { grip.setPointerCapture(e.pointerId); } catch {}
+    const mv = ev => { const vr = view.getBoundingClientRect(), W = vr.width - tb.offsetWidth, Hh = vr.height - tb.offsetHeight;
+      PP = {x: W > 0 ? clamp((ev.clientX - vr.left - ox) / W, 0, 1) : 0, y: Hh > 0 ? clamp((ev.clientY - vr.top - oy) / Hh, 0, 1) : 0}; pillPos(); };
+    const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); tb.classList.remove('dragging'); try { localStorage.setItem(PK, JSON.stringify(PP)); } catch {} navigator.vibrate?.(8); };
+    grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up); navigator.vibrate?.(10);
+  });
+  if (window.ResizeObserver) new ResizeObserver(() => pillPos()).observe(view);
+  more.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>';
+  window.CCT_pillPos = pillPos;
   const fp = $('#favPillBtn'); if (fp) fp.addEventListener('click', e => { e.stopPropagation(); if (!FB.show) { FB.show = true; syncUi(); renderFavBar(); } setFbOpen(!fbOpen); placeFab(); });
   place(); if (deskMQ.addEventListener) deskMQ.addEventListener('change', () => { close(); place(); });
 })();
@@ -2356,8 +2377,10 @@ function placeFab() { // coloca el botón estrella (fracciones mx,my) y abre la 
   const bar = $('#favBar'), fab = $('#favFab'), ar = $('#chartArea'); if (!bar || !ar) return;
   if (!fab) { // celular: la barra sale justo arriba de la píldora
     const pb = $('#favPillBtn'), ab = ar.getBoundingClientRect(), r = pb ? pb.getBoundingClientRect() : null, bw = bar.offsetWidth, bh = bar.offsetHeight || 44;
-    const cx = r ? r.left + r.width / 2 - ab.left : 20; bar.style.left = clamp(cx - bw / 2, 8, Math.max(8, ar.clientWidth - bw - 8)) + 'px'; bar.style.top = Math.max(8, ar.clientHeight - bh - 8) + 'px'; bar.style.bottom = 'auto';
-    bar.style.transformOrigin = 'center bottom'; bar.style.setProperty('--fb-from', '0px'); return;
+    const cx = r ? r.left + r.width / 2 - ab.left : 20, up = !r || (r.top - ab.top) > ar.clientHeight / 2;
+    bar.style.left = clamp(cx - bw / 2, 8, Math.max(8, ar.clientWidth - bw - 8)) + 'px'; bar.style.bottom = 'auto';
+    bar.style.top = clamp(r ? (up ? r.top - ab.top - bh - 8 : r.bottom - ab.top + 8) : ar.clientHeight - bh - 8, 8, Math.max(8, ar.clientHeight - bh - 8)) + 'px';
+    bar.style.transformOrigin = up ? 'center bottom' : 'center top'; bar.style.setProperty('--fb-from', '0px'); return;
   }
   const aw = ar.clientWidth, ah = ar.clientHeight, mw = Math.max(0, aw - FAB), mh = Math.max(0, ah - FAB);
   const fx = FB.mx == null ? 10 : clamp(FB.mx * mw, 0, mw), fy = FB.my == null ? Math.max(0, ah - FAB - 84) : clamp(FB.my * mh, 0, mh);
