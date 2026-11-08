@@ -1,5 +1,12 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.0', d: '8 nov 2026', t: 'Diario de trading y libro de órdenes', items: [
+    'Diario de trading: cada operación de la cuenta demo se anota sola con captura del gráfico al abrir y al cerrar. También puedes agregar tus operaciones reales.',
+    'Estadísticas del diario: % ganadoras, factor de beneficio, esperanza, R promedio, curva de capital, calendario de ganancias y resultados por activo, día y motivo de cierre.',
+    'Etiqueta cada operación con su setup, cómo te sentiste y tus errores, escribe notas y exporta todo a CSV.',
+    'Libro de órdenes: compras y ventas agrupadas, spread, desequilibrio, curva de profundidad y muros. Toca un nivel para preparar una orden ahí.',
+    'Opción para ver la profundidad del libro como barras sobre el gráfico.'
+  ]},
   {v: '2.9', d: '8 nov 2026', t: 'Derivados en vivo', items: [
     'Junto al precio: funding con cuenta regresiva al próximo cobro, interés abierto con su cambio en 24 h y ratio long/short.',
     'Toca esos datos para ver el detalle: funding anualizado, precio mark e índice, prima de futuros y una lectura de lo que está pasando.',

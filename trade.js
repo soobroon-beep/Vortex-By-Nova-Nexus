@@ -21,7 +21,7 @@
   const rp = v => { v = +v; if (!(v > 0)) return ''; const d = Math.max(2, Math.min(8, 5 - Math.floor(Math.log10(v)))); return +v.toFixed(d); }; // precio con decimales razonables
 
   function changed(ev) {
-    save(); H.render(); renderPanel();
+    save(); if (root.CCTJournal) CCTJournal.sync(A); H.render(); renderPanel();
     for (const e of ev || []) {
       const s = coin(e.sym), sd = e.side > 0 ? 'Long' : 'Short';
       if (e.k === 'open') H.toast(`Abriste ${sd} ${qf(e.qty)} ${s} a ${f(e.price)}`);
@@ -76,7 +76,7 @@
   const svg = (p, s = 16) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   function shell() {
     panel = document.createElement('div'); panel.className = 'tr-panel'; panel.hidden = true; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Operar · cuenta demo');
-    panel.innerHTML = `<div class="tr-head"><div><b>Operar</b><span class="tr-demo">Cuenta demo</span></div><div class="tr-eq" data-tr-eq></div><button type="button" class="tr-x" data-tr-close aria-label="Cerrar">✕</button></div>
+    panel.innerHTML = `<div class="tr-head"><div><b>Operar</b><span class="tr-demo">Cuenta demo</span></div><div class="tr-eq" data-tr-eq></div><button type="button" class="tr-jr" data-tr-journal title="Diario de trading">Diario</button><button type="button" class="tr-x" data-tr-close aria-label="Cerrar">✕</button></div>
       <div class="tr-body">
         <div class="tr-seg" data-tr-types>${[['market', 'Mercado'], ['limit', 'Límite'], ['stop', 'Stop']].map(([k, l]) => `<button type="button" data-tr-type="${k}">${l}</button>`).join('')}</div>
         <label class="tr-f tr-price"><span>Precio</span><input type="text" inputmode="decimal" data-tr-in="price" autocomplete="off"><button type="button" class="tr-mini" data-tr-last>Último</button></label>
@@ -160,6 +160,7 @@
   function onClick(e) {
     const t = e.target;
     if (t.closest('[data-tr-close]')) return toggle(false);
+    if (t.closest('[data-tr-journal]')) { if (root.CCTJournal) CCTJournal.open(); return; }
     const ty = t.closest('[data-tr-type]'); if (ty) { ui.type = ty.dataset.trType; if (ui.type !== 'market' && !(num('price') > 0)) inp('price').value = rp(px(H.sym())); saveUi(); renderPanel(); return; }
     if (t.closest('[data-tr-last]')) { inp('price').value = rp(px(H.sym())); renderCalc(); return; }
     if (t.closest('[data-tr-unit]')) { const s = sizing(); ui.unit = ui.unit === 'usdt' ? 'coin' : 'usdt'; if (s) inp('amt').value = ui.unit === 'usdt' ? +s.margin.toFixed(2) : +s.qty.toPrecision(6); saveUi(); renderPanel(); return; }
@@ -200,7 +201,7 @@
   }
 
   function bind(h) {
-    Object.assign(H, h); clearInterval(timer); timer = setInterval(poll, 2000);
+    Object.assign(H, h); clearInterval(timer); timer = setInterval(poll, 2000); if (root.CCTJournal) setTimeout(() => CCTJournal.sync(A), 0);
     if (ui.open) setTimeout(() => toggle(true), 0);
   }
   const symChanged = () => { if (panel && !panel.hidden) { inp('price').value = ''; if (ui.type !== 'market') inp('price').value = rp(px(H.sym())); renderPanel(); } };

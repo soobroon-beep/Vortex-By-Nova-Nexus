@@ -1855,7 +1855,7 @@ $$('[data-panel]').forEach(b => b.onclick = () => openSheet(b.dataset.panel === 
 $('#goChart').onclick = () => switchView('chartView');
 function selectSymbol(s) {
   state.symbol = s; save(); closeSheet(); clearTransient(); closeWS(); candles = []; ind = {};
-  updateChartHeader(); switchView('chartView'); loadCandles(); if (window.CCTTrade) CCTTrade.symChanged(); dvClose(); dvFs = ''; setTimeout(() => dvRefresh(true), 50);
+  updateChartHeader(); switchView('chartView'); loadCandles(); if (window.CCTTrade) CCTTrade.symChanged(); if (window.CCTBook) CCTBook.symChanged(); dvClose(); dvFs = ''; setTimeout(() => dvRefresh(true), 50);
 }
 
 /* ───────── Pestañas de gráficos: varios gráficos abiertos, cada uno con su moneda, temporalidad y tipo de vela ───────── */
@@ -3094,6 +3094,12 @@ function renderCore() {
       if (live && alDrag.p != null) { const ny = ln(alDrag.p, .95, CS.alertW + 1, [6, 4]); if (ny != null) { const dl = (alDrag.p - lastP) / lastP * 100; tag(ny, fmt(alDrag.p), true); g.setLineDash([]); g.font = '11px system-ui'; g.globalAlpha = .9; g.fillStyle = acol; g.textAlign = 'left'; g.fillText(`${dl >= 0 ? '+' : ''}${dl.toFixed(2)}%`, left + 28, ny - 5); } }
     }
     g.restore(); }
+  // profundidad del libro de órdenes: barras horizontales pegadas a la escala de precio (verde = compras, rojo = ventas, ★ = muro)
+  if (window.CCTBook && CCTBook.overlayOn() && !replay) { const DL = CCTBook.levels(PRICE(plotTop + plotH), PRICE(plotTop), Math.max(20, Math.min(120, Math.round(plotH / 5)))); if (DL && DL.max > 0) {
+    g.save(); const maxW = Math.min(170, plotW * .22), x1 = w - right - 2, bh = Math.max(1, Math.abs(Y(DL.lo) - Y(DL.lo + DL.step)) - 1);
+    for (const b of DL.bins) { if (!b.v) continue; const yy = Y(b.p), bw = Math.max(1, b.v / DL.max * maxW); g.globalAlpha = b.wall ? .55 : .22; g.fillStyle = b.side > 0 ? up : down; g.fillRect(x1 - bw, yy - bh / 2, bw, bh);
+      if (b.wall) { g.globalAlpha = .9; g.font = '600 10px system-ui'; g.textAlign = 'right'; g.fillStyle = b.side > 0 ? up : down; g.fillText('★ ' + dvBig(b.v), x1 - bw - 4, yy + 3.5); } }
+    g.restore(); } }
   // operaciones de la cuenta demo: entrada, TP, SL, órdenes y liquidación (se arrastran para moverlas; × las cierra o quita)
   trHit = [];
   if (window.CCTTrade && !replay) { const TL = CCTTrade.lines(state.symbol); if (TL.length) {
@@ -4947,6 +4953,13 @@ if (window.CCTDerivs) {
   dvTimer = setInterval(() => dvRefresh(), 30e3);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) dvRefresh(); });
 }
+if (window.CCTJournal) CCTJournal.bind({sym: () => state.symbol, base: s => base(s), fmt, toast, go: s => { if (s !== state.symbol) selectSymbol(s); else switchView('chartView'); },
+  snap: () => { try { const cv = $('#priceCanvas'); if (!cv || !cv.width) return null; const W = 720, k = W / cv.width, o = document.createElement('canvas'); o.width = W; o.height = Math.round(cv.height * k); const c = o.getContext('2d'); c.fillStyle = cstyle().bg || '#07090e'; c.fillRect(0, 0, o.width, o.height); c.drawImage(cv, 0, 0, o.width, o.height); return o.toDataURL('image/jpeg', .72); } catch { return null; } }});
+if (window.CCTBook) {
+  CCTBook.bind({sym: () => state.symbol, src: () => srcOf(state.symbol), split: s => splitSym(s), fmt, render: scheduleRender, toast, base: s => base(s)});
+  const bb = $('#bookBtn'); if (bb) bb.addEventListener('click', () => CCTBook.toggle());
+}
+{ const jb = $('#journalBtn'); if (jb) jb.addEventListener('click', () => window.CCTJournal && CCTJournal.open()); }
 if (window.CCTTrade) {
   CCTTrade.bind({sym: () => state.symbol, price: s => { const v = s === state.symbol && candles.length && !replay ? candles[candles.length - 1].c : curPrice(s); return +v; }, fmt, render: scheduleRender, toast, base: s => base(s), go: s => { if (s !== state.symbol) selectSymbol(s); }});
   const tb = $('#tradeBtn'); if (tb) tb.addEventListener('click', () => CCTTrade.toggle());
