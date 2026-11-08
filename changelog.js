@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.5', d: '8 nov 2026', t: 'Nova Bot Lab más sencillo', items: [
+    'Al abrir Nova Bot Lab solo ves Crear, Importar, Panel de riesgo, Comparar y la lista de tus bots con su mini curva y rendimiento.',
+    'Al tocar un bot aparece todo lo visual: rendimiento grande, aciertos, caída máxima, curva de capital, ranking y actividad.',
+    'Botones directos en cada bot: Probar, Editar, Simular y Ver en el gráfico; las opciones avanzadas quedan dentro de «Mejorar».'
+  ]},
   {v: '3.4', d: '8 nov 2026', t: 'Claudio, agente de trading autónomo', items: [
     'Nuevo en Nova Bot Lab (PC): Claudio, un agente que corre 24/7 en el servidor, evalúa cada vela de 1 h de 8 criptomonedas con Jev en una sola llamada y opera con capital virtual.',
     'Riesgo fijo en el código: drawdown máx. 15 %, pérdida diaria máx. 3 %, 20 % por posición, ¼ de Kelly e interruptor de emergencia.',

@@ -58,9 +58,8 @@
   function card() {
     const s = st.s, [k, label] = status(), stt = s ? K.stats(s) : null;
     if (!st.loaded) setTimeout(load, 0);
-    return `<div class="cl-card" data-a="claudio" role="button" tabindex="0"><div class="cl-face">${FACE}</div><div class="cl-card-m"><div class="cl-card-t"><b>Claudio</b><span class="cl-chip k-${k}">${esc(label)}</span></div>
-      <small>Agente autónomo · cerebro Opus 5.5 + reflejo Jev · ${RS.CANDIDATES.length} candidatos · velas 1 h</small>
-      <div class="cl-card-s">${stt ? `<span class="${cls(stt.retPct)}">${pct(stt.retPct)}</span> · ${stt.n} op. · DD ${num(stt.ddPct, 1)} % / ${K.LIMITS.maxDrawdownPct} % · ${ago(s.lastT)}` : '<span class="bl-dim">Ábrelo para encenderlo</span>'}</div></div><span class="cl-go">Abrir ›</span></div>`;
+    return `<div class="cl-card" data-a="claudio" role="button" tabindex="0"><div class="cl-face">${FACE}</div><div class="cl-card-m"><div class="cl-card-t"><b>Claudio</b><span class="cl-chip k-${k}">${esc(k === 'on' ? 'En vivo' : label)}</span></div>
+      <small>Agente autónomo · ${RS.CANDIDATES.length} monedas · 1 h</small></div><span class="bl-row-v ${stt ? cls(stt.retPct) : ''}">${stt ? pct(stt.retPct) : '—'}</span><span class="bl-row-go">›</span></div>`;
   }
   const gauge = (lab, v, max, unit, invert) => { const p = Math.max(0, Math.min(100, (v || 0) / max * 100)), col = p > 80 ? '#f06b79' : p > 50 ? '#f0b90b' : '#20bf9f'; return `<div class="cl-g"><div class="cl-g-h"><small>${lab}</small><b>${num(v, 2)}${unit} <i>/ ${max}${unit}</i></b></div><div class="cl-g-b"><i style="width:${p.toFixed(1)}%;background:${col}"></i></div></div>`; };
   function curve(s) {
