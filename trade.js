@@ -90,6 +90,7 @@
           <label class="tr-chk"><input type="checkbox" data-tr-on="sl"> SL</label><input type="text" inputmode="decimal" data-tr-in="sl" placeholder="Precio de stop" autocomplete="off">
         </div>
         <div class="tr-calc" data-tr-calc></div>
+        <p class="tr-err" data-tr-err hidden></p>
         <div class="tr-go"><button type="button" class="tr-buy" data-tr-side="1"><b>Comprar</b><small data-tr-bl>Long</small></button><button type="button" class="tr-sell" data-tr-side="-1"><b>Vender</b><small data-tr-sl>Short</small></button></div>
         <div class="tr-tabs">${[['pos', 'Posiciones'], ['ord', 'Órdenes'], ['hist', 'Historial']].map(([k, l]) => `<button type="button" data-tr-tab="${k}">${l}<i data-tr-n="${k}"></i></button>`).join('')}</div>
         <div class="tr-list" data-tr-list></div>
@@ -160,6 +161,7 @@
     if (!can && ui.mode === 'real') ui.mode = 'demo';
     el.innerHTML = can ? `<span class="tr-seg tr-msw"><button type="button" data-tr-m="demo" class="${ui.mode !== 'real' ? 'on' : ''}">Demo</button><button type="button" data-tr-m="real" class="${ui.mode === 'real' ? 'on real' : ''}">Real · ${esc(x.name)}</button></span>` : `<span class="tr-demo">Cuenta demo</span>${x ? '' : '<button type="button" class="tr-mini" data-ex-open>Conectar exchange</button>'}`;
     panel.classList.toggle('is-real', real()); $p('[data-tr-reset]').hidden = real();
+    const eb = $p('[data-tr-err]'), pw = real() && X().permWarn ? X().permWarn() : ''; if (pw) { eb.textContent = pw; eb.hidden = false; } else if (!real()) eb.hidden = true;
   }
   function renderPanel() {
     if (!panel || panel.hidden) return; renderMode();
@@ -179,7 +181,8 @@
       const x = X().info(), msg = `ORDEN REAL en ${x.name}\n\n${side > 0 ? 'COMPRA (Long)' : 'VENTA (Short)'} ${qf(s.qty)} ${coin(sym)}\n${o.type === 'market' ? 'A mercado (~' + f(s.e) + ')' : (o.type === 'limit' ? 'Límite en ' : 'Stop en ') + f(s.e)}\nValor ${usd(s.notional)} · ${ui.lev}x · margen ${usd(s.margin)}${o.tp ? '\nTP ' + f(o.tp) : ''}${o.sl ? '\nSL ' + f(o.sl) : ''}\n\n¿Enviar la orden?`;
       if (!root.confirm(msg)) return;
       H.toast('Enviando orden a ' + x.name + '…');
-      X().order(o).then(() => { H.toast(`Orden enviada a ${x.name}`); ui.tab = o.type === 'market' ? 'pos' : 'ord'; renderList(); }, e => H.toast('No se pudo: ' + (e.message || e)));
+      const eb = $p('[data-tr-err]'); eb.hidden = true;
+      X().order(o).then(() => { H.toast(`Orden enviada a ${x.name}`); ui.tab = o.type === 'market' ? 'pos' : 'ord'; renderList(); }, e => { eb.textContent = e.message || String(e); eb.hidden = false; H.toast('No se pudo enviar la orden (detalle en el panel)'); });
       return;
     }
     const r = E.place(A, o, px); if (r.error) { H.toast(r.error); return; }

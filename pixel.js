@@ -515,5 +515,5 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
   addEventListener('resize', placePeek); setTimeout(placePeek, 300);
   if (ls.open) setTimeout(() => show(false), 1800);
   addEventListener('cct-pixel-cfg', () => { try { if (M) M.setColor(CFG().color || 'purple'); } catch {} });
-  window.NexusPixel = {show, hide, ask, get open() { return open; }};
+  window.NexusPixel = {show, hide, ask, say: async t => { try { if (!open) await show(false); mood('excited', 'fly'); say(t); } catch {} }, get open() { return open; }}; // say: el Radar de oportunidades te lo cuenta
 })();

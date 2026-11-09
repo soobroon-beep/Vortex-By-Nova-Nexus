@@ -47,6 +47,14 @@
     finally { busy = false; }
     emit(); return snap;
   }
+  /* El mensaje exacto del exchange (código + texto) para saber qué arreglar */
+  function rawOf(e) { const m = String(e && e.message || e); const j = m.match(/\{.*\}/); if (j) { try { const o = JSON.parse(j[0]); const c = o.code ?? o.retCode ?? o.ret_code, t = o.msg ?? o.retMsg ?? o.message ?? o.ret_msg; if (c != null || t) return `${c != null ? 'código ' + c + ': ' : ''}${t || ''}`.slice(0, 160); } catch {} } return m.replace(/^[a-z]+ /, '').slice(0, 160); }
+  function tradeErr(e) { // al operar: la lectura ya funcionó, así que casi siempre es un permiso de la API
+    const m = String(e && e.message || e), raw = rawOf(e), auth = /AuthenticationError|PermissionDenied|Invalid API|-2015|-2014|permission|10005|50120|40014/i.test((e && e.constructor && e.constructor.name) + ' ' + m);
+    if (!auth) return errText(e) + (raw && !errText(e).includes(raw) ? ` (${raw})` : '');
+    const tip = {binance: cfg.market === 'spot' ? 'En Binance › Gestión de API, edita la clave y activa «Habilitar trading spot y de margen».' : 'En Binance › Gestión de API, edita la clave y activa «Habilitar futuros» (tu cuenta de Futuros debe estar abierta ANTES de crear la clave; si es más vieja, crea una nueva).', bybit: 'En Bybit › API, dale permiso de «Contratos/Órdenes» (o Spot) a la clave.', bingx: 'En BingX › Gestión de API, activa «Trading de futuros perpetuos» (o Spot).', okx: 'En OKX › API, dale permiso «Trade» a la clave.', bitget: 'En Bitget › API, activa el permiso de trading de Futuros/Spot.'}[cfg.id] || 'En tu exchange, dale permiso de trading (Futuros o Spot) a la API Key.';
+    return `Tu API Key lee bien pero ${nameOf(cfg.id)} no la deja operar. ${tip} (${raw})`;
+  }
   function errText(e) {
     const m = String(e && e.message || e);
     if (/AuthenticationError|Invalid API|signature|apikey|api-key|API key|40001|10001|-2015|-2014/i.test((e && e.constructor && e.constructor.name) + ' ' + m)) return 'El exchange rechazó tu API Key: revisa la clave, el secret (y passphrase si tu exchange la pide) y los permisos.';
@@ -73,7 +81,7 @@
     let type = o.type === 'limit' ? 'limit' : 'market', price = o.type === 'limit' ? +ex.priceToPrecision(m, o.price) : undefined;
     if (o.type === 'stop') p.triggerPrice = +ex.priceToPrecision(m, o.price);
     let r; try { r = await ex.createOrder(m, type, side, amount, price, p); }
-    catch (e) { if (cfg.market === 'spot' || !hedgeErr(e)) throw new Error(errText(e)); r = await ex.createOrder(m, type, side, amount, price, Object.assign({}, p, {positionSide: o.side > 0 ? 'LONG' : 'SHORT', hedged: true})).catch(e2 => { throw new Error(errText(e2)); }); }
+    catch (e) { if (cfg.market === 'spot' || !hedgeErr(e)) throw new Error(tradeErr(e)); r = await ex.createOrder(m, type, side, amount, price, Object.assign({}, p, {positionSide: o.side > 0 ? 'LONG' : 'SHORT', hedged: true})).catch(e2 => { throw new Error(tradeErr(e2)); }); }
     setTimeout(refresh, 800); return r;
   }
   async function closePosition(pos, frac = 1) {
@@ -81,10 +89,10 @@
     if (!ex) ex = await make(cfg); await ex.loadMarkets();
     const long = String(pos.side).toLowerCase() === 'long', amount = +ex.amountToPrecision(pos.symbol, Math.abs(num(pos.contracts)) * frac), side = long ? 'sell' : 'buy';
     try { await ex.createOrder(pos.symbol, 'market', side, amount, undefined, {reduceOnly: true}); }
-    catch (e) { if (!hedgeErr(e)) throw new Error(errText(e)); await ex.createOrder(pos.symbol, 'market', side, amount, undefined, {positionSide: long ? 'LONG' : 'SHORT', hedged: true}).catch(e2 => { throw new Error(errText(e2)); }); }
+    catch (e) { if (!hedgeErr(e)) throw new Error(tradeErr(e)); await ex.createOrder(pos.symbol, 'market', side, amount, undefined, {positionSide: long ? 'LONG' : 'SHORT', hedged: true}).catch(e2 => { throw new Error(tradeErr(e2)); }); }
     setTimeout(refresh, 800);
   }
-  async function cancel(o) { if (!ex) ex = await make(cfg); try { await ex.cancelOrder(o.id, o.symbol); } catch (e) { throw new Error(errText(e)); } setTimeout(refresh, 600); }
+  async function cancel(o) { if (!ex) ex = await make(cfg); try { await ex.cancelOrder(o.id, o.symbol); } catch (e) { throw new Error(tradeErr(e)); } setTimeout(refresh, 600); }
   const canTrade = () => !!(cfg && cfg.trade);
 
   /* ───────── Guardado: dispositivo + cuenta ───────── */
@@ -106,10 +114,18 @@
     } catch {}
   }
 
+  /* Permisos reales de la clave (Binance los informa): para avisar ANTES de intentar operar */
+  let perms = null;
+  async function checkPerms() {
+    perms = null; if (!cfg || cfg.id !== 'binance') return null;
+    try { if (!ex) ex = await make(cfg); const r = await ex.sapiGetAccountApiRestrictions(); perms = {futures: !!r.enableFutures, spot: !!r.enableSpotAndMarginTrading, ip: !!r.ipRestrict}; } catch {}
+    return perms;
+  }
+  const permWarn = () => { if (!perms || !cfg || !cfg.trade) return ''; const need = cfg.market === 'spot' ? perms.spot : perms.futures; if (need) return ''; return cfg.market === 'spot' ? 'Tu clave de Binance no tiene «Habilitar trading spot y de margen»: puede leer pero no operar.' : 'Tu clave de Binance no tiene «Habilitar futuros»: puede leer pero no operar. Edítala en Binance › Gestión de API (si tu cuenta de Futuros se abrió después de crear la clave, crea una nueva).' + (perms.ip ? '' : ' Si Binance te pide restringir por IP para activarlo, avísame: el puente no tiene una IP fija.'); };
   async function connect(c) {
     const t = await make(c); t.checkRequiredCredentials();
     await t.fetchBalance(); // prueba real: si la clave no sirve, aquí falla
-    cfg = Object.assign({}, c, {at: Date.now()}); ex = t; storeLocal(); const cloud = await cloudSave(); lensLink(); startPoll();
+    cfg = Object.assign({}, c, {at: Date.now()}); ex = t; storeLocal(); const cloud = await cloudSave(); lensLink(); startPoll(); await checkPerms();
     return cloud;
   }
   async function disconnect() { cfg = null; ex = null; clearInterval(pollT); snap = {equity: NaN, free: NaN, positions: [], orders: [], at: 0, err: ''}; storeLocal(); await cloudSave(); emit(); }
@@ -143,7 +159,7 @@
   }
   function statusHtml() {
     const s = snap, eq = Number.isFinite(s.equity) ? s.equity.toLocaleString('es-MX', {style: 'currency', currency: 'USD'}) : '…';
-    return `<div class="xc-cur"><span class="xc-lg">${esc(nameOf(cfg.id).slice(0, 2))}</span><div class="xc-cur-t"><b>${esc(nameOf(cfg.id))} conectado</b><small>${s.err ? '⚠ ' + esc(s.err) : `Saldo ${eq} · ${cfg.market === 'spot' ? 'Spot' : 'Perpetuos'} · ${cfg.trade ? 'puede operar' : 'solo lectura'}`}</small></div><button type="button" class="tr-mini" data-xc-pick="${esc(cfg.id)}">Editar</button><button type="button" class="tr-mini dn" data-xc-off>Desconectar</button></div><div class="sg-label">Cambiar de exchange</div>`;
+    return `<div class="xc-cur"><span class="xc-lg">${esc(nameOf(cfg.id).slice(0, 2))}</span><div class="xc-cur-t"><b>${esc(nameOf(cfg.id))} conectado</b><small>${s.err ? '⚠ ' + esc(s.err) : `Saldo ${eq} · ${cfg.market === 'spot' ? 'Spot' : 'Perpetuos'} · ${cfg.trade ? 'puede operar' : 'solo lectura'}`}</small>${permWarn() ? `<small class="xc-warn">⚠ ${esc(permWarn())}</small>` : ''}</div><button type="button" class="tr-mini" data-xc-pick="${esc(cfg.id)}">Editar</button><button type="button" class="tr-mini dn" data-xc-off>Desconectar</button></div><div class="sg-label">Cambiar de exchange</div>`;
   }
   function open() {
     if (!ov) {
@@ -175,7 +191,7 @@
     }
   }
   document.addEventListener('click', e => { if (e.target.closest('[data-ex-open]')) { e.preventDefault(); open(); } });
-  if (cfg) startPoll();
+  if (cfg) { startPoll(); setTimeout(checkPerms, 1500); }
 
-  root.CCTExchange = {open, close, refresh, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
+  root.CCTExchange = {open, close, refresh, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
 })(typeof self !== 'undefined' ? self : this);

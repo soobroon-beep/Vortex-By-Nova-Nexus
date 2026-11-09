@@ -784,3 +784,5 @@ body[data-tier="infinity"] .prem-tag{display:none!important}
 .tr-msw button.on{background:var(--surface);color:var(--text)}.tr-msw button.on.real{background:rgba(240,107,121,.18);color:#ff8f9b}
 .tr-panel.is-real{box-shadow:0 0 0 1px rgba(240,107,121,.45),0 18px 40px rgba(0,0,0,.45)}
 .tr-mode .tr-mini{margin-left:6px}
+.tr-err{margin:6px 0 8px;padding:8px 10px;border-radius:10px;border:1px solid rgba(240,107,121,.4);background:rgba(240,107,121,.08);color:#ff9aa5;font-size:11.5px;line-height:1.45}
+.xc-cur-t .xc-warn{color:#f6c56a;margin-top:4px}

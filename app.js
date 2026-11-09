@@ -28,7 +28,7 @@ const defaults = {
   groups: [], symGroup: {}, symColor: {}, listRev: 0, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], designs: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
 };
 function sanAlert(a) {
-  if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
+  if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{2,20}(@[a-z]{2,12})?$/.test(a.symbol)) return null; // también monedas de otros exchanges (HYPEUSDT@binancef, BTCUSDT@bybit…): antes se borraban y nunca avisaban
   const base0 = {id: a.id, symbol: a.symbol, on: a.on !== false, note: String(a.note || '').slice(0, 140), created: +a.created || 0, firedAt: +a.firedAt || 0};
   if (['app', 'discord', 'both'].includes(a.notify)) base0.notify = a.notify;
   if (a.kind === 'ind') {
@@ -148,7 +148,7 @@ function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estil
   if (o.label != null) { o.label = String(o.label).slice(0, 80); if (!o.label) delete o.label; }
   if (o.sp != null) { const v = +o.sp; if (Number.isFinite(v) && v > 0) o.sp = v; else delete o.sp; } // Long/Short: precio del stop puesto a mano
   if (o.gc != null && !hex(o.gc)) delete o.gc; if (o.rc != null && !hex(o.rc)) delete o.rc; // Long/Short: color del objetivo y del stop
-  for (const k of ['nt', 'no', 'ns']) if (o[k] !== true) delete o[k]; // Long/Short: ocultar título / texto del objetivo / texto del stop
+  for (const k of ['nt', 'no', 'ns', 'nr']) if (o[k] !== true) delete o[k]; // Long/Short: ocultar título / texto del objetivo / texto del stop
   if (o.lock !== true) delete o.lock; if (o.hide !== true) delete o.hide;
   return o;
 }
@@ -188,7 +188,7 @@ function merge(s) {
     }
     const bq = o.brush && typeof o.brush === 'object' ? o.brush : {};
     o.brush = {c: /^#[0-9a-f]{6}$/i.test(bq.c) ? bq.c : '#e9c36e', w: Math.max(1, Math.min(24, Math.round(+bq.w) || 3))};
-    o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 80).map(t => ({n: t.n.slice(0, 24), ...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})})) : [];
+    o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 80).map(t => ({n: t.n.slice(0, 24), ...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns', 'nr'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})})) : [];
   }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
   o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.risk = sanRisk(o.risk); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.scrPush = sanScrPush(o.scrPush); o.discord = sanDiscord(o.discord);
@@ -301,7 +301,7 @@ function switchView(id) {
   if (id !== 'chartView') document.body.classList.remove('expanded');
   if (id === 'chartView') requestAnimationFrame(() => { if (!candles.length) loadCandles(); render(); });
   if (id === 'watchView') renderWatch();
-  if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); }
+  if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); if (window.CCTRadar) CCTRadar.paint(); }
   if (isDesktop()) renderWatch();
   syncFullscreenLabel();
 }
@@ -312,7 +312,7 @@ let alTab = 'list';
 function setAlTab(t) {
   alTab = t; $$('#alertsView [data-altab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.altab === t)));
   $$('#alertsView [data-alpane]').forEach(p => { p.hidden = p.dataset.alpane !== t; });
-  if (t === 'how') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } else if (t === 'move') { renderMoveAlerts(); renderScrPush(); scrStatus(); }
+  if (t === 'how') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } else if (t === 'move') { renderMoveAlerts(); renderScrPush(); scrStatus(); if (window.CCTRadar) CCTRadar.paint(); }
 }
 function alTabCount() { const n = (state.alerts || []).filter(a => a.on).length, e = $('#alTabN'); if (e) e.textContent = n ? String(n) : ''; }
 function openAlerts(t) { switchView('alertsView'); setAlTab(t || alTab); }
@@ -679,7 +679,11 @@ function checkAlerts(sym, price) {
   if (hit) { save(); renderAlerts(); scheduleRender(); }
 }
 async function checkAlertsPoll() {
-  const allS = [...new Set(state.alerts.filter(a => a.kind !== 'ind' && a.on).map(a => a.symbol))], syms = allS.filter(k => srcOf(k) === 'binance'); for (const k of allS) if (srcOf(k) !== 'binance') { const p = Number(tickers[k]?.lastPrice); if (Number.isFinite(p)) checkAlerts(k, p); } if (!syms.length) return;
+  const allS = [...new Set(state.alerts.filter(a => a.kind !== 'ind' && a.on).map(a => a.symbol))], syms = allS.filter(k => srcOf(k) === 'binance'), other = allS.filter(k => srcOf(k) !== 'binance');
+  if (other.length && window.CCTMarkets) { // otros exchanges y futuros: precio de su propio mercado (aunque la moneda no esté en tu seguimiento)
+    try { const t = await CCTMarkets.tickers(other); for (const k of other) { const p = Number((t[k] || tickers[k] || {}).lastPrice); if (Number.isFinite(p)) checkAlerts(k, p); } } catch { for (const k of other) { const p = Number(tickers[k]?.lastPrice); if (Number.isFinite(p)) checkAlerts(k, p); } }
+  }
+  if (!syms.length) return;
   try {
     const data = await getJSON(`${API}/ticker/price?symbols=${encodeURIComponent(JSON.stringify(syms))}`);
     for (const t of data) checkAlerts(t.symbol, +t.price);
@@ -2117,7 +2121,7 @@ function sbEditText(val) {
 }
 const tplKind = d => isPos(d) ? 'pos' : d.type;
 const tplFits = (t, d) => t.k ? t.k === tplKind(d) : !isPos(d); // las plantillas guardadas antes (sin tipo) valen para todo menos Long/Short
-const tplOf = d => { const o = {k: tplKind(d)}; if (isPos(d)) { for (const f of ['gc', 'rc', 'nt', 'no', 'ns']) if (d[f] != null) o[f] = d[f]; } if (d.col) o.col = d.col; const w = d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw; if (w) o.lw = w; if (d.ds) o.ds = d.ds; if (d.tc) o.tc = d.tc; if (d.ts) o.ts = d.ts; return o; };
+const tplOf = d => { const o = {k: tplKind(d)}; if (isPos(d)) { for (const f of ['gc', 'rc', 'nt', 'no', 'ns', 'nr']) if (d[f] != null) o[f] = d[f]; } if (d.col) o.col = d.col; const w = d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw; if (w) o.lw = w; if (d.ds) o.ds = d.ds; if (d.tc) o.tc = d.tc; if (d.ts) o.ts = d.ts; return o; };
 function sbSaveTpl() {
   const d = curDraw(); if (!d) return; if ((state.drawTpl || []).filter(t => tplFits(t, d)).length >= 12) { toast('Máximo 12 plantillas de este tipo: borra alguna'); return; }
   const n = (prompt('Nombre de la plantilla:', 'Plantilla ' + ((state.drawTpl || []).filter(t => tplFits(t, d)).length + 1)) || '').trim().slice(0, 24); if (!n) return;
@@ -2133,7 +2137,7 @@ function sbApplyTpl(i) {
 const isPos = d => !!d && (d.type === 'long' || d.type === 'short');
 function sbResetStyle() { const d = curDraw(); if (!d) return; patchD(d.type === 'brush' ? {col: '#e9c36e', w: d.hl ? 9 : 3} : {col: null, lw: null, ds: null, tc: null, ts: null, label: null, gc: null, rc: null, nt: null, no: null, ns: null, sp: null}); }
 const posColors = d => `<label class="pp-lbl">Objetivo (ganancia)</label>${sbPal('data-pgc', d.gc || '#089981')}<label class="pp-lbl">Stop (pérdida)</label>${sbPal('data-prc', d.rc || '#f23645')}`;
-const posToggles = d => `<label class="pp-lbl">Textos que se muestran</label><div class="pp-col">${[['nt', 'Título (Long / Short)'], ['no', 'Texto del objetivo'], ['ns', 'Texto del stop']].map(([k, n]) => `<button class="pp-item${d[k] ? '' : ' on'}" data-ptog="${k}"><span class="pp-ic">${d[k] ? '' : I('check', 16)}</span><span>${n}</span></button>`).join('')}</div>`;
+const posToggles = d => `<label class="pp-lbl">Textos que se muestran</label><div class="pp-col">${[['nt', 'Título (Long / Short)'], ['no', 'Texto del objetivo'], ['ns', 'Texto del stop'], ['nr', 'Tamaño y riesgo (calculadora)']].map(([k, n]) => `<button class="pp-item${d[k] ? '' : ' on'}" data-ptog="${k}"><span class="pp-ic">${d[k] ? '' : I('check', 16)}</span><span>${n}</span></button>`).join('')}</div>`;
 const sbSw = (attr, c, cur) => `<button class="pp-sw${String(cur || '').toLowerCase() === c ? ' on' : ''}" ${attr}="${c}" style="background:${c}" aria-label="${c}"></button>`;
 const sbPal = (attr, cur) => `<div class="pp-grid">${SB_PAL.flat().map(c => sbSw(attr, c, cur)).join('')}</div><label class="pp-custom">Otro color <input type="color" ${attr}-in value="${/^#[0-9a-f]{6}$/i.test(cur || '') ? cur : '#e9c36e'}"></label>`;
 const sbLwRow = (list, cur) => `<div class="pp-row">${list.map(w => `<button class="pp-lw${Math.round(cur) === w ? ' on' : ''}" data-pw="${w}"><i style="height:${Math.min(w, 8)}px"></i><span>${w}px</span></button>`).join('')}</div>`;
@@ -4309,6 +4313,7 @@ function renderPrefs() {
     + irow(ico('#b07cff', '<path d="M5 4v16M5 14c3-6 6 2 9-4s4-2 5-3"/>'), 'Alertas de indicador', 'Señales de tus indicadores', tg('ind', PR.n.ind, 'Alertas de indicador'))
     + irow(ico('#f06b79', '<path d="M3 12h4l2-6 4 12 2-6h6"/>'), 'Movimientos bruscos', 'Sube o cae fuerte en minutos · top 5 (BTC, ETH, BNB, XRP, SOL)', tg('move', !!M.on, 'Movimientos bruscos'))
     + (M.on ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Sensibilidad', `También avisa si pasa ±${(M.pct * 2.5).toFixed(M.pct * 2.5 % 1 ? 1 : 0)} % en 1 hora`, `<select id="moveLvl" class="pref-sel" aria-label="Sensibilidad">${MOVE_LEVELS.map(l => `<option value="${l[0]}" ${l[0] === near[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select>`, sub) : '')
+    + irow(ico('#c084fc', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7.5"/>'), 'Grandes oportunidades', 'Nexus Pixel revisa el Screener cada hora, filtra, lo confirma con IA y aprende de los resultados', tg('radar', !!(window.CCTRadar && CCTRadar.on()), 'Grandes oportunidades'))
     + irow(ico('#20bf9f', '<path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M7 15l3-4 3 2 4-5"/>'), 'Señales del Screener', 'LONG, SHORT y RANGO del top 50 por volumen', tg('scr', !!S.on, 'Señales del Screener'))
     + (S.on ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Temporalidad 1 hora', 'Al empezar cada hora', tg('scrH1', S.h1 !== false, 'Señales de 1 hora'), sub)
       + irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Temporalidad 4 horas', 'Cada 4 horas', tg('scrH4', S.h4 !== false, 'Señales de 4 horas'), sub) : '')
@@ -4326,7 +4331,7 @@ function renderPrefs() {
   const onClick = e => {
     const b = e.target.closest('[data-pk]'); if (b && b.tagName === 'BUTTON') { const v = b.dataset.v; setPref(b.dataset.pk, /^\d+$/.test(v) ? +v : v); return; }
     const w = e.target.closest('[data-sw]');
-    if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); save(); renderPrefs(); renderMoveAlerts(); if (window.VortexPush) VortexPush.sync(true); } else if (k === 'scr' || k === 'scrH1' || k === 'scrH4') { const S = {...(state.scrPush || {})}; if (k === 'scr') S.on = !S.on; else if (k === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false; state.scrPush = sanScrPush(S); save(); renderPrefs(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true); } else setPref(k, !PR.n[k], true); return; }
+    if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'radar') { if (window.CCTRadar) { CCTRadar.setOn(!CCTRadar.on()); toast(CCTRadar.on() ? 'Radar encendido: Nexus Pixel te avisará de las grandes oportunidades' : 'Radar apagado'); } renderPrefs(); } else if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); save(); renderPrefs(); renderMoveAlerts(); if (window.VortexPush) VortexPush.sync(true); } else if (k === 'scr' || k === 'scrH1' || k === 'scrH4') { const S = {...(state.scrPush || {})}; if (k === 'scr') S.on = !S.on; else if (k === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false; state.scrPush = sanScrPush(S); save(); renderPrefs(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true); } else setPref(k, !PR.n[k], true); return; }
     if (e.target.closest('[data-play]')) { const t = $('#notifBox select[data-pk=tone]'); alertBeep(true, t && t.value); return; }
     if (e.target.closest('[data-news]')) openNews();
   };
@@ -4687,7 +4692,7 @@ async function genPrev(x) {
   if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh();
   renderIndicators();
 }
-const prevImg = x => { const u = scriptPrev(x); return u && u !== 'err' ? `<img class="pine-prev" alt="Imagen de ${esc(x.name)}" src="${u}">` : `<div class="pine-prev ph">${u === 'err' ? 'Sin imagen: el script no se pudo calcular' : 'Generando imagen…'}</div>`; };
+const prevImg = x => { if (x.id === 'cat:nova-lite') return novaLitePreviewSvg().replace('class="nova-prev"', 'class="pine-prev nl-prev"'); const u = scriptPrev(x); return u && u !== 'err' ? `<img class="pine-prev" alt="Imagen de ${esc(x.name)}" src="${u}">` : `<div class="pine-prev ph">${u === 'err' ? 'Sin imagen: el script no se pudo calcular' : 'Generando imagen…'}</div>`; };
 window.__cctScripts = {addScript, store: () => prevStore}; // expuesto para pruebas
 const pineRetried = new Set();
 function schedulePine() {
@@ -4699,9 +4704,28 @@ function schedulePine() {
 
 /* ───────── Catálogo: indicadores Pine listos para añadir ───────── */
 const CAT_SYMS = 'BTC ETH BNB SOL XRP DOGE ADA AVAX LINK DOT TRX LTC BCH ATOM UNI NEAR APT ARB OP FIL INJ SUI SEI TIA RUNE AAVE MKR ALGO XLM HBAR ETC SAND MANA GALA IMX PEPE SHIB WLD FET RNDR'.split(' ').map(x => 'BINANCE:' + x + 'USDT');
+/* Vista previa de Nova LITE · Smart Money Concepts: estructura (HH/HL, BOS, CHoCH), order blocks, FVG, barrida de liquidez y premium/descuento */
+function novaLitePreviewSvg() {
+  const W = 320, X = i => 18 + i * 10.6, F = 'font-family="Inter,system-ui,sans-serif"';
+  // la historia: baja con mínimos más bajos → barre la liquidez → CHoCH → mínimo más alto → BOS → retroceso al FVG / order block → máximo más alto
+  const path = [66, 72, 70, 80, 95, 84, 74, 64, 70, 78, 86, 76, 66, 56, 48, 44, 50, 56, 60, 52, 44, 38, 34, 30, 34, 28, 24];
+  let c = '', v = 60; const cs = path.map((t, i) => { const o = v, cl = t; v = cl; return [o, cl, Math.min(o, cl) - 3 - (i % 3), Math.max(o, cl) + 3 + ((i + 1) % 3)]; });
+  const tag = (x, y, t, f) => `<rect x="${x}" y="${y}" width="${t.length * 5.4 + 9}" height="12" rx="3.5" fill="${f}"/><text x="${x + 4.5}" y="${y + 8.8}" font-size="7.6" font-weight="800" fill="#fff" ${F}>${t}</text>`;
+  c += `<rect x="10" y="8" width="${W - 20}" height="30" rx="4" fill="#f23645" opacity=".07"/><rect x="10" y="82" width="${W - 20}" height="30" rx="4" fill="#089981" opacity=".08"/>`;
+  c += `<text x="16" y="18" font-size="6.8" fill="#f2364599" font-weight="800" letter-spacing=".6" ${F}>PREMIUM</text><text x="${W - 14}" y="108" font-size="6.8" fill="#08998199" text-anchor="end" font-weight="800" letter-spacing=".6" ${F}>DESCUENTO</text>`;
+  c += `<line x1="10" x2="${W - 10}" y1="60" y2="60" stroke="#8796ab" stroke-dasharray="2 4" opacity=".35"/>`;
+  c += `<rect x="${X(10) - 5}" y="80" width="${X(26) - X(10) + 10}" height="10" fill="#089981" opacity=".22"/><rect x="${X(10) - 5}" y="80" width="${X(26) - X(10) + 10}" height="10" fill="none" stroke="#14b88f" stroke-width=".8" opacity=".75"/>` + tag(X(13), 92, 'OB +', '#0b8f72');
+  c += `<rect x="${X(14) - 5}" y="50" width="${X(26) - X(14) + 10}" height="9" fill="#ffd54f" opacity=".17"/>` + tag(X(23), 38.5, 'FVG', '#a8861a');
+  c += `<line x1="${X(1)}" x2="${X(4) + 6}" y1="98.5" y2="98.5" stroke="#c792ea" stroke-width="1" stroke-dasharray="1.5 2.2"/><text x="${X(0) - 4}" y="107" font-size="6.6" fill="#d7a8f5" font-weight="700" ${F}>$$$ barrida</text>`;
+  c += `<line x1="${X(1)}" x2="${X(8)}" y1="66" y2="66" stroke="#ffb74d" stroke-width="1.1" stroke-dasharray="4 2"/><text x="${X(2)}" y="63" font-size="7.4" font-weight="800" fill="#ffb74d" ${F}>CHoCH</text>`;
+  c += `<line x1="${X(7)}" x2="${X(13)}" y1="61" y2="61" stroke="#8ab4ff" stroke-width="1.1" stroke-dasharray="4 2"/><text x="${X(9)}" y="58" font-size="7.4" font-weight="800" fill="#8ab4ff" ${F}>BOS</text>`;
+  cs.forEach((k, i) => { const up = k[1] <= k[0], col = up ? '#12b886' : '#f23645'; c += `<line x1="${X(i)}" x2="${X(i)}" y1="${k[2]}" y2="${k[3]}" stroke="${col}" stroke-width="1.1"/><rect x="${X(i) - 3.2}" y="${Math.min(k[0], k[1])}" width="6.4" height="${Math.max(1.6, Math.abs(k[0] - k[1]))}" rx=".8" fill="${col}"/>`; });
+  [[4, 'LL', 1], [7, 'LH', 0], [10, 'HL', 1], [15, 'HH', 0], [18, 'HL', 1], [26, 'HH', 0]].forEach(([i, t, lo]) => { const k = cs[i]; c += `<text x="${X(i)}" y="${lo ? k[3] + 9 : k[2] - 4}" font-size="7" font-weight="800" fill="${lo ? '#4cd6b0' : '#ff8a95'}" text-anchor="middle" ${F}>${t}</text>`; });
+  return `<svg class="nova-prev" viewBox="0 0 ${W} 120" role="img" aria-label="Vista previa de Nova LITE: estructura de mercado (LL, HL, HH), CHoCH, BOS, order block, FVG, barrida de liquidez y zonas premium y descuento"><defs><linearGradient id="nlBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0d1421"/><stop offset="1" stop-color="#111b2e"/></linearGradient></defs><rect width="${W}" height="120" rx="10" fill="url(#nlBg)"/>${c}</svg>`;
+}
 function catPreviewSvg(id) {
   if (id === 'nova-nexus') return novaPreviewSvg();
-  if (id === 'nova-lite') { const sc = scripts.find(x => x.id === 'cat:nova-lite'), u = sc && scriptPrev(sc); return u && u !== 'err' ? `<img class="nova-prev" src="${u}" alt="Vista previa de Nova LITE">` : '<div class="nova-prev ph">Generando imagen…</div>'; } // imagen real: el indicador dibujado en velas de muestra
+  if (id === 'nova-lite') return novaLitePreviewSvg(); // ilustración propia, con el mismo estilo que Nova Nexus
   const bg = '<rect width="300" height="130" fill="#0b0e14"/>';
   if (id === 'nova-osc') {
     let a = '', b = '', f = ''; const n = 40, X = i => 8 + i * 7.1;
@@ -5053,7 +5077,7 @@ window.CCTCloudPriv = {ready: () => !!(uid && db && fbUser), get: async n => { c
 function exSub() { const x = window.CCTExchange && CCTExchange.info(), s = x && CCTExchange.snap(); $$('[data-ex-sub]').forEach(el => { el.textContent = x ? `${x.name} conectado · ${s && s.err ? 'revisa la conexión' : Number.isFinite(s && s.equity) ? 'saldo $' + s.equity.toLocaleString('es-MX', {maximumFractionDigits: 2}) : 'leyendo saldo…'}` : 'Conecta BingX, Binance, Bybit o cualquier otro'; }); }
 if (window.CCTExchange) CCTExchange.onChange(s => { exSub(); if (acctMenu) paintAcctMenu(); if (Number.isFinite(s.equity) && s.equity >= 0 && !s.err && !(state.acct && state.acct.auto === false)) { const v = Math.round(s.equity * 100) / 100, A = state.acct || {}; if (A.cur !== v || !(A.start > 0)) { state.acct = sanAcct({start: A.start > 0 ? A.start : v, cur: v, auto: true}); save(); if (typeof renderAcct === 'function') renderAcct(); } } }); // el saldo real de tu exchange alimenta la barra de saldo de la cuenta
 function renderAccount() {
-  exSub(); if (fbUser && window.CCTExchange) CCTExchange.cloudSync(uid);
+  exSub(); if (fbUser && window.CCTExchange) CCTExchange.cloudSync(uid); if (fbUser && window.CCTRadar && renderAccount.rUid !== uid) { renderAccount.rUid = uid; CCTRadar.cloudLoad(); }
   const box = $('#accountBox'), top = $('#accountBtn');
   if (window.CCTPlans) CCTPlans.setUser(fbUser);
   queueMicrotask(() => { const r = $('#rrAccount'); if (!r) return; r.hidden = top.hidden; const t = fbUser ? 'Cuenta' : 'Iniciar sesión'; r.dataset.tip = t; r.setAttribute('aria-label', t); r.classList.toggle('on-acc', !!fbUser); });
@@ -5361,6 +5385,8 @@ if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, sav
 window.CCT_switchView = id => switchView(id);
 window.CCT_tzInfo = () => ({tz: PR.tz, clock: PR.clock}); // la zona horaria y el formato de hora elegidos (los usa la barra de eventos económicos)
 window.CCT_discordStore = {get: () => state.discord, set: patch => { state.discord = sanDiscord({...state.discord, ...patch, on: {...(state.discord || {}).on, ...(patch.on || {})}, sent: {...(state.discord || {}).sent, ...(patch.sent || {})}}); save(); return state.discord; }};
+/* Radar de Nexus Pixel (radar.js): cómo te avisa */
+window.CCT_radarHost = {notify(title, body, tag) { if (PR.sound !== 'off') { alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200, 100, 300]); } catch {} } toast(title); sysNotify('VORTEX · ' + title, body, tag); }, discord: () => !!(PR.n.discord && alDiscordReady())};
 window.CCT_host = {
   interval: () => state.interval,
   async top(n) { try { if (!popAll.length) await loadPopTickers(); } catch {} return popAll.slice(0, n).map(t => ({symbol: t.symbol, price: +t.lastPrice, chg: +t.priceChangePercent})); },

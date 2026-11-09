@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.13', d: '8 nov 2026', t: 'Radar de Nexus Pixel y alertas en cualquier exchange', items: [
+    'Las alertas de precio ya funcionan en monedas de Binance Futuros, Bybit, OKX, BingX y demás (antes se borraban) y también avisan a Discord con la app cerrada.',
+    'Nuevo «Grandes oportunidades»: Nexus Pixel revisa el Screener cada hora, aplica filtros, lo confirma con IA, te avisa y aprende de los resultados.',
+    'Operar en real explica exactamente qué permiso falta en tu exchange; la caja Long/Short puede ocultar el texto de tamaño y riesgo; Nova LITE estrena imagen.'
+  ]},
   {v: '3.12', d: '8 nov 2026', t: 'Conecta tu exchange una sola vez', items: [
     'Nuevo «Conectar exchange» (menú de tu cuenta y Configuración › Cuenta): elige entre más de 100 exchanges (BingX, Binance, Bybit, OKX, Bitget…), pega tu API una vez y queda guardada en tu cuenta.',
     'Con el exchange conectado, la barra de saldo usa tu saldo real, Nexus Lens se conecta solo (BingX) y, si permites operar en vivo, Operar tiene modo Real con confirmación en cada orden.',

@@ -18,7 +18,7 @@ const enc = new TextEncoder();
 export const b64u = buf => { let s = ''; for (const b of new Uint8Array(buf)) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 export const unb64u = str => { const s = String(str).replace(/-/g, '+').replace(/_/g, '/'); const bin = atob(s + '='.repeat((4 - s.length % 4) % 4)); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
 const concat = (...arrs) => { const n = arrs.reduce((a, x) => a + x.length, 0), out = new Uint8Array(n); let o = 0; for (const x of arrs) { out.set(x, o); o += x.length; } return out; };
-const baseOf = s => String(s).replace(/(USDT|USDC|FDUSD|BUSD|BTC|ETH|EUR|TRY|BRL)$/, '') || s;
+const baseOf = s => String(s).split('@')[0].replace(/(USDT|USDC|FDUSD|BUSD|BTC|ETH|EUR|TRY|BRL)$/, '') || s;
 export function fmt(p) { // mismo estilo que la app: más decimales en precios pequeños
   if (!Number.isFinite(p)) return '—'; const a = Math.abs(p), d = a >= 1000 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 6 : 8;
   return '$' + p.toLocaleString('en-US', {minimumFractionDigits: Math.min(2, d), maximumFractionDigits: d});
@@ -26,7 +26,7 @@ export function fmt(p) { // mismo estilo que la app: más decimales en precios p
 
 /* ───────── limpieza de lo que manda la app ───────── */
 export function sanAlert(a) {
-  if (!a || typeof a.id !== 'string' || a.id.length > 40 || a.kind === 'ind' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
+  if (!a || typeof a.id !== 'string' || a.id.length > 40 || a.kind === 'ind' || !/^[A-Z0-9]{2,20}(@[a-z]{2,12})?$/.test(a.symbol)) return null; // BTCUSDT (Binance) o BTCUSDT@bybit, HYPEUSDT@binancef…
   if (!(+a.price > 0) || (a.dir !== 'up' && a.dir !== 'down')) return null;
   const o = {id: a.id, symbol: a.symbol, on: a.on !== false, price: +a.price, dir: a.dir, note: String(a.note || '').slice(0, 140), firedAt: +a.firedAt || 0, firedPrice: Number.isFinite(+a.firedPrice) && a.firedPrice !== null ? +a.firedPrice : null};
   if (a.cond === 'up' || a.cond === 'down') o.cond = a.cond;
@@ -53,7 +53,7 @@ export function mergeAlerts(incoming, server, since = 0) {
 
 /* ───────── lógica de alertas (idéntica a checkAlerts/fireAlert de app.js) ───────── */
 export function evalAlerts(alerts, prices, now = Date.now(), priceOn = true) {
-  const fired = []; let changed = false;
+  const fired = [], dc = []; let changed = false;
   for (const a of alerts) {
     if (!a.on) continue; const price = prices[a.symbol]; if (!Number.isFinite(price)) continue;
     if (a.exp && now > a.exp) { a.on = false; a.expired = true; changed = true; continue; }
@@ -62,9 +62,10 @@ export function evalAlerts(alerts, prices, now = Date.now(), priceOn = true) {
     if (!past) continue;
     const dir0 = a.dir; a.firedAt = now; a.firedPrice = price; changed = true;
     if (a.repeat === 'every') { if (a.cond) a.wait = true; else a.dir = a.dir === 'up' ? 'down' : 'up'; } else a.on = false;
+    if (a.notify === 'discord' || a.notify === 'both' || a.dc) dc.push(`${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`); // Discord también con la app cerrada
     if (priceOn && a.notify !== 'discord') fired.push({title: 'VORTEX · Alerta', body: `${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`, tag: 'al-' + a.id, url: APP_URL + '#alerts'});
   }
-  return {fired, changed};
+  return {fired, changed, dc};
 }
 // closes: precios de cierre de velas de 1 minuto (la última es la actual). Devuelve los avisos y actualiza last (enfriamiento por moneda y sentido)
 export function moveCheck(sym, closes, pct, last, now = Date.now()) {
@@ -127,6 +128,31 @@ async function getJSON(path) {
   throw err;
 }
 async function allPrices() { const d = await getJSON('/api/v3/ticker/price'), o = {}; for (const t of d) o[t.symbol] = +t.price; return o; }
+/* Precios de otros exchanges y futuros (clave «SIMBOLO@exchange», como en la app). Un solo pedido por exchange. */
+const nk = s => String(s).toUpperCase().replace(/[-_/]/g, '').replace(/SWAP$/, '');
+const SRC_PRICES = {
+  binancef: async () => (await (await fetch('https://fapi.binance.com/fapi/v1/ticker/price')).json()).map(t => [t.symbol, t.price]),
+  bybit: async () => (await (await fetch('https://api.bybit.com/v5/market/tickers?category=spot')).json()).result.list.map(t => [t.symbol, t.lastPrice]),
+  bybitf: async () => (await (await fetch('https://api.bybit.com/v5/market/tickers?category=linear')).json()).result.list.map(t => [t.symbol, t.lastPrice]),
+  okx: async () => (await (await fetch('https://www.okx.com/api/v5/market/tickers?instType=SPOT')).json()).data.map(t => [t.instId, t.last]),
+  okxf: async () => (await (await fetch('https://www.okx.com/api/v5/market/tickers?instType=SWAP')).json()).data.map(t => [t.instId, t.last]),
+  bingx: async () => (await (await fetch('https://open-api.bingx.com/openApi/spot/v1/ticker/24hr?timestamp=' + Date.now())).json()).data.map(t => [t.symbol, t.lastPrice]),
+  bingxf: async () => (await (await fetch('https://open-api.bingx.com/openApi/swap/v2/quote/ticker')).json()).data.map(t => [t.symbol, t.lastPrice]),
+  mexc: async () => (await (await fetch('https://api.mexc.com/api/v3/ticker/price')).json()).map(t => [t.symbol, t.price]),
+  gate: async () => (await (await fetch('https://api.gateio.ws/api/v4/spot/tickers')).json()).map(t => [t.currency_pair, t.last]),
+  bitget: async () => (await (await fetch('https://api.bitget.com/api/v2/spot/market/tickers')).json()).data.map(t => [t.symbol, t.lastPr]),
+  kucoin: async () => (await (await fetch('https://api.kucoin.com/api/v1/market/allTickers')).json()).data.ticker.map(t => [t.symbol, t.last]),
+  htx: async () => (await (await fetch('https://api.huobi.pro/market/tickers')).json()).data.map(t => [t.symbol, t.close])
+};
+export async function otherPrices(keys) { // keys: ['HYPEUSDT@binancef', …] → {'HYPEUSDT@binancef': 75.1, …}
+  const by = {}; for (const k of keys) { const i = k.indexOf('@'); if (i > 0) (by[k.slice(i + 1)] = by[k.slice(i + 1)] || []).push(k); }
+  const out = {};
+  await Promise.all(Object.entries(by).map(async ([src, ks]) => {
+    if (!SRC_PRICES[src]) return;
+    try { const m = new Map((await SRC_PRICES[src]()).map(([sym, p]) => [nk(sym), +p])); for (const k of ks) { const p = m.get(nk(k.split('@')[0])); if (Number.isFinite(p)) out[k] = p; } } catch (e) { console.warn('precios', src, e.message); }
+  }));
+  return out;
+}
 async function closes1m(sym) { const d = await getJSON(`/api/v3/klines?symbol=${sym}&interval=1m&limit=61`); return d.map(k => +k[4]); }
 
 /* ───────── ronda programada ───────── */
@@ -136,10 +162,12 @@ async function tick(env, now = Date.now()) {
   if (!devs.length) return {devices: 0};
   const needPrices = devs.some(([, d]) => (d.alerts || []).some(a => a.on)), needMoves = devs.some(([, d]) => d.move && d.move.on);
   const prices = needPrices ? await allPrices().catch(() => ({})) : {};
+  if (needPrices) { const other = [...new Set(devs.flatMap(([, d]) => (d.alerts || []).filter(a => a.on && a.symbol.includes('@')).map(a => a.symbol)))]; if (other.length) Object.assign(prices, await otherPrices(other).catch(() => ({}))); }
   const moves = {}; if (needMoves) await Promise.all(MOVE_TOP.map(s => closes1m(s).then(c => { moves[s] = c; }).catch(() => {})));
   let v = null, sent = 0, gone = [];
   for (const [id, d] of devs) {
     const msgs = [], r = evalAlerts(d.alerts || [], prices, now, d.priceOn !== false); msgs.push(...r.fired); let changed = r.changed;
+    if (r.dc.length && d.priceOn !== false) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of r.dc.slice(0, 5)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta de precio', description: m, color: 0x548fff}]})}); } catch (e) { console.warn('discord', e.message); } } }
     if (d.move && d.move.on) { d.moveLast = d.moveLast || {}; for (const s of MOVE_TOP) if (moves[s]) { const m = moveCheck(s, moves[s], d.move.pct, d.moveLast, now); if (m.length) { msgs.push(...m); changed = true; } } }
     for (const m of msgs.slice(0, 8)) {
       v = v || await vapidKeys(env);
@@ -272,7 +300,7 @@ export default {
       if (b.subOnly) { if (!cur.sub) return json({ok: false, error: 'Dispositivo sin registrar'}, 404); cur.sub = sub; cur.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(cur)); if (!ids.includes(id)) await env.KV.put('devs', JSON.stringify([...ids, id])); return json({ok: true}); } // el celular renovó su suscripción: se conservan alertas y ajustes
       const incoming = (Array.isArray(b.alerts) ? b.alerts : []).map(sanAlert).filter(Boolean).slice(0, MAX_ALERTS);
       const m = mergeAlerts(incoming, cur.alerts, b.since);
-      const d = {sub, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), priceOn: b.priceOn !== false, moveLast: cur.moveLast || {}, updated: cur.updated || Date.now()};
+      const d = {sub, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), priceOn: b.priceOn !== false, dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now()};
       const same = JSON.stringify({...d, updated: 0}) === JSON.stringify({...cur, updated: 0});
       if (!same) { d.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(d)); } // sin cambios no se escribe (el plan gratis permite 1000 escrituras al día)
       if (!ids.includes(id)) { if (ids.length >= MAX_DEVICES) return json({error: 'Demasiados dispositivos'}, 429); await env.KV.put('devs', JSON.stringify([...ids, id])); }
