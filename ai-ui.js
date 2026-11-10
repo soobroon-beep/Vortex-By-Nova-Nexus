@@ -295,6 +295,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
       <label class="pxc-l">Soportes y resistencias por lado<input id="pxSr" type="range" min="1" max="5" value="${c.sr}"><small class="pxc-n" id="pxSrN">${c.sr}</small></label>
       <div class="pxc-l pxc-cols"><label>Color de soportes<input id="pxColSup" type="color" value="${c.colSup || '#20bf9f'}"></label><label>Color de resistencias<input id="pxColRes" type="color" value="${c.colRes || '#f06b79'}"></label></div>
       <div class="pxc-l">Color de su luz${chips('color', O.color.map(x => [x, '']), c.color)}</div>
+      <div class="pxc-l">Avisos de tus reglas (mira el gráfico, te recuerda tus reglas y te dice su lectura)${chips('vigia', [['0', 'No'], ['5', 'Cada 5 min'], ['15', 'Cada 15 min'], ['30', 'Cada 30 min']], String(c.vigia == null ? 15 : c.vigia))}</div>
       <div class="pxc-l">Sugerencias (se asoma de vez en cuando a ofrecerte ayuda)${chips('tips', [['on', 'Sí'], ['off', 'No']], c.tips === false ? 'off' : 'on')}</div>
       <div class="aiv-actions"><button class="aiv-btn" type="button" data-act="pxsave">Guardar</button></div><p class="aiv-dim" id="pxMsg"></p></div>`;
     root.querySelectorAll('[data-pxk="color"]').forEach(b => { b.style.background = PXC[b.dataset.v]; b.setAttribute('aria-label', b.dataset.v); });
@@ -302,7 +303,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
   }
   function pixelSave() {
     const B = window.CCT_pixel; if (!B) return; const on = k => [...root.querySelectorAll(`[data-pxk="${k}"].on`)].map(b => b.dataset.v), one = k => on(k)[0];
-    const c = B.setCfg({nombre: $('#pxNombre').value.trim(), estilo: one('estilo'), riesgo: one('riesgo'), tono: one('tono'), trato: one('trato'), color: one('color'), tfs: on('tfs'), completo: on('completo'), reglas: $('#pxReglas').value.trim(), notas: $('#pxNotas').value.trim(), sr: +$('#pxSr').value, colSup: $('#pxColSup').value, colRes: $('#pxColRes').value, tips: one('tips') !== 'off'});
+    const c = B.setCfg({nombre: $('#pxNombre').value.trim(), estilo: one('estilo'), riesgo: one('riesgo'), tono: one('tono'), trato: one('trato'), color: one('color'), tfs: on('tfs'), completo: on('completo'), reglas: $('#pxReglas').value.trim(), notas: $('#pxNotas').value.trim(), sr: +$('#pxSr').value, colSup: $('#pxColSup').value, colRes: $('#pxColRes').value, tips: one('tips') !== 'off', vigia: +one('vigia')});
     const m = $('#pxMsg'); if (m) { m.textContent = `✓ Guardado. Pixel ya te conoce${c.nombre ? ', ' + c.nombre : ''}.`; m.className = 'aiv-dim ok'; }
   }
 
