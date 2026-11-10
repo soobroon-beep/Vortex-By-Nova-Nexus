@@ -32,7 +32,7 @@
     volRatio: {label: 'Volumen ÷ su media', p: {n: 20}}, hh: {label: 'Máximo de las últimas N velas', p: {n: 20}}, ll: {label: 'Mínimo de las últimas N velas', p: {n: 20}}, num: {label: 'Número', p: {v: 0}},
     novaBuy: {label: 'Señal de COMPRA de Nova Nexus (1 = hay señal en esa vela)', nova: true}, novaSell: {label: 'Señal de VENTA de Nova Nexus (1 = hay señal)', nova: true},
     user: {label: 'Indicador mío (señal o serie)', user: true},
-    novaOsc: {label: 'Nova Oscillator', nova: true}, novaFlux: {label: 'Flujo de dinero de Nova Nexus', nova: true}, novaAdx: {label: 'ADX de Nova Nexus', nova: true}, novaBull: {label: 'Nova Nexus: precio sobre la nube EMA (1 = sí)', nova: true}
+    novaScore: {label: 'Puntaje de la señal de Nova Nexus (1–5; 0 = sin señal)', nova: true}, novaRange: {label: 'Nova Nexus: mercado en RANGO (ADX < 25; 1 = sí)', nova: true}, novaOsc: {label: 'Nova Oscillator', nova: true}, novaFlux: {label: 'Flujo de dinero de Nova Nexus', nova: true}, novaAdx: {label: 'ADX de Nova Nexus', nova: true}, novaBull: {label: 'Nova Nexus: precio sobre la nube EMA (1 = sí)', nova: true}
   };
   const OPS = {gt: 'es mayor que', lt: 'es menor que', gte: 'es mayor o igual que', lte: 'es menor o igual que', crossUp: 'cruza hacia ARRIBA a', crossDown: 'cruza hacia ABAJO a', is: 'está activa'};
   const key = o => o.k + ':' + JSON.stringify(Object.keys(o).filter(x => x !== 'k').sort().map(x => [x, o[x]]));
@@ -53,7 +53,7 @@
           const nn = ctx.nova && ctx.nova.compute; if (!nn) throw new Error('Nova Nexus no está disponible en este entorno');
           const r = ctx.novaRes || (ctx.novaRes = nn(C, ctx.novaOpts || {})), flat = a => C.map((_, i) => isNum(a && a[i]) ? a[i] : NA);
           s = o.k === 'novaBuy' ? C.map((_, i) => (r.bySignal[i] && r.bySignal[i].side === 'buy') ? 1 : 0) : o.k === 'novaSell' ? C.map((_, i) => (r.bySignal[i] && r.bySignal[i].side === 'sell') ? 1 : 0)
-            : o.k === 'novaOsc' ? flat(r.osc) : o.k === 'novaFlux' ? flat(r.flux) : o.k === 'novaAdx' ? flat(r.adx) : C.map((_, i) => r.bull[i] ? 1 : 0);
+            : o.k === 'novaScore' ? C.map((_, i) => r.bySignal[i] ? r.bySignal[i].score : 0) : o.k === 'novaRange' ? C.map((_, i) => isNum(r.adx && r.adx[i]) ? (r.adx[i] < 25 ? 1 : 0) : NA) : o.k === 'novaOsc' ? flat(r.osc) : o.k === 'novaFlux' ? flat(r.flux) : o.k === 'novaAdx' ? flat(r.adx) : C.map((_, i) => r.bull[i] ? 1 : 0);
         } else throw new Error('Operando desconocido: ' + o.k);
     }
     return (ctx.cache[id] = s);

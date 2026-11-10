@@ -1,0 +1,17 @@
+name: Diagnóstico de bots (Nova Bot Lab)
+# Se corre a mano: explica por qué un bot no opera y optimiza el indicador Nova Nexus v2.7 como bot (con validación fuera de muestra).
+on:
+  workflow_dispatch:
+    inputs:
+      coins: {description: 'Monedas (coma)', default: 'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT,AVAXUSDT,LINKUSDT,SUIUSDT'}
+permissions: {contents: read}
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: node scripts/botlab-diag.js
+        env: {COINS: '${{ inputs.coins }}'}
