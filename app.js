@@ -1208,8 +1208,9 @@ function replayBar() {
 }
 function setLive(on) { $('#liveDot').classList.toggle('on', !!on); }
 function closeWS() { wsGen++; wsOpen = false; clearInterval(wsPing); if (ws) { ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null; try { ws.close(); } catch {} } ws = null; setLive(false); }
+let wsLast = 0, wsReloadAt = 0; // último dato en vivo recibido / última recarga del vigilante
 function connectWS() {
-  closeWS();
+  closeWS(); wsLast = Date.now();
   if (typeof WebSocket === 'undefined') return;
   const gen = wsGen, sym = symOf(state.symbol), tf = state.interval, src = dataSrc || 'binance';
   if (src === 'dom') { setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH.dom.get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 60000); return; }
@@ -1223,7 +1224,7 @@ function connectWS() {
     if (by) { ws.send(JSON.stringify({op: 'subscribe', args: [`kline.${BY_IV[tf]}.${sym}`]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send(JSON.stringify({op: 'ping'})); } catch {} }, 20000); }
     if (ok) { ws.send(JSON.stringify({op: 'subscribe', args: [{channel: 'candle' + OKX_BAR[tf], instId: dashPair(sym) + (src === 'okxf' ? '-SWAP' : '')}]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send('ping'); } catch {} }, 20000); } } };
   ws.onmessage = e => {
-    if (gen !== wsGen) return;
+    if (gen !== wsGen) return; wsLast = Date.now();
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (by) { const d = m && typeof m.topic === 'string' && m.topic.startsWith('kline.') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d.start, o: +d.open, h: +d.high, l: +d.low, c: +d.close, v: +d.volume}); return; }
     if (ok) { const d = m && m.arg && /^candle/.test(m.arg.channel || '') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}); return; }
@@ -1233,7 +1234,7 @@ function connectWS() {
   ws.onclose = () => {
     if (gen !== wsGen) return;
     wsOpen = false; setLive(false);
-    setTimeout(() => { if (gen === wsGen && !document.hidden) connectWS(); }, Math.min(30000, 4000 * ++wsRetry));
+    setTimeout(() => { if (gen === wsGen && !document.hidden) connectWS(); }, Math.min(15000, 3000 * ++wsRetry));
   };
 }
 function applyKline(k) {
@@ -1249,8 +1250,18 @@ function applyKline(k) {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   fetchTicker();
-  if (currentView === 'chartView' && candles.length) { loadCandles(true); }
+  if (currentView === 'chartView' && candles.length) { wsReloadAt = Date.now(); loadCandles(true); }
 });
+/* Vigilante del tiempo real: si la conexión se queda «colgada» sin avisar (la compu durmió, cambió la red, el exchange la soltó),
+   a los 20 s sin datos se bajan las velas recientes y se reconecta solo. Así el gráfico abierto nunca se queda congelado. */
+function liveKick(why) { if (document.hidden || replay || !candles.length || currentView !== 'chartView') return; wsReloadAt = Date.now(); fetchTicker(); loadCandles(true); }
+setInterval(() => {
+  if (document.hidden || replay || !candles.length || currentView !== 'chartView' || !ws) return; // (las fuentes sin WebSocket ya se consultan solas cada pocos segundos)
+  const now = Date.now(); if (now - wsLast > 20000 && now - wsReloadAt > 12000) liveKick('sin datos');
+}, 5000);
+window.addEventListener('online', () => liveKick('red'));
+window.addEventListener('focus', () => { if (Date.now() - wsLast > 20000 && Date.now() - wsReloadAt > 12000) liveKick('foco'); });
+{ let beat = Date.now(); setInterval(() => { const n = Date.now(); if (n - beat > 30000) liveKick('despertó'); beat = n; }, 4000); } // el reloj «saltó»: la compu estuvo dormida
 
 /* ───────── Indicadores ───────── */
 /* Miniaturas muy básicas de cada indicador común (viewBox 40×24; la línea toma el color del indicador) */
@@ -3179,7 +3190,7 @@ function renderCore() {
       g.globalAlpha = L.kind === 'liq' ? .55 : L.pend ? .6 : .9; g.strokeStyle = col; g.lineWidth = L.kind === 'pos' ? 1.4 : 1; g.setLineDash(L.kind === 'pos' ? [] : L.kind === 'liq' ? [2, 4] : [6, 4]);
       g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
       // etiqueta a la izquierda: texto · PnL · ×  (en posición también +TP / +SL)
-      const parts = [{t: L.txt, k: 'lbl'}]; if (Number.isFinite(L.pnl)) parts.push({t: uFmt(L.pnl) + (L.sub ? ' ' + L.sub : ''), k: 'pnl', c: L.pnl >= 0 ? up : down});
+      const parts = L.kind === 'pos' || L.kind === 'liq' ? [] : [{t: L.txt, k: 'lbl'}]; /* minimalista: la posición solo muestra PnL y botones; la liquidación solo su línea y el precio en la escala */ if (Number.isFinite(L.pnl)) parts.push({t: uFmt(L.pnl) + (L.sub ? ' ' + L.sub : ''), k: 'pnl', c: L.pnl >= 0 ? up : down});
       if (L.addTp) parts.push({t: '+TP', k: 'addtp'}); if (L.addSl) parts.push({t: '+SL', k: 'addsl'}); if (L.x) parts.push({t: '✕', k: 'x'});
       const totW = parts.reduce((s0, q) => s0 + g.measureText(q.t).width + 17, 0); let x0 = Math.max(left + 8, w - right - 14 - totW); const hh = 20, ty = yy - hh / 2; // etiquetas pegadas a la derecha, junto a la escala
       for (const pt of parts) {
@@ -5178,6 +5189,7 @@ async function onUser(user) {
     let snapSeq = 0;
     unsubCloud = ref.onSnapshot(async sn => { // cambios hechos desde otro dispositivo
       if (sn.metadata.hasPendingWrites || !sn.exists) return;
+      { const f = sn.data().force; if (f && f.by !== DEV_ID && +f.at > forceSeen && Math.abs(Date.now() - f.at) < 300000) { forceSeen = +f.at; setTimeout(() => forceSync(true), 50); } } // otro dispositivo apretó el botón VORTEX: este también guarda y se actualiza
       const seq = ++snapSeq, data = sn.data(), str = await readRemote(data); if (seq !== snapSeq || !str || str === lastRemote) return;
       let st; try { st = JSON.parse(str); } catch { return; }
       const rr = revOf(st, data); remoteRev = Math.max(remoteRev, rr);
@@ -5286,10 +5298,11 @@ function cloudPush() {
 // al cerrar o mandar la pestaña a segundo plano (móvil) se sube de inmediato lo pendiente, sin esperar el retardo
 /* Botón del logo VORTEX: guarda TODO ahora mismo (gráficos, ajustes, lista, indicadores, scripts, alertas) en este dispositivo y en la cuenta,
    baja lo más nuevo de la cuenta y vuelve a cargar velas, precios y conexión en vivo (útil si el celular se quedó trabado). El guardado automático sigue igual. */
-let forceBusy = false;
-async function forceSync() {
+let forceBusy = false, forceSeen = 0; const DEV_ID = Math.random().toString(36).slice(2, 10);
+async function forceSync(remote) { // remote = lo pidió otro dispositivo con el botón VORTEX
+  if (remote !== true) remote = false;
   if (forceBusy) return; forceBusy = true; const t0 = Date.now();
-  const btns = $$('#forceSync'); btns.forEach(b => b.classList.add('syncing')); toast('Guardando y actualizando…');
+  const btns = $$('#forceSync'); btns.forEach(b => b.classList.add('syncing')); toast(remote ? 'Otro dispositivo pidió guardar y actualizar…' : 'Guardando y actualizando en todos tus dispositivos…');
   let msg = '';
   try {
     try { syncUi(); } catch {}
@@ -5303,7 +5316,9 @@ async function forceSync() {
         const sref = db.doc(`users/${uid}/data/scripts`), local = JSON.stringify(userScripts());
         if (local !== scriptsRemote) { await sref.set({items: await packStr(local), updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); scriptsRemote = local; } // scripts nuevos o borrados aquí
         else { const sn = await sref.get({source: 'server'}), str = sn.exists ? await unpackStr(sn.data().items) : ''; if (str && str !== scriptsRemote) { const arr = JSON.parse(str); if (Array.isArray(arr)) { scriptsRemote = str; scripts = withCatalog(arr); saveScriptsLocal(); renderScripts(); } } } // sin cambios locales: se baja lo de la cuenta
-        msg = /^No se pudo/.test(syncStatus) ? 'No se pudo guardar en la nube; sigue guardado en este dispositivo' : 'Todo guardado en tu cuenta y actualizado ✓';
+        const okCloud = !/^No se pudo/.test(syncStatus);
+        if (okCloud && !remote) { try { forceSeen = Date.now(); await db.doc(CLOUD_DOC(uid)).set({force: {at: forceSeen, by: DEV_ID}}, {merge: true}); } catch {} } // señal: los demás dispositivos abiertos guardan lo suyo (se mezcla, no se pisa) y se actualizan
+        msg = !okCloud ? 'No se pudo guardar en la nube; sigue guardado en este dispositivo' : remote ? 'Guardado y actualizado (lo pidió otro dispositivo) ✓' : 'Guardado y actualizado en todos tus dispositivos abiertos ✓';
       }
     } else msg = 'Guardado en este dispositivo. Inicia sesión para guardarlo también en tu cuenta';
     pineKey = ''; try { applyUi(); } catch {}

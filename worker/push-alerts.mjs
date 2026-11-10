@@ -119,7 +119,7 @@ export async function encryptPayload(sub, text) {
 }
 export async function sendPush(sub, msg, v) {
   const body = await encryptPayload(sub, JSON.stringify(msg));
-  const r = await fetch(sub.endpoint, {method: 'POST', headers: {'content-type': 'application/octet-stream', 'content-encoding': 'aes128gcm', ttl: '3600', urgency: 'high', topic: String(msg.tag || 'vortex').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32), authorization: await vapidHeader(sub.endpoint, v)}, body});
+  const r = await fetch(sub.endpoint, {method: 'POST', headers: {'content-type': 'application/octet-stream', 'content-encoding': 'aes128gcm', ttl: '43200', urgency: 'high', topic: String(msg.tag || 'vortex').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32), authorization: await vapidHeader(sub.endpoint, v)}, body});
   return r.status;
 }
 
@@ -128,11 +128,16 @@ async function getJSON(path) {
   let err; for (const h of HOSTS) { try { const r = await fetch(h + path, {headers: {'user-agent': 'VORTEX-Push/1.0'}}); if (r.ok) return await r.json(); err = new Error(h + ' HTTP ' + r.status); } catch (e) { err = e; } }
   throw err;
 }
+async function spotPrices(syms) { // solo las monedas con alerta; si Binance rechaza la lista (símbolo raro), se piden todas
+  if (!syms.length) return {};
+  if (syms.length <= 60) { try { const d = await getJSON('/api/v3/ticker/price?symbols=' + encodeURIComponent(JSON.stringify(syms))), o = {}; for (const t of d) o[t.symbol] = +t.price; return o; } catch {} }
+  return allPrices();
+}
 async function allPrices() { const d = await getJSON('/api/v3/ticker/price'), o = {}; for (const t of d) o[t.symbol] = +t.price; return o; }
 /* Precios de otros exchanges y futuros (clave «SIMBOLO@exchange», como en la app). Un solo pedido por exchange. */
 const nk = s => String(s).toUpperCase().replace(/[-_/]/g, '').replace(/SWAP$/, '');
 const SRC_PRICES = {
-  binancef: async () => (await (await fetch('https://fapi.binance.com/fapi/v1/ticker/price')).json()).map(t => [t.symbol, t.price]),
+  binancef: async ks => ks && ks.length <= 12 ? (await Promise.all(ks.map(async k => { const t = await (await fetch('https://fapi.binance.com/fapi/v1/ticker/price?symbol=' + encodeURIComponent(k.split('@')[0]))).json(); return [t.symbol, t.price]; }))) : (await (await fetch('https://fapi.binance.com/fapi/v1/ticker/price')).json()).map(t => [t.symbol, t.price]),
   bybit: async () => (await (await fetch('https://api.bybit.com/v5/market/tickers?category=spot')).json()).result.list.map(t => [t.symbol, t.lastPrice]),
   bybitf: async () => (await (await fetch('https://api.bybit.com/v5/market/tickers?category=linear')).json()).result.list.map(t => [t.symbol, t.lastPrice]),
   okx: async () => (await (await fetch('https://www.okx.com/api/v5/market/tickers?instType=SPOT')).json()).data.map(t => [t.instId, t.last]),
@@ -150,7 +155,7 @@ export async function otherPrices(keys) { // keys: ['HYPEUSDT@binancef', …] �
   const out = {};
   await Promise.all(Object.entries(by).map(async ([src, ks]) => {
     if (!SRC_PRICES[src]) return;
-    try { const m = new Map((await SRC_PRICES[src]()).map(([sym, p]) => [nk(sym), +p])); for (const k of ks) { const p = m.get(nk(k.split('@')[0])); if (Number.isFinite(p)) out[k] = p; } } catch (e) { console.warn('precios', src, e.message); }
+    try { const m = new Map((await SRC_PRICES[src](ks)).map(([sym, p]) => [nk(sym), +p])); for (const k of ks) { const p = m.get(nk(k.split('@')[0])); if (Number.isFinite(p)) out[k] = p; } } catch (e) { console.warn('precios', src, e.message); }
   }));
   return out;
 }
@@ -162,17 +167,21 @@ async function tick(env, now = Date.now()) {
   const devs = (await Promise.all(ids.map(id => env.KV.get('dev:' + id, 'json').then(d => d && d.sub ? [id, d] : null)))).filter(Boolean);
   if (!devs.length) return {devices: 0};
   const needPrices = devs.some(([, d]) => (d.alerts || []).some(a => a.on)), needMoves = devs.some(([, d]) => d.move && d.move.on);
-  const prices = needPrices ? await allPrices().catch(() => ({})) : {};
+  const spot = [...new Set(devs.flatMap(([, d]) => (d.alerts || []).filter(a => a.on && !a.symbol.includes('@')).map(a => a.symbol)))];
+  const prices = needPrices ? await spotPrices(spot).catch(() => ({})) : {};
   if (needPrices) { const other = [...new Set(devs.flatMap(([, d]) => (d.alerts || []).filter(a => a.on && a.symbol.includes('@')).map(a => a.symbol)))]; if (other.length) Object.assign(prices, await otherPrices(other).catch(() => ({}))); }
   const moves = {}; if (needMoves) await Promise.all(MOVE_TOP.map(s => closes1m(s).then(c => { moves[s] = c; }).catch(() => {})));
-  let v = null, sent = 0, gone = [];
+  let sent = 0, gone = [];
+  { const hb = (await env.KV.get('hb', 'json')) || {}; if (now - (hb.at || 0) > 15 * 6e4) await env.KV.put('hb', JSON.stringify({at: now, devices: devs.length})); } // latido: la app puede ver que el servidor sí está revisando
   for (const [id, d] of devs) {
     const msgs = [], r = evalAlerts(d.alerts || [], prices, now, d.priceOn !== false); msgs.push(...r.fired); let changed = r.changed;
     if (r.dc.length && d.priceOn !== false) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of r.dc.slice(0, 5)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta de precio', description: m, color: 0x548fff}]})}); } catch (e) { console.warn('discord', e.message); } } }
     if (d.move && d.move.on) { d.moveLast = d.moveLast || {}; for (const s of MOVE_TOP) if (moves[s]) { const m = moveCheck(s, moves[s], d.move.pct, d.moveLast, now); if (m.length) { msgs.push(...m); changed = true; } } }
-    for (const m of msgs.slice(0, 8)) {
-      v = v || await vapidKeys(env);
-      try { const st = await sendPush(d.sub, m, v); sent++; if (st === 404 || st === 410) { gone.push(id); break; } } catch (e) { console.warn('push', e.message); }
+    if (d.testAt) { msgs.push({title: 'VORTEX · Prueba con la app cerrada', body: 'Si ves esto con VORTEX cerrada, tus avisos funcionan ✅', tag: 'test2', url: APP_URL + '#alerts'}); delete d.testAt; changed = true; }
+    if (msgs.length) { // el cifrado de cada aviso corre en su propia llamada interna
+      let sts = []; try { sts = (await self(env, '/int/push', {id, msgs: msgs.slice(0, 8)})).sts || []; } catch (e) { sts = ['err: ' + String(e.message).slice(0, 60)]; }
+      sent += sts.filter(x => x >= 200 && x < 300).length; if (sts.some(x => x === 404 || x === 410)) gone.push(id);
+      d.lastPush = {at: now, st: sts[sts.length - 1], n: msgs.length, title: String(msgs[0].title || '').slice(0, 60)}; changed = true;
     }
     if (changed) { d.updated = now; await env.KV.put('dev:' + id, JSON.stringify(d)); }
   }
@@ -272,7 +281,7 @@ export default {
     if (req.method === 'GET' && path === '/') return json({ok: true, app: 'VORTEX push', note: 'Notificaciones de alertas con la app cerrada'});
     if (req.method === 'GET' && path === '/scr/state') { const st = (await env.KV.get('scr', 'json')) || {}; return json({ok: true, '1h': st['1h'] || 0, '4h': st['4h'] || 0, last: st.last || {}, lock: st.lock || 0, err: st.err || null, kick: st.kick || null, now: Date.now()}); }
     if (path.startsWith('/scr/') && req.method === 'POST') return scrInternal(req, env, path);
-    if (path.startsWith('/radar/') && req.method === 'POST') return scrInternal(req, env, path); // Radar de Nexus Pixel (llamadas internas)
+    if ((path.startsWith('/radar/') || path.startsWith('/int/')) && req.method === 'POST') return scrInternal(req, env, path); // Radar de Nexus Pixel (llamadas internas)
     if (req.method === 'GET' && path === '/radar/state') { const st = await radarState(env); return json({ok: true, at: st.at || 0, note: st.note || '', min: st.min, log: st.log.slice(0, 30).map(o => ({symbol: o.symbol, tf: o.tf, side: o.side, at: o.at, entry: o.entry, stop: o.stop, target: o.target, ai: o.ai, v: o.v, why: o.why, res: o.res, resAt: o.resAt}))}); }
     if (req.method === 'GET' && path === '/scr/diag') { // diagnóstico: qué servidores de Binance contestan desde Cloudflare
       const urls = ['https://api.mexc.com/api/v3/klines?symbol=BTCUSDT&interval=60m&limit=2', 'https://api.mexc.com/api/v3/ticker/24hr', 'https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=BTC_USDT&interval=1h&limit=2', 'https://api.kucoin.com/api/v1/market/candles?symbol=BTC-USDT&type=1hour', 'https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar=1H&limit=2', 'https://api.bybit.com/v5/market/kline?category=spot&symbol=BTCUSDT&interval=60&limit=2', 'https://api.bitget.com/api/v2/spot/market/candles?symbol=BTCUSDT&granularity=1h&limit=2', 'https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=2', 'https://min-api.cryptocompare.com/data/v2/histohour?fsym=BTC&tsym=USDT&e=Binance&limit=2', 'https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=2', 'https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=2'], out = {};
@@ -303,15 +312,17 @@ export default {
       if (b.subOnly) { if (!cur.sub) return json({ok: false, error: 'Dispositivo sin registrar'}, 404); cur.sub = sub; cur.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(cur)); if (!ids.includes(id)) await env.KV.put('devs', JSON.stringify([...ids, id])); return json({ok: true}); } // el celular renovó su suscripción: se conservan alertas y ajustes
       const incoming = (Array.isArray(b.alerts) ? b.alerts : []).map(sanAlert).filter(Boolean).slice(0, MAX_ALERTS);
       const m = mergeAlerts(incoming, cur.alerts, b.since);
-      const d = {sub, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now()};
+      const d = {sub, lastPush: cur.lastPush, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now()};
       const same = JSON.stringify({...d, updated: 0}) === JSON.stringify({...cur, updated: 0});
       if (!same) { d.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(d)); } // sin cambios no se escribe (el plan gratis permite 1000 escrituras al día)
       if (!ids.includes(id)) { if (ids.length >= MAX_DEVICES) return json({error: 'Demasiados dispositivos'}, 429); await env.KV.put('devs', JSON.stringify([...ids, id])); }
-      return json({ok: true, back: m.back, now: Date.now()});
+      const hb = (await env.KV.get('hb', 'json')) || {};
+      return json({ok: true, back: m.back, now: Date.now(), srv: {hb: hb.at || 0, lastPush: cur.lastPush || null}});
     }
     if (path === '/pull') { const cur = await env.KV.get('dev:' + id, 'json'); return json({ok: true, active: !!cur, alerts: cur ? cur.alerts : [], now: Date.now()}); }
     if (path === '/test') {
       const cur = await env.KV.get('dev:' + id, 'json'); if (!cur || !cur.sub) return json({error: 'Este dispositivo no está registrado'}, 404);
+      if (b.later) { cur.testAt = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(cur)); return json({ok: true, later: true}); } // la manda la próxima revisión del servidor (≤1 min): da tiempo de cerrar la app
       const st = await sendPush(cur.sub, {title: 'VORTEX · Prueba', body: 'Las notificaciones con la app cerrada funcionan ✅', tag: 'test', url: APP_URL + '#alerts'}, await vapidKeys(env));
       return json({ok: st >= 200 && st < 300, status: st});
     }
@@ -346,6 +357,11 @@ async function scrInternal(req, env, path) {
   if (req.headers.get('x-vx-int') !== await intToken(env)) return J({error: 'No autorizado'}, 403);
   let b = {}; try { b = await req.json(); } catch {}
   const tf = b.tf === '4h' ? '4h' : '1h', now = +b.now || Date.now();
+  if (path === '/int/push') { // manda los avisos de UN dispositivo
+    const d = await env.KV.get('dev:' + b.id, 'json'); if (!d || !d.sub) return J({sts: [404]});
+    const v = await vapidKeys(env), sts = []; for (const m of (b.msgs || []).slice(0, 8)) { try { const st = await sendPush(d.sub, m, v); sts.push(st); if (st === 404 || st === 410) break; } catch (e) { sts.push('err: ' + String(e.message).slice(0, 60)); } }
+    return J({sts});
+  }
   if (path === '/radar/push') { // grandes oportunidades: solo a los celulares que encendieron el radar
     const ids = (await env.KV.get('devs', 'json')) || []; let sent = 0; const v = await vapidKeys(env);
     for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (!d || !d.sub || !d.radar) continue; try { const s0 = await sendPush(d.sub, b.msg, v); if (s0 < 300) sent++; } catch {} }

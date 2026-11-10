@@ -11,7 +11,7 @@
   const ok = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && window.isSecureContext;
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } };
   const store = o => { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch {} };
-  let cfg = load(), lastSig = '', busy = false, lastErr = '', lastMaster = null;
+  let cfg = load(), lastSig = '', busy = false, lastErr = '', lastMaster = null, srv = null, srvNow = 0;
   if (!cfg.id) { const r = new Uint8Array(18); crypto.getRandomValues(r); cfg.id = 'd_' + Array.from(r, b => b.toString(16).padStart(2, '0')).join(''); store(cfg); }
   const url = () => String(cfg.url || DEF_URL).replace(/\/+$/, '');
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -44,7 +44,7 @@
       const reg = await navigator.serviceWorker.ready, sub = await ensureSub(reg);
       if (!sub) { lastErr = Notification.permission === 'denied' ? 'El celular bloqueó las notificaciones de VORTEX: actívalas en Ajustes del sistema → Apps → VORTEX/Chrome → Notificaciones. El interruptor sigue encendido y se reanuda solo.' : 'Esperando el permiso de notificaciones del celular.'; return; } // NUNCA se apaga solo: solo tú lo apagas
       const j = await api('/sync', {id: cfg.id, sub: sub.toJSON(), since: cfg.since || 0, ...p});
-      applyBack(j.back); cfg.since = j.now || Date.now(); cfg.at = Date.now(); store(cfg);
+      applyBack(j.back); cfg.since = j.now || Date.now(); cfg.at = Date.now(); store(cfg); srv = j.srv || null; srvNow = j.now || Date.now();
       lastSig = JSON.stringify(payload()); lastErr = '';
     } catch (e) { lastErr = e.message || 'Sin conexión con el servidor de avisos'; }
     finally { busy = false; render(); }
@@ -87,6 +87,18 @@
     try { const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (sub) await sub.unsubscribe(); } catch {}
     render(); toast('Notificaciones desactivadas');
   }
+  async function testLater() { // prueba real con la app cerrada: el servidor la manda en su próxima revisión (≤1 min)
+    try { await sync(true); await api('/test', {id: cfg.id, later: true}); toast('Listo: CIERRA VORTEX ahora. En menos de 1 minuto debe llegarte la prueba'); }
+    catch (e) { toast('No se pudo programar la prueba: ' + e.message); }
+  }
+  function srvLine() { // qué dice el servidor: ¿está revisando? ¿qué pasó con el último aviso?
+    if (!srv) return '';
+    const ago = t => { const m = Math.max(0, Math.round((srvNow - t) / 6e4)); return m < 1 ? 'hace un momento' : m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`; };
+    const alive = srv.hb && srvNow - srv.hb < 40 * 6e4, lp = srv.lastPush;
+    const a = !srv.hb ? 'Servidor: esperando su primera revisión (≤15 min)' : alive ? 'Servidor revisando cada minuto ✓' : `⚠ El servidor no revisa desde ${ago(srv.hb)}`;
+    const b = lp ? ` · Último aviso ${ago(lp.at)}: ${lp.st >= 200 && lp.st < 300 ? 'entregado al servicio de tu celular ✓' : lp.st === 404 || lp.st === 410 ? 'tu celular canceló la suscripción (apaga y enciende el interruptor)' : 'falló (' + lp.st + ')'}` : ' · Aún no ha enviado avisos a este dispositivo';
+    return a + b;
+  }
   async function testPush() {
     try { await sync(true); const j = await api('/test', {id: cfg.id}); toast(j.ok ? 'Prueba enviada: cierra la app y mira tu celular' : 'El servicio push respondió ' + j.status); }
     catch (e) { toast('No se pudo enviar la prueba: ' + e.message); }
@@ -119,15 +131,23 @@
       : lastErr ? '⚠ ' + lastErr : `Activas, también con la app cerrada · vigilando ${n} alerta${n === 1 ? '' : 's'} de precio${mv ? ' y movimientos bruscos' : ''}`;
     box.innerHTML = `<div class="setting-row nt-master${on ? ' on' : ''}"><div><b>Activar notificaciones</b><small>${why}</small></div><button class="toggle ${on ? 'on' : ''}" id="pushOn" type="button" aria-label="Activar notificaciones" aria-pressed="${on}"></button></div>`
       + (on && cfg.noPush ? `<div class="setting-row"><div><b>Avisos con la app cerrada</b><small>Bloqueados por el navegador</small></div><button class="small-button" id="pushRetry" type="button">Reintentar</button></div>` : '')
-      + (on && ok && cfg.on ? `<div class="setting-row"><div><b>Probar</b><small>Manda una notificación de prueba a este celular</small></div><button class="small-button" id="pushTest" type="button">Enviar</button></div>` : '');
+      + (on && ok && cfg.on ? `<div class="setting-row"><div><b>Probar</b><small>Manda una notificación de prueba a este celular</small></div><button class="small-button" id="pushTest" type="button">Enviar</button></div>
+        <div class="setting-row"><div><b>Probar con la app cerrada</b><small>Toca, cierra VORTEX y espera 1 minuto. Si no llega hasta que abres la app, tu celular la está «durmiendo»: Ajustes → Apps → VORTEX (o Chrome) → Batería → <b>Sin restricciones</b>, y quítala de «apps en suspensión».</small></div><button class="small-button" id="pushLater" type="button">Probar</button></div>
+        ${srvLine() ? `<p class="small-note nt-srv">${srvLine()}</p>` : ''}` : '');
     if (on !== lastMaster) { lastMaster = on; if (B.renderPrefs) try { B.renderPrefs(); } catch {} } // «Qué te avisamos» cambia según esté encendido
   }
   document.addEventListener('click', e => {
     if (e.target.closest('#pushOn')) { master() ? turnOff() : turnOn(); }
     else if (e.target.closest('#pushTest')) testPush();
+    else if (e.target.closest('#pushLater')) testLater();
     else if (e.target.closest('#pushRetry')) enable();
   });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(true); }); // al volver a la app trae lo que disparó el servidor
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(true); else flush(); });
+  window.addEventListener('pagehide', () => flush());
+  function flush() { // sin esperar: usa la suscripción que el servidor ya tiene
+    if (!cfg.on) return; const p = payload(), sig = JSON.stringify(p); if (sig === lastSig) return;
+    try { fetch(url() + '/sync', {method: 'POST', keepalive: true, headers: {'content-type': 'application/json'}, body: JSON.stringify({id: cfg.id, since: cfg.since || 0, ...p})}).then(() => { lastSig = sig; }).catch(() => {}); } catch {}
+  } // al volver a la app trae lo que disparó el servidor
   setInterval(() => sync(false), 10000); // si cambian tus alertas, se mandan al servidor en ≤10 s
   window.addEventListener('pageshow', () => { if (cfg.on) sync(true); }); // al volver desde otra app (Android puede congelar la página)
   render(); if (cfg.on) { meta(true); sync(true); }

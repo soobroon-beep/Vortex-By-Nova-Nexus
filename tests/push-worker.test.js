@@ -108,7 +108,7 @@ test('ronda programada: avisa una vez, guarda el estado y borra suscripciones ve
   };
   try {
     const r = await w.tick(env, 1e12);
-    assert.deepStrictEqual(r, {devices: 2, sent: 2, gone: 1});
+    assert.deepStrictEqual(r, {devices: 2, sent: 1, gone: 1}); // sent = avisos aceptados por el servicio push
     const p = pushes.find(x => x.url.endsWith('/abc'));
     assert.strictEqual(p.init.headers['content-encoding'], 'aes128gcm'); assert.match(p.init.headers.authorization, /^vapid t=/);
     const msg = JSON.parse(await decrypt(new Uint8Array(p.init.body), f.kp, f.auth));

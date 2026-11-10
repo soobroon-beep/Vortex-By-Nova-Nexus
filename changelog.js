@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.15', d: '10 nov 2026', t: 'Gráfico siempre en vivo y botón VORTEX para todos tus dispositivos', items: [
+    'El gráfico ya no se congela al dejarlo abierto: si la conexión en vivo se cuelga (la compu durmió o cambió la red), se reconecta solo en segundos.',
+    'El botón VORTEX ahora guarda y actualiza en TODOS tus dispositivos abiertos: cada uno sube lo suyo, se mezcla sin pisarse y se refresca.',
+    'Avisos con la app cerrada más confiables: el servidor gasta menos, muestra su estado y hay una «Prueba con la app cerrada». Las líneas de tu operación son más minimalistas.'
+  ]},
   {v: '3.14', d: '10 nov 2026', t: 'Radar en el servidor, bots multi-temporalidad y TP/SL reales en el gráfico', items: [
     'El Radar de Nexus Pixel trabaja en el servidor cada hora, aunque la app y el celular estén cerrados (con «Activar notificaciones»).',
     'Bots: tu edición se aplica siempre (ya no se queda en 4h); elige varias temporalidades y monedas y mira cómo va cada una por separado.',
