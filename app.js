@@ -11,8 +11,6 @@ const INTERVALS = Object.keys(IV_MS);
 const PANE = /[?&]pane=/.test(location.search); // gráficos extra (2.º a 5.º): la misma app dentro de un iframe, con su propio estado y sin sincronizar
 const PANE_N = Math.min(5, Math.max(2, +((/[?&]pane=(\d)/.exec(location.search) || [])[1]) || 2));
 const STORE = PANE ? 'cct_pane' + PANE_N + '_v1' : 'cct_mobile_v1';
-const FIB = [0, .236, .382, .5, .618, .786, 1];
-const FIBEXT = [0, .618, 1, 1.272, 1.618, 2.618];
 const ONEPT = ['horizontal', 'vertical', 'text', 'marker', 'hray', 'crossline', 'note', 'label', 'arrowup', 'arrowdown', 'flag', 'check', 'xmark', 'star', 'arrowleft', 'arrowright'], THREEPT = ['channel', 'fibext', 'pitchfork', 'triangle', 'parallelogram'];
 /* Patrones de varios puntos: se toca cada punto en orden (n = cuántos) */
 const MULTI = {
@@ -150,6 +148,7 @@ function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estil
   if (o.gc != null && !hex(o.gc)) delete o.gc; if (o.rc != null && !hex(o.rc)) delete o.rc; // Long/Short: color del objetivo y del stop
   for (const k of ['nt', 'no', 'ns', 'nr']) if (o[k] !== true) delete o[k]; // Long/Short: ocultar título / texto del objetivo / texto del stop
   if (o.lock !== true) delete o.lock; if (o.hide !== true) delete o.hide;
+  if (o.o != null) { const x = CCTDrawCfg.sanitize(o.o); if (x) o.o = x; else delete o.o; } // ajustes propios de la herramienta (niveles, fondo, extensiones…)
   return o;
 }
 const DESIGN_KEYS = ['indicators', 'stdParams', 'stdHide', 'pine', 'chartStyle', 'ctype', 'novaParams', 'novaSaved', 'pn'];
@@ -174,7 +173,8 @@ function sanPixel(x) {
     sr: Math.max(1, Math.min(5, Math.round(+q.sr) || 3)), colSup: hex(q.colSup), colRes: hex(q.colRes),
     tips: q.tips !== false, completo: Array.isArray(q.completo) && q.completo.filter(k => PIX_OPT.completo.includes(k)).length ? q.completo.filter(k => PIX_OPT.completo.includes(k)) : ['sr', 'trend', 'channel'], at: +q.at || 0};
 }
-const sanTpl = t => ({...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns', 'nr'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})});
+const sanTpl = t => ({...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns', 'nr'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {}), ...dSanO(t.o)});
+function dSanO(o) { const x = o ? CCTDrawCfg.sanitize(o) : null; return x ? {o: x} : {}; } // ajustes propios de la herramienta (draw-cfg.js)
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
@@ -184,7 +184,7 @@ function merge(s) {
     for (const k of Object.keys(o.drawings)) {
       const arr = Array.isArray(o.drawings[k]) ? o.drawings[k] : [];
       const clean = arr.filter(d => d && typeof d === 'object' && (d.type === 'brush' ? (Array.isArray(d.pts) && d.pts.length >= 2 && d.pts.length <= 400 && d.pts.every(okPt)) : (d.pts == null || (Array.isArray(d.pts) && d.pts.length >= 2 && d.pts.length <= 12 && d.pts.every(q => q && Number.isFinite(q.t) && Number.isFinite(q.p)))))).slice(-300)
-        .map(d => d.type === 'brush' ? {id: String(d.id || '').slice(0, 16), type: 'brush', pts: d.pts, a: {t: d.pts[0][0], p: d.pts[0][1]}, col: /^#[0-9a-f]{6}$/i.test(d.col) ? d.col : '#e9c36e', w: Math.max(1, Math.min(24, +d.w || 3)), ...(d.hl === true ? {hl: true} : {}), ...(d.lock === true ? {lock: true} : {}), ...(d.hide === true ? {hide: true} : {})} : sanDrawExtra(d));
+        .map(d => d.type === 'brush' ? {id: String(d.id || '').slice(0, 16), type: 'brush', pts: d.pts, a: {t: d.pts[0][0], p: d.pts[0][1]}, col: /^#[0-9a-f]{6}$/i.test(d.col) ? d.col : '#e9c36e', w: Math.max(1, Math.min(24, +d.w || 3)), ...(d.hl === true ? {hl: true} : {}), ...(d.lock === true ? {lock: true} : {}), ...(d.hide === true ? {hide: true} : {}), ...dSanO(d.o)} : sanDrawExtra(d));
       if (clean.length) o.drawings[k] = clean; else delete o.drawings[k];
     }
     const bq = o.brush && typeof o.brush === 'object' ? o.brush : {};
@@ -2091,7 +2091,7 @@ function patchD(props, snap = true) {
   const d = curDraw(); if (!d) return;
   if (snap) snapDraw();
   let nd = null; setDrawings(getDrawings().map(x => { if (x.id !== d.id) return x; const n = {...x, ...props}; for (const k of Object.keys(props)) if (props[k] == null || props[k] === false) delete n[k]; nd = n; return n; }));
-  if (nd && nd.type !== 'brush') { const {k, ...st} = tplOf(nd); state.lastStyle = {...(state.lastStyle || {}), [k]: st}; save(); } // el próximo dibujo de este tipo sale con esta configuración
+  if (nd) { const {k, ...st} = tplOf(nd); state.lastStyle = {...(state.lastStyle || {}), [k]: nd.type === 'brush' ? (st.o ? {o: st.o} : {}) : st}; save(); } // el próximo dibujo de este tipo sale con esta configuración
   renderSelBar(); render();
 }
 const sbBrushMode = d => (d && d.type === 'brush') || (!d && isBrushTool(drawTool));
@@ -2152,9 +2152,9 @@ function sbEditText(val) {
   const d = curDraw(); if (!d) return; const v = String(val || '').trim().slice(0, 80);
   if (SB_TEXT.has(d.type)) { if (!v) { toast('El texto no puede quedar vacío'); return; } patchD({text: v}); } else patchD({label: v || null});
 }
-const tplKind = d => isPos(d) ? 'pos' : d.type;
-const tplFits = (t, d) => t.k ? t.k === tplKind(d) : !isPos(d); // las plantillas guardadas antes (sin tipo) valen para todo menos Long/Short
-const tplOf = d => { const o = {k: tplKind(d)}; if (isPos(d)) { for (const f of ['gc', 'rc', 'nt', 'no', 'ns', 'nr']) if (d[f] != null) o[f] = d[f]; } if (d.col) o.col = d.col; const w = d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw; if (w) o.lw = w; if (d.ds) o.ds = d.ds; if (d.tc) o.tc = d.tc; if (d.ts) o.ts = d.ts; return o; };
+const tplKind = d => isPos(d) ? 'pos' : d.type === 'brush' && d.hl ? 'highlighter' : d.type;
+const tplFits = (t, d) => t.k ? t.k === tplKind(d) || (t.k === 'brush' && d.type === 'brush') : !isPos(d); // las plantillas guardadas antes (sin tipo) valen para todo menos Long/Short
+const tplOf = d => { const o = {k: tplKind(d)}; if (isPos(d)) { for (const f of ['gc', 'rc', 'nt', 'no', 'ns', 'nr']) if (d[f] != null) o[f] = d[f]; } if (d.col) o.col = d.col; const w = d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw; if (w) o.lw = w; if (d.ds) o.ds = d.ds; if (d.tc) o.tc = d.tc; if (d.ts) o.ts = d.ts; if (d.o) o.o = d.o; return o; };
 function sbSaveTpl() {
   const d = curDraw(); if (!d) return; if ((state.drawTpl || []).filter(t => tplFits(t, d)).length >= 12) { toast('Máximo 12 plantillas de este tipo: borra alguna'); return; }
   const n = (prompt('Nombre de la plantilla:', 'Plantilla ' + ((state.drawTpl || []).filter(t => tplFits(t, d)).length + 1)) || '').trim().slice(0, 24); if (!n) return;
@@ -2163,12 +2163,12 @@ function sbSaveTpl() {
 function sbApplyTpl(i) {
   const d = curDraw(), t = (state.drawTpl || [])[i]; if (!d || !t) return;
   if (!tplFits(t, d)) return;
-  if (isPos(d)) { patchD({col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts, gc: t.gc, rc: t.rc, nt: t.nt, no: t.no, ns: t.ns, nr: t.nr}); return; }
-  patchD(d.type === 'brush' ? {col: t.col, w: Math.round((t.lw || (d.hl ? d.w / 3 : d.w)) * (d.hl ? 3 : 1))} : {col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts});
+  if (isPos(d)) { patchD({col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts, gc: t.gc, rc: t.rc, nt: t.nt, no: t.no, ns: t.ns, nr: t.nr, o: t.o}); return; }
+  patchD(d.type === 'brush' ? {col: t.col, w: Math.round((t.lw || (d.hl ? d.w / 3 : d.w)) * (d.hl ? 3 : 1)), o: t.o} : {col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts, o: t.o});
   if (d.type === 'brush' && t.col) { state.brush.c = t.col; save(); }
 }
 const isPos = d => !!d && (d.type === 'long' || d.type === 'short');
-function sbResetStyle() { const d = curDraw(); if (!d) return; patchD(d.type === 'brush' ? {col: '#e9c36e', w: d.hl ? 9 : 3} : {col: null, lw: null, ds: null, tc: null, ts: null, label: null, gc: null, rc: null, nt: null, no: null, ns: null, sp: null}); }
+function sbResetStyle() { const d = curDraw(); if (!d) return; patchD(d.type === 'brush' ? {col: '#e9c36e', w: d.hl ? 9 : 3, o: null} : {col: null, lw: null, ds: null, tc: null, ts: null, label: null, gc: null, rc: null, nt: null, no: null, ns: null, sp: null, o: null}); }
 const posColors = d => `<label class="pp-lbl">Objetivo (ganancia)</label>${sbPal('data-pgc', d.gc || '#089981')}<label class="pp-lbl">Stop (pérdida)</label>${sbPal('data-prc', d.rc || '#f23645')}`;
 const posToggles = d => `<label class="pp-lbl">Textos que se muestran</label><div class="pp-col">${[['nt', 'Título (Long / Short)'], ['no', 'Texto del objetivo'], ['ns', 'Texto del stop'], ['nr', 'Tamaño y riesgo (calculadora)']].map(([k, n]) => `<button class="pp-item${d[k] ? '' : ' on'}" data-ptog="${k}"><span class="pp-ic">${d[k] ? '' : I('check', 16)}</span><span>${n}</span></button>`).join('')}</div>`;
 const sbSw = (attr, c, cur) => `<button class="pp-sw${String(cur || '').toLowerCase() === c ? ' on' : ''}" ${attr}="${c}" style="background:${c}" aria-label="${c}"></button>`;
@@ -2194,9 +2194,11 @@ function popHtml(kind, d) {
   }
   if (kind === 'set') {
     const noStyle = SB_NOSTYLE.has(d.type) || brush, hasPrice = d.type === 'horizontal' || d.type === 'hray';
-    if (isPos(d)) return `<div class="pp-title">Ajustes</div>${posColors(d)}<label class="pp-lbl">Grosor</label>${sbLwRow(SB_LW, lw)}<label class="pp-lbl">Estilo</label>${sbDsRow(d.ds)}${posToggles(d)}${sbTextBlock(d)}`;
-    return `<div class="pp-title">Ajustes</div><label class="pp-lbl">Color</label>${sbPal('data-pc', col)}`
+    if (isPos(d)) return `<div class="pp-title">Ajustes</div>${posColors(d)}<label class="pp-lbl">Grosor</label>${sbLwRow(SB_LW, lw)}<label class="pp-lbl">Estilo</label>${sbDsRow(d.ds)}${dCfgHtml(d)}${posToggles(d)}${sbTextBlock(d)}`;
+    const lvFirst = CCTDrawCfg.has(d, 'lv'); // herramientas con niveles (Fibonacci, Gann…): sus niveles van arriba, que es lo que más se cambia
+    return `<div class="pp-title">Ajustes</div>${lvFirst ? dCfgHtml(d) : ''}<label class="pp-lbl">Color</label>${sbPal('data-pc', col)}`
       + (brush ? `<label class="pp-lbl">Grosor</label>${sbLwRow(SB_BW, lw)}` : noStyle ? '' : `<label class="pp-lbl">Grosor</label>${sbLwRow(SB_LW, lw)}<label class="pp-lbl">Estilo</label>${sbDsRow(d.ds)}`)
+      + (lvFirst ? '' : dCfgHtml(d))
       + (hasPrice ? `<label class="pp-lbl">Precio</label><div class="pp-row"><input class="pp-input" id="sbPrice" inputmode="decimal" value="${d.a.p}"><button class="pp-ok" data-sb="priceok">OK</button></div>` : '')
       + (brush || SB_NOSTYLE.has(d.type) ? '' : sbTextBlock(d));
   }
@@ -2210,7 +2212,7 @@ function popHtml(kind, d) {
   return '';
 }
 function sbMoreNoSel() { return `<button class="pp-item" data-sb="undo"><span class="pp-ic">${I('undo', 16)}</span><span>Deshacer</span></button><button class="pp-item" data-sb="redo"><span class="pp-ic">${I('redo', 16)}</span><span>Rehacer</span></button><button class="pp-item" data-sb="clear"><span class="pp-ic">${I('trash', 16)}</span><span>Borrar todos los dibujos</span></button>`; }
-function closePop() { selPop = ''; const p = $('#selPop'); if (p) p.remove(); document.querySelectorAll('#selBar [data-sb].open').forEach(b => b.classList.remove('open')); }
+function closePop() { selPop = ''; dPpCol = ''; const p = $('#selPop'); if (p) p.remove(); document.querySelectorAll('#selBar [data-sb].open').forEach(b => b.classList.remove('open')); }
 function renderPop() {
   const old = $('#selPop'), bar = $('#selBar'), keepTop = old && old.dataset.k === selPop ? old.scrollTop : 0; if (old) old.remove(); // al cambiar un ajuste el panel se vuelve a dibujar: conserva por dónde ibas
   if (!selPop || !bar) return;
@@ -2223,6 +2225,63 @@ function renderPop() {
 }
 const sbIc = (k, s = 20) => SV(SBI[k], s);
 function applyBarPos(bar) { if (selPos) { bar.style.left = selPos.x + 'px'; bar.style.top = selPos.y + 'px'; bar.style.bottom = 'auto'; bar.style.transform = 'none'; } }
+/* ───────── Ajustes propios de cada herramienta (esquema en draw-cfg.js) ─────────
+   El panel «Ajustes» añade, debajo de color/grosor/estilo, lo que solo tiene esa herramienta: niveles de Fibonacci,
+   fondo, extensiones, textos… Cada cambio queda como «última configuración» de la herramienta y entra en sus plantillas. */
+let dPpCol = '', dRangeSnap = false; // dPpCol: qué color está desplegado ('o:clave' de un ajuste o 'l:nivel')
+const dOpt = (d, k) => CCTDrawCfg.get(d, k);
+const dLv = d => CCTDrawCfg.levelsOf(d);
+const dLvCol = (d, lv, col) => CCTDrawCfg.levelColor(d, lv, col);
+function dCfgHtml(d) {
+  const S = CCTDrawCfg.schema(d); if (!S.length) return '';
+  const base = d.col || (d.type === 'brush' ? '#e9c36e' : sbDefCol()), chk = on => `<span class="pp-ic">${on ? I('check', 16) : ''}</span>`;
+  return S.map(f => {
+    const v = f.k ? dOpt(d, f.k) : null;
+    if (f.t === 'sec') return `<label class="pp-lbl">${f.n}</label>`;
+    if (f.t === 'bool') return `<button class="pp-item${v ? ' on' : ''}" data-oo="${f.k}">${chk(v)}<span>${f.n}</span></button>`;
+    if (f.t === 'pick') return `<label class="pp-lbl">${f.n}</label><div class="pp-row">${f.opts.map(([x, n]) => `<button class="pp-lw${v === x ? ' on' : ''}" data-ok="${f.k}" data-ov="${x}"><span>${n}</span></button>`).join('')}</div>`;
+    if (f.t === 'range') return `<label class="pp-lbl">${f.n} <b id="orv_${f.k}">${v}${f.u}</b></label><input class="pp-range" type="range" data-or="${f.k}" data-u="${f.u}" min="${f.min}" max="${f.max}" step="${f.step}" value="${v}">`;
+    if (f.t === 'col') { const cur = v || base, open = dPpCol === 'o:' + f.k;
+      return `<button class="pp-item${open ? ' open' : ''}" data-ocol="o:${f.k}"><i class="pp-dot" style="background:${cur}"></i><span>${f.n}</span><small>${open ? '▴' : '▾'}</small></button>` + (open ? `<div class="pp-sub">${sbPal('data-opc', cur)}${f.def === '' ? '<button class="pp-item" data-opc="">↺ Igual que el color de línea</button>' : ''}</div>` : ''); }
+    if (f.t === 'levels') { const act = dLv(d), all = [...new Set([...f.all, ...act])].sort((a, b) => a - b), open = dPpCol.startsWith('l:') ? +dPpCol.slice(2) : null;
+      return `<label class="pp-lbl">${f.n}</label><div class="pp-lvs">${all.map(lv => { const on = act.includes(lv); return `<div class="pp-lv${on ? ' on' : ''}"><button data-olv="${lv}">${chk(on)}<span>${esc(CCTDrawCfg.levelLabel(d, lv))}</span></button><button class="pp-lvc${open === lv ? ' open' : ''}" data-ocol="l:${lv}" style="background:${dLvCol(d, lv, base)}" title="Color de este nivel" aria-label="Color del nivel ${lv}"></button></div>`; }).join('')}</div>`
+        + (open != null ? `<div class="pp-sub"><label class="pp-lbl">Color de ${esc(CCTDrawCfg.levelLabel(d, open))}</label>${sbPal('data-opc', dLvCol(d, open, base))}<button class="pp-item" data-opc="">↺ Quitar el color propio</button></div>` : '')
+        + (f.custom ? `<div class="pp-row pp-lvadd"><input class="pp-input" id="olvNew" inputmode="decimal" maxlength="8" placeholder="Otro nivel (ej. 0.886)"><button class="pp-ok" data-olvadd="1" aria-label="Añadir nivel">＋</button></div>` : ''); }
+    return '';
+  }).join('');
+}
+function dApplyCol(c) { // color elegido en la paleta desplegada: de un ajuste o de un nivel
+  const d = curDraw(); if (!d || !dPpCol) return; const key = dPpCol.slice(2);
+  if (dPpCol[0] === 'o') { patchD({o: CCTDrawCfg.set(d, key, c || null)}); return; }
+  const lk = {...((d.o && d.o.lk) || {})}; if (c) lk[key] = c; else delete lk[key];
+  patchD({o: CCTDrawCfg.set(d, 'lk', Object.keys(lk).length ? lk : null)});
+}
+function dAddLevel() {
+  const d = curDraw(), i = $('#olvNew'); if (!d || !i) return; const v = parseFloat(String(i.value).replace(',', '.')), act = dLv(d);
+  if (!Number.isFinite(v) || v < -10 || v > 1000) { toast('Escribe un nivel válido (por ejemplo 0.886)'); return; }
+  if (act.length >= 24) { toast('Máximo 24 niveles'); return; }
+  patchD({o: CCTDrawCfg.set(d, 'lv', [...act, CCTDrawCfg.r4(v)])});
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('#selPop [data-oo], #selPop [data-ok], #selPop [data-ocol], #selPop [data-opc], #selPop [data-olv], #selPop [data-olvadd]'); if (!t) return;
+  const D = t.dataset, d = curDraw(); if (!d) return;
+  if (D.oo) { patchD({o: CCTDrawCfg.set(d, D.oo, !dOpt(d, D.oo))}); return; }
+  if (D.ok) { const f = CCTDrawCfg.field(d, D.ok), op = f && f.opts.find(x => String(x[0]) === D.ov); if (op) patchD({o: CCTDrawCfg.set(d, D.ok, op[0])}); return; }
+  if (D.ocol) { dPpCol = dPpCol === D.ocol ? '' : D.ocol; renderPop(); return; }
+  if (D.opc !== undefined) { dApplyCol(D.opc); return; }
+  if (D.olv !== undefined) { const lv = +D.olv, f = CCTDrawCfg.field(d, 'lv'), act = dLv(d), nx = act.includes(lv) ? act.filter(x => x !== lv) : [...act, lv]; if (f && nx.length < f.min) { toast('Deja al menos un nivel activo'); return; } patchD({o: CCTDrawCfg.set(d, 'lv', nx)}); return; }
+  if (D.olvadd) dAddLevel();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'olvNew') { e.preventDefault(); dAddLevel(); } });
+/* Deslizadores (opacidad…): el dibujo cambia en vivo mientras arrastras; al soltar queda guardado como última configuración */
+document.addEventListener('input', e => {
+  const i = e.target.closest('#selPop input[data-or]'); if (!i) return; const d = curDraw(); if (!d) return;
+  if (!dRangeSnap) { snapDraw(); dRangeSnap = true; }
+  const o = CCTDrawCfg.set(d, i.dataset.or, +i.value);
+  setDrawings(getDrawings().map(x => { if (x.id !== d.id) return x; const n = {...x}; if (o) n.o = o; else delete n.o; return n; }));
+  const b = document.getElementById('orv_' + i.dataset.or); if (b) b.textContent = i.value + (i.dataset.u || ''); scheduleRender();
+});
+document.addEventListener('change', e => { const i = e.target.closest('#selPop input[data-or]'); if (!i) return; dRangeSnap = false; const d = curDraw(); if (d) patchD({o: d.o || null}, false); });
 /* ───────── Calculadora de riesgo ───────── */
 const riskCap = () => { const R = state.risk || {}, A = state.acct || {}; return R.cap > 0 ? R.cap : (A.cur > 0 ? A.cur : A.start > 0 ? A.start : 0); };
 const usd = v => (Math.abs(v) >= 1000 ? '$' + Math.round(v).toLocaleString('en-US') : '$' + (+v).toFixed(2));
@@ -2319,7 +2378,7 @@ document.addEventListener('click', e => {
   if (k === 'undo') undoDrawing(); else if (k === 'redo') redoDrawing();
   else if (k === 'clear') { closePop(); if (!getDrawings().length) return toast('No hay dibujos'); if (confirm('¿Borrar todos los dibujos de este gráfico? (Ctrl+Z los recupera)')) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); } }
 });
-document.addEventListener('change', e => { const i = e.target.closest('#selPop input[type=color]'); if (!i) return; if (i.hasAttribute('data-pc-in')) sbSetColor(i.value); else if (i.hasAttribute('data-ptc-in')) patchD({tc: i.value}); else if (i.hasAttribute('data-pgc-in')) patchD({gc: i.value}); else if (i.hasAttribute('data-prc-in')) patchD({rc: i.value}); });
+document.addEventListener('change', e => { const i = e.target.closest('#selPop input[type=color]'); if (!i) return; if (i.hasAttribute('data-pc-in')) sbSetColor(i.value); else if (i.hasAttribute('data-ptc-in')) patchD({tc: i.value}); else if (i.hasAttribute('data-pgc-in')) patchD({gc: i.value}); else if (i.hasAttribute('data-prc-in')) patchD({rc: i.value}); else if (i.hasAttribute('data-opc-in')) dApplyCol(i.value); });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'sbTxt') { e.preventDefault(); sbEditText(e.target.value); } else if (e.key === 'Enter' && e.target.id === 'sbPrice') { e.preventDefault(); document.querySelector('#selPop [data-sb="priceok"]').click(); } });
 document.addEventListener('keydown', e => { // atajos de escritorio: copiar / pegar / clonar
   if (!(e.ctrlKey || e.metaKey) || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || currentView !== 'chartView') return;
@@ -2532,17 +2591,20 @@ function snapPoint(pt) {
 }
 const px = a => ({x: X(idxOfTime(a.t)), y: Y(a.p)});
 /* Geometría de las herramientas nuevas: Fibonacci (tiempo, abanico, círculos), horquilla, triángulo, elipse y patrones de varios puntos */
-const FIBTIME = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55], FANLV = [.25, .382, .5, .618, .75, 1], FIBCIRC = [.382, .5, .618, .786, 1, 1.272, 1.618];
 const ptsPx = d => (d.pts || []).map(px);
 const farPt = (a, b, k = 1) => { const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1; return {x: a.x + dx / L * 5000 * k, y: a.y + dy / L * 5000 * k}; };
 function pitchRays(d) { // horquilla de Andrews: mediana desde A por el punto medio de B–C, y paralelas por B y C
   const A = px(d.a), B = px(d.b), C = px(d.c), M = {x: (B.x + C.x) / 2, y: (B.y + C.y) / 2}, dx = M.x - A.x, dy = M.y - A.y, L = Math.hypot(dx, dy) || 1;
   return [A, B, C].map(P => [P, {x: P.x + dx / L * 5000, y: P.y + dy / L * 5000}]);
 }
-function fanRays(d) { const A = px(d.a), B = px(d.b); return FANLV.map(lv => [A, farPt(A, {x: B.x, y: A.y + (B.y - A.y) * lv})]); }
+function fanRays(d) { const A = px(d.a), B = px(d.b); return dLv(d).map(lv => [A, farPt(A, {x: B.x, y: A.y + (B.y - A.y) * lv})]); }
 function fibCircle(d) { const A = px(d.a), B = px(d.b); return {m: {x: (A.x + B.x) / 2, y: (A.y + B.y) / 2}, R: Math.hypot(B.x - A.x, B.y - A.y) / 2}; }
 const inTri = (p, a, b, c) => { const s = (p1, p2, p3) => (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y), d1 = s(p, a, b), d2 = s(p, b, c), d3 = s(p, c, a); return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0)); };
 const readableOn = hex => { const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || ''); if (!m) return '#10151f'; const l = (.299 * parseInt(m[1], 16) + .587 * parseInt(m[2], 16) + .114 * parseInt(m[3], 16)) / 255; return l > .55 ? '#10151f' : '#ffffff'; };
+const dExt = (d, p, q) => [dOpt(d, 'xl') ? farPt(q, p) : p, dOpt(d, 'xr') ? farPt(p, q) : q]; // extremos de una línea con «extender a la izquierda / derecha»
+const dFibPrice = (d, lv) => dOpt(d, 'rv') ? d.a.p + (d.b.p - d.a.p) * lv : b_price(d, lv);
+const dFibSpan = (d, p, q) => { const x1 = dOpt(d, 'xl') ? geo.left : Math.min(p.x, q.x); let x2 = dOpt(d, 'xr') ? geo.w - geo.right : Math.max(p.x, q.x); if (x2 - x1 < 60) x2 = x1 + 60; return {x1, x2}; };
+const dDateTag = t => new Date(t).toLocaleString('es', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
 function handlesOf(d) {
   if (d.type === 'brush' || d.lock) return [];
   if (d.pts && MULTI[d.type]) return d.pts.map((q, i) => ({key: 'p' + i, ...px(q)}));
@@ -2562,7 +2624,7 @@ function channelOff(d) { // desplazamiento vertical (en precio) de la paralela q
 function posBox(d) { // Long/Short: entrada = a, objetivo = b, stop espejo a 2:1
   const A = px(d.a), B = px(d.b), x1 = Math.min(A.x, B.x); let x2 = Math.max(A.x, B.x); if (x2 - x1 < 40) x2 = x1 + 40;
   const manual = Number.isFinite(d.sp) && (d.sp - d.a.p) * (d.b.p - d.a.p) < 0; // stop movido a mano (debe quedar del lado contrario al objetivo)
-  const stop = manual ? d.sp : d.a.p - (d.b.p - d.a.p) / 2;
+  const stop = manual ? d.sp : d.a.p - (d.b.p - d.a.p) / (dOpt(d, 'rr') || 2);
   return {x1, x2, entry: d.a.p, target: d.b.p, stop, yE: Y(d.a.p), yT: Y(d.b.p), yS: Y(stop), manual};
 }
 function fmtDur(ms) { const m = Math.round(Math.abs(ms) / 6e4), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60; return d ? `${d} d ${h} h` : h ? `${h} h ${mm} min` : `${mm} min`; }
@@ -2572,15 +2634,14 @@ function segDist(p, a, b) {
   const t = l2 ? clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0, 1) : 0;
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
-const GANLV = [1 / 8, 1 / 4, 1 / 3, 1 / 2, 1, 2, 3, 4, 8], GANLAB = ['1x8', '1x4', '1x3', '1x2', '1x1', '2x1', '3x1', '4x1', '8x1'];
-function gannRays(d) { const A = px(d.a), B = px(d.b); return GANLV.map(lv => [A, farPt(A, {x: B.x, y: A.y + (B.y - A.y) * lv})]); }
+function gannRays(d) { const A = px(d.a), B = px(d.b); return dLv(d).map(lv => [A, farPt(A, {x: B.x, y: A.y + (B.y - A.y) * lv})]); }
 function regLines(d) { // regresión lineal de los cierres entre dos velas, con bandas a ±2 desviaciones
   const n = candles.length; if (!n) return null; let i0 = clamp(Math.round(idxOfTime(d.a.t)), 0, n - 1), i1 = clamp(Math.round(idxOfTime(d.b.t)), 0, n - 1); if (i0 > i1) [i0, i1] = [i1, i0];
   const m = i1 - i0 + 1; if (m < 3) return null; let sx = 0, sy = 0, sxx = 0, sxy = 0;
   for (let i = i0; i <= i1; i++) { const x = i - i0, y = candles[i].c; sx += x; sy += y; sxx += x * x; sxy += x * y; }
   const k = (m * sxy - sx * sy) / (m * sxx - sx * sx || 1), c0 = (sy - k * sx) / m; let v = 0; for (let i = i0; i <= i1; i++) { const e = candles[i].c - (c0 + k * (i - i0)); v += e * e; }
   const sd = Math.sqrt(v / m), f = (i, o) => ({x: X(i), y: Y(c0 + k * (i - i0) + o)});
-  return {sd, lines: [0, 2, -2].map(o => [f(i0, o * sd), f(i1, o * sd)])};
+  const dv = dOpt(d, 'dv') || 2; return {sd, lines: [0, dv, -dv].map(o => [f(i0, o * sd), f(i1, o * sd)])};
 }
 function sinePts(d, rightX) { // onda: a es una cresta/valle y b la siguiente; se repite hacia la derecha
   const A = px(d.a), B = px(d.b), dx = B.x - A.x; if (Math.abs(dx) < 6) return []; const mid = (A.y + B.y) / 2, amp = (A.y - B.y) / 2, s = Math.sign(dx), P = [];
@@ -2588,6 +2649,7 @@ function sinePts(d, rightX) { // onda: a es una cresta/valle y b la siguiente; s
   return P;
 }
 function distToDrawing(d, pt) {
+  { const s = dOpt(d, 'sz'); if (s && s !== 1) { const A = px(d.a); pt = {x: A.x + (pt.x - A.x) / s, y: A.y + (pt.y - A.y) / s}; } } // iconos con tamaño propio
   if (d.type === 'brush') { let m = 1e9, prev = null; for (const q of d.pts) { const c = {x: X(idxOfTime(q[0])), y: Y(q[1])}; m = Math.min(m, prev ? segDist(pt, prev, c) : Math.hypot(pt.x - c.x, pt.y - c.y)); prev = c; } return Math.max(0, m - (d.w || 3) / 2); }
   if (d.type === 'horizontal') return Math.abs(pt.y - Y(d.a.p));
   if (d.type === 'vertical') return Math.abs(pt.x - X(idxOfTime(d.a.t)));
@@ -2609,7 +2671,7 @@ function distToDrawing(d, pt) {
     return Math.hypot(pt.x - A.x, pt.y - A.y);
   }
   const a = px(d.a), b = px(d.b);
-  if (d.type === 'trend' || d.type === 'arrow' || d.type === 'info' || d.type === 'angle') return segDist(pt, a, b);
+  if (d.type === 'trend' || d.type === 'arrow' || d.type === 'info' || d.type === 'angle') return segDist(pt, ...dExt(d, a, b));
   if (d.type === 'extended') return segDist(pt, farPt(a, b, -1), farPt(a, b, 1));
   if (d.type === 'regression') { const R = regLines(d); return R ? Math.min(...R.lines.map(([p, q]) => segDist(pt, p, q))) : segDist(pt, a, b); }
   if (d.type === 'cyclic') { if (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH) return 1e9; const i0 = idxOfTime(d.a.t), u = idxOfTime(d.b.t) - i0; if (!u) return 1e9; let m = 1e9; for (let k = 0; k < 200; k++) m = Math.min(m, Math.abs(pt.x - X(i0 + u * k))); return m; }
@@ -2621,13 +2683,13 @@ function distToDrawing(d, pt) {
   if (d.type === 'ellipse') { const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2, rx = Math.max(1, Math.abs(b.x - a.x) / 2), ry = Math.max(1, Math.abs(b.y - a.y) / 2), r = Math.hypot((pt.x - cx) / rx, (pt.y - cy) / ry); return r <= 1 ? 0 : (r - 1) * Math.min(rx, ry); }
   if (d.type === 'triangle') { if (!d.c) return segDist(pt, a, b); const c = px(d.c); return inTri(pt, a, b, c) ? 0 : Math.min(segDist(pt, a, b), segDist(pt, b, c), segDist(pt, c, a)); }
   if (d.type === 'pitchfork') { if (!d.c) return segDist(pt, a, b); return Math.min(...pitchRays(d).map(([p, q]) => segDist(pt, p, q))); }
-  if (d.type === 'fibtime') { if (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH) return 1e9; const i0 = idxOfTime(d.a.t), u = idxOfTime(d.b.t) - i0; return Math.min(...FIBTIME.map(nn => Math.abs(pt.x - X(i0 + u * nn)))); }
+  if (d.type === 'fibtime') { if (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH) return 1e9; const i0 = idxOfTime(d.a.t), u = idxOfTime(d.b.t) - i0; return Math.min(...dLv(d).map(nn => Math.abs(pt.x - X(i0 + u * nn)))); }
   if (d.type === 'fibfan') return Math.min(...fanRays(d).map(([p, q]) => segDist(pt, p, q)));
-  if (d.type === 'fibcircle') { const {m, R} = fibCircle(d), r = Math.hypot(pt.x - m.x, pt.y - m.y); return Math.min(...FIBCIRC.map(lv => Math.abs(r - R * lv))); }
+  if (d.type === 'fibcircle') { const {m, R} = fibCircle(d), r = Math.hypot(pt.x - m.x, pt.y - m.y); return Math.min(...dLv(d).map(lv => Math.abs(r - R * lv))); }
   if (d.type === 'ray') { const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1; return segDist(pt, a, {x: a.x + dx / L * 5000, y: a.y + dy / L * 5000}); }
   if (d.type === 'channel') {
     if (!d.c) return segDist(pt, a, b);
-    const off = channelOff(d); return Math.min(segDist(pt, a, b), segDist(pt, px({t: d.a.t, p: d.a.p + off}), px({t: d.b.t, p: d.b.p + off})));
+    const off = channelOff(d); return Math.min(segDist(pt, ...dExt(d, a, b)), segDist(pt, ...dExt(d, px({t: d.a.t, p: d.a.p + off}), px({t: d.b.t, p: d.b.p + off}))));
   }
   if (d.type === 'long' || d.type === 'short') {
     const q = posBox(d), y1 = Math.min(q.yT, q.yS), y2 = Math.max(q.yT, q.yS);
@@ -2635,16 +2697,16 @@ function distToDrawing(d, pt) {
   }
   if (d.type === 'fibext') {
     if (!d.c) return segDist(pt, a, b);
-    const c = px(d.c); if (pt.x < Math.min(a.x, c.x) - 10) return 1e9;
-    return Math.min(...FIBEXT.map(lv => Math.abs(pt.y - Y(d.c.p + (d.b.p - d.a.p) * lv))));
+    const c = px(d.c), sp = dFibSpan(d, a, c); if (pt.x < sp.x1 - 10 || pt.x > sp.x2 + 10) return 1e9;
+    return Math.min(...dLv(d).map(lv => Math.abs(pt.y - Y(d.c.p + (d.b.p - d.a.p) * lv))));
   }
   if (d.type === 'rect' || d.type === 'gannbox' || d.type === 'diamond' || d.type === 'measure' || d.type === 'pricerange' || d.type === 'daterange') {
-    const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
+    const x1 = Math.min(a.x, b.x), x2 = dOpt(d, 'xr') ? geo.w - geo.right : Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
     if (pt.x >= x1 && pt.x <= x2 && pt.y >= y1 && pt.y <= y2) return 0;
     return Math.min(segDist(pt, {x: x1, y: y1}, {x: x2, y: y1}), segDist(pt, {x: x2, y: y1}, {x: x2, y: y2}), segDist(pt, {x: x2, y: y2}, {x: x1, y: y2}), segDist(pt, {x: x1, y: y2}, {x: x1, y: y1}));
   }
-  const xs = Math.min(a.x, b.x); if (pt.x < xs - 10) return 1e9;
-  return Math.min(...FIB.map(lv => Math.abs(pt.y - Y(b_price(d, lv)))));
+  const sp = dFibSpan(d, a, b); if (pt.x < sp.x1 - 10 || pt.x > sp.x2 + 10) return 1e9;
+  return Math.min(...dLv(d).map(lv => Math.abs(pt.y - Y(dFibPrice(d, lv)))), dOpt(d, 'tl') ? segDist(pt, a, b) : 1e9);
 }
 const b_price = (d, lv) => d.b.p - (d.b.p - d.a.p) * lv;
 function hitTest(pt) { if (DOPT.lock || DOPT.hide) return null; const arr = getDrawings(); for (let i = arr.length - 1; i >= 0; i--) if (!arr[i].hide && distToDrawing(arr[i], pt) < 13) return arr[i]; return null; }
@@ -2678,13 +2740,14 @@ function commitMulti() {
   withLastStyle(d); snapDraw(); setDrawings([...getDrawings(), d]);
   selectedId = DOPT.stay ? null : d.id; if (!DOPT.stay) drawTool = ''; multi = []; pending = null; preview = null; updateDrawUI(); render();
 }
+const dBrushO = () => { const st = (state.lastStyle || {})[drawTool === 'highlighter' ? 'highlighter' : 'brush']; return st && st.o ? {o: st.o} : {}; }; // opacidad usada la última vez
 function commitBrush(live) {
   if (!live || live.length < 2 || !geo) return;
   const P = live.map(q => ({x: X(idxOfTime(q[0])), y: Y(q[1]), q}));
   let eps = 1.1, out = rdp(P, eps); while (out.length > 300 && eps < 20) out = rdp(P, eps *= 1.5);
   if (out.length < 2) return;
   const pts = out.map(o => [Math.round(o.q[0]), +(+o.q[1].toPrecision(8))]);
-  const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: 'brush', pts, a: {t: pts[0][0], p: pts[0][1]}, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, ...(drawTool === 'highlighter' ? {hl: true} : {})};
+  const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: 'brush', pts, a: {t: pts[0][0], p: pts[0][1]}, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, ...(drawTool === 'highlighter' ? {hl: true} : {}), ...dBrushO()};
   snapDraw(); setDrawings([...getDrawings(), d]); selectedId = d.id; updateDrawUI();
 }
 
@@ -3140,15 +3203,16 @@ function renderCore() {
   if (nn && nn.smc && state.indicators.nnSmc) drawNovaStruct(nn.smc);
   // dibujos del usuario
   if (!DOPT.hide) for (const d of getDrawings()) drawShape(d, d.id === selectedId, drawCol, text);
-  if (pending2) drawShape({id: '_', type: 'trend', a: pending2.a, b: pending2.b}, false, drawCol, text);
-  if (preview) drawShape({id: '_', type: drawTool, a: preview.a, b: preview.b, c: preview.c}, false, drawCol, text);
-  if (brushLive && brushLive.length > 1) drawBrush({pts: brushLive, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, hl: drawTool === 'highlighter'}, false, drawCol);
+  const dPre = drawTool && !isBrushTool(drawTool) ? withLastStyle({id: '_', type: drawTool}) : {}, preCol = dPre.col || drawCol; // mientras se dibuja ya sale con el color, grosor y ajustes de la última vez
+  if (pending2) drawShape({id: '_', type: 'trend', a: pending2.a, b: pending2.b, col: dPre.col, lw: dPre.lw, ds: dPre.ds}, false, drawCol, text);
+  if (preview) drawShape({...dPre, a: preview.a, b: preview.b, c: preview.c}, false, drawCol, text);
+  if (brushLive && brushLive.length > 1) drawBrush({type: 'brush', ...dBrushO(), pts: brushLive, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, hl: drawTool === 'highlighter'}, false, drawCol);
   if (multi.length && MULTI[drawTool]) {
     const live = cross ? snapPoint(cross) : null, pts = multi.concat(live && multi.length < MULTI[drawTool].n ? [live] : []);
-    drawShape({id: '_', type: drawTool, a: pts[0], pts}, false, drawCol, text);
-    g.fillStyle = drawCol; for (const q of multi) { const P = px(q); g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
+    drawShape({...dPre, a: pts[0], pts}, false, drawCol, text);
+    g.fillStyle = preCol; for (const q of multi) { const P = px(q); g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
   }
-  if (pending) { const P = px(pending); g.fillStyle = drawCol; g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
+  if (pending) { const P = px(pending); g.fillStyle = preCol; g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
   g.restore();
 
   // asas de agarre: barra derecha (escala de precio) e inferior (escala de tiempo)
@@ -3757,54 +3821,72 @@ function tag(txt, x, y, fill, align = 'left', tc = '#fff', fs = 10) { // etiquet
   const rx = geo.left + geo.plotW; x0 = Math.max(geo.left, Math.min(x0, rx - w)); // dentro del área del gráfico
   g.fillStyle = fill; roundRect(x0, y - 9, w, 17, 3); g.fill(); g.fillStyle = tc; g.textAlign = 'left'; g.fillText(txt, x0 + 5, y + 3.5);
 }
+function dStat(d, a, b) { // «mostrar precio, % y velas» de las líneas
+  if (!dOpt(d, 'st') || !d.b) return; const dp = d.b.p - d.a.p, bars = Math.round(idxOfTime(d.b.t) - idxOfTime(d.a.t));
+  tag(`${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)}) · ${Math.abs(bars)} velas`, b.x + 8, b.y + (b.y < a.y ? -14 : 14), '#5b6b83');
+}
+function dFibRows(d, L, priceOf, x1, x2, rightX, col, dim) { // niveles horizontales (retroceso y extensión): línea, etiqueta y fondo entre niveles
+  const sl = dOpt(d, 'sl'), sv = dOpt(d, 'sv'), right = dOpt(d, 'lp') === 'r', fl = dOpt(d, 'fl'), fo = dOpt(d, 'fo') / 100, fc = dOpt(d, 'fc'); g.font = '10px system-ui'; g.lineWidth = 1;
+  L.forEach((lv, k) => {
+    const pr = priceOf(lv), yy = Y(pr), c = dLvCol(d, lv, col);
+    g.strokeStyle = c; g.fillStyle = c; g.globalAlpha = lv === 0 || lv === 1 ? 1 : dim;
+    g.beginPath(); g.moveTo(x1, yy); g.lineTo(x2, yy); g.stroke(); g.globalAlpha = 1;
+    const tx = [sl ? String(lv) : '', sv ? `(${fmt(pr)})` : ''].filter(Boolean).join(' ');
+    if (tx) { g.textAlign = right ? 'right' : 'left'; g.fillText(tx, right ? x2 - 4 : Math.min(x1 + 4, rightX - 90), yy - 3); g.textAlign = 'left'; }
+    if (fl && k < L.length - 1) { const y2 = Y(priceOf(L[k + 1])); g.globalAlpha = fo; g.fillStyle = fc || dLvCol(d, L[k + 1], col); g.fillRect(x1, Math.min(yy, y2), x2 - x1, Math.abs(y2 - yy)); g.globalAlpha = 1; }
+  });
+  g.strokeStyle = col; g.fillStyle = col;
+}
+const dFont = (d, px0) => `${dOpt(d, 'it') ? 'italic ' : ''}${dOpt(d, 'bo') ? 'bold ' : ''}${px0}px system-ui`;
 function drawShapeExtra(d, a, b, rightX, col) {
   const t = d.type; g.setLineDash([]); g.globalAlpha = 1; g.textAlign = 'left';
-  if (t === 'vertical') { g.beginPath(); g.moveTo(a.x, geo.plotTop); g.lineTo(a.x, geo.h - geo.axisH); g.stroke(); }
-  else if (t === 'ray') { const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x + dx / L * 5000, a.y + dy / L * 5000); g.stroke(); }
-  else if (t === 'arrow') { g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); g.fillStyle = col; arrowHead(a, b, 11); }
-  else if (t === 'text') { g.font = `bold ${d.ts || 12}px system-ui`; g.fillStyle = col; g.fillText(d.text || '', a.x, a.y); }
+  if (t === 'vertical') { g.beginPath(); g.moveTo(a.x, geo.plotTop); g.lineTo(a.x, geo.h - geo.axisH); g.stroke(); if (dOpt(d, 'dl')) tag(dDateTag(d.a.t), a.x + 6, geo.h - geo.axisH - 12, col, 'left', readableOn(col)); }
+  else if (t === 'ray') { const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x + dx / L * 5000, a.y + dy / L * 5000); g.stroke(); dStat(d, a, b); }
+  else if (t === 'arrow') { g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); g.fillStyle = col; const hs = dOpt(d, 'hs') || 11; arrowHead(a, b, hs); if (dOpt(d, 'a2')) arrowHead(b, a, hs); }
+  else if (t === 'text') {
+    const fs = d.ts || 12, txt = d.text || ''; g.font = dFont(d, fs);
+    if (dOpt(d, 'bg') || dOpt(d, 'br')) { const w = g.measureText(txt).width + 12, h = fs + 10, bx = a.x - 6, by = a.y - fs - 3; if (dOpt(d, 'bg')) { g.fillStyle = dOpt(d, 'bc'); roundRect(bx, by, w, h, 4); g.fill(); } if (dOpt(d, 'br')) { g.lineWidth = 1; roundRect(bx, by, w, h, 4); g.stroke(); } }
+    g.fillStyle = col; g.fillText(txt, a.x, a.y);
+  }
   else if (t === 'marker') {
     const hi = markerKind(d) === 'high'; g.font = 'bold 11px system-ui'; g.fillStyle = col; g.textAlign = 'center';
-    g.fillText(hi ? '▼' : '▲', a.x, hi ? a.y - 3 : a.y + 12); g.font = 'bold 10px system-ui'; g.fillText(fmt(d.a.p), a.x, hi ? a.y - 15 : a.y + 24); g.textAlign = 'left';
+    g.fillText(hi ? '▼' : '▲', a.x, hi ? a.y - 3 : a.y + 12); g.font = 'bold 10px system-ui'; if (dOpt(d, 'vp')) g.fillText(fmt(d.a.p), a.x, hi ? a.y - 15 : a.y + 24); g.textAlign = 'left';
   }
   else if (t === 'channel') {
-    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+    const [p1, q1] = dExt(d, a, b); g.beginPath(); g.moveTo(p1.x, p1.y); g.lineTo(q1.x, q1.y); g.stroke();
     if (!d.c) return;
-    const off = channelOff(d), a2 = px({t: d.a.t, p: d.a.p + off}), b2 = px({t: d.b.t, p: d.b.p + off});
-    g.beginPath(); g.moveTo(a2.x, a2.y); g.lineTo(b2.x, b2.y); g.stroke();
-    g.globalAlpha = .1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(b2.x, b2.y); g.lineTo(a2.x, a2.y); g.closePath(); g.fill(); g.globalAlpha = 1;
+    const off = channelOff(d), [p2, q2] = dExt(d, px({t: d.a.t, p: d.a.p + off}), px({t: d.b.t, p: d.b.p + off}));
+    g.beginPath(); g.moveTo(p2.x, p2.y); g.lineTo(q2.x, q2.y); g.stroke();
+    if (dOpt(d, 'ml')) { g.setLineDash([5, 4]); g.beginPath(); g.moveTo((p1.x + p2.x) / 2, (p1.y + p2.y) / 2); g.lineTo((q1.x + q2.x) / 2, (q1.y + q2.y) / 2); g.stroke(); g.setLineDash([]); }
+    if (dOpt(d, 'fl')) { g.globalAlpha = dOpt(d, 'fo') / 100; g.fillStyle = dOpt(d, 'fc') || col; g.beginPath(); g.moveTo(p1.x, p1.y); g.lineTo(q1.x, q1.y); g.lineTo(q2.x, q2.y); g.lineTo(p2.x, p2.y); g.closePath(); g.fill(); g.globalAlpha = 1; g.fillStyle = col; }
   }
   else if (t === 'measure') {
-    const dp = d.b.p - d.a.p, up = dp >= 0, mc = up ? '#089981' : '#f23645', bars = Math.round(idxOfTime(d.b.t) - idxOfTime(d.a.t));
+    const dp = d.b.p - d.a.p, up = dp >= 0, mc = up ? dOpt(d, 'uc') : dOpt(d, 'dc'), bars = Math.round(idxOfTime(d.b.t) - idxOfTime(d.a.t));
     const x1 = Math.min(a.x, b.x), y1 = Math.min(a.y, b.y), w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
-    g.fillStyle = mc; g.strokeStyle = mc; g.globalAlpha = .12; g.fillRect(x1, y1, w, h); g.globalAlpha = 1; g.setLineDash([4, 3]); g.strokeRect(x1, y1, w, h); g.setLineDash([]);
+    g.fillStyle = mc; g.strokeStyle = mc; if (dOpt(d, 'fl')) { g.globalAlpha = dOpt(d, 'fo') / 100; g.fillRect(x1, y1, w, h); g.globalAlpha = 1; } g.setLineDash([4, 3]); g.strokeRect(x1, y1, w, h); g.setLineDash([]);
     g.lineWidth = 1.5; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); arrowHead(a, b, 8);
-    const l1 = `${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)})`, l2 = `${Math.abs(bars)} velas · ${fmtDur(d.b.t - d.a.t)}`;
-    g.font = 'bold 10px system-ui'; const tw = Math.max(g.measureText(l1).width, g.measureText(l2).width) + 12, tx = clamp(x1 + w / 2 - tw / 2, geo.left, rightX - tw), ty = up ? Math.max(geo.plotTop + 2, y1 - 34) : Math.min(geo.plotTop + geo.plotH - 34, y1 + h + 4);
-    g.fillStyle = mc; roundRect(tx, ty, tw, 30, 4); g.fill(); g.fillStyle = '#fff'; g.fillText(l1, tx + 6, ty + 12); g.fillText(l2, tx + 6, ty + 25);
+    const LL = [dOpt(d, 'vp') ? `${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)})` : '', dOpt(d, 'vb') ? `${Math.abs(bars)} velas · ${fmtDur(d.b.t - d.a.t)}` : ''].filter(Boolean);
+    if (LL.length) { g.font = 'bold 10px system-ui'; const tw = Math.max(...LL.map(x => g.measureText(x).width)) + 12, th = LL.length * 13 + 4, tx = clamp(x1 + w / 2 - tw / 2, geo.left, rightX - tw), ty = up ? Math.max(geo.plotTop + 2, y1 - th - 4) : Math.min(geo.plotTop + geo.plotH - th - 4, y1 + h + 4);
+      g.fillStyle = mc; roundRect(tx, ty, tw, th, 4); g.fill(); g.fillStyle = '#fff'; LL.forEach((x, i) => g.fillText(x, tx + 6, ty + 12 + i * 13)); }
   }
   else if (t === 'fibext') {
-    g.setLineDash([4, 4]); g.lineWidth = 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+    const tl = dOpt(d, 'tl'); g.setLineDash([4, 4]); g.lineWidth = 1;
+    if (tl || !d.c) { g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); }
     if (!d.c) { g.setLineDash([]); return; }
-    const c = px(d.c); g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(c.x, c.y); g.stroke(); g.setLineDash([]);
-    const x1 = Math.min(a.x, c.x); g.font = '10px system-ui';
-    FIBEXT.forEach(lv => {
-      const pr = d.c.p + (d.b.p - d.a.p) * lv, yy = Y(pr);
-      g.globalAlpha = lv === 0 || lv === 1 ? 1 : .8; g.fillStyle = col; g.beginPath(); g.moveTo(x1, yy); g.lineTo(rightX, yy); g.stroke(); g.globalAlpha = 1;
-      g.fillText(`${lv} (${fmt(pr)})`, Math.min(x1 + 4, rightX - 90), yy - 3);
-    });
+    const c = px(d.c); if (tl) { g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(c.x, c.y); g.stroke(); } g.setLineDash([]);
+    const sp = dFibSpan(d, a, c); dFibRows(d, dLv(d), lv => d.c.p + (d.b.p - d.a.p) * lv, sp.x1, sp.x2, rightX, col, .8);
   }
   else if (t === 'long' || t === 'short') {
     const q = posBox(d), lg = t === 'long', gc = d.gc || '#089981', rc = d.rc || '#f23645', w = q.x2 - q.x1, lw = d.lw || 1.2, ds = d.ds === 'dash' ? [7, 5] : d.ds === 'dot' ? [1.5, 4] : [];
-    g.globalAlpha = .16; g.fillStyle = gc; g.fillRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
+    g.globalAlpha = dOpt(d, 'zo') / 100; g.fillStyle = gc; g.fillRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
     g.fillStyle = rc; g.fillRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE)); g.globalAlpha = 1;
-    g.lineWidth = lw; g.setLineDash(ds); g.strokeStyle = gc; g.strokeRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
-    g.strokeStyle = rc; g.strokeRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE));
-    g.strokeStyle = 'rgba(160,170,185,.9)'; g.beginPath(); g.moveTo(q.x1, q.yE); g.lineTo(q.x2, q.yE); g.stroke(); g.setLineDash([]);
-    const pc = v => pct((v - q.entry) / q.entry * 100), tc = d.tc || '#fff', fs = d.ts ? Math.max(9, d.ts - 3) : 10;
+    g.lineWidth = lw; g.setLineDash(ds); if (dOpt(d, 'bd')) { g.strokeStyle = gc; g.strokeRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
+      g.strokeStyle = rc; g.strokeRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE)); }
+    g.strokeStyle = dOpt(d, 'ec'); g.beginPath(); g.moveTo(q.x1, q.yE); g.lineTo(q.x2, q.yE); g.stroke(); g.setLineDash([]);
+    const pc = v => dOpt(d, 'pc') ? ` (${pct((v - q.entry) / q.entry * 100)})` : '', tc = d.tc || '#fff', fs = d.ts ? Math.max(9, d.ts - 3) : 10;
     if (!d.nt) tag(d.label ? d.label : `${lg ? 'Long' : 'Short'} · R:R ${(Math.abs(q.target - q.entry) / (Math.abs(q.entry - q.stop) || 1)).toFixed(2)}`, q.x1, q.yE, '#5b6b83', 'left', tc, fs);
-    if (!d.no) tag(`Objetivo ${fmt(q.target)} (${pc(q.target)})`, q.x1, q.yT + (q.yT < q.yE ? -11 : 11), gc, 'left', tc, fs);
-    if (!d.ns) tag(`Stop ${fmt(q.stop)} (${pc(q.stop)})`, q.x1, q.yS + (q.yS < q.yE ? -11 : 11), rc, 'left', tc, fs);
+    if (!d.no) tag(`Objetivo ${fmt(q.target)}${pc(q.target)}`, q.x1, q.yT + (q.yT < q.yE ? -11 : 11), gc, 'left', tc, fs);
+    if (!d.ns) tag(`Stop ${fmt(q.stop)}${pc(q.stop)}`, q.x1, q.yS + (q.yS < q.yE ? -11 : 11), rc, 'left', tc, fs);
     const RK = state.risk || {}, cap = riskCap(); // tamaño de posición según tu riesgo (calculadora)
     if (RK.show !== false && cap > 0 && window.CCTRisk && !d.nr) { const r = CCTRisk.calc({capital: cap, riskPct: RK.pct, entry: q.entry, stop: q.stop, target: q.target, leverage: RK.lev, feePct: RK.fee});
       if (r.ok) tag(`Tamaño ${fmtQty(r.qty)} (${usd(r.notional)}) · x${r.lev} · arriesgas ${usd(r.loss)}${r.warn.length && /liquidar/.test(r.warn[0]) ? ' · ⚠ liquidación antes del stop' : ''}`, q.x1, q.yE + (q.yS > q.yE ? 13 : -13), '#2a3446', 'left', tc, Math.max(9, fs - 1)); }
@@ -3815,7 +3897,9 @@ function drawShapeNew(d, a, b, rightX, col, selected) {
   const lw = selected ? 2.2 : 1.5; g.lineWidth = lw; g.strokeStyle = col; g.fillStyle = col;
   const poly = (P, close) => { g.beginPath(); P.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); if (close) g.closePath(); };
   const seg = (p, q) => { g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(q.x, q.y); g.stroke(); };
-  const fillA = (al, fn) => { g.globalAlpha = al; fn(); g.globalAlpha = 1; };
+  const F = CCTDrawCfg.has(d, 'fl') ? (dOpt(d, 'fl') ? {a: dOpt(d, 'fo') / 100, c: dOpt(d, 'fc')} : null) : undefined; // fondo configurable de esta herramienta (undefined = no aplica)
+  const fillA = (al, fn) => { if (F === null) return; const pf = g.fillStyle; g.globalAlpha = F ? F.a : al; if (F && F.c) g.fillStyle = F.c; fn(); g.globalAlpha = 1; g.fillStyle = pf; };
+  const bd = () => { if (dOpt(d, 'bd') !== false) g.stroke(); };
   const dash = fn => { g.setLineDash([5, 4]); g.lineWidth = 1; fn(); g.setLineDash([]); g.lineWidth = lw; };
   const lab = (txt, x, y) => { g.font = 'bold 11px system-ui'; g.fillStyle = col; g.textAlign = 'center'; g.fillText(txt, x, y); g.textAlign = 'left'; };
   const M = MULTI[t];
@@ -3827,100 +3911,101 @@ function drawShapeNew(d, a, b, rightX, col, selected) {
     if (t === 'trianglep') { fillIdx([0, 2, 3, 1]); if (P[2]) seg(P[0], P[2]); if (P[3]) seg(P[1], P[3]); dseg(0, 1); dseg(1, 2); dseg(2, 3); }
     else { poly(P); g.stroke(); }
     if (t === 'xabcd') { dseg(0, 2); dseg(1, 3); dseg(2, 4); dseg(0, 4); }
-    if (t === 'abcd') { dseg(0, 2); dseg(1, 3); }
-    if (t === 'hs' && P[4]) dash(() => seg(P[2], farPt(P[2], P[4])));
+    if (t === 'abcd' && dOpt(d, 'gl')) { dseg(0, 2); dseg(1, 3); }
+    if (t === 'hs' && P[4] && dOpt(d, 'nk')) dash(() => seg(P[2], farPt(P[2], P[4])));
     g.fillStyle = col; P.forEach(p => { g.beginPath(); g.arc(p.x, p.y, 2.6, 0, 7); g.fill(); });
-    (M.labels || []).forEach((tx, i) => { const p = P[i]; if (!p || !tx) return; const up = (!P[i - 1] || P[i - 1].y > p.y) && (!P[i + 1] || P[i + 1].y > p.y); lab(tx, p.x, up ? p.y - 8 : p.y + 17); });
+    if (dOpt(d, 'lb') !== false) (M.labels || []).forEach((tx, i) => { const p = P[i]; if (!p || !tx) return; const up = (!P[i - 1] || P[i - 1].y > p.y) && (!P[i + 1] || P[i + 1].y > p.y); lab(tx, p.x, up ? p.y - 8 : p.y + 17); });
     return;
   }
   const bars = b && d.b ? Math.round(idxOfTime(d.b.t) - idxOfTime(d.a.t)) : 0;
-  if (t === 'hray') { seg(a, {x: rightX, y: a.y}); g.beginPath(); g.arc(a.x, a.y, 3, 0, 7); g.fill(); }
-  else if (t === 'crossline') { seg({x: geo.left, y: a.y}, {x: rightX, y: a.y}); seg({x: a.x, y: geo.plotTop}, {x: a.x, y: geo.h - geo.axisH}); }
-  else if (t === 'extended') { seg(farPt(a, b, -1), farPt(a, b, 1)); }
+  if (t === 'hray') { seg(a, {x: rightX, y: a.y}); if (dOpt(d, 'pt')) { g.beginPath(); g.arc(a.x, a.y, 3, 0, 7); g.fill(); } if (dOpt(d, 'pl')) tag(fmt(d.a.p), rightX - 2, a.y - 11, col, 'right', readableOn(col)); }
+  else if (t === 'crossline') { seg({x: geo.left, y: a.y}, {x: rightX, y: a.y}); seg({x: a.x, y: geo.plotTop}, {x: a.x, y: geo.h - geo.axisH}); if (dOpt(d, 'pl')) tag(fmt(d.a.p), rightX - 2, a.y - 11, col, 'right', readableOn(col)); if (dOpt(d, 'dl')) tag(dDateTag(d.a.t), a.x + 6, geo.h - geo.axisH - 12, col, 'left', readableOn(col)); }
+  else if (t === 'extended') { seg(farPt(a, b, -1), farPt(a, b, 1)); dStat(d, a, b); }
   else if (t === 'info') {
-    seg(a, b); const dp = d.b.p - d.a.p;
-    tag(`${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)}) · ${Math.abs(bars)} velas`, b.x + 8, b.y + (b.y < a.y ? -14 : 14), '#5b6b83');
+    seg(a, b); const dp = d.b.p - d.a.p, parts = [dOpt(d, 'vp') ? `${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)})` : '', dOpt(d, 'vb') ? `${Math.abs(bars)} velas` : '', dOpt(d, 'vt') ? fmtDur(d.b.t - d.a.t) : ''].filter(Boolean);
+    if (parts.length) tag(parts.join(' · '), b.x + 8, b.y + (b.y < a.y ? -14 : 14), '#5b6b83');
   }
   else if (t === 'angle') {
-    seg(a, b); dash(() => seg(a, {x: b.x, y: a.y}));
+    seg(a, b); if (dOpt(d, 'gl')) dash(() => seg(a, {x: b.x, y: a.y}));
     const sx = b.x >= a.x ? 1 : -1, ang = Math.atan2(a.y - b.y, Math.abs(b.x - a.x)), deg = ang * 180 / Math.PI;
     g.beginPath(); if (sx === 1) g.arc(a.x, a.y, 26, 0, -ang, ang > 0); else g.arc(a.x, a.y, 26, Math.PI, Math.PI + ang, ang < 0); g.lineWidth = 1; g.stroke(); g.lineWidth = lw;
-    tag(deg.toFixed(1) + '°', a.x + sx * 34, a.y - 12, '#5b6b83', sx === 1 ? 'left' : 'right');
+    if (dOpt(d, 'sa')) tag(deg.toFixed(1) + '°', a.x + sx * 34, a.y - 12, '#5b6b83', sx === 1 ? 'left' : 'right');
   }
   else if (t === 'pricerange') {
-    const x1 = Math.min(a.x, b.x), w = Math.max(60, Math.abs(b.x - a.x)), mx = x1 + w / 2, dp = d.b.p - d.a.p, mc = dp >= 0 ? '#089981' : '#f23645';
+    const x1 = Math.min(a.x, b.x), w = Math.max(60, Math.abs(b.x - a.x)), mx = x1 + w / 2, dp = d.b.p - d.a.p, mc = dp >= 0 ? dOpt(d, 'uc') : dOpt(d, 'dc');
     g.fillStyle = mc; g.strokeStyle = mc; fillA(.12, () => g.fillRect(x1, Math.min(a.y, b.y), w, Math.abs(b.y - a.y)));
     seg({x: x1, y: a.y}, {x: x1 + w, y: a.y}); seg({x: x1, y: b.y}, {x: x1 + w, y: b.y}); seg({x: mx, y: a.y}, {x: mx, y: b.y}); arrowHead({x: mx, y: a.y}, {x: mx, y: b.y}, 8);
-    tag(`${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)})`, mx + 8, (a.y + b.y) / 2, mc);
+    if (dOpt(d, 'vp')) tag(`${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)})`, mx + 8, (a.y + b.y) / 2, mc, 'left', readableOn(mc));
   }
   else if (t === 'daterange') {
-    const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = geo.plotTop, y2 = geo.h - geo.axisH, ym = (a.y + b.y) / 2, mc = '#548fff';
+    const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = geo.plotTop, y2 = geo.h - geo.axisH, ym = (a.y + b.y) / 2, mc = d.col || '#548fff';
     g.fillStyle = mc; g.strokeStyle = mc; fillA(.08, () => g.fillRect(x1, y1, x2 - x1, y2 - y1));
     seg({x: x1, y: y1}, {x: x1, y: y2}); seg({x: x2, y: y1}, {x: x2, y: y2}); seg({x: a.x, y: ym}, {x: b.x, y: ym}); arrowHead({x: a.x, y: ym}, {x: b.x, y: ym}, 8);
-    tag(`${Math.abs(bars)} velas · ${fmtDur(d.b.t - d.a.t)}`, (x1 + x2) / 2 - 40, ym - 14, mc);
+    if (dOpt(d, 'vb')) tag(`${Math.abs(bars)} velas · ${fmtDur(d.b.t - d.a.t)}`, (x1 + x2) / 2 - 40, ym - 14, mc, 'left', readableOn(mc));
   }
   else if (t === 'ellipse') {
-    g.beginPath(); g.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.max(1, Math.abs(b.x - a.x) / 2), Math.max(1, Math.abs(b.y - a.y) / 2), 0, 0, Math.PI * 2); fillA(.12, () => g.fill()); g.stroke();
+    g.beginPath(); g.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.max(1, Math.abs(b.x - a.x) / 2), Math.max(1, Math.abs(b.y - a.y) / 2), 0, 0, Math.PI * 2); fillA(.12, () => g.fill()); bd();
   }
   else if (t === 'triangle') {
-    if (!d.c) seg(a, b); else { poly([a, b, px(d.c)], true); fillA(.12, () => g.fill()); g.stroke(); }
+    if (!d.c) seg(a, b); else { poly([a, b, px(d.c)], true); fillA(.12, () => g.fill()); bd(); }
   }
   else if (t === 'pitchfork') {
     if (!d.c) { seg(a, b); return; }
     const R = pitchRays(d); poly([R[1][0], R[1][1], R[2][1], R[2][0]], true); fillA(.08, () => g.fill());
     R.forEach(([p, q], k) => { g.lineWidth = k === 0 ? lw : 1.2; seg(p, q); }); g.lineWidth = lw; dash(() => seg(R[1][0], R[2][0]));
+    if (dOpt(d, 'ml')) { const M = {x: (R[1][0].x + R[2][0].x) / 2, y: (R[1][0].y + R[2][0].y) / 2}; [1, 2].forEach(k => { const s0 = {x: (M.x + R[k][0].x) / 2, y: (M.y + R[k][0].y) / 2}; dash(() => seg(s0, {x: s0.x + R[k][1].x - R[k][0].x, y: s0.y + R[k][1].y - R[k][0].y})); }); }
   }
   else if (t === 'fibtime') {
-    const i0 = idxOfTime(d.a.t), u = idxOfTime(d.b.t) - i0; dash(() => seg(a, b)); g.font = '10px system-ui';
-    FIBTIME.forEach(nn => { const x = X(i0 + u * nn); if (x < geo.left - 1 || x > rightX) return; g.globalAlpha = nn <= 1 ? 1 : .7; g.lineWidth = 1; g.strokeStyle = col; seg({x, y: geo.plotTop}, {x, y: geo.h - geo.axisH}); g.globalAlpha = 1; g.fillStyle = col; g.fillText(String(nn), x + 3, geo.plotTop + 11); }); g.lineWidth = lw;
+    const i0 = idxOfTime(d.a.t), u = idxOfTime(d.b.t) - i0, sl = dOpt(d, 'sl'); if (dOpt(d, 'tl')) dash(() => seg(a, b)); g.font = '10px system-ui';
+    dLv(d).forEach(nn => { const x = X(i0 + u * nn); if (x < geo.left - 1 || x > rightX) return; const c = dLvCol(d, nn, col); g.globalAlpha = nn <= 1 ? 1 : .7; g.lineWidth = 1; g.strokeStyle = c; seg({x, y: geo.plotTop}, {x, y: geo.h - geo.axisH}); g.globalAlpha = 1; if (sl) { g.fillStyle = c; g.fillText(String(nn), x + 3, geo.plotTop + 11); } }); g.lineWidth = lw; g.strokeStyle = col; g.fillStyle = col;
   }
   else if (t === 'fibfan') {
-    g.font = '10px system-ui';
-    fanRays(d).forEach(([p, q], k) => { const lv = FANLV[k]; g.globalAlpha = lv === 1 ? 1 : .8; g.lineWidth = lv === 1 ? lw : 1; g.strokeStyle = col; seg(p, q); g.globalAlpha = 1; g.fillStyle = col; g.fillText(String(lv), b.x + 4, a.y + (b.y - a.y) * lv + 3); }); g.lineWidth = lw;
+    g.font = '10px system-ui'; const FL = dLv(d), sl = dOpt(d, 'sl');
+    fanRays(d).forEach(([p, q], k) => { const lv = FL[k], c = dLvCol(d, lv, col); g.globalAlpha = lv === 1 ? 1 : .8; g.lineWidth = lv === 1 ? lw : 1; g.strokeStyle = c; seg(p, q); g.globalAlpha = 1; if (sl) { g.fillStyle = c; g.fillText(String(lv), b.x + 4, a.y + (b.y - a.y) * lv + 3); } }); g.lineWidth = lw; g.strokeStyle = col; g.fillStyle = col;
   }
   else if (t === 'fibcircle') {
-    const {m, R} = fibCircle(d); dash(() => seg(a, b)); g.font = '10px system-ui';
-    FIBCIRC.forEach(lv => { g.globalAlpha = lv === 1 ? 1 : .75; g.lineWidth = 1; g.strokeStyle = col; g.beginPath(); g.arc(m.x, m.y, R * lv, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1; g.fillStyle = col; g.fillText(String(lv), m.x + 3, m.y - R * lv - 2); }); g.lineWidth = lw;
+    const {m, R} = fibCircle(d), sl = dOpt(d, 'sl'); if (dOpt(d, 'tl')) dash(() => seg(a, b)); g.font = '10px system-ui';
+    dLv(d).forEach(lv => { const c = dLvCol(d, lv, col); g.globalAlpha = lv === 1 ? 1 : .75; g.lineWidth = 1; g.strokeStyle = c; g.beginPath(); g.arc(m.x, m.y, R * lv, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1; if (sl) { g.fillStyle = c; g.fillText(String(lv), m.x + 3, m.y - R * lv - 2); } }); g.lineWidth = lw; g.strokeStyle = col; g.fillStyle = col;
   }
   else if (t === 'regression') {
     const R = regLines(d); if (!R) { seg(a, b); return; }
     const [m, u, l] = R.lines; poly([u[0], u[1], l[1], l[0]], true); fillA(.08, () => g.fill());
     g.lineWidth = lw; seg(m[0], m[1]); dash(() => { seg(u[0], u[1]); seg(l[0], l[1]); });
-    g.font = '10px system-ui'; g.fillStyle = col; g.fillText('±2σ', Math.max(u[1].x, l[1].x) + 6, u[1].y + 3); g.fillText('-2σ', Math.max(u[1].x, l[1].x) + 6, l[1].y + 3);
+    if (dOpt(d, 'lb')) { const dv = dOpt(d, 'dv'); g.font = '10px system-ui'; g.fillStyle = col; g.fillText(`+${dv}σ`, Math.max(u[1].x, l[1].x) + 6, u[1].y + 3); g.fillText(`-${dv}σ`, Math.max(u[1].x, l[1].x) + 6, l[1].y + 3); }
   }
   else if (t === 'cyclic') {
-    const i0 = idxOfTime(d.a.t), u = idxOfTime(d.b.t) - i0; dash(() => seg(a, b)); if (!u) return;
-    for (let k = 0; k < 200; k++) { const x = X(i0 + u * k); if (x > rightX) break; if (x < geo.left) continue; g.globalAlpha = .75; g.lineWidth = 1; seg({x, y: geo.plotTop}, {x, y: geo.h - geo.axisH}); g.globalAlpha = 1; }
+    const i0 = idxOfTime(d.a.t), u = idxOfTime(d.b.t) - i0, nb = dOpt(d, 'nb'); if (dOpt(d, 'gl')) dash(() => seg(a, b)); if (!u) return; g.font = '10px system-ui';
+    for (let k = 0; k < 200; k++) { const x = X(i0 + u * k); if (x > rightX) break; if (x < geo.left) continue; g.globalAlpha = .75; g.lineWidth = 1; seg({x, y: geo.plotTop}, {x, y: geo.h - geo.axisH}); g.globalAlpha = 1; if (nb) g.fillText(String(k + 1), x + 3, geo.plotTop + 11); }
     g.lineWidth = lw;
   }
-  else if (t === 'sinewave') { const P = sinePts(d, rightX); if (P.length > 1) { poly(P); g.stroke(); } dash(() => seg(a, b)); }
+  else if (t === 'sinewave') { const P = sinePts(d, rightX); if (P.length > 1) { poly(P); g.stroke(); } if (dOpt(d, 'gl')) dash(() => seg(a, b)); }
   else if (t === 'gannfan') {
-    g.font = '10px system-ui';
-    gannRays(d).forEach(([p, q], k) => { const one = GANLV[k] === 1; g.globalAlpha = one ? 1 : .75; g.lineWidth = one ? lw : 1; g.strokeStyle = col; seg(p, q); g.globalAlpha = 1; g.fillStyle = col; const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1, tx = Math.min(rightX - 26, p.x + dx / L * Math.min(L, 200)), ty = p.y + dy / L * Math.min(L, 200); if (tx > p.x + 20) g.fillText(GANLAB[k], tx, ty - 3); });
-    g.lineWidth = lw;
+    g.font = '10px system-ui'; const GL = dLv(d), sl = dOpt(d, 'sl');
+    gannRays(d).forEach(([p, q], k) => { const one = GL[k] === 1, c = dLvCol(d, GL[k], col); g.globalAlpha = one ? 1 : .75; g.lineWidth = one ? lw : 1; g.strokeStyle = c; seg(p, q); g.globalAlpha = 1; g.fillStyle = c; const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1, tx = Math.min(rightX - 26, p.x + dx / L * Math.min(L, 200)), ty = p.y + dy / L * Math.min(L, 200); if (sl && tx > p.x + 20) g.fillText(CCTDrawCfg.levelLabel(d, GL[k]), tx, ty - 3); });
+    g.lineWidth = lw; g.strokeStyle = col; g.fillStyle = col;
   }
   else if (t === 'gannbox') {
     const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y), w = x2 - x1, h = y2 - y1;
     fillA(.07, () => g.fillRect(x1, y1, w, h)); g.strokeRect(x1, y1, w, h); g.lineWidth = 1;
-    [.25, .5, .75].forEach(f => { g.globalAlpha = f === .5 ? .8 : .45; seg({x: x1, y: y1 + h * f}, {x: x2, y: y1 + h * f}); seg({x: x1 + w * f, y: y1}, {x: x1 + w * f, y: y2}); });
-    g.globalAlpha = .8; seg({x: x1, y: y1}, {x: x2, y: y2}); seg({x: x2, y: y1}, {x: x1, y: y2}); g.globalAlpha = 1; g.lineWidth = lw;
+    dLv(d).forEach(f => { g.globalAlpha = f === .5 ? .8 : .45; seg({x: x1, y: y1 + h * f}, {x: x2, y: y1 + h * f}); seg({x: x1 + w * f, y: y1}, {x: x1 + w * f, y: y2}); });
+    if (dOpt(d, 'dg')) { g.globalAlpha = .8; seg({x: x1, y: y1}, {x: x2, y: y2}); seg({x: x2, y: y1}, {x: x1, y: y2}); } g.globalAlpha = 1; g.lineWidth = lw;
   }
-  else if (t === 'circle') { g.beginPath(); g.arc(a.x, a.y, Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), 0, Math.PI * 2); fillA(.12, () => g.fill()); g.stroke(); }
-  else if (t === 'diamond') { const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2; poly([{x: cx, y: Math.min(a.y, b.y)}, {x: Math.max(a.x, b.x), y: cy}, {x: cx, y: Math.max(a.y, b.y)}, {x: Math.min(a.x, b.x), y: cy}], true); fillA(.12, () => g.fill()); g.stroke(); }
-  else if (t === 'parallelogram') { if (!d.c) seg(a, b); else { const c = px(d.c); poly([a, b, c, {x: a.x + c.x - b.x, y: a.y + c.y - b.y}], true); fillA(.12, () => g.fill()); g.stroke(); } }
+  else if (t === 'circle') { g.beginPath(); g.arc(a.x, a.y, Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), 0, Math.PI * 2); fillA(.12, () => g.fill()); bd(); }
+  else if (t === 'diamond') { const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2; poly([{x: cx, y: Math.min(a.y, b.y)}, {x: Math.max(a.x, b.x), y: cy}, {x: cx, y: Math.max(a.y, b.y)}, {x: Math.min(a.x, b.x), y: cy}], true); fillA(.12, () => g.fill()); bd(); }
+  else if (t === 'parallelogram') { if (!d.c) seg(a, b); else { const c = px(d.c); poly([a, b, c, {x: a.x + c.x - b.x, y: a.y + c.y - b.y}], true); fillA(.12, () => g.fill()); bd(); } }
   else if (t === 'callout') {
-    g.font = `${d.ts || 12}px system-ui`; const txt = d.text || '', w = g.measureText(txt).width + 16;
-    seg(a, b); g.beginPath(); g.arc(a.x, a.y, 3, 0, 7); g.fill();
-    g.fillStyle = col; fillA(.95, () => { roundRect(b.x - w / 2, b.y - 12, w, 24, 5); g.fill(); }); g.fillStyle = d.tc || readableOn(col); g.textAlign = 'center'; g.fillText(txt, b.x, b.y + 4); g.textAlign = 'left';
+    g.font = dFont(d, d.ts || 12); const txt = d.text || '', w = g.measureText(txt).width + 16;
+    seg(a, b); if (dOpt(d, 'pt')) { g.beginPath(); g.arc(a.x, a.y, 3, 0, 7); g.fill(); }
+    g.fillStyle = col; fillA(.95, () => { roundRect(b.x - w / 2, b.y - 12, w, 24, 5); g.fill(); }); if (dOpt(d, 'br')) { g.strokeStyle = d.tc || readableOn(col); g.lineWidth = 1; roundRect(b.x - w / 2, b.y - 12, w, 24, 5); g.stroke(); g.strokeStyle = col; g.lineWidth = lw; } g.fillStyle = d.tc || readableOn(col); g.textAlign = 'center'; g.fillText(txt, b.x, b.y + 4); g.textAlign = 'left';
   }
   else if (t === 'flag') { seg(a, {x: a.x, y: a.y - 26}); poly([{x: a.x, y: a.y - 26}, {x: a.x + 17, y: a.y - 20}, {x: a.x, y: a.y - 13}], true); g.fill(); g.beginPath(); g.arc(a.x, a.y, 2.5, 0, 7); g.fill(); }
   else if (t === 'check') { g.lineWidth = 3.2; g.lineCap = 'round'; g.lineJoin = 'round'; poly([{x: a.x - 8, y: a.y}, {x: a.x - 2.5, y: a.y + 6}, {x: a.x + 8, y: a.y - 7}]); g.stroke(); g.lineCap = 'butt'; g.lineJoin = 'miter'; g.lineWidth = lw; }
   else if (t === 'xmark') { g.lineWidth = 3.2; g.lineCap = 'round'; seg({x: a.x - 7, y: a.y - 7}, {x: a.x + 7, y: a.y + 7}); seg({x: a.x + 7, y: a.y - 7}, {x: a.x - 7, y: a.y + 7}); g.lineCap = 'butt'; g.lineWidth = lw; }
-  else if (t === 'star') { const P = []; for (let i = 0; i < 10; i++) { const r = i % 2 ? 4.8 : 11, an = -Math.PI / 2 + i * Math.PI / 5; P.push({x: a.x + Math.cos(an) * r, y: a.y + Math.sin(an) * r}); } poly(P, true); g.fill(); g.lineJoin = 'round'; g.stroke(); g.lineJoin = 'miter'; }
+  else if (t === 'star') { const P = []; for (let i = 0; i < 10; i++) { const r = i % 2 ? 4.8 : 11, an = -Math.PI / 2 + i * Math.PI / 5; P.push({x: a.x + Math.cos(an) * r, y: a.y + Math.sin(an) * r}); } poly(P, true); if (!dOpt(d, 'ol')) g.fill(); g.lineJoin = 'round'; g.stroke(); g.lineJoin = 'miter'; }
   else if (t === 'arrowleft' || t === 'arrowright') { const sx = t === 'arrowleft' ? 1 : -1; poly([a, {x: a.x + 13 * sx, y: a.y - 9}, {x: a.x + 13 * sx, y: a.y - 3.5}, {x: a.x + 36 * sx, y: a.y - 3.5}, {x: a.x + 36 * sx, y: a.y + 3.5}, {x: a.x + 13 * sx, y: a.y + 3.5}, {x: a.x + 13 * sx, y: a.y + 9}], true); g.fill(); }
   else if (t === 'note') {
-    g.font = `${d.ts || 12}px system-ui`; const txt = d.text || '', w = g.measureText(txt).width + 14, h = 24, bx = a.x - 6, by = a.y - h - 9;
-    g.fillStyle = col; fillA(.95, () => { roundRect(bx, by, w, h, 5); g.fill(); });
+    g.font = dFont(d, d.ts || 12); const txt = d.text || '', w = g.measureText(txt).width + 14, h = 24, bx = a.x - 6, by = a.y - h - 9;
+    g.fillStyle = col; fillA(.95, () => { roundRect(bx, by, w, h, 5); g.fill(); }); if (dOpt(d, 'br')) { g.strokeStyle = d.tc || readableOn(col); g.lineWidth = 1; roundRect(bx, by, w, h, 5); g.stroke(); g.strokeStyle = col; g.lineWidth = lw; }
     g.beginPath(); g.moveTo(a.x - 2, by + h - 1); g.lineTo(a.x + 7, by + h - 1); g.lineTo(a.x, a.y); g.closePath(); g.fill();
     g.fillStyle = d.tc || readableOn(col); g.fillText(txt, bx + 7, by + 16);
   }
@@ -3938,7 +4023,7 @@ function drawBrush(d, selected, col) {
   g.save(); g.lineCap = 'round'; g.lineJoin = 'round'; g.setLineDash([]);
   const trace = () => { g.beginPath(); g.moveTo(P[0].x, P[0].y); for (let i = 1; i < P.length - 1; i++) g.quadraticCurveTo(P[i].x, P[i].y, (P[i].x + P[i + 1].x) / 2, (P[i].y + P[i + 1].y) / 2); g.lineTo(P[P.length - 1].x, P[P.length - 1].y); };
   if (selected) { g.strokeStyle = '#fff'; g.globalAlpha = .35; g.lineWidth = d.w + 6; trace(); g.stroke(); g.globalAlpha = 1; }
-  g.strokeStyle = d.col || col; g.lineWidth = d.w || 3; if (d.hl) g.globalAlpha = .35; trace(); g.stroke(); g.restore();
+  g.strokeStyle = d.col || col; g.lineWidth = d.w || 3; g.globalAlpha = (dOpt(d, 'op') || (d.hl ? 35 : 100)) / 100; trace(); g.stroke(); g.restore();
 }
 /* Estilo propio del dibujo (grosor y estilo de línea): se aplica a cada trazo que hace el dibujo sin tocar cada herramienta */
 function styleWrap(d) {
@@ -3972,25 +4057,24 @@ function drawShape(d, selected, col, textCol) {
   const rightX = geo.w - geo.right;
   if (d.type === 'horizontal') {
     g.beginPath(); g.moveTo(geo.left, a.y); g.lineTo(rightX, a.y); g.stroke();
-    g.font = '10px system-ui'; g.fillRect(rightX + 2, a.y - 9, geo.right - 3, 18); g.fillStyle = '#10151f'; g.fillText(fmt(d.a.p), rightX + 5, a.y + 3.5);
+    if (dOpt(d, 'pl')) { g.font = '10px system-ui'; g.fillRect(rightX + 2, a.y - 9, geo.right - 3, 18); g.fillStyle = '#10151f'; g.fillText(fmt(d.a.p), rightX + 5, a.y + 3.5); }
   } else if (d.type === 'trend') {
-    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+    const [p, q] = dExt(d, a, b); g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(q.x, q.y); g.stroke();
+    if (dOpt(d, 'ar')) arrowHead(a, b, 11);
+    dStat(d, a, b);
   } else if (d.type === 'rect') {
-    g.globalAlpha = .13; g.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y)); g.globalAlpha = 1;
-    g.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y), w = (dOpt(d, 'xr') ? rightX : Math.max(a.x, b.x)) - x, h = Math.abs(b.y - a.y);
+    if (dOpt(d, 'fl')) { g.globalAlpha = dOpt(d, 'fo') / 100; g.fillStyle = dOpt(d, 'fc') || col; g.fillRect(x, y, w, h); g.globalAlpha = 1; g.fillStyle = col; }
+    if (dOpt(d, 'bd')) g.strokeRect(x, y, w, h);
+    if (dOpt(d, 'ml')) { g.setLineDash([5, 4]); g.beginPath(); g.moveTo(x, y + h / 2); g.lineTo(x + w, y + h / 2); g.stroke(); g.setLineDash([]); }
   } else if (d.type === 'fib') {
-    const x1 = Math.min(a.x, b.x); g.font = '10px system-ui';
-    FIB.forEach((lv, k) => {
-      const pr = b_price(d, lv), yy = Y(pr);
-      g.globalAlpha = lv === 0 || lv === 1 ? 1 : .75; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(x1, yy); g.lineTo(rightX, yy); g.stroke(); g.globalAlpha = 1;
-      g.fillStyle = col; g.fillText(`${lv} (${fmt(pr)})`, Math.min(x1 + 4, rightX - 90), yy - 3);
-      if (k < FIB.length - 1) { g.globalAlpha = .06; g.fillRect(x1, Math.min(yy, Y(b_price(d, FIB[k + 1]))), rightX - x1, Math.abs(Y(b_price(d, FIB[k + 1])) - yy)); g.globalAlpha = 1; }
-    });
-    g.setLineDash([4, 4]); g.lineWidth = 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); g.setLineDash([]);
+    const sp = dFibSpan(d, a, b); dFibRows(d, dLv(d), lv => dFibPrice(d, lv), sp.x1, sp.x2, rightX, col, .75);
+    if (dOpt(d, 'tl')) { g.setLineDash([4, 4]); g.lineWidth = 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); g.setLineDash([]); }
   }
+  const sz = dOpt(d, 'sz'), scaled = !!sz && sz !== 1; if (scaled) { g.save(); g.translate(a.x, a.y); g.scale(sz, sz); g.translate(-a.x, -a.y); } // iconos y marcas con tamaño propio
   drawShapeExtra(d, a, b, rightX, col);
   drawShapeNew(d, a, b, rightX, col, selected);
+  if (scaled) g.restore();
   unwrap(); drawLabel(d, a, b, col);
   if (selected) for (const hnd of handlesOf(d)) { g.fillStyle = '#fff'; g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(hnd.x, hnd.y, 7, 0, 7); g.fill(); g.stroke(); }
 }
