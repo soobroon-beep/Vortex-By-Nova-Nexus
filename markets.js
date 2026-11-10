@@ -144,7 +144,17 @@
   // ── Dominancia (USDT.D, BTC.D): muestras que guarda .github/workflows/dominance.yml en dominance-data.json ──
   const DOM_NAMES = {'USDT.D': 'Tether Dominance', 'BTC.D': 'Bitcoin Dominance'};
   const DOM_URLS = ['dominance-data.json', 'https://raw.githubusercontent.com/soobroon-beep/Vortex-By-Nova-Nexus/main/dominance-data.json'];
+  const DOM_SRV = 'https://vortex-push.soobroon.workers.dev/dom', DOM_METHOD = 'cryptocap-top125-v1'; // muestras puntuales de cada 15 min que toma el servidor (GitHub actualiza el archivo cada varias horas)
   let domCache = null;
+  async function domServerMerge(d) {
+    if (d.method !== DOM_METHOD) return; // solo se juntan muestras de la misma fórmula
+    try {
+      const r = await fetch(DOM_SRV + '?v=' + Math.floor(Date.now() / 120000)); if (!r.ok) return; const j = await r.json(); if (!j || j.method !== DOM_METHOD || !j.series) return;
+      for (const k of Object.keys(DOM_NAMES)) { const s = d.series[k], add = j.series[k]; if (!s || !Array.isArray(add)) continue;
+        const m = new Map((s.h || []).map(p => [p[0], p[1]])); for (const p of add) if (Array.isArray(p) && p[0] > 0 && p[1] > 0 && p[1] < 100) m.set(p[0], p[1]);
+        s.h = [...m.entries()].sort((a, b) => a[0] - b[0]); }
+    } catch {}
+  }
   /* Valor en vivo (cada minuto) con la misma fórmula que el archivo: moneda / suma de las 125 criptomonedas más grandes (CoinGecko). Si falla, queda la muestra de 15 min. */
   let domLive = null, domLiveAt = 0;
   const DOM_SKIP = /(^|-)(wrapped|staked|restaked|bridged|binance-peg)(-|$)|staked-|-staked|wrapped-|-wrapped|-bridged/i, DOM_FUNDS = /^(figr_heloc|buidl|usyc|ustb|jaaa|jtrsy|eutbl|ousg|benji|usdtb|ustbl|tbill|wtgxx|fobxx|ylds)$/i;
@@ -163,7 +173,7 @@
     let d = null;
     for (const u of DOM_URLS) { try { const r = await fetch(u + (u.includes('?') ? '&' : '?') + 'v=' + Math.floor(Date.now() / 120000)); if (r.ok) { d = await r.json(); if (d && d.series) break; } } catch {} }
     if (!d || !d.series) { if (domCache) return domCache.d; throw Error('Sin datos de dominancia'); }
-    domCache = {ts: Date.now(), d}; return d;
+    await domServerMerge(d); domCache = {ts: Date.now(), d}; return d;
   }
   function domPoints(d, sym) { // [t, %] en orden: el diario (largo plazo) y el de 15 min (reciente) sin repetir
     const s = d.series[sym]; if (!s) return [];

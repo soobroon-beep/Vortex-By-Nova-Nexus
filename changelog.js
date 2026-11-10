@@ -3,7 +3,8 @@ window.CCT_CHANGELOG = [
   {v: '3.18', d: '10 nov 2026', t: 'Cada herramienta de dibujo con sus propios ajustes', items: [
     'En «Ajustes» cada herramienta tiene lo suyo: en Fibonacci eliges qué niveles salen (y añades los tuyos), su color, fondo, etiquetas y extensiones; Long/Short tiene stop automático, opacidad y porcentajes; el texto tiene negrita, cursiva, fondo y borde; las formas, borde y fondo; las líneas, extensiones y datos…',
     'Las plantillas de cada herramienta guardan también esos ajustes, y la herramienta recuerda cómo la usaste la última vez.',
-    'Mientras dibujas, el trazo ya sale con el color, grosor y ajustes de la última vez (antes salía con el color predeterminado hasta soltarlo).'
+    'Mientras dibujas, el trazo ya sale con el color, grosor y ajustes de la última vez (antes salía con el color predeterminado hasta soltarlo).',
+    'USDT.D y BTC.D: la muestra de cada 15 min ahora la toma el servidor (GitHub tardaba horas entre una y otra) y el historial se reconstruye solo, por partes.'
   ]},
   {v: '3.17', d: '10 nov 2026', t: 'Vela en vivo fluida y USDT.D con la fórmula CRYPTOCAP', items: [
     'La vela se mueve con cada dato en vivo: los indicadores ya no frenan el gráfico y, si la conexión falla, la vela se sigue actualizando cada 2 s mientras se reconecta.',
