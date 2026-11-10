@@ -4,14 +4,15 @@ on:
   schedule: [{cron: '*/15 * * * *'}]
   workflow_dispatch:
     inputs:
-      backfill: {description: 'Reconstruir el historial de 1 año (tarda ~6 min)', required: false, default: ''}
+      backfill: {description: 'Reconstruir el historial (1 = sí; tarda ~40 min)', required: false, default: ''}
+      diag: {description: 'Solo mostrar valores (1 = sí)', required: false, default: ''}
 permissions:
   contents: write
 concurrency: {group: dominance, cancel-in-progress: false}
 jobs:
   dominance:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,6 +20,7 @@ jobs:
       - run: node scripts/fetch-dominance.js
         env:
           BACKFILL: ${{ github.event.inputs.backfill }}
+          DIAG: ${{ github.event.inputs.diag }}
       - name: Guardar si cambió
         run: |
           git config user.name "dominance-bot"; git config user.email "dominance-bot@users.noreply.github.com"
