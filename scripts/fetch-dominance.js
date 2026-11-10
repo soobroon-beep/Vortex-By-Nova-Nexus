@@ -2,25 +2,27 @@
 //   moneda.D = capitalización de la moneda / TOTAL × 100, donde TOTAL = suma de la capitalización de las 125 criptomonedas más grandes.
 // Lo ejecuta .github/workflows/dominance.yml y guarda dominance-data.json; la app lo lee como archivo estático.
 // Datos reales de CoinGecko (API pública): capitalización de cada moneda. Nunca se inventan puntos:
-// · cada 15 min: una muestra con las 125 más grandes de ese momento.
-// · BACKFILL=1 (a mano): historial con la capitalización real de cada una de esas 125 monedas — por hora (90 días) y por día (1 año).
+// · cada 15 min: una muestra con las 125 más grandes de ese momento. GitHub corre sus tareas programadas cuando quiere (a veces cada 5–9 h),
+//   así que el servidor de Cloudflare (worker/push-alerts.mjs) toma la muestra puntual y aquí se juntan las suyas: no quedan huecos.
+// · Historial (solo si el archivo aún usa la fórmula anterior, o a mano con BACKFILL=1): por partes y reanudable. CoinGecko limita las consultas,
+//   así que se va despacio, el avance se guarda en .cache/ y, si no alcanza el tiempo, la siguiente ejecución sigue donde se quedó.
+// · BACKFILL=1: historial con la capitalización real de cada una de esas 125 monedas — por hora (90 días) y por día (1 año).
 //   Único supuesto: para el pasado se usan las 125 monedas más grandes de HOY (una moneda que aún no existía cuenta 0).
-const fs = require('fs'), path = require('path');
+const fs = require('fs'), path = require('path'), C = require('../dominance-core.js');
+const {top125, domOf, isDeriv, TOP, METHOD} = C;
 const FILE = path.join(__dirname, '..', 'dominance-data.json'), API = 'https://api.coingecko.com/api/v3';
-const Q = 900e3, HR = 3600e3, D = 86400e3, KEEP_Q = 30 * D, KEEP_HR = 120 * D, KEEP_D = 3000 * D, TOP = 125, METHOD = 'cryptocap-top125-v1';
+const CACHE = process.env.DOM_CACHE || path.join(__dirname, '..', '.cache'), PROG = path.join(CACHE, 'dominance-backfill.json'), F_SAVE = path.join(CACHE, 'dominance-save'), F_PENDING = path.join(CACHE, 'dominance-pending');
+const SRV = process.env.DOM_SRV == null ? 'https://vortex-push.soobroon.workers.dev' : process.env.DOM_SRV; // servidor que toma la muestra puntual cada 15 min
+const Q = 900e3, HR = 3600e3, D = 86400e3, KEEP_Q = 30 * D, KEEP_HR = 120 * D, KEEP_D = 3000 * D;
+const PACE = +process.env.DOM_PACE_MS || 13000, BUDGET = (+process.env.DOM_BUDGET_MIN || 75) * 6e4, PROG_MAX_AGE = 12 * HR, MAX_ROUNDS = 6, T0 = Date.now();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-// Fichas que solo «envuelven» a otra (wBTC, stETH, WETH, puentes…): no son criptomonedas aparte y contarlas duplicaría capitalización
-const DERIV = /(^|-)(wrapped|staked|restaked|bridged|binance-peg|liquid-staking)(-|$)|^(weth|wbtc|steth|wsteth|weeth|reth|cbbtc|cbeth|lbtc|solvbtc|ezeth|rseth|meth|jitosol|msol|bnsol|susde|susds|usdtb|wbeth|tbtc|sweth|oseth|ethx|lseth|pumpbtc|fbtc|clbtc|ebtc|unibtc|jupsol|bbsol|wbnb|usdt0|kbtc)$|staked-|-staked|wrapped-|-wrapped|-bridged|rocket-pool-eth|lido-staked|coinbase-wrapped|kelp-dao|renzo-restaked|ether-fi-staked|mantle-staked|binance-staked|jito-staked|marinade-staked|lombard-staked|solv-protocol|ethena-staked/i;
-// Fondos y valores tokenizados (bonos del Tesoro, créditos…): no son criptomonedas y no están en el listado de monedas que usa CRYPTOCAP
-const FUNDS = /^(figr_heloc|buidl|usyc|ustb|jaaa|jtrsy|eutbl|ousg|benji|usdtb|ustbl|tbill|wtgxx|fobxx|ylds)$/i;
-const isDeriv = c => DERIV.test(c.id || '') || DERIV.test(String(c.symbol || '').toLowerCase()) || FUNDS.test(String(c.symbol || ''));
 
-async function getJSON(url) {
+async function getJSON(url, tries = 5) {
   let err;
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < tries; i++) {
     try {
-      const r = await fetch(url, {headers: {accept: 'application/json', 'user-agent': 'VORTEX-Dominance/1.0'}});
-      if (r.status === 429) { err = new Error('HTTP 429 (límite de CoinGecko)'); await sleep(25000 * (i + 1)); continue; }
+      const r = await fetch(url, {headers: {accept: 'application/json', 'user-agent': 'VORTEX-Dominance/1.0'}, signal: AbortSignal.timeout(30000)});
+      if (r.status === 429) { err = new Error('HTTP 429 (límite de CoinGecko)'); const ra = +r.headers.get('retry-after'); await sleep(Math.min(120, ra > 0 ? ra + 2 : 20 * (i + 1)) * 1000); continue; }
       if (!r.ok) throw new Error(`HTTP ${r.status} en ${url.replace(API, '')}`);
       return await r.json();
     } catch (e) { err = e; await sleep(2000); }
@@ -35,9 +37,6 @@ function merge(old, add, keep, bucket) { // une series [t,v] sin repetir hueco (
   const lim = Date.now() - keep;
   return [...m.entries()].filter(([t]) => t >= lim).sort((a, b) => a[0] - b[0]).map(([t, v]) => [t, +v.toFixed(4)]);
 }
-/* Las 125 más grandes (sin fichas envueltas) y la dominancia de ese momento */
-function top125(markets, skipDeriv = true) { return markets.filter(c => c && c.market_cap > 0 && !(skipDeriv && isDeriv(c))).sort((a, b) => b.market_cap - a.market_cap).slice(0, TOP); }
-function domOf(list) { const tot = list.reduce((a, c) => a + c.market_cap, 0), cap = id => (list.find(c => c.id === id) || {}).market_cap || 0; return {total: tot, usdt: cap('tether') / tot * 100, btc: cap('bitcoin') / tot * 100}; }
 async function markets() { const a = await getJSON(`${API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1`); if (!Array.isArray(a) || a.length < 150) throw new Error('CoinGecko devolvió muy pocas monedas'); return a; }
 
 /* Suma, hueco por hueco, la capitalización de todas las monedas (si a una le falta un hueco se usa su último dato; antes de existir cuenta 0) */
@@ -52,42 +51,67 @@ function combine(seriesById, bucket) {
   }
   return out;
 }
+/* Avance del historial (se guarda en .cache/ y el flujo lo conserva entre ejecuciones) */
+const flag = (f, on) => { try { if (on) { fs.mkdirSync(CACHE, {recursive: true}); fs.writeFileSync(f, '1'); } else fs.rmSync(f, {force: true}); } catch {} };
+function loadProgress() { try { const j = JSON.parse(fs.readFileSync(PROG, 'utf8')); if (j && j.v === METHOD && !j.done && Date.now() - j.at < PROG_MAX_AGE && j.day && j.hr) return j; } catch {} return {v: METHOD, at: Date.now(), rounds: 0, day: {}, hr: {}}; }
+function saveProgress(pg) { fs.mkdirSync(CACHE, {recursive: true}); fs.writeFileSync(PROG, JSON.stringify(pg)); }
+const caps = j => (j && Array.isArray(j.market_caps) ? j.market_caps : []).filter(p => Array.isArray(p) && p[1] > 0).map(p => [p[0], Math.round(p[1])]);
+/* Devuelve {pending: true} si no alcanzó el tiempo o faltan monedas (la siguiente ejecución sigue); si no, las series listas. */
 async function backfill(list) {
-  const dayS = {}, hrS = {}; let n = 0;
+  const pg = loadProgress(); pg.rounds = (pg.rounds || 0) + 1; flag(F_SAVE, true);
+  if (pg.rounds > MAX_ROUNDS) { saveProgress({v: METHOD, done: true, at: Date.now()}); throw new Error(`El historial no se completó en ${MAX_ROUNDS} intentos (CoinGecko no responde): se vuelve a intentar desde cero en la próxima ejecución`); }
+  const done = () => list.filter(c => c.id in pg.day && c.id in pg.hr).length; let n = 0;
+  console.log(`historial: intento ${pg.rounds}, ${done()}/${list.length} monedas ya descargadas`);
   for (const c of list) {
-    n++;
-    try { const j = await getJSON(`${API}/coins/${c.id}/market_chart?vs_currency=usd&days=365`); dayS[c.id] = j.market_caps || []; } catch (e) { console.warn('sin historial diario:', c.id, e.message); }
-    await sleep(7000);
-    try { const j = await getJSON(`${API}/coins/${c.id}/market_chart?vs_currency=usd&days=90`); hrS[c.id] = j.market_caps || []; } catch (e) { console.warn('sin historial por hora:', c.id, e.message); }
-    await sleep(7000);
-    if (n % 10 === 0) console.log(`historial ${n}/${list.length}`);
+    if (c.id in pg.day && c.id in pg.hr) continue;
+    if (Date.now() - T0 > BUDGET) break;
+    if (!(c.id in pg.day)) { try { pg.day[c.id] = caps(await getJSON(`${API}/coins/${c.id}/market_chart?vs_currency=usd&days=365`)); } catch (e) { pg.day[c.id] = []; console.warn('sin historial diario:', c.id, e.message); } await sleep(PACE); }
+    if (!(c.id in pg.hr)) { try { pg.hr[c.id] = caps(await getJSON(`${API}/coins/${c.id}/market_chart?vs_currency=usd&days=90`)); } catch (e) { pg.hr[c.id] = []; console.warn('sin historial por hora:', c.id, e.message); } await sleep(PACE); }
+    if (++n % 10 === 0) { saveProgress(pg); console.log(`historial ${done()}/${list.length}`); }
   }
-  if (!dayS.tether || !dayS.bitcoin || Object.keys(dayS).length < list.length * .9) throw new Error(`Historial incompleto (${Object.keys(dayS).length}/${list.length} monedas): no se guarda nada`);
-  return {d: combine(dayS, D), hh: Object.keys(hrS).length >= list.length * .9 && hrS.tether ? combine(hrS, HR) : null, coins: Object.keys(dayS).length};
+  const ids = list.map(c => c.id), full = o => ids.filter(id => (o[id] || []).length > 1), okD = full(pg.day), okH = full(pg.hr);
+  if (done() < list.length || !okD.includes('tether') || !okD.includes('bitcoin') || okD.length < list.length * .9) {
+    for (const o of [pg.day, pg.hr]) for (const id of Object.keys(o)) if (!o[id].length) delete o[id]; // lo que falló se vuelve a pedir en la siguiente ejecución
+    saveProgress(pg); console.log(`historial a medias (${okD.length}/${list.length} monedas): continúa en la siguiente ejecución`); return {pending: true};
+  }
+  const pickSeries = (o, ok) => Object.fromEntries(ok.map(id => [id, o[id]]));
+  const out = {d: combine(pickSeries(pg.day, okD), D), hh: okH.length >= list.length * .9 && okH.includes('tether') && okH.includes('bitcoin') ? combine(pickSeries(pg.hr, okH), HR) : null, coins: okD.length};
+  saveProgress({v: METHOD, done: true, at: Date.now()}); return out;
+}
+/* Muestras puntuales de cada 15 min que guarda el servidor (misma fórmula). Si no contesta, se sigue sin ellas. */
+async function serverSamples() {
+  if (!SRV) return null;
+  try { const j = await getJSON(SRV + '/dom', 2); if (j && j.method === METHOD && j.series) return j.series; } catch (e) { console.warn('servidor de muestras sin respuesta:', e.message); }
+  return null;
 }
 
 async function main() {
   const db = load(), mk = await markets(), list = top125(mk), cur = domOf(list), now = Date.now(), t = Math.floor(now / Q) * Q;
+  flag(F_SAVE, false); flag(F_PENDING, false);
   if (process.env.DIAG === '1') { const all = domOf(top125(mk, false)); let g = null; try { g = (await getJSON(`${API}/global`)).data.market_cap_percentage; } catch {}
     console.log(`USDT.D top125 sin envueltas: ${cur.usdt.toFixed(3)}% · top125 con todo: ${all.usdt.toFixed(3)}% · CoinGecko global: ${g ? g.usdt.toFixed(3) : '?'}%`);
     console.log(`BTC.D  top125 sin envueltas: ${cur.btc.toFixed(3)}% · top125 con todo: ${all.btc.toFixed(3)}% · CoinGecko global: ${g ? g.btc.toFixed(3) : '?'}%`);
+    const sv = await serverSamples(); console.log('Muestras del servidor:', sv ? Object.entries(sv).map(([k, a]) => `${k} ${a.length}${a.length ? ' (última ' + new Date(a[a.length - 1][0]).toISOString() + ')' : ''}`).join(' · ') : 'sin respuesta');
     console.log('Excluidas (envueltas):', mk.slice(0, 200).filter(isDeriv).map(c => c.id).join(', ')); console.log('Top125:', list.map(c => c.symbol).join(' ')); return; }
   if (!(cur.usdt > 0 && cur.btc > 0)) throw new Error('No se pudo calcular la dominancia');
-  if (db.method !== METHOD && process.env.BACKFILL !== '1') { console.log('El archivo usa el método anterior: ejecuta el flujo con backfill=1 para reconstruirlo con la fórmula CRYPTOCAP.'); return; }
-  const S = db.series;
-  if (process.env.BACKFILL === '1') {
+  const S = db.series, oldMethod = db.method !== METHOD;
+  if (process.env.BACKFILL === '1' || oldMethod) { // el archivo con la fórmula anterior se reconstruye solo, sin tener que lanzarlo a mano
     const b = await backfill(list);
-    for (const k of ['USDT.D', 'BTC.D']) S[k] = {h: [], hh: b.hh ? merge([], b.hh[k], KEEP_HR, HR) : [], d: merge([], b.d[k], KEEP_D, D)};
-    db.method = METHOD; db.note = `Fórmula CRYPTOCAP: moneda / suma de las ${TOP} criptomonedas más grandes. Historial con la capitalización real de ${b.coins} monedas (por hora 90 días, por día 1 año); muestras cada 15 min.`;
+    if (b.pending) { flag(F_PENDING, true); if (oldMethod) return; } // sin historial nuevo no se mezclan muestras de la fórmula nueva con la anterior
+    else {
+      for (const k of ['USDT.D', 'BTC.D']) S[k] = {h: oldMethod ? [] : clean((S[k] || {}).h), hh: b.hh ? merge([], b.hh[k], KEEP_HR, HR) : [], d: merge([], b.d[k], KEEP_D, D)};
+      db.method = METHOD; db.note = `Fórmula CRYPTOCAP: moneda / suma de las ${TOP} criptomonedas más grandes. Historial con la capitalización real de ${b.coins} monedas (por hora 90 días, por día 1 año); muestras cada 15 min.`;
+    }
   }
+  const sv = await serverSamples();
   for (const [k, v] of [['USDT.D', cur.usdt], ['BTC.D', cur.btc]]) {
-    const s = S[k] = S[k] || {h: [], hh: [], d: []};
-    s.h = merge(clean(s.h), [[t, v]], KEEP_Q, Q);
-    s.hh = merge(clean(s.hh), [[t, v]], KEEP_HR, HR);
-    s.d = merge(clean(s.d), [[t, v]], KEEP_D, D);
+    const s = S[k] = S[k] || {h: [], hh: [], d: []}, add = [...clean(sv && sv[k]), [t, v]];
+    s.h = merge(clean(s.h), add, KEEP_Q, Q);
+    s.hh = merge(clean(s.hh), add, KEEP_HR, HR);
+    s.d = merge(clean(s.d), add, KEEP_D, D);
   }
   db.updated = new Date(now).toISOString(); db.source = 'CoinGecko (capitalización por moneda) · fórmula CRYPTOCAP top-125';
-  fs.writeFileSync(FILE, JSON.stringify(db)); console.log(`USDT.D ${cur.usdt.toFixed(3)}% · BTC.D ${cur.btc.toFixed(3)}% · ${S['USDT.D'].d.length} días · ${S['USDT.D'].hh.length} horas`);
+  fs.writeFileSync(FILE, JSON.stringify(db)); console.log(`USDT.D ${cur.usdt.toFixed(3)}% · BTC.D ${cur.btc.toFixed(3)}% · ${S['USDT.D'].d.length} días · ${S['USDT.D'].hh.length} horas · ${S['USDT.D'].h.length} muestras de 15 min${sv ? ' (con las del servidor)' : ''}`);
 }
 if (require.main === module) main().catch(e => { console.error('Error:', e.message); process.exit(1); });
-module.exports = {daily, merge, clean, combine, top125, domOf, isDeriv};
+module.exports = {daily, merge, clean, combine, top125, domOf, isDeriv, backfill, main};

@@ -1,13 +1,16 @@
 name: Actualizar dominancia
-# Guarda la dominancia de USDT y BTC (USDT.D, BTC.D) en dominance-data.json cada 15 minutos, para el buscador y el gráfico de VORTEX.
+# Guarda la dominancia de USDT y BTC (USDT.D, BTC.D) en dominance-data.json, para el buscador y el gráfico de VORTEX.
+# GitHub no respeta el «cada 15 minutos» (a veces pasan horas): la muestra puntual la toma el servidor de Cloudflare (vortex-push)
+# y este flujo junta las suyas en el archivo. El historial se reconstruye por partes: si no alcanza el tiempo, se relanza solo y sigue donde se quedó.
 on:
   schedule: [{cron: '*/15 * * * *'}]
   workflow_dispatch:
     inputs:
-      backfill: {description: 'Reconstruir el historial (1 = sí; tarda ~40 min)', required: false, default: ''}
+      backfill: {description: 'Reconstruir el historial (1 = sí; tarda 1–2 h y continúa solo)', required: false, default: ''}
       diag: {description: 'Solo mostrar valores (1 = sí)', required: false, default: ''}
 permissions:
   contents: write
+  actions: write
 concurrency: {group: dominance, cancel-in-progress: false}
 jobs:
   dominance:
@@ -17,12 +20,29 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: 20}
+      - name: Recuperar el avance del historial
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/dominance-backfill.json
+          key: dominance-backfill-${{ github.run_id }}
+          restore-keys: dominance-backfill-
       - run: node scripts/fetch-dominance.js
         env:
           BACKFILL: ${{ github.event.inputs.backfill }}
           DIAG: ${{ github.event.inputs.diag }}
+      - name: Guardar el avance del historial
+        if: always() && hashFiles('.cache/dominance-save') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/dominance-backfill.json
+          key: dominance-backfill-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Guardar si cambió
         run: |
           git config user.name "dominance-bot"; git config user.email "dominance-bot@users.noreply.github.com"
           git add dominance-data.json
           git diff --cached --quiet || (git commit -m "chore: dominancia" && git pull --rebase -q && git push)
+      - name: Continuar el historial si quedó a medias
+        if: hashFiles('.cache/dominance-pending') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run dominance.yml --ref main -f backfill=1

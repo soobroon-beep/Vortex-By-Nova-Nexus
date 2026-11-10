@@ -8,6 +8,7 @@
 
 import * as SCR from './screener.mjs';
 import {radarInternal, loadState as radarState} from './radar-server.mjs';
+import DOM from '../dominance-core.js';
 const DEFAULT_ORIGINS = 'https://soobroon-beep.github.io';
 const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com', 'https://api1.binance.com'];
 const MOVE_TOP = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT'];
@@ -280,6 +281,7 @@ export default {
     const path = new URL(req.url).pathname;
     if (req.method === 'GET' && path === '/') return json({ok: true, app: 'VORTEX push', note: 'Notificaciones de alertas con la app cerrada'});
     if (req.method === 'GET' && path === '/scr/state') { const st = (await env.KV.get('scr', 'json')) || {}; return json({ok: true, '1h': st['1h'] || 0, '4h': st['4h'] || 0, last: st.last || {}, lock: st.lock || 0, err: st.err || null, kick: st.kick || null, now: Date.now()}); }
+    if (req.method === 'GET' && path === '/dom') { const st = (await env.KV.get('dom', 'json')) || {}; return json({ok: true, method: DOM.METHOD, at: st.at || 0, err: st.err || null, series: st.h || {}, now: Date.now()}); } // muestras de dominancia de cada 15 min (las juntan la app y el flujo de GitHub)
     if (path.startsWith('/scr/') && req.method === 'POST') return scrInternal(req, env, path);
     if ((path.startsWith('/radar/') || path.startsWith('/int/')) && req.method === 'POST') return scrInternal(req, env, path); // Radar de Nexus Pixel (llamadas internas)
     if (req.method === 'GET' && path === '/radar/state') { const st = await radarState(env); return json({ok: true, at: st.at || 0, note: st.note || '', min: st.min, log: st.log.slice(0, 30).map(o => ({symbol: o.symbol, tf: o.tf, side: o.side, at: o.at, entry: o.entry, stop: o.stop, target: o.target, ai: o.ai, v: o.v, why: o.why, res: o.res, resAt: o.resAt}))}); }
@@ -332,9 +334,29 @@ export default {
     const now = event.scheduledTime || Date.now();
     ctx.waitUntil(tick(env, now).then(r => console.log('ronda', JSON.stringify(r))).catch(e => console.error('ronda', e.message)));
     ctx.waitUntil(scrKick(env, now).catch(e => console.error('screener', e.message)));
+    ctx.waitUntil(domKick(env, now).catch(e => console.error('dominancia', e.message)));
   }
 };
-export {tick};
+export {tick, domKick, domRun};
+
+/* ───────── Dominancia puntual cada 15 min (USDT.D, BTC.D) ─────────
+   GitHub corre «Actualizar dominancia» cuando quiere (a veces cada 5–9 h), así que la muestra de cada cuarto de hora se toma aquí,
+   con la misma fórmula (dominance-core.js). Se guardan 4 días en el KV; el flujo de GitHub las pasa a dominance-data.json y la app las lee de /dom. */
+const DOM_Q = 900e3, DOM_KEEP = 4 * 864e5, DOM_URL = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1';
+async function domKick(env, now = Date.now()) {
+  if (Math.floor(now / 6e4) % 15 > 5) return null; // se intenta en los primeros minutos de cada cuarto de hora (si CoinGecko falla, se reintenta al minuto siguiente)
+  const st = (await env.KV.get('dom', 'json')) || {}; if (st.slot === Math.floor(now / DOM_Q) * DOM_Q) return null;
+  return self(env, '/int/dom', {now}); // en su propia llamada: leer 250 monedas tiene su propio límite de CPU y no estorba a las alertas
+}
+async function domRun(env, now = Date.now()) {
+  const slot = Math.floor(now / DOM_Q) * DOM_Q, st = (await env.KV.get('dom', 'json')) || {}; if (st.slot === slot) return {ok: true, skip: 'ya tomada'};
+  let cur = null, why = '';
+  try { const r = await fetch(DOM_URL, {headers: {accept: 'application/json', 'user-agent': 'VORTEX-Dominance/1.0'}}); if (r.ok) cur = DOM.sample(await r.json()); else why = 'CoinGecko HTTP ' + r.status; } catch (e) { why = String(e && e.message || e).slice(0, 120); }
+  if (!cur) { if (Math.floor(now / 6e4) % 15 === 5) { st.err = {at: now, why: why || 'respuesta incompleta'}; await env.KV.put('dom', JSON.stringify(st)); } return {ok: false, why: why || 'respuesta incompleta'}; } // el fallo solo se anota en el último intento (pocas escrituras)
+  const h = st.h || {}; for (const [k, v] of [['USDT.D', cur.usdt], ['BTC.D', cur.btc]]) h[k] = DOM.mergeSamples(h[k], [[slot, v]], DOM_Q, now - DOM_KEEP);
+  await env.KV.put('dom', JSON.stringify({slot, at: now, h}));
+  return {ok: true, usdt: +cur.usdt.toFixed(4), btc: +cur.btc.toFixed(4)};
+}
 
 /* ───────── Screener programado (ver worker/screener.mjs) ───────── */
 const J = (o, status = 200) => new Response(JSON.stringify(o), {status, headers: {'content-type': 'application/json'}});
@@ -357,6 +379,7 @@ async function scrInternal(req, env, path) {
   if (req.headers.get('x-vx-int') !== await intToken(env)) return J({error: 'No autorizado'}, 403);
   let b = {}; try { b = await req.json(); } catch {}
   const tf = b.tf === '4h' ? '4h' : '1h', now = +b.now || Date.now();
+  if (path === '/int/dom') return J(await domRun(env, now));
   if (path === '/int/push') { // manda los avisos de UN dispositivo
     const d = await env.KV.get('dev:' + b.id, 'json'); if (!d || !d.sub) return J({sts: [404]});
     const v = await vapidKeys(env), sts = []; for (const m of (b.msgs || []).slice(0, 8)) { try { const st = await sendPush(d.sub, m, v); sts.push(st); if (st === 404 || st === 410) break; } catch (e) { sts.push('err: ' + String(e.message).slice(0, 60)); } }
