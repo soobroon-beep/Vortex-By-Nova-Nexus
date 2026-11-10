@@ -1613,27 +1613,48 @@ body.rp-picking #chartArea{cursor:crosshair}
 
 /* ───────── Liquidaciones: botón «pro» con fondo de galaxia (estrellas que pasan), sin la etiqueta PRO · celular y escritorio ───────── */
 .prem-btn .prem-tag{display:none!important}
-#chartView #liqBtn.prem-btn{position:relative;overflow:hidden;isolation:isolate;gap:6px;color:#eef0ff!important;font-weight:700;letter-spacing:.1px;border:1px solid transparent!important;text-shadow:0 0 10px rgba(167,139,250,.6);
+body[data-tier="infinity"] #chartView #liqBtn{position:relative;overflow:hidden;isolation:isolate;gap:6px;color:#eef0ff!important;font-weight:700;letter-spacing:.1px;border:1px solid transparent!important;text-shadow:0 0 10px rgba(167,139,250,.6);
   background:radial-gradient(120% 150% at 0% 0%,rgba(124,77,255,.6),transparent 58%) padding-box,radial-gradient(120% 170% at 100% 100%,rgba(41,98,255,.55),transparent 62%) padding-box,linear-gradient(135deg,#0b0a1f,#17103a 55%,#0a1232) padding-box,linear-gradient(120deg,#a78bfa,#60a5fa 42%,#f0abfc 72%,#818cf8) border-box!important;
   box-shadow:0 2px 14px rgba(124,77,255,.3)!important;filter:none!important}
-#chartView #liqBtn.prem-btn .ic{color:#c4b5fd!important;filter:drop-shadow(0 0 4px rgba(167,139,250,.7))}
-#chartView #liqBtn.prem-btn::before,#chartView #liqBtn.prem-btn::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;transform:none;background-repeat:repeat}
-#chartView #liqBtn.prem-btn::before{background-image:radial-gradient(1px 1px at 12px 9px,#fff,transparent 70%),radial-gradient(1px 1px at 47px 24px,rgba(255,255,255,.85),transparent 70%),radial-gradient(1.2px 1.2px at 78px 6px,#c4b5fd,transparent 70%),radial-gradient(1px 1px at 103px 28px,rgba(255,255,255,.7),transparent 70%),radial-gradient(1px 1px at 30px 31px,#93c5fd,transparent 70%),radial-gradient(1px 1px at 62px 15px,rgba(255,255,255,.55),transparent 70%);background-size:120px 38px;opacity:.9;animation:liqStars 16s linear infinite}
-#chartView #liqBtn.prem-btn::after{background-image:radial-gradient(1.7px 1.7px at 20px 14px,#fff,transparent 70%),radial-gradient(1.5px 1.5px at 66px 27px,#f0abfc,transparent 70%),radial-gradient(1.6px 1.6px at 96px 9px,#fff,transparent 70%);background-size:110px 38px;animation:liqStars2 9s linear infinite,liqTwinkle 2.8s ease-in-out infinite}
-#chartView #liqBtn.prem-btn:hover{box-shadow:0 0 18px rgba(139,92,246,.55),0 2px 14px rgba(124,77,255,.3)!important}
-#chartView #liqBtn.prem-btn.on{color:#fff!important;box-shadow:0 0 0 1px rgba(196,181,253,.55),0 0 20px rgba(139,92,246,.7)!important;
+body[data-tier="infinity"] #chartView #liqBtn .ic{color:#c4b5fd!important;filter:drop-shadow(0 0 4px rgba(167,139,250,.7))}
+body[data-tier="infinity"] #chartView #liqBtn::before,body[data-tier="infinity"] #chartView #liqBtn::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;transform:none;background-repeat:repeat}
+body[data-tier="infinity"] #chartView #liqBtn::before{background-image:radial-gradient(1px 1px at 12px 9px,#fff,transparent 70%),radial-gradient(1px 1px at 47px 24px,rgba(255,255,255,.85),transparent 70%),radial-gradient(1.2px 1.2px at 78px 6px,#c4b5fd,transparent 70%),radial-gradient(1px 1px at 103px 28px,rgba(255,255,255,.7),transparent 70%),radial-gradient(1px 1px at 30px 31px,#93c5fd,transparent 70%),radial-gradient(1px 1px at 62px 15px,rgba(255,255,255,.55),transparent 70%);background-size:120px 38px;opacity:.9;animation:liqStars 16s linear infinite}
+body[data-tier="infinity"] #chartView #liqBtn::after{background-image:radial-gradient(1.7px 1.7px at 20px 14px,#fff,transparent 70%),radial-gradient(1.5px 1.5px at 66px 27px,#f0abfc,transparent 70%),radial-gradient(1.6px 1.6px at 96px 9px,#fff,transparent 70%);background-size:110px 38px;animation:liqStars2 9s linear infinite,liqTwinkle 2.8s ease-in-out infinite}
+body[data-tier="infinity"] #chartView #liqBtn:hover{box-shadow:0 0 18px rgba(139,92,246,.55),0 2px 14px rgba(124,77,255,.3)!important}
+body[data-tier="infinity"] #chartView #liqBtn.on{color:#fff!important;box-shadow:0 0 0 1px rgba(196,181,253,.55),0 0 20px rgba(139,92,246,.7)!important;
   background:radial-gradient(120% 150% at 0% 0%,rgba(167,139,250,.85),transparent 60%) padding-box,radial-gradient(120% 170% at 100% 100%,rgba(96,165,250,.8),transparent 64%) padding-box,linear-gradient(135deg,#1a1450,#2a1a6b 55%,#14246a) padding-box,linear-gradient(120deg,#ddd6fe,#93c5fd 42%,#f5d0fe 72%,#a5b4fc) border-box!important}
-#chartView #liqBtn.prem-btn.on .ic{color:#fff!important}
+body[data-tier="infinity"] #chartView #liqBtn.on .ic{color:#fff!important}
 @keyframes liqStars{to{background-position:-120px 0}}
 @keyframes liqStars2{to{background-position:-110px 0}}
 @keyframes liqTwinkle{0%,100%{opacity:.3}50%{opacity:1}}
-@media (prefers-reduced-motion:reduce){#chartView #liqBtn.prem-btn::before,#chartView #liqBtn.prem-btn::after{animation:none}}
+@media (prefers-reduced-motion:reduce){body[data-tier="infinity"] #chartView #liqBtn::before,body[data-tier="infinity"] #chartView #liqBtn::after{animation:none}}
 
-/* ───────── Mi seguimiento: el color de cada moneda es solo un punto junto al nombre (sin franja ni fondo de color) ───────── */
-.watch-row.tagged .row-main strong::after{content:'';display:inline-block;width:7px;height:7px;margin-left:7px;border-radius:50%;vertical-align:middle;position:relative;top:-1px;background:var(--tag);box-shadow:0 0 0 2px color-mix(in srgb,var(--tag) 22%,transparent),0 0 8px color-mix(in srgb,var(--tag) 60%,transparent)}
+/* ───────── Mi seguimiento: el color de cada moneda es un punto a la izquierda, todos en la misma columna (sin franja ni fondo de color) ───────── */
+#watchRows .watch-row:not(.sec-head):not(.sec-row)::before{content:'';flex:none;width:7px;height:7px;margin:0 -5px 0 3px;border-radius:50%;background:transparent}
+#watchRows .watch-row.tagged:not(.sec-head):not(.sec-row)::before{background:var(--tag);box-shadow:0 0 0 2px color-mix(in srgb,var(--tag) 22%,transparent),0 0 8px color-mix(in srgb,var(--tag) 60%,transparent)}
 .tag-grid button,.rm-color .tag-grid button{width:16px;height:16px;justify-self:center;border:0;opacity:.9;box-shadow:0 0 0 3px rgba(255,255,255,.06);transition:transform .15s,box-shadow .2s}
 .tag-grid button.on{opacity:1;box-shadow:0 0 0 2px var(--raised),0 0 0 3.5px var(--c),0 0 10px color-mix(in srgb,var(--c) 60%,transparent)}
 .tag-grid button:hover{transform:scale(1.2)}
 
 /* Nexus Pixel: aviso de tus reglas (más ancho que una sugerencia, se lee completo) */
 .px-tip.px-watch{max-width:min(280px,calc(100vw - 24px));white-space:normal;line-height:1.4;font-weight:500;border-radius:16px 16px 4px 16px;background:rgba(16,12,34,.72);-webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6)}
+
+/* Liquidaciones sin el plan que lo incluye: botón oscuro y apagado (el fondo de galaxia solo lo ve quien tiene el plan) */
+#chartView #liqBtn.prem-btn,#chartView #liqBtn.prem-btn.on{color:rgba(237,243,252,.5)!important;background:#090b12!important;border:1px solid rgba(255,255,255,.08)!important;box-shadow:none!important;text-shadow:none!important;filter:none!important}
+#chartView #liqBtn.prem-btn .ic{color:rgba(237,243,252,.45)!important}
+#chartView #liqBtn.prem-btn::before,#chartView #liqBtn.prem-btn::after{content:none!important;animation:none!important}
+#chartView #liqBtn.prem-btn.on{border-color:rgba(255,255,255,.22)!important;color:rgba(237,243,252,.8)!important}
+
+/* ───────── Liquid glass oscuro en TODOS los menús y ventanas de la app ─────────
+   Menús y barras flotantes: translúcidos con desenfoque. Ventanas de ajustes y diálogos: lo mismo, un poco más densos para que el texto se lea bien. */
+body:not(.light) :is(#legMenu,.rail-fly,.src-menu,.acct-pop,.acct-menu,.tag-pop,.pop-menu,.pbar,.pbar-pop,.pbar-hidden,.prefs-pop,.tab-prev,.ss-pop,.row-menu,.al-confirm,.ec-pop,.dv-pop,.favbar,.bl-more>div,#toast,.draw-hint,.tc-tip,.bd-tip,.bf-tip,.sel-bar,.tr-panel,.bk-panel,.rp-bar){
+  background:rgba(9,12,20,.42)!important;border:1px solid rgba(255,255,255,.13)!important;-webkit-backdrop-filter:blur(28px) saturate(1.8)!important;backdrop-filter:blur(28px) saturate(1.8)!important;box-shadow:0 14px 34px rgba(0,0,0,.36)!important}
+body:not(.light) :is(.cfg-dlg,.pc-dlg,.rk-dlg,.dz-box,.xc-box,.pl-box,.jr-box0,.jr-det,.sym-modal,.sheet){
+  background:rgba(9,12,20,.6)!important;border-color:rgba(255,255,255,.13)!important;-webkit-backdrop-filter:blur(32px) saturate(1.8)!important;backdrop-filter:blur(32px) saturate(1.8)!important;box-shadow:0 20px 50px rgba(0,0,0,.42)!important}
+/* el velo de fondo de las ventanas deja ver la app detrás (antes casi la tapaba) */
+body:not(.light) :is(.cfg-overlay,.pc-back,.rk-back,.dz-back,.sym-backdrop,.sheet-backdrop,.pl-ov,.jr-ov,.xc-ov){background:rgba(3,5,10,.42)!important}
+/* dentro de los menús, los botones y campos también son de cristal (sin bloques opacos) */
+body:not(.light) :is(.cfg-dlg,.pc-dlg,.rk-dlg,.dz-box,.row-menu,.pop-menu,.tag-pop,.acct-pop,.acct-menu,.prefs-pop,.rail-fly,#legMenu,.sym-modal,.sheet) :is(.cfg-btn,.small-button,.tag-none,.search,input:not([type=range]):not([type=color]):not([type=checkbox]):not([type=radio]),select,textarea){background:rgba(255,255,255,.06)!important;border-color:rgba(255,255,255,.12)!important}
+/* el menú de clic derecho se ensancha para que sus textos no queden cortados */
+.pop-menu{width:max-content;max-width:min(320px,calc(100vw - 16px))}
+.pop-menu.chart-ctx button span{width:auto;text-align:left;opacity:1}
