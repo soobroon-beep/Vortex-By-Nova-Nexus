@@ -143,9 +143,22 @@
 
   // ── Dominancia (USDT.D, BTC.D): muestras que guarda .github/workflows/dominance.yml en dominance-data.json ──
   const DOM_NAMES = {'USDT.D': 'Tether Dominance', 'BTC.D': 'Bitcoin Dominance'};
-  const DOM_URLS = ['dominance-data.json', 'https://raw.githubusercontent.com/soobroon-beep/CriptoChart-Terminal/main/dominance-data.json'];
+  const DOM_URLS = ['dominance-data.json', 'https://raw.githubusercontent.com/soobroon-beep/Vortex-By-Nova-Nexus/main/dominance-data.json'];
   let domCache = null;
+  /* Valor en vivo (cada minuto) con la misma fórmula que el archivo: moneda / suma de las 125 criptomonedas más grandes (CoinGecko). Si falla, queda la muestra de 15 min. */
+  let domLive = null, domLiveAt = 0;
+  const DOM_SKIP = /(^|-)(wrapped|staked|restaked|bridged|binance-peg)(-|$)|staked-|-staked|wrapped-|-wrapped|-bridged/i, DOM_FUNDS = /^(figr_heloc|buidl|usyc|ustb|jaaa|jtrsy|eutbl|ousg|benji|usdtb|ustbl|tbill|wtgxx|fobxx|ylds)$/i;
+  async function domLivePull() {
+    if (Date.now() - domLiveAt < 60000) return; domLiveAt = Date.now();
+    try {
+      const r = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1'); if (!r.ok) return;
+      const a = (await r.json()).filter(c => c && c.market_cap > 0 && !DOM_SKIP.test(c.id || '') && !DOM_FUNDS.test(c.symbol || '')).sort((x, y) => y.market_cap - x.market_cap).slice(0, 125); if (a.length < 100) return;
+      const tot = a.reduce((x, c) => x + c.market_cap, 0), cap = id => (a.find(c => c.id === id) || {}).market_cap || 0;
+      if (tot > 0 && cap('tether') > 0) domLive = {t: Date.now(), v: {'USDT.D': cap('tether') / tot * 100, 'BTC.D': cap('bitcoin') / tot * 100}};
+    } catch {}
+  }
   async function domData() {
+    await domLivePull();
     if (domCache && Date.now() - domCache.ts < 120000) return domCache.d;
     let d = null;
     for (const u of DOM_URLS) { try { const r = await fetch(u + (u.includes('?') ? '&' : '?') + 'v=' + Math.floor(Date.now() / 120000)); if (r.ok) { d = await r.json(); if (d && d.series) break; } } catch {} }
@@ -154,8 +167,10 @@
   }
   function domPoints(d, sym) { // [t, %] en orden: el diario (largo plazo) y el de 15 min (reciente) sin repetir
     const s = d.series[sym]; if (!s) return [];
-    const h = s.h || [], t0 = h.length ? h[0][0] : Infinity;
-    return [...(s.d || []).filter(p => p[0] < t0), ...h].sort((a, b) => a[0] - b[0]);
+    const h = s.h || [], t0 = h.length ? h[0][0] : Infinity, hh = (s.hh || []).filter(p => p[0] < t0), t1 = hh.length ? hh[0][0] : t0; // diario (1 año) → por hora (90 días) → cada 15 min (30 días)
+    const out = [...(s.d || []).filter(p => p[0] < t1), ...hh, ...h].sort((a, b) => a[0] - b[0]);
+    const lv = domLive && domLive.v[sym]; if (lv > 0 && out.length && domLive.t > out[out.length - 1][0]) out.push([domLive.t, lv]); // valor de este minuto
+    return out;
   }
   async function domList() {
     const d = await domData(), out = [];

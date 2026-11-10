@@ -10,8 +10,10 @@ const FILE = path.join(__dirname, '..', 'dominance-data.json'), API = 'https://a
 const Q = 900e3, HR = 3600e3, D = 86400e3, KEEP_Q = 30 * D, KEEP_HR = 120 * D, KEEP_D = 3000 * D, TOP = 125, METHOD = 'cryptocap-top125-v1';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // Fichas que solo «envuelven» a otra (wBTC, stETH, WETH, puentes…): no son criptomonedas aparte y contarlas duplicaría capitalización
-const DERIV = /(^|-)(wrapped|staked|restaked|bridged|binance-peg|liquid-staking)(-|$)|^(weth|wbtc|steth|wsteth|weeth|reth|cbbtc|cbeth|lbtc|solvbtc|ezeth|rseth|meth|jitosol|msol|bnsol|susde|susds|usdtb|wbeth|tbtc|sweth|oseth|ethx|lseth|pumpbtc|fbtc|clbtc|ebtc|unibtc|jupsol|bbsol|wbnb|usdt0|kbtc)$|staked-|-staked|wrapped-|-wrapped|-bridged|rocket-pool-eth|lido-|coinbase-wrapped|kelp-dao|renzo-restaked|ether-fi-staked|mantle-staked|binance-staked|jito-staked|marinade-staked|lombard-staked|solv-protocol|ethena-staked/i;
-const isDeriv = c => DERIV.test(c.id || '') || DERIV.test(String(c.symbol || '').toLowerCase());
+const DERIV = /(^|-)(wrapped|staked|restaked|bridged|binance-peg|liquid-staking)(-|$)|^(weth|wbtc|steth|wsteth|weeth|reth|cbbtc|cbeth|lbtc|solvbtc|ezeth|rseth|meth|jitosol|msol|bnsol|susde|susds|usdtb|wbeth|tbtc|sweth|oseth|ethx|lseth|pumpbtc|fbtc|clbtc|ebtc|unibtc|jupsol|bbsol|wbnb|usdt0|kbtc)$|staked-|-staked|wrapped-|-wrapped|-bridged|rocket-pool-eth|lido-staked|coinbase-wrapped|kelp-dao|renzo-restaked|ether-fi-staked|mantle-staked|binance-staked|jito-staked|marinade-staked|lombard-staked|solv-protocol|ethena-staked/i;
+// Fondos y valores tokenizados (bonos del Tesoro, créditos…): no son criptomonedas y no están en el listado de monedas que usa CRYPTOCAP
+const FUNDS = /^(figr_heloc|buidl|usyc|ustb|jaaa|jtrsy|eutbl|ousg|benji|usdtb|ustbl|tbill|wtgxx|fobxx|ylds)$/i;
+const isDeriv = c => DERIV.test(c.id || '') || DERIV.test(String(c.symbol || '').toLowerCase()) || FUNDS.test(String(c.symbol || ''));
 
 async function getJSON(url) {
   let err;

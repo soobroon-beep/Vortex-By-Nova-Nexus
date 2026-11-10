@@ -162,15 +162,16 @@
   let ov = null, step = 'list', pickId = '', q = '', all = null;
   const REQ = {apiKey: ['API Key', 'Tu clave pública'], secret: ['Secret Key', 'Tu clave secreta'], password: ['Passphrase', 'La frase que elegiste al crear la API'], uid: ['UID', 'Tu ID de usuario del exchange']};
   /* Logo de cada exchange: el de CCXT; si no carga, el ícono de su sitio; si tampoco, sus iniciales */
-  const logoCache = {};
+  const logoCache = {}, SITE = {bingx: 'bingx.com', binance: 'binance.com', bybit: 'bybit.com', okx: 'okx.com', bitget: 'bitget.com', kucoin: 'kucoin.com', gate: 'gate.com', mexc: 'mexc.com', htx: 'htx.com', kraken: 'kraken.com', coinbase: 'coinbase.com', bitmart: 'bitmart.com', cryptocom: 'crypto.com', bitfinex: 'bitfinex.com', phemex: 'phemex.com', hyperliquid: 'hyperliquid.xyz', woo: 'woox.io', deribit: 'deribit.com', blofin: 'blofin.com', lbank: 'lbank.com', binanceus: 'binance.us', bitstamp: 'bitstamp.net', gemini: 'gemini.com', upbit: 'upbit.com', bithumb: 'bithumb.com', whitebit: 'whitebit.com', bitso: 'bitso.com', poloniex: 'poloniex.com', xt: 'xt.com', weex: 'weex.com', toobit: 'toobit.com', aster: 'asterdex.com', dydx: 'dydx.exchange', backpack: 'backpack.exchange'};
   function logoOf(id) {
     if (logoCache[id] !== undefined) return logoCache[id]; let u = null;
+    if (SITE[id]) return (logoCache[id] = {logo: '', fav: `https://www.google.com/s2/favicons?domain=${SITE[id]}&sz=64`, alt: `https://icons.duckduckgo.com/ip3/${SITE[id]}.ico`}); // los populares: logo al instante, sin esperar a CCXT
     try { const X = root.ccxt; if (X && X[id]) { const d = X[id].prototype.describe(), w = d.urls || {}; let www = Array.isArray(w.www) ? w.www[0] : w.www; const host = www ? new URL(www).hostname : ''; u = {logo: typeof w.logo === 'string' ? w.logo : '', fav: host ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : ''}; } } catch {}
     if (root.ccxt) logoCache[id] = u; return u; // sin CCXT cargado aún no se guarda (se vuelve a intentar al pintar)
   }
   function lg(id, big) {
     const L = logoOf(id), ini = esc(nameOf(id).slice(0, 2)), src = L && (L.fav || L.logo);
-    return `<span class="xc-lg${big ? ' big' : ''}${src ? ' img' : ''}">${src ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-alt="${esc(L.logo && L.fav ? L.logo : '')}" onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt=''}else{this.parentNode.classList.remove('img');this.replaceWith(document.createTextNode('${ini}'))}">` : ini}</span>`;
+    return `<span class="xc-lg${big ? ' big' : ''}${src ? ' img' : ''}">${src ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-alt="${esc(L.alt || (L.logo && L.fav ? L.logo : ''))}" onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt=''}else{this.parentNode.classList.remove('img');this.replaceWith(document.createTextNode('${ini}'))}">` : ini}</span>`;
   }
   function listHtml() {
     const ids = all || FEATURED.map(x => x[0]), qq = q.trim().toLowerCase(), feat = FEATURED.map(x => x[0]);

@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.17', d: '10 nov 2026', t: 'Vela en vivo fluida y USDT.D con la fórmula CRYPTOCAP', items: [
+    'La vela se mueve con cada dato en vivo: los indicadores ya no frenan el gráfico y, si la conexión falla, la vela se sigue actualizando cada 2 s mientras se reconecta.',
+    'USDT.D y BTC.D se calculan como CRYPTOCAP (moneda / suma de las 125 criptomonedas más grandes) con capitalizaciones reales: por hora 90 días, por día 1 año y en vivo cada minuto.',
+    'Clic derecho: «Restablecer gráfico» va primero. Los logos de los exchanges aparecen al instante.'
+  ]},
   {v: '3.16', d: '10 nov 2026', t: 'Nombres Nova Nexus©, logos de exchanges y operación compacta en el celular', items: [
     'Tus indicadores se llaman «Nova Nexus© - Personal», «- IA Signals», «- Oscilador», «- Señales», «- Screener»… y la leyenda ya no muestra la «ƒ».',
     'En el celular, tu operación ocupa solo una pastilla pequeña a la izquierda; tócala para ver +TP, +SL y ✕. Conectar exchange muestra el logo de cada exchange.',

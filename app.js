@@ -1238,14 +1238,23 @@ function connectWS() {
     setTimeout(() => { if (gen === wsGen && !document.hidden) connectWS(); }, Math.min(15000, 3000 * ++wsRetry));
   };
 }
+/* La vela se pinta con CADA dato en vivo; los indicadores (lo pesado) se recalculan como mucho unas veces por segundo,
+   según lo que tarden: así el hilo no se satura y el gráfico nunca se queda «a tirones». Una vela nueva sí recalcula al instante. */
+let rcAt = 0, rcCost = 0, rcTimer = 0;
+function recalcSoon(force) {
+  const now = performance.now(), gap = Math.min(3000, Math.max(300, rcCost * 4));
+  if (force || now - rcAt >= gap) { clearTimeout(rcTimer); rcTimer = 0; const t0 = performance.now(); recalc(); rcCost = performance.now() - t0; rcAt = performance.now(); }
+  else if (!rcTimer) rcTimer = setTimeout(() => { rcTimer = 0; recalcSoon(true); scheduleRender(); }, gap - (now - rcAt));
+}
 function applyKline(k) {
   if (replay) { replayLive(k); return; } // en repetición el gráfico no se mueve con el precio en vivo
   const n = candles.length; if (!n) return;
   const last = candles[n - 1];
+  let isNew = false;
   if (k.t === last.t) candles[n - 1] = k;
-  else if (k.t > last.t) { candles.push(k); if (pan > 0) pan += 1; }
+  else if (k.t > last.t) { candles.push(k); if (pan > 0) pan += 1; isNew = true; }
   else return;
-  recalc(); updateChartHeader(); checkAlerts(state.symbol, k.c); if (window.CCTTrade) CCTTrade.tick(state.symbol, k.c);
+  recalcSoon(isNew); updateChartHeader(); checkAlerts(state.symbol, k.c); if (window.CCTTrade) CCTTrade.tick(state.symbol, k.c);
   if (currentView === 'chartView') scheduleRender();
 }
 document.addEventListener('visibilitychange', () => {
@@ -1258,10 +1267,19 @@ document.addEventListener('visibilitychange', () => {
 function liveKick(why) { if (document.hidden || replay || !candles.length || currentView !== 'chartView') return; wsReloadAt = Date.now(); fetchTicker(); loadCandles(true); }
 setInterval(() => {
   if (document.hidden || replay || !candles.length || currentView !== 'chartView' || !ws) return; // (las fuentes sin WebSocket ya se consultan solas cada pocos segundos)
-  const now = Date.now(); if (now - wsLast > 20000 && now - wsReloadAt > 12000) liveKick('sin datos');
-}, 5000);
+  const now = Date.now(); if (now - wsLast > 12000 && now - wsReloadAt > 12000) liveKick('sin datos');
+}, 3000);
+/* Respaldo: si el tiempo real lleva más de 4 s callado, la última vela se pide directo al exchange cada 2 s mientras se reconecta.
+   La vela se sigue moviendo aunque la conexión en vivo falle. */
+let restBusy = false;
+setInterval(async () => {
+  if (document.hidden || replay || !candles.length || currentView !== 'chartView' || !ws || restBusy || Date.now() - wsLast < 4000) return;
+  const sym = state.symbol, tf = state.interval, gen = wsGen; restBusy = true;
+  try { const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 5000), r = await fetchKlinesAny(sym, tf, ctl.signal, 3); clearTimeout(to); if (gen === wsGen && sym === state.symbol && tf === state.interval && r.src === (dataSrc || 'binance')) r.cs.forEach(applyKline); } catch {}
+  restBusy = false;
+}, 2000);
 window.addEventListener('online', () => liveKick('red'));
-window.addEventListener('focus', () => { if (Date.now() - wsLast > 20000 && Date.now() - wsReloadAt > 12000) liveKick('foco'); });
+window.addEventListener('focus', () => { if (Date.now() - wsLast > 12000 && Date.now() - wsReloadAt > 12000) liveKick('foco'); });
 { let beat = Date.now(); setInterval(() => { const n = Date.now(); if (n - beat > 30000) liveKick('despertó'); beat = n; }, 4000); } // el reloj «saltó»: la compu estuvo dormida
 
 /* ───────── Indicadores ───────── */
@@ -4241,8 +4259,8 @@ area.addEventListener('contextmenu', e => {
   let ctxPrice = NaN; try { const q = local(e); if (geo && q.y >= 0) ctxPrice = +PRICE(q.y).toPrecision(8); } catch {}
   const m = document.createElement('div'); m.className = 'pop-menu chart-ctx';
   window.__ctxPrice = ctxPrice;
-  m.innerHTML = `<button data-a="copyp">${SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 16)}<span>Copiar precio ${fmt(ctxPrice)}</span></button>${PANE ? '' : `<button data-a="alertp">${SV('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 16)}<span>Añadir alerta en ${fmt(ctxPrice)}</span></button>`}<i class="ctx-sep"></i>` // lo que más se usa, arriba
-    + (window.CCTTrade && ctxPrice > 0 ? `<button data-a="trbuy" class="ctx-buy">${SV('<path d="M12 19V5M6 11l6-6 6 6"/>', 16)}<span>Comprar en ${fmt(ctxPrice)}</span></button><button data-a="trsell" class="ctx-sell">${SV('<path d="M12 5v14M6 13l6 6 6-6"/>', 16)}<span>Vender en ${fmt(ctxPrice)}</span></button>` : '') + `<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><i class="ctx-sep"></i><button data-a="risk">${SV('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11v6M8 14h2M12 14h2M8 17h2M12 17h2"/>', 16)}<span>Calculadora de riesgo</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
+  m.innerHTML = `<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="copyp">${SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 16)}<span>Copiar precio ${fmt(ctxPrice)}</span></button>${PANE ? '' : `<button data-a="alertp">${SV('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 16)}<span>Añadir alerta en ${fmt(ctxPrice)}</span></button>`}<i class="ctx-sep"></i>` // lo que más se usa, arriba
+    + (window.CCTTrade && ctxPrice > 0 ? `<button data-a="trbuy" class="ctx-buy">${SV('<path d="M12 19V5M6 11l6-6 6 6"/>', 16)}<span>Comprar en ${fmt(ctxPrice)}</span></button><button data-a="trsell" class="ctx-sell">${SV('<path d="M12 5v14M6 13l6 6 6-6"/>', 16)}<span>Vender en ${fmt(ctxPrice)}</span></button>` : '') + `<button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><i class="ctx-sep"></i><button data-a="risk">${SV('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11v6M8 14h2M12 14h2M8 17h2M12 17h2"/>', 16)}<span>Calculadora de riesgo</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
   document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
   const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
