@@ -171,7 +171,7 @@ function sanPixel(x) {
   return {nombre: txt(q.nombre, 30), estilo: pick('estilo', 'intradía'), riesgo: pick('riesgo', 'moderado'), tono: pick('tono', 'corto y directo'), trato: pick('trato', 'amigable'), color: pick('color', 'purple'),
     tfs: Array.isArray(q.tfs) ? q.tfs.filter(t => INTERVALS.includes(t)).slice(0, 6) : [], reglas: txt(q.reglas, 1500), notas: txt(q.notas, 1000),
     sr: Math.max(1, Math.min(5, Math.round(+q.sr) || 3)), colSup: hex(q.colSup), colRes: hex(q.colRes),
-    tips: q.tips !== false, completo: Array.isArray(q.completo) && q.completo.filter(k => PIX_OPT.completo.includes(k)).length ? q.completo.filter(k => PIX_OPT.completo.includes(k)) : ['sr', 'trend', 'channel'], at: +q.at || 0};
+    tips: q.tips !== false, vigia: [0, 5, 15, 30].includes(+q.vigia) && q.vigia != null && q.vigia !== '' ? +q.vigia : 15, completo: Array.isArray(q.completo) && q.completo.filter(k => PIX_OPT.completo.includes(k)).length ? q.completo.filter(k => PIX_OPT.completo.includes(k)) : ['sr', 'trend', 'channel'], at: +q.at || 0};
 }
 const sanTpl = t => ({...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns', 'nr'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {}), ...dSanO(t.o)});
 function dSanO(o) { const x = o ? CCTDrawCfg.sanitize(o) : null; return x ? {o: x} : {}; } // ajustes propios de la herramienta (draw-cfg.js)
@@ -1020,7 +1020,27 @@ function renderFrames() {
     if (r.top - vr.top > vr.height / 2) { panel.style.top = 'auto'; panel.style.bottom = (vr.bottom - r.top + 8) + 'px'; } else { panel.style.bottom = 'auto'; panel.style.top = (r.bottom - vr.top + 8) + 'px'; }
     view.classList.add(cls); btn.setAttribute('aria-expanded', 'true');
   };
-  tf.onclick = e => { e.stopPropagation(); toggle('tf-open', tf, $('#timeframes')); };
+  /* celular: desliza el dedo hacia arriba o hacia abajo sobre la temporalidad para cambiarla sin abrir el menú (arriba = más grande) */
+  let sw = null, swHint = null, swAt = 0;
+  const swShow = i => {
+    if (!swHint) { swHint = document.createElement('div'); swHint.className = 'tf-wheel'; view.appendChild(swHint); }
+    swHint.innerHTML = [i + 1, i, i - 1].map((k, n) => `<span class="${n === 1 ? 'cur' : ''}">${INTERVALS[k] || '·'}</span>`).join('');
+    const r = tf.getBoundingClientRect(), vr = view.getBoundingClientRect(); swHint.style.left = (r.left - vr.left + r.width / 2) + 'px'; swHint.style.top = (r.top - vr.top - 8) + 'px';
+  };
+  tf.addEventListener('pointerdown', e => { if (isDesktop()) return; const i = INTERVALS.indexOf(state.interval); sw = {y: e.clientY, i0: i, i, moved: false}; try { tf.setPointerCapture(e.pointerId); } catch {} });
+  tf.addEventListener('pointermove', e => {
+    if (!sw) return; const dy = sw.y - e.clientY; if (!sw.moved && Math.abs(dy) < 10) return;
+    if (!sw.moved) { sw.moved = true; close(); tf.classList.add('swiping'); }
+    const i = clamp(sw.i0 + Math.round(dy / 24), 0, INTERVALS.length - 1); if (i !== sw.i) { sw.i = i; navigator.vibrate?.(6); }
+    tf.textContent = INTERVALS[i] + ' ▾'; swShow(i); e.preventDefault();
+  });
+  const swEnd = e => {
+    if (!sw) return; const s = sw; sw = null; tf.classList.remove('swiping'); if (swHint) { swHint.remove(); swHint = null; } if (!s.moved) return;
+    swAt = Date.now(); // el toque que cierra el gesto no abre el menú
+    if (e.type === 'pointerup' && s.i !== s.i0) { state.interval = INTERVALS[s.i]; save(); renderFrames(); clearTransient(); loadCandles(); } else renderFrames();
+  };
+  tf.addEventListener('pointerup', swEnd); tf.addEventListener('pointercancel', swEnd);
+  tf.onclick = e => { e.stopPropagation(); if (Date.now() - swAt < 450) return; toggle('tf-open', tf, $('#timeframes')); };
   more.onclick = e => { e.stopPropagation(); toggle('more-open', more, $('#moreGroup')); };
   document.addEventListener('click', e => {
     if (!view.classList.contains('tf-open') && !view.classList.contains('more-open')) return;
@@ -1030,7 +1050,7 @@ function renderFrames() {
   window.addEventListener('resize', close);
   // celular: en la píldora quedan solo los esenciales; lo demás pasa a «Más» (en escritorio todo vuelve a su lugar)
   // celular: la barra flotante solo lleva la temporalidad actual y la estrella; todo lo demás va en el menú que se despliega
-  const MOVE = [tb.querySelector('[data-panel=indicators]'), $('#designsBtn'), $('#tradeBtn'), tb.querySelector('[data-panel=tools]'), $('#liqBtn'), $('#replayBtn'), $('#bookBtn'), $('#journalBtn')].filter(Boolean), UNDO = $('#undoDraw');
+  const MOVE = [tb.querySelector('[data-panel=indicators]'), $('#liqBtn'), tb.querySelector('[data-panel=tools]'), $('#designsBtn'), $('#tradeBtn'), $('#replayBtn'), $('#bookBtn'), $('#journalBtn')].filter(Boolean), UNDO = $('#undoDraw');
   const ORIG = [...tb.children], firstOwn = $('#layoutBtn'); // orden original de la barra (para volver a escritorio)
   const place = () => {
     const mob = !isDesktop(), grp = $('#moreGroup');

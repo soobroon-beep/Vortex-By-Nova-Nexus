@@ -396,8 +396,35 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     if (open || busy || CFG().tips === false || !TIPS[sec] || Date.now() - lastTip < 90000) return; const day = new Date().toDateString(); ls.tips = ls.tips || {}; if (ls.tips[sec] === day) return;
     clearTimeout(tipTimer); tipTimer = setTimeout(() => { if (open || section() !== sec) return; ls.tips[sec] = day; store(); lastTip = Date.now(); tip.textContent = TIPS[sec][0]; tip.dataset.q = TIPS[sec][1]; tip.hidden = false; const r = fab.getBoundingClientRect(), l = layer.getBoundingClientRect(); tip.style.left = clamp(r.left - l.left + r.width / 2 - 110, 8, AW() - 228) + 'px'; tip.style.top = (r.top - l.top - 46) + 'px'; fab.classList.add('peek-up'); setTimeout(() => { tip.hidden = true; fab.classList.remove('peek-up'); }, 6500); }, 2500);
   }
-  tip.addEventListener('click', async () => { const q = tip.dataset.q; tip.hidden = true; fab.classList.remove('peek-up'); await show(false); ask(q); });
+  tip.addEventListener('click', async () => { const q = tip.dataset.q; tip.hidden = true; tip.classList.remove('px-watch'); fab.classList.remove('peek-up'); await show(false); ask(q); });
   setInterval(() => { const sec = section(); if (sec !== lastSec) { lastSec = sec; placePeek(); if (open) { setChips(); if (!busy) { const h = home(); flyTo(h.x, h.y, 500); } } else maybeTip(sec); } }, 1200);
+
+  /* ── Vigía de tus reglas: cada cierto tiempo mira el gráfico, lo compara con tus reglas y te deja un mensajito con su lectura ──
+       (lectura de indicadores y mensaje de respaldo en pixel-watch.js; cada cuánto se elige en la tarjeta de Pixel: «Avisos de tus reglas») */
+  const W = window.NexusPixelWatch; let watchKey = '', watchAt = 0, watchSig = '', watchSaid = 0, watchBusy = false, watchHide = 0;
+  function showWatch(text) {
+    lastTip = Date.now(); hist.push({role: 'assistant', content: text}); if (hist.length > 12) hist.splice(0, hist.length - 12);
+    if (open) { if (busy) return; wake(); mood('excited', 'idle'); bub.hidden = false; say(text); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2600); return; }
+    clearTimeout(tipTimer); clearTimeout(watchHide); tip.textContent = text; tip.dataset.q = '¿Por qué lo dices? Explícame tu lectura del gráfico con mis reglas'; tip.classList.add('px-watch'); tip.hidden = false;
+    const r = fab.getBoundingClientRect(), l = layer.getBoundingClientRect(), w = tip.offsetWidth, hh = tip.offsetHeight;
+    tip.style.left = clamp(r.left - l.left + r.width / 2 - w + 24, 8, Math.max(8, AW() - w - 8)) + 'px'; tip.style.top = Math.max(8, r.top - l.top - hh - 10) + 'px'; fab.classList.add('peek-up');
+    watchHide = setTimeout(() => { tip.hidden = true; tip.classList.remove('px-watch'); fab.classList.remove('peek-up'); }, 14000);
+  }
+  async function ruleWatch(force) {
+    const h = H(), c = CFG(), every = W ? W.every(c) : 0; if (!W || !h || (!every && !force) || watchBusy || busy || document.hidden || !onChart() || !fab.getClientRects().length) return null;
+    const key = h.symbol() + '|' + h.interval(), now = Date.now(), coin = String(h.symbol()).replace(/(USDT|USDC|FDUSD|BUSD)$/, '') || h.symbol();
+    if (key !== watchKey && !force) { watchKey = key; watchSig = ''; watchAt = now - every * 6e4 + 40000; return null; } // gráfico nuevo: primera lectura a los 40 s
+    if (!force && (now - watchAt < every * 6e4 || !tip.hidden)) return null;
+    let ctx = null; try { ctx = window.CCT_getAIContext && window.CCT_getAIContext(); } catch {} const R = W.read(ctx); if (!R) return null;
+    watchAt = now; watchKey = key; if (!force && R.sig === watchSig && now - watchSaid < 60 * 6e4) return null; // nada cambió: no repite lo mismo (como mucho, un recordatorio por hora)
+    watchBusy = true; let text = '';
+    try { const L = LLM(); if (L && L.chat) { const r = await Promise.race([L.chat([{role: 'system', content: W.SYS + profile()}, {role: 'user', content: W.prompt(R, coin, h.interval(), ctx)}], {purpose: 'text', maxTokens: 150}), sleep(25000).then(() => { throw new Error('tarde'); })]); text = W.clean(r && r.text); } } catch {}
+    watchBusy = false; if (!text) text = W.local(R, coin, h.interval(), c);
+    if (h.symbol() + '|' + h.interval() !== key || (busy && !force)) return null; // cambiaste de gráfico mientras pensaba
+    watchSig = R.sig; watchSaid = Date.now(); showWatch(text); return text;
+  }
+  setInterval(() => { ruleWatch(false).catch(() => {}); }, 15000);
+  addEventListener('cct-pixel-cfg', () => { watchSig = ''; watchAt = Date.now() - 1e9; watchKey = H() ? H().symbol() + '|' + H().interval() : ''; setTimeout(() => ruleWatch(false).catch(() => {}), 4000); }); // reglas nuevas: te lo demuestra enseguida
 
   /* ── abrir / cerrar ── */
   async function ensureModel() {
@@ -515,5 +542,5 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
   addEventListener('resize', placePeek); setTimeout(placePeek, 300);
   if (ls.open) setTimeout(() => show(false), 1800);
   addEventListener('cct-pixel-cfg', () => { try { if (M) M.setColor(CFG().color || 'purple'); } catch {} });
-  window.NexusPixel = {show, hide, ask, say: async t => { try { if (!open) await show(false); mood('excited', 'fly'); say(t); } catch {} }, get open() { return open; }}; // say: el Radar de oportunidades te lo cuenta
+  window.NexusPixel = {show, hide, ask, watch: () => ruleWatch(true), say: async t => { try { if (!open) await show(false); mood('excited', 'fly'); say(t); } catch {} }, get open() { return open; }}; // say: el Radar de oportunidades te lo cuenta
 })();
