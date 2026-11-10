@@ -39,10 +39,15 @@
       if (!ex) ex = await make(cfg);
       const bal = await ex.fetchBalance(), q = ['USDT', 'USDC', 'USD'].find(k => bal.total && Number.isFinite(+bal.total[k]) && +bal.total[k] > 0) || 'USDT';
       let positions = [], orders = [];
-      if (cfg.market !== 'spot' && ex.has.fetchPositions) { try { positions = (await ex.fetchPositions()).filter(p => Math.abs(num(p.contracts)) > 0); } catch {} }
-      if (ex.has.fetchOpenOrders) { try { orders = await ex.fetchOpenOrders(); } catch {} }
+      let posErr = '';
+      if (cfg.market !== 'spot' && ex.has.fetchPositions) { // posiciones abiertas (si una forma falla, se intenta otra y se muestra el motivo)
+        const live = p => Math.abs(num(p.contracts)) > 0 || Math.abs(num(p.info && (p.info.positionAmt || p.info.availableAmt || p.info.size || p.info.pos))) > 0;
+        for (const args of [[], [undefined, {type: 'swap'}], [undefined, {subType: 'linear'}]]) { try { positions = (await ex.fetchPositions(...args)).filter(live); posErr = ''; break; } catch (e) { posErr = errText(e); } }
+      }
+      if (ex.has.fetchOpenOrders) { try { orders = await ex.fetchOpenOrders(); } catch (e) { try { orders = await ex.fetchOpenOrders(undefined, undefined, undefined, {type: cfg.market === 'spot' ? 'spot' : 'swap'}); } catch {} } }
+      if (cfg.market !== 'spot' && ex.has.fetchOpenOrders) { try { const tr = await ex.fetchOpenOrders(undefined, undefined, undefined, {stop: true, trigger: true}); for (const o of tr || []) if (!orders.some(x => x.id === o.id)) orders.push(o); } catch {} } // órdenes condicionales (TP/SL)
       const upnl = positions.reduce((a, p) => a + (num(p.unrealizedPnl) || 0), 0), info = bal.info || {}, bxEq = num(info.data && info.data.balance && info.data.balance.equity);
-      snap = {equity: Number.isFinite(bxEq) ? bxEq : num(bal.total && bal.total[q]) + (cfg.market !== 'spot' ? upnl : 0), free: num(bal.free && bal.free[q]), quote: q, positions, orders, at: Date.now(), err: ''};
+      snap = {equity: Number.isFinite(bxEq) ? bxEq : num(bal.total && bal.total[q]) + (cfg.market !== 'spot' ? upnl : 0), free: num(bal.free && bal.free[q]), quote: q, positions, orders, posErr, at: Date.now(), err: ''};
     } catch (e) { snap = Object.assign({}, snap, {err: errText(e), at: Date.now()}); }
     finally { busy = false; }
     emit(); return snap;
@@ -92,6 +97,29 @@
     catch (e) { if (!hedgeErr(e)) throw new Error(tradeErr(e)); await ex.createOrder(pos.symbol, 'market', side, amount, undefined, {positionSide: long ? 'LONG' : 'SHORT', hedged: true}).catch(e2 => { throw new Error(tradeErr(e2)); }); }
     setTimeout(refresh, 800);
   }
+  /* TP y SL de una posición real: se leen de sus órdenes condicionales y se cambian desde el gráfico */
+  const trig = o => num(o.triggerPrice || o.stopPrice || o.takeProfitPrice || o.stopLossPrice || (o.info && (o.info.stopPrice || o.info.triggerPrice)));
+  const baseOf = s => String(s || '').split(/[/:]/)[0].replace(/^1000/, '');
+  function protections(pos) {
+    const long = String(pos.side).toLowerCase() === 'long', e = num(pos.entryPrice), out = {tp: null, sl: null};
+    for (const o of snap.orders || []) {
+      if (o.symbol !== pos.symbol) continue; const t = trig(o); if (!(t > 0)) continue; const closes = (o.side === 'sell') === long; if (!closes) continue;
+      const k = /take|profit/i.test(String(o.type) + JSON.stringify(o.info || {}).slice(0, 300)) ? 'tp' : /stop|loss/i.test(String(o.type)) && !/take/i.test(String(o.type)) ? 'sl' : ((t > e) === long ? 'tp' : 'sl');
+      if (!out[k]) out[k] = {id: o.id, price: t, o};
+    }
+    return out;
+  }
+  async function setTpSl(pos, kind, price) {
+    if (!canTrade()) throw new Error('Activa «Permitir operar en vivo» en tu exchange conectado');
+    if (!ex) ex = await make(cfg); await ex.loadMarkets();
+    const long = String(pos.side).toLowerCase() === 'long', prev = protections(pos)[kind], amount = +ex.amountToPrecision(pos.symbol, Math.abs(num(pos.contracts))), p = +ex.priceToPrecision(pos.symbol, price), side = long ? 'sell' : 'buy';
+    const base = kind === 'tp' ? {takeProfitPrice: p} : {stopLossPrice: p};
+    try { await ex.createOrder(pos.symbol, 'market', side, amount, undefined, Object.assign({reduceOnly: true}, base)); }
+    catch (e) { if (!hedgeErr(e)) throw new Error(tradeErr(e)); await ex.createOrder(pos.symbol, 'market', side, amount, undefined, Object.assign({positionSide: long ? 'LONG' : 'SHORT', hedged: true}, base)).catch(e2 => { throw new Error(tradeErr(e2)); }); }
+    if (prev) { try { await ex.cancelOrder(prev.id, pos.symbol, {stop: true, trigger: true}); } catch { try { await ex.cancelOrder(prev.id, pos.symbol); } catch {} } } // se quita el anterior DESPUÉS de poner el nuevo (nunca queda sin protección)
+    setTimeout(refresh, 700);
+  }
+  async function removeTpSl(pos, kind) { const prev = protections(pos)[kind]; if (!prev) return; if (!ex) ex = await make(cfg); try { await ex.cancelOrder(prev.id, pos.symbol, {stop: true, trigger: true}); } catch (e) { try { await ex.cancelOrder(prev.id, pos.symbol); } catch (e2) { throw new Error(tradeErr(e2)); } } setTimeout(refresh, 600); }
   async function cancel(o) { if (!ex) ex = await make(cfg); try { await ex.cancelOrder(o.id, o.symbol); } catch (e) { throw new Error(tradeErr(e)); } setTimeout(refresh, 600); }
   const canTrade = () => !!(cfg && cfg.trade);
 
@@ -193,5 +221,5 @@
   document.addEventListener('click', e => { if (e.target.closest('[data-ex-open]')) { e.preventDefault(); open(); } });
   if (cfg) { startPoll(); setTimeout(checkPerms, 1500); }
 
-  root.CCTExchange = {open, close, refresh, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
+  root.CCTExchange = {open, close, refresh, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, protections, setTpSl, removeTpSl, baseOf, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
 })(typeof self !== 'undefined' ? self : this);

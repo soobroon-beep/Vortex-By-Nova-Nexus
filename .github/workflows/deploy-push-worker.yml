@@ -6,7 +6,7 @@ name: Publicar servidor de avisos (vortex-push)
 on:
   push:
     branches: [main]
-    paths: ['worker/push-alerts.mjs', 'worker/screener.mjs', 'worker/wrangler-push.toml', 'nova-nexus.js', 'discord-format.js', '.github/workflows/deploy-push-worker.yml']
+    paths: ['worker/push-alerts.mjs', 'worker/screener.mjs', 'worker/radar-server.mjs', 'radar.js', 'worker/wrangler-push.toml', 'nova-nexus.js', 'discord-format.js', '.github/workflows/deploy-push-worker.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22}
       - name: Pruebas del Worker
-        run: node --test tests/push-worker.test.js tests/worker-screener.test.js
+        run: node --test tests/push-worker.test.js tests/worker-screener.test.js tests/radar.test.js tests/radar-server.test.js tests/alerts-exchanges.test.js
       - name: Publicar en Cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

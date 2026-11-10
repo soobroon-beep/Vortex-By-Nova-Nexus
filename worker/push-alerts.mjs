@@ -7,6 +7,7 @@
 // Se publica solo con .github/workflows/deploy-push-worker.yml (configuración en worker/wrangler-push.toml).
 
 import * as SCR from './screener.mjs';
+import {radarInternal, loadState as radarState} from './radar-server.mjs';
 const DEFAULT_ORIGINS = 'https://soobroon-beep.github.io';
 const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com', 'https://api1.binance.com'];
 const MOVE_TOP = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT'];
@@ -271,6 +272,8 @@ export default {
     if (req.method === 'GET' && path === '/') return json({ok: true, app: 'VORTEX push', note: 'Notificaciones de alertas con la app cerrada'});
     if (req.method === 'GET' && path === '/scr/state') { const st = (await env.KV.get('scr', 'json')) || {}; return json({ok: true, '1h': st['1h'] || 0, '4h': st['4h'] || 0, last: st.last || {}, lock: st.lock || 0, err: st.err || null, kick: st.kick || null, now: Date.now()}); }
     if (path.startsWith('/scr/') && req.method === 'POST') return scrInternal(req, env, path);
+    if (path.startsWith('/radar/') && req.method === 'POST') return scrInternal(req, env, path); // Radar de Nexus Pixel (llamadas internas)
+    if (req.method === 'GET' && path === '/radar/state') { const st = await radarState(env); return json({ok: true, at: st.at || 0, note: st.note || '', min: st.min, log: st.log.slice(0, 30).map(o => ({symbol: o.symbol, tf: o.tf, side: o.side, at: o.at, entry: o.entry, stop: o.stop, target: o.target, ai: o.ai, v: o.v, why: o.why, res: o.res, resAt: o.resAt}))}); }
     if (req.method === 'GET' && path === '/scr/diag') { // diagnóstico: qué servidores de Binance contestan desde Cloudflare
       const urls = ['https://api.mexc.com/api/v3/klines?symbol=BTCUSDT&interval=60m&limit=2', 'https://api.mexc.com/api/v3/ticker/24hr', 'https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=BTC_USDT&interval=1h&limit=2', 'https://api.kucoin.com/api/v1/market/candles?symbol=BTC-USDT&type=1hour', 'https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar=1H&limit=2', 'https://api.bybit.com/v5/market/kline?category=spot&symbol=BTCUSDT&interval=60&limit=2', 'https://api.bitget.com/api/v2/spot/market/candles?symbol=BTCUSDT&granularity=1h&limit=2', 'https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=2', 'https://min-api.cryptocompare.com/data/v2/histohour?fsym=BTC&tsym=USDT&e=Binance&limit=2', 'https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=2', 'https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=2'], out = {};
       await Promise.all(urls.map(async u => { try { const r = await fetch(u, {headers: {'user-agent': 'Mozilla/5.0 (compatible; VORTEX/2.0)', accept: 'application/json'}}); const t = await r.text(); out[u.split('?')[0]] = r.status + ' ' + t.slice(0, 80); } catch (e) { out[u] = 'err ' + e.message; } }));
@@ -300,7 +303,7 @@ export default {
       if (b.subOnly) { if (!cur.sub) return json({ok: false, error: 'Dispositivo sin registrar'}, 404); cur.sub = sub; cur.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(cur)); if (!ids.includes(id)) await env.KV.put('devs', JSON.stringify([...ids, id])); return json({ok: true}); } // el celular renovó su suscripción: se conservan alertas y ajustes
       const incoming = (Array.isArray(b.alerts) ? b.alerts : []).map(sanAlert).filter(Boolean).slice(0, MAX_ALERTS);
       const m = mergeAlerts(incoming, cur.alerts, b.since);
-      const d = {sub, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), priceOn: b.priceOn !== false, dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now()};
+      const d = {sub, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now()};
       const same = JSON.stringify({...d, updated: 0}) === JSON.stringify({...cur, updated: 0});
       if (!same) { d.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(d)); } // sin cambios no se escribe (el plan gratis permite 1000 escrituras al día)
       if (!ids.includes(id)) { if (ids.length >= MAX_DEVICES) return json({error: 'Demasiados dispositivos'}, 429); await env.KV.put('devs', JSON.stringify([...ids, id])); }
@@ -343,6 +346,17 @@ async function scrInternal(req, env, path) {
   if (req.headers.get('x-vx-int') !== await intToken(env)) return J({error: 'No autorizado'}, 403);
   let b = {}; try { b = await req.json(); } catch {}
   const tf = b.tf === '4h' ? '4h' : '1h', now = +b.now || Date.now();
+  if (path === '/radar/push') { // grandes oportunidades: solo a los celulares que encendieron el radar
+    const ids = (await env.KV.get('devs', 'json')) || []; let sent = 0; const v = await vapidKeys(env);
+    for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (!d || !d.sub || !d.radar) continue; try { const s0 = await sendPush(d.sub, b.msg, v); if (s0 < 300) sent++; } catch {} }
+    return J({sent});
+  }
+  if (path.startsWith('/radar/')) {
+    const h = {self: (p, body) => self(env, p, body), pool, appUrl: APP_URL, aiKey: () => aiKey(env),
+      anyRadar: async () => { const ids = (await env.KV.get('devs', 'json')) || []; for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (d && d.radar) return true; } return false; },
+      discord: (t, op) => SCR.postDiscord(String(env.DISCORD_WEBHOOK || '').trim(), [{title: '🛰️ ' + t.title, description: t.body + '\n_Radar de Nexus Pixel · no es asesoría financiera._', color: op.side === 'buy' ? 0x089981 : 0xf23645, timestamp: new Date().toISOString()}])};
+    try { const r = await radarInternal(path, b, env, h); return r ? J(r) : J({error: 'No encontrado'}, 404); } catch (e) { return J({error: String(e && e.message || e).slice(0, 200)}, 500); }
+  }
   if (path === '/scr/top') return J({top: await SCR.topSymbols(SCR.TOP_N)});
   if (path === '/scr/chunk') { // unas cuantas monedas por llamada para no pasar los 10 ms de CPU
     const rows = [], fail = [];
@@ -377,7 +391,8 @@ async function scrInternal(req, env, path) {
     }
     st[tf] = slot; st.lock = 0; st.err = null; st.last = Object.assign(st.last || {}, {[tf]: {at: Date.now(), n: rows.length, of: done, discord, pushed}});
     await env.KV.put('scr', JSON.stringify(st));
-    return J({ok: true, tf, n: rows.length, of: done, discord, pushed});
+    let radar = null; try { radar = await self(env, '/radar/run', {tf, now, rows: rows.map(r => ({symbol: r.symbol, sg: r.sg}))}); } catch (e) { radar = {error: e.message}; } // el radar revisa lo que encontró el Screener
+    return J({ok: true, tf, n: rows.length, of: done, discord, pushed, radar});
   }
   return J({error: 'No encontrado'}, 404);
 }

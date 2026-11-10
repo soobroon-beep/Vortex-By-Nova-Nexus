@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.14', d: '10 nov 2026', t: 'Radar en el servidor, bots multi-temporalidad y TP/SL reales en el gráfico', items: [
+    'El Radar de Nexus Pixel trabaja en el servidor cada hora, aunque la app y el celular estén cerrados (con «Activar notificaciones»).',
+    'Bots: tu edición se aplica siempre (ya no se queda en 4h); elige varias temporalidades y monedas y mira cómo va cada una por separado.',
+    'Tu posición real del exchange se dibuja en el gráfico con TP y SL que puedes arrastrar; Avisos ahora vive en Configuración; señales más separadas de las velas y cada dibujo nuevo usa tu última configuración.'
+  ]},
   {v: '3.13', d: '8 nov 2026', t: 'Radar de Nexus Pixel y alertas en cualquier exchange', items: [
     'Las alertas de precio ya funcionan en monedas de Binance Futuros, Bybit, OKX, BingX y demás (antes se borraban) y también avisan a Discord con la app cerrada.',
     'Nuevo «Grandes oportunidades»: Nexus Pixel revisa el Screener cada hora, aplica filtros, lo confirma con IA, te avisa y aprende de los resultados.',

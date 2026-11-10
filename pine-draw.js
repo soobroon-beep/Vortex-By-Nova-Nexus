@@ -124,8 +124,8 @@
         const i = pt[0] + (s.offset || 0); if (i < lo - 1 || i > hi) continue; const x = X(i), c = candles[Math.min(candles.length - 1, Math.max(0, i))];
         if (s.kind === 'arrow') { const up = pt[1] > 0, y = up ? Y(c.l) + 4 : Y(c.h) - 4, sz = 6; g.fillStyle = col(pt[2]); g.beginPath(); if (up) { g.moveTo(x, y); g.lineTo(x - sz, y + sz * 1.6); g.lineTo(x + sz, y + sz * 1.6); } else { g.moveTo(x, y); g.lineTo(x - sz, y - sz * 1.6); g.lineTo(x + sz, y - sz * 1.6); } g.closePath(); g.fill(); continue; }
         const sz = SIZE[s.size] || 7, loc = s.loc; let y, dir;
-        if (loc === 'abovebar') { y = o.overlay ? Y(c.h) - sz - 5 : top + sz + 4; dir = -1; }
-        else if (loc === 'belowbar') { y = o.overlay ? Y(c.l) + sz + 5 : bottom - sz - 4; dir = 1; }
+        if (loc === 'abovebar') { y = o.overlay ? Y(c.h) - sz - 5 - SIG_GAP : top + sz + 4; dir = -1; } // separadas de la vela (SIG_GAP) para que no estorben
+        else if (loc === 'belowbar') { y = o.overlay ? Y(c.l) + sz + 5 + SIG_GAP : bottom - sz - 4; dir = 1; }
         else if (loc === 'top') { y = top + sz + 4; dir = -1; } else if (loc === 'bottom') { y = bottom - sz - 4; dir = 1; }
         else { y = Y(pt[1]); dir = 0; }
         drawGlyph(g, s, x, y, sz, col(pt[2]), col(pt[3]), pt[4], dir);
@@ -167,7 +167,8 @@
     for (const lb of res.labels) {
       if (isn(lb.x)) continue; const i = Math.round(lb.x), c = candles[Math.min(candles.length - 1, Math.max(0, i))]; let y;
       if (lb.yloc === 'abovebar') y = Y(c.h); else if (lb.yloc === 'belowbar') y = Y(c.l); else if (isn(lb.y)) continue; else y = Y(lb.y);
-      drawLabel(g, lb, X(lb.x), y, col(lb.ci), col(lb.tci), lb.yloc === 'abovebar' ? 'down' : lb.yloc === 'belowbar' ? 'up' : null);
+      { const f = lb.yloc === 'abovebar' ? 'down' : lb.yloc === 'belowbar' ? 'up' : null, st = f || String(lb.style || 'label_down').replace(/^label_/, ''); if (st === 'down') y -= SIG_GAP; else if (st === 'up') y += SIG_GAP; // señales (long/short/rango…) con margen respecto a la vela
+      drawLabel(g, lb, X(lb.x), y, col(lb.ci), col(lb.tci), f); }
     }
     for (const pl of res.polylines || []) {
       const pts = pl.pts.filter(q => !isn(q[0]) && !isn(q[1])); if (pts.length < 2) continue;
@@ -253,6 +254,7 @@
     if (!c || !b.text || !/(\(\d+(\.\d+)?%\)\s*$)|(^\s*[\d.,]+\s*$)/.test(b.text)) return c;
     const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(c); return m ? `rgba(${m[1]},${m[2]},${m[3]},${+(m[4] * VP_FILL_K).toFixed(3)})` : c;
   }
+  const SIG_GAP = 9; // px de separación entre la vela y las etiquetas/figuras de señal
   function drawLabel(g, lb, x, y, bg, fg, force) {
     const fs = FONT[lb.size] || 11; g.font = `${fs}px system-ui`; const text = lb.text || '', lines = text.split('\n'), tw = Math.max(0, ...lines.map(t => g.measureText(t).width)), pad = 5, w = tw + pad * 2, h = lines.length * (fs + 2) + pad * 2 - 2;
     let st = String(lb.style || 'label_down').replace(/^label_/, ''); if (force === 'up') st = 'up'; if (force === 'down') st = 'down';

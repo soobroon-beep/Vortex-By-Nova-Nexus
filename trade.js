@@ -44,7 +44,23 @@
   function poll() { const syms = new Set([...A.pos.map(p => p.sym), ...A.ord.map(o => o.sym)]); for (const s of syms) tick(s, px(s)); }
 
   /* ───────── líneas para el gráfico ───────── */
-  function lines(sym) { if (real()) return []; // en modo real no se dibujan las líneas de la demo
+  /* Modo real: líneas de tu posición del exchange (entrada, TP, SL y liquidación). TP y SL se arrastran para moverlos; × los quita. */
+  const symBase = s => String(s || '').split('@')[0].replace(/(USDT|USDC|USD)$/, '').replace(/^1000/, '');
+  function realLines(sym) {
+    const S = xs(), b = symBase(sym), out = [];
+    (S.positions || []).forEach((p, i) => {
+      if (X().baseOf(p.symbol) !== b) return; const L = +p.contracts * (String(p.side).toLowerCase() === 'long' ? 1 : -1), e = +p.entryPrice, pr = X().protections(p), id = 'x' + i, sd = L > 0 ? 1 : -1, q = Math.abs(+p.contracts) * (+p.contractSize || 1);
+      out.push({id, kind: 'pos', price: e, side: sd, txt: `${sd > 0 ? 'LONG' : 'SHORT'} REAL ${qf(q)}${+p.leverage ? ' · ' + p.leverage + 'x' : ''}`, pnl: +p.unrealizedPnl, sub: fin(+p.percentage) ? (+p.percentage >= 0 ? '+' : '') + (+p.percentage).toFixed(2) + '%' : '', x: 1, addTp: !pr.tp, addSl: !pr.sl, real: 1});
+      if (pr.tp) out.push({id, kind: 'tp', price: pr.tp.price, txt: 'TP', pnl: (pr.tp.price - e) * q * sd, drag: 1, x: 1, real: 1});
+      if (pr.sl) out.push({id, kind: 'sl', price: pr.sl.price, txt: 'SL', pnl: (pr.sl.price - e) * q * sd, drag: 1, x: 1, real: 1});
+      if (+p.liquidationPrice > 0) out.push({id, kind: 'liq', price: +p.liquidationPrice, txt: 'Liquidación', real: 1});
+    });
+    return out;
+  }
+  const realPos = id => (xs().positions || [])[+String(id).slice(1)];
+  function lines(sym) { const rl = X() && X().connected() ? realLines(sym) : []; if (real()) return rl; // tu posición REAL del exchange se ve siempre que la tengas abierta (también junto a la demo)
+    return rl.concat(demoLines(sym)); }
+  function demoLines(sym) {
     const out = [], L = px(sym);
     for (const p of A.pos) if (p.sym === sym) {
       const pn = fin(L) ? E.upnl(p, L) : NaN, roe = pn / E.margin(p) * 100;
@@ -60,13 +76,15 @@
     }
     return out;
   }
-  function moveLine(id, kind, price) { const r = E.move(A, id, kind, rp(price), px(H.sym())); if (r.error) { H.toast(r.error); H.render(); return false; } changed(); H.toast(kind === 'ord' ? 'Orden movida a ' + f(price) : (kind === 'tp' ? 'TP' : 'SL') + ' en ' + f(price)); return true; }
+  function moveLine(id, kind, price) { if (/^x\d+$/.test(id) && X()) { const p = realPos(id); if (!p || (kind !== 'tp' && kind !== 'sl')) return false; if (!root.confirm(`¿Mover el ${kind.toUpperCase()} REAL de ${X().baseOf(p.symbol)} a ${f(price)}?`)) { H.render(); return false; } H.toast('Enviando a tu exchange…'); X().setTpSl(p, kind, price).then(() => H.toast((kind === 'tp' ? 'TP' : 'SL') + ' real en ' + f(price)), e => { H.toast('No se pudo: ' + e.message); H.render(); }); return true; } const r = E.move(A, id, kind, rp(price), px(H.sym())); if (r.error) { H.toast(r.error); H.render(); return false; } changed(); H.toast(kind === 'ord' ? 'Orden movida a ' + f(price) : (kind === 'tp' ? 'TP' : 'SL') + ' en ' + f(price)); return true; }
   function xLine(id, kind) { // botón × de la línea
+    if (/^x\d+$/.test(id) && X()) { const p = realPos(id); if (!p) return; if (kind === 'tp' || kind === 'sl') { if (root.confirm(`¿Quitar el ${kind.toUpperCase()} REAL?`)) X().removeTpSl(p, kind).then(() => H.toast('Quitado'), e => H.toast('No se pudo: ' + e.message)); } else if (kind === 'pos' && root.confirm(`¿Cerrar tu posición REAL de ${X().baseOf(p.symbol)} a mercado?`)) X().closePosition(p, 1).then(() => H.toast('Posición cerrada'), e => H.toast('No se pudo: ' + e.message)); return; }
     if (kind === 'tp' || kind === 'sl') { E.setTpSl(A, id, kind === 'tp' ? 0 : undefined, kind === 'sl' ? 0 : undefined); changed(); H.toast((kind === 'tp' ? 'TP' : 'SL') + ' quitado'); return; }
     if (kind === 'ord') { E.cancel(A, id); changed(); H.toast('Orden cancelada'); return; }
     if (kind === 'pos') { const p = A.pos.find(x => x.id === id); if (!p) return; if (!confirmClose(p)) return; changed(E.closePos(A, id, px(p.sym))); }
   }
   function addTpSl(id, kind) { // +TP / +SL desde la etiqueta: lo pone a 2 % (TP) o 1 % (SL) para que luego lo arrastres
+    if (/^x\d+$/.test(id) && X()) { const p = realPos(id); if (!p) return; const long = String(p.side).toLowerCase() === 'long', e = +p.markPrice || +p.entryPrice, pr = kind === 'tp' ? e * (long ? 1.02 : .98) : e * (long ? .99 : 1.01); if (!root.confirm(`¿Poner ${kind.toUpperCase()} REAL en ${f(pr)}? (luego lo arrastras)`)) return; X().setTpSl(p, kind, pr).then(() => H.toast(kind.toUpperCase() + ' puesto'), e2 => H.toast('No se pudo: ' + e2.message)); return; }
     const p = A.pos.find(x => x.id === id); if (!p) return; const L = px(p.sym) || p.entry, ref = p.side > 0 ? Math.max(L, p.entry) : Math.min(L, p.entry);
     let v = kind === 'tp' ? ref * (1 + .02 * p.side) : (p.side > 0 ? Math.min(L, p.entry) : Math.max(L, p.entry)) * (1 - .01 * p.side);
     if (kind === 'sl' && (p.side > 0 ? v <= p.liq : v >= p.liq)) v = (p.entry + p.liq) / 2;
@@ -151,7 +169,7 @@
     if (ui.tab === 'pos') h = P.length ? P.map((p, i) => { const L = String(p.side).toLowerCase() === 'long', pn = n2(p.unrealizedPnl), sym = String(p.symbol || '').split(':')[0];
       return `<div class="tr-row"><div class="tr-r1"><b class="${L ? 'up' : 'dn'}">${L ? 'Long' : 'Short'}</b> <b>${esc(sym)}</b> <small>${fin(n2(p.leverage)) ? n2(p.leverage) + 'x · ' : ''}${qf(Math.abs(n2(p.contracts)))}</small><span class="tr-pn ${pn >= 0 ? 'up' : 'dn'}">${usd(pn, true)}<small>${fin(n2(p.percentage)) ? (n2(p.percentage) >= 0 ? '+' : '') + n2(p.percentage).toFixed(2) + '%' : ''}</small></span></div>
         <div class="tr-r2"><span>Entrada <b>${f(n2(p.entryPrice))}</b></span><span>Precio <b>${f(n2(p.markPrice))}</b></span><span>Liq. <b>${f(n2(p.liquidationPrice))}</b></span></div>
-        <div class="tr-r3"><button type="button" data-tr-xhalf="${i}">Cerrar 50%</button><button type="button" class="dn" data-tr-xclose="${i}">Cerrar a mercado</button></div></div>`; }).join('') : `<div class="tr-empty">${S.err ? esc(S.err) : 'Sin posiciones abiertas en tu exchange.'}</div>`;
+        <div class="tr-r3"><button type="button" data-tr-xhalf="${i}">Cerrar 50%</button><button type="button" class="dn" data-tr-xclose="${i}">Cerrar a mercado</button></div></div>`; }).join('') : `<div class="tr-empty">${S.err ? esc(S.err) : S.posErr ? 'No pude leer tus posiciones: ' + esc(S.posErr) : 'Sin posiciones abiertas en tu exchange (' + (X().info() || {}).name + ' · ' + ((X().info() || {}).market === 'spot' ? 'Spot' : 'Futuros perpetuos') + ').'}</div>`;
     else if (ui.tab === 'ord') h = O.length ? O.map((o, i) => `<div class="tr-row"><div class="tr-r1"><b class="${o.side === 'buy' ? 'up' : 'dn'}">${o.side === 'buy' ? 'Compra' : 'Venta'} ${esc(o.type || '')}</b> <b>${esc(String(o.symbol || '').split(':')[0])}</b> <small>${qf(+o.amount || 0)}</small><button type="button" class="tr-cancel" data-tr-xcancel="${i}">Cancelar</button></div><div class="tr-r2"><span>Precio <b>${f(n2(o.price || o.triggerPrice || o.stopPrice))}</b></span></div></div>`).join('') : '<div class="tr-empty">Sin órdenes pendientes en tu exchange.</div>';
     else h = '<div class="tr-empty">El historial real está en Nexus Lens (barra derecha) y en tu exchange.</div>';
     box.innerHTML = h; $p('[data-tr-stats]').textContent = S.at ? 'Actualizado ' + new Date(S.at).toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit'}) : 'Leyendo tu exchange…';
@@ -237,7 +255,7 @@
   }
 
   function bind(h) {
-    Object.assign(H, h); if (X()) X().onChange(() => { if (panel && !panel.hidden) { renderMode(); renderLive(); } }); clearInterval(timer); timer = setInterval(poll, 2000); if (root.CCTJournal) setTimeout(() => CCTJournal.sync(A), 0);
+    Object.assign(H, h); if (X()) X().onChange(() => { if (panel && !panel.hidden) { renderMode(); renderLive(); } H.render(); }); // las líneas de tu posición real se actualizan en el gráfico clearInterval(timer); timer = setInterval(poll, 2000); if (root.CCTJournal) setTimeout(() => CCTJournal.sync(A), 0);
     if (ui.open) setTimeout(() => toggle(true), 0);
   }
   const symChanged = () => { if (panel && !panel.hidden) { inp('price').value = ''; if (ui.type !== 'market') inp('price').value = rp(px(H.sym())); renderPanel(); } };

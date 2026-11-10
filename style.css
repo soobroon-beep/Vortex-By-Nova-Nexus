@@ -69,11 +69,12 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   #watchView{display:block!important;grid-area:watch;border-right:1px solid var(--line);padding:18px 16px 20px}
   #chartView{display:flex!important;grid-area:chart;min-width:0}
   #indicatorView{display:none!important}
-  #newsView,#aiView,#settingsView,#customView,#alertsView,#screenerView,#lensView,#discordView,#botLabView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
+  #newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
   body:not([data-side]) #newsView,body[data-side="newsView"] #newsView{display:block}
   body[data-side="aiView"] #aiView{display:block}
   body[data-side="settingsView"] #settingsView{display:block}
   body[data-side="customView"] #customView{display:block}
+  body[data-side="notifView"] #notifView{display:block}
   body[data-side="alertsView"] #alertsView{display:block}
   body[data-side="screenerView"] #screenerView{display:block}
   body[data-side="lensView"] #lensView{display:block}
@@ -97,7 +98,7 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   .sheet-handle{display:none}
   #toast{bottom:36px}
   .expanded .topbar{display:flex}
-  .expanded #watchView,.expanded #newsView,.expanded #aiView,.expanded #alertsView,.expanded #settingsView,.expanded #customView,.expanded #screenerView,.expanded #lensView,.expanded #discordView{display:none!important}
+  .expanded #watchView,.expanded #newsView,.expanded #aiView,.expanded #alertsView,.expanded #settingsView,.expanded #customView,.expanded #notifView,.expanded #screenerView,.expanded #lensView,.expanded #discordView{display:none!important}
   .expanded main{grid-template-columns:1fr;grid-template-areas:"chart"}
 }
 @media(min-width:1024px){
@@ -190,7 +191,7 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
   #splitL{left:calc(var(--wl-w) - 4px)}#splitR{right:calc(var(--side-w) - 4px)}
   .split-btn{position:absolute;top:50%;left:-3px;transform:translateY(-50%);width:16px;height:44px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:14px;line-height:1;opacity:0;transition:opacity .15s;cursor:pointer}
   .splitter:hover .split-btn,.splitter.collapsed .split-btn{opacity:1}
-  body.wl-off #watchView,body.side-off #newsView,body.side-off #aiView,body.side-off #settingsView,body.side-off #customView,body.side-off #alertsView,body.side-off #screenerView,body.side-off #lensView,body.side-off #discordView{display:none!important}
+  body.wl-off #watchView,body.side-off #newsView,body.side-off #aiView,body.side-off #settingsView,body.side-off #customView,body.side-off #notifView,body.side-off #alertsView,body.side-off #screenerView,body.side-off #lensView,body.side-off #discordView{display:none!important}
   body.wl-off #splitL{left:0}body.side-off #splitR{right:0}
 }
 
@@ -249,7 +250,7 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
 
 /* ── Segundo gráfico (división) ── */
 #pane2{display:none;border:0;width:100%;height:100%;background:var(--bg);min-height:0}
-body.pane .topbar,body.pane .bottom-nav,body.pane .splitter,body.pane #watchView,body.pane #newsView,body.pane #aiView,body.pane #alertsView,body.pane #lensView,body.pane #discordView,body.pane #screenerView,body.pane #settingsView,body.pane #customView,body.pane #indicatorView{display:none!important}
+body.pane .topbar,body.pane .bottom-nav,body.pane .splitter,body.pane #watchView,body.pane #newsView,body.pane #aiView,body.pane #alertsView,body.pane #lensView,body.pane #discordView,body.pane #screenerView,body.pane #settingsView,body.pane #customView,body.pane #notifView,body.pane #indicatorView{display:none!important}
 body.pane #layoutBtn{display:none}
 body.pane #app,body.pane main{max-width:none;border:0;margin:0}
 body.pane main{display:block!important}
@@ -786,3 +787,10 @@ body[data-tier="infinity"] .prem-tag{display:none!important}
 .tr-mode .tr-mini{margin-left:6px}
 .tr-err{margin:6px 0 8px;padding:8px 10px;border-radius:10px;border:1px solid rgba(240,107,121,.4);background:rgba(240,107,121,.08);color:#ff9aa5;font-size:11.5px;line-height:1.45}
 .xc-cur-t .xc-warn{color:#f6c56a;margin-top:4px}
+/* Nova Bot Lab: varias temporalidades y apartados por temporalidad/moneda */
+.bl-tfs{display:flex;flex-wrap:wrap;gap:5px}
+.bl-tfs button{border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:12px;font-weight:700;padding:6px 10px;border-radius:9px;cursor:pointer;min-width:42px}
+.bl-tfs button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--text)}
+.bl-parts{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:6px 0 8px}
+.bl-part{border:1px solid var(--line);border-radius:12px;padding:9px 11px;background:var(--surface);display:flex;flex-direction:column;gap:2px}
+.bl-part b{font-size:13px}.bl-part span{font-size:16px;font-weight:800}.bl-part small{color:var(--muted);font-size:11px}

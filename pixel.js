@@ -258,7 +258,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     [/anadir|agregar (una )?(cripto|moneda)|seguimiento/, 'Añadir a Mi seguimiento', 'watchView', '#addAsset', '#addAsset', 'Agrega criptos de cualquier exchange.'],
     [/crear (una )?alerta|nueva alerta/, 'Crear alerta', 'alertsView', '#alAdd', '#alAdd', 'O dímelo a mí: «avísame si BTC pasa 70 mil».'],
     [/alerta/, 'Alertas', 'alertsView', '[data-side="alertsView"]', '#topAlertsBtn', 'Tus alertas de precio y de indicador.'],
-    [/avisos con la app cerrada|app cerrada|notificacion/, 'Avisos con la app cerrada', 'alertsView', '[data-altab="how"]', '[data-altab="how"]', 'En «Avisos»: enciende «Activar notificaciones».'],
+    [/avisos con la app cerrada|app cerrada|notificacion/, 'Avisos con la app cerrada', 'notifView', '#pushOn', '#pushOn', 'En Configuración › Avisos: enciende «Activar notificaciones».'],
     [/calendario/, 'Calendario económico', 'newsView', '[data-nw-tab="cal"]', '[data-nw-tab="cal"]', 'Eventos pasados, de hoy y futuros.'],
     [/noticia/, 'Noticias', 'newsView', '[data-side="newsView"]', '.bottom-nav [data-view="newsView"]', 'Cripto y bolsa en español.'],
     [/screener|senales/, 'Screener', 'screenerView', '[data-side="screenerView"]', '.bottom-nav [data-view="screenerView"]', 'Señales de Nova Nexus en el top de criptos.'],

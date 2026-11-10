@@ -174,6 +174,7 @@ function sanPixel(x) {
     sr: Math.max(1, Math.min(5, Math.round(+q.sr) || 3)), colSup: hex(q.colSup), colRes: hex(q.colRes),
     tips: q.tips !== false, completo: Array.isArray(q.completo) && q.completo.filter(k => PIX_OPT.completo.includes(k)).length ? q.completo.filter(k => PIX_OPT.completo.includes(k)) : ['sr', 'trend', 'channel'], at: +q.at || 0};
 }
+const sanTpl = t => ({...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns', 'nr'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})});
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
@@ -188,7 +189,8 @@ function merge(s) {
     }
     const bq = o.brush && typeof o.brush === 'object' ? o.brush : {};
     o.brush = {c: /^#[0-9a-f]{6}$/i.test(bq.c) ? bq.c : '#e9c36e', w: Math.max(1, Math.min(24, Math.round(+bq.w) || 3))};
-    o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 80).map(t => ({n: t.n.slice(0, 24), ...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns', 'nr'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})})) : [];
+    o.lastStyle = o.lastStyle && typeof o.lastStyle === 'object' && !Array.isArray(o.lastStyle) ? Object.fromEntries(Object.entries(o.lastStyle).filter(([k, v]) => /^[a-z0-9_]{1,24}$/i.test(k) && v && typeof v === 'object').slice(0, 60).map(([k, t]) => [k, sanTpl(t)])) : {}; // última configuración por herramienta
+    o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 80).map(t => ({n: t.n.slice(0, 24), ...sanTpl(t)})) : [];
   }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
   o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.risk = sanRisk(o.risk); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.scrPush = sanScrPush(o.scrPush); o.discord = sanDiscord(o.discord);
@@ -278,20 +280,20 @@ const lastShown = {};
 /* ───────── Navegación ───────── */
 const deskMQ = window.matchMedia ? window.matchMedia('(min-width: 1024px)') : {matches: false};
 const isDesktop = () => deskMQ.matches;
-const SUB_VIEWS = ['alertsView', 'discordView', 'customView']; let alBackTo = ''; // a dónde regresa el botón ‹ de Alertas
+const SUB_VIEWS = ['alertsView', 'discordView', 'customView', 'notifView']; let alBackTo = ''; // a dónde regresa el botón ‹ de Alertas
 function setSide(id) {
   { const cur = document.body.dataset.side; if (id === 'alertsView' && cur && !SUB_VIEWS.includes(cur)) alBackTo = cur; }
   document.body.dataset.side = id;
   if (id === 'lensView') { const f = $('#lensFrame'); if (f && !f.src) f.src = f.dataset.src; } // Nexus Lens se carga la primera vez que se abre
-  $$('.right-rail [data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === (id === 'customView' ? 'settingsView' : id)));
+  $$('.right-rail [data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === (id === 'customView' || id === 'notifView' ? 'settingsView' : id)));
 }
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
-    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView' || id === 'botLabView' || id === 'customView') { setSide(id); if (id === 'customView') renderCustom(); if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
+    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView' || id === 'botLabView' || id === 'customView' || id === 'notifView') { setSide(id); if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
     id = 'chartView';
   }
   if (id === 'alertsView' && currentView !== id && !SUB_VIEWS.includes(currentView)) alBackTo = currentView;
-  currentView = id; if (id === 'customView') renderCustom();
+  currentView = id; if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); }
   if (id === 'lensView') { const f = $('#lensFrame'); if (f && !f.src) f.src = f.dataset.src; }
   $$('.view').forEach(x => x.classList.toggle('active', x.id === id));
   $$('.bottom-nav button').forEach(x => x.classList.toggle('active', x.dataset.view === id));
@@ -312,15 +314,15 @@ let alTab = 'list';
 function setAlTab(t) {
   alTab = t; $$('#alertsView [data-altab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.altab === t)));
   $$('#alertsView [data-alpane]').forEach(p => { p.hidden = p.dataset.alpane !== t; });
-  if (t === 'how') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } else if (t === 'move') { renderMoveAlerts(); renderScrPush(); scrStatus(); if (window.CCTRadar) CCTRadar.paint(); }
+  if (t === 'move') { renderMoveAlerts(); renderScrPush(); scrStatus(); if (window.CCTRadar) CCTRadar.paint(); }
 }
 function alTabCount() { const n = (state.alerts || []).filter(a => a.on).length, e = $('#alTabN'); if (e) e.textContent = n ? String(n) : ''; }
 function openAlerts(t) { switchView('alertsView'); setAlTab(t || alTab); }
 $$('#alertsView [data-altab]').forEach(b => b.addEventListener('click', () => setAlTab(b.dataset.altab)));
 { const bk = $('#alBack'); if (bk) bk.onclick = () => switchView(alBackTo && alBackTo !== 'alertsView' ? alBackTo : (isDesktop() ? 'watchView' : 'chartView')); } // ‹ regresa a donde estabas antes de abrir Alertas
 { const bk = $('#cuBack'); if (bk) bk.onclick = () => switchView('settingsView'); const sc = $('#setCustom'); if (sc) sc.onclick = () => switchView('customView'); }
-document.addEventListener('click', e => { if (!e.target.closest('#alDiscord')) return; window.CCT_dcBack = 'alertsView'; switchView('discordView'); if (window.CCTDiscord) setTimeout(() => CCTDiscord.paint(), 0); }); // el botón se vuelve a dibujar con los avisos
-{ const s2 = $('#setAlerts'); if (s2) s2.onclick = () => openAlerts('how'); }
+document.addEventListener('click', e => { if (!e.target.closest('#alDiscord')) return; window.CCT_dcBack = 'notifView'; switchView('discordView'); if (window.CCTDiscord) setTimeout(() => CCTDiscord.paint(), 0); }); // el botón se vuelve a dibujar con los avisos
+{ const s2 = $('#setAlerts'); if (s2) s2.onclick = () => switchView('notifView'); const nb = $('#ntBack'); if (nb) nb.onclick = () => switchView('settingsView'); } // Avisos viven en Configuración; Alertas = solo Mis alertas e Historial
 { const ta = $('#topAlertsBtn'); if (ta) ta.onclick = () => switchView('alertsView'); }
 let prevSide = ''; // panel que estaba abierto antes del clic en la barra de iconos (volver a tocar el mismo lo oculta)
 $$('.right-rail [data-side]').forEach(b => b.addEventListener('click', () => { prevSide = document.body.dataset.side || 'watchView'; setSide(b.dataset.side); }));
@@ -2058,7 +2060,8 @@ const sbDefCol = () => cstyle().draw || '#e9c36e';
 function patchD(props, snap = true) {
   const d = curDraw(); if (!d) return;
   if (snap) snapDraw();
-  setDrawings(getDrawings().map(x => { if (x.id !== d.id) return x; const n = {...x, ...props}; for (const k of Object.keys(props)) if (props[k] == null || props[k] === false) delete n[k]; return n; }));
+  let nd = null; setDrawings(getDrawings().map(x => { if (x.id !== d.id) return x; const n = {...x, ...props}; for (const k of Object.keys(props)) if (props[k] == null || props[k] === false) delete n[k]; nd = n; return n; }));
+  if (nd && nd.type !== 'brush') { const {k, ...st} = tplOf(nd); state.lastStyle = {...(state.lastStyle || {}), [k]: st}; save(); } // el próximo dibujo de este tipo sale con esta configuración
   renderSelBar(); render();
 }
 const sbBrushMode = d => (d && d.type === 'brush') || (!d && isBrushTool(drawTool));
@@ -2130,7 +2133,7 @@ function sbSaveTpl() {
 function sbApplyTpl(i) {
   const d = curDraw(), t = (state.drawTpl || [])[i]; if (!d || !t) return;
   if (!tplFits(t, d)) return;
-  if (isPos(d)) { patchD({col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts, gc: t.gc, rc: t.rc, nt: t.nt, no: t.no, ns: t.ns}); return; }
+  if (isPos(d)) { patchD({col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts, gc: t.gc, rc: t.rc, nt: t.nt, no: t.no, ns: t.ns, nr: t.nr}); return; }
   patchD(d.type === 'brush' ? {col: t.col, w: Math.round((t.lw || (d.hl ? d.w / 3 : d.w)) * (d.hl ? 3 : 1))} : {col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts});
   if (d.type === 'brush' && t.col) { state.brush.c = t.col; save(); }
 }
@@ -2615,6 +2618,7 @@ function distToDrawing(d, pt) {
 }
 const b_price = (d, lv) => d.b.p - (d.b.p - d.a.p) * lv;
 function hitTest(pt) { if (DOPT.lock || DOPT.hide) return null; const arr = getDrawings(); for (let i = arr.length - 1; i >= 0; i--) if (!arr[i].hide && distToDrawing(arr[i], pt) < 13) return arr[i]; return null; }
+function withLastStyle(d) { const st = (state.lastStyle || {})[tplKind(d)]; if (st) for (const [k, v] of Object.entries(st)) if (k !== 'k' && v != null && d[k] == null) d[k] = v; return d; } // última configuración usada en esa herramienta
 function commitDrawing(a, b, c) {
   const one = ONEPT.includes(drawTool), three = THREEPT.includes(drawTool);
   if (!one) {
@@ -2629,7 +2633,7 @@ function commitDrawing(a, b, c) {
     if (!txt) { drawTool = ''; pending = null; preview = null; updateDrawUI(); render(); return; }
     d.text = txt;
   }
-  snapDraw(); setDrawings([...getDrawings(), d]);
+  withLastStyle(d); snapDraw(); setDrawings([...getDrawings(), d]);
   selectedId = DOPT.stay ? null : d.id; if (!DOPT.stay) drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); render();
 }
 
@@ -2641,7 +2645,7 @@ function rdp(P, eps) {
 }
 function commitMulti() {
   const M = MULTI[drawTool], pts = multi.slice(0, M.n), d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: drawTool, a: pts[0], pts};
-  snapDraw(); setDrawings([...getDrawings(), d]);
+  withLastStyle(d); snapDraw(); setDrawings([...getDrawings(), d]);
   selectedId = DOPT.stay ? null : d.id; if (!DOPT.stay) drawTool = ''; multi = []; pending = null; preview = null; updateDrawUI(); render();
 }
 function commitBrush(live) {
@@ -4336,7 +4340,7 @@ function renderPrefs() {
     if (e.target.closest('[data-news]')) openNews();
   };
   const onChange = e => { if (e.target.id === 'moveLvl') { state.moveAlerts = sanMoveAlerts({...state.moveAlerts, pct: +e.target.value}); save(); renderPrefs(); if (window.VortexPush) VortexPush.sync(true); return; } const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
-  for (const r of [$('#settingsView'), $('#customView'), $('#alertsView')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
+  for (const r of [$('#settingsView'), $('#customView'), $('#notifView')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
   // Hora, fecha y formato: se despliega dentro de Personalización › Apariencia (mismo estilo que el resto de la app)
   const fb = $('#cuFmt'), fp = $('#prefsBox');
   if (fb && fp) fb.addEventListener('click', () => { const open = fp.hidden; fp.hidden = !open; fb.setAttribute('aria-expanded', String(open)); if (open) renderPrefs(); });

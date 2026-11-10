@@ -56,7 +56,7 @@
   function paint() {
     const box = $('#discordBox'); if (!box) return; const D = get(), has = !!D.url; if (box.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') { const st = $('.dc-st', box); if (st) { st.textContent = status.t; st.className = 'dc-st ' + status.cls; } return; }
     box.innerHTML = `
-      <button class="dc-back" id="dcBack" type="button">‹ ${window.CCT_dcBack === 'alertsView' ? 'Alertas' : 'Configuración'}</button>
+      <button class="dc-back" id="dcBack" type="button">‹ ${window.CCT_dcBack === 'notifView' ? 'Avisos' : 'Configuración'}</button>
       <div class="dc-card"><h3>Únete al servidor Nova Nexus</h3><p>Entra a la comunidad. Las señales del Screener de Nova Nexus (LONG, SHORT y RANGO) llegan solas al canal <b>#vortex</b> cada hora y cada 4 horas, aunque no tengas la app abierta.</p>
         <div class="dc-row"><a class="dc-btn pri" href="${esc(D.invite || DEFAULT_INVITE)}" target="_blank" rel="noopener">Unirme a Nova Nexus</a><a class="dc-btn" href="https://discord.com/login" target="_blank" rel="noopener">Iniciar sesión en Discord</a></div></div>
       <div class="dc-card"><h3>Mis avisos en mi propio Discord <small>(opcional)</small></h3>
