@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.18', d: '10 nov 2026', t: 'Cada herramienta de dibujo con sus propios ajustes', items: [
+    'En «Ajustes» cada herramienta tiene lo suyo: en Fibonacci eliges qué niveles salen (y añades los tuyos), su color, fondo, etiquetas y extensiones; Long/Short tiene stop automático, opacidad y porcentajes; el texto tiene negrita, cursiva, fondo y borde; las formas, borde y fondo; las líneas, extensiones y datos…',
+    'Las plantillas de cada herramienta guardan también esos ajustes, y la herramienta recuerda cómo la usaste la última vez.',
+    'Mientras dibujas, el trazo ya sale con el color, grosor y ajustes de la última vez (antes salía con el color predeterminado hasta soltarlo).'
+  ]},
   {v: '3.17', d: '10 nov 2026', t: 'Vela en vivo fluida y USDT.D con la fórmula CRYPTOCAP', items: [
     'La vela se mueve con cada dato en vivo: los indicadores ya no frenan el gráfico y, si la conexión falla, la vela se sigue actualizando cada 2 s mientras se reconecta.',
     'USDT.D y BTC.D se calculan como CRYPTOCAP (moneda / suma de las 125 criptomonedas más grandes) con capitalizaciones reales: por hora 90 días, por día 1 año y en vivo cada minuto.',
