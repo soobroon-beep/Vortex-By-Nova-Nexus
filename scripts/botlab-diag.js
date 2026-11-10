@@ -25,6 +25,13 @@ function pool(rs) { // junta las operaciones de varias monedas (cada una con su 
 }
 
 (async () => {
+  if (process.env.DETAIL === '2') { // prueba final de los bots tal como quedan configurados
+    const list = [['safe1h'], ['safe4h'], ['nova27x4h'], ['nova27x1h'], ['novaVol', B.novaVolBoth(B.PRESETS.novaNexus())]];
+    for (const [k, sp0] of list) { const sp = sp0 || B.PRESETS[k](), syms = sp.basket || [sp.symbol], by = {}, n = sp.interval === '4h' ? 3000 : 6000; for (const s of syms) by[s] = await history(s, sp.interval, n);
+      const r = sp.basket ? B.backtestBasket(by, sp, {nova: NN}) : B.backtest(by[sp.symbol], sp, {nova: NN}), m = r.metrics, g = r.segments, d14 = r.trades.filter(t => t.entryT > Date.now() - 14 * 864e5).length;
+      console.log(`\n${sp.name} · ${sp.interval} · ${syms.length} monedas · ${m.days} días\n  ops ${m.n} (${d14} en los últimos 14 d; ${r.trades.filter(t => t.side === 'long').length} compras / ${r.trades.filter(t => t.side === 'short').length} ventas) · aciertos ${f(m.winRate)} % · PF ${f(m.profitFactor, 2)} · retorno ${f(m.retPct)} % · DD máx ${f(m.maxDDPct)} %\n  entrenamiento ${f(g.train.net, 0)} · validación ${f(g.val.net, 0)} · prueba ${f(g.test.net, 0)} USDT · veredicto: ${r.verdict.level}`); }
+    return;
+  }
   const data = {}; for (const iv of Object.keys(BARS)) for (const s of COINS) { try { data[s + iv] = await history(s, iv, BARS[iv]); } catch (e) { console.log('sin velas', s, iv, e.message); } }
   const D = (s, iv) => data[s + iv];
 

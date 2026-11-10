@@ -36,7 +36,7 @@
   }
   async function pullCloud() {
     const c = H.cloud && H.cloud(); if (!c) return; let got = false; try { const str = await c.get(); got = true; if (str) { cloudStr = str; const m = merge(readLocal(), JSON.parse(str)); S = m; save(); } } catch {}
-    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) seedSafe(); if (view === 'lib') render();
+    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) { seedSafe(); fixNov26(); } if (view === 'lib') render();
   }
 
   /* ───────── Modelo de bot ───────── */
@@ -266,6 +266,23 @@
     S.seeded = S.seeded || {}; if (S.seeded.safe || !B.PRESETS.safe1h) return; S.seeded.safe = Date.now();
     for (const [k, color, icon] of [['safe1h', '#20bf9f', 'astronauta'], ['safe4h', '#548fff', 'satelite']]) { if (S.bots.some(b => b.preset === k)) continue; newLook = {color, icon}; const b = newBot(B.PRESETS[k](), 'visual', 'Solo compras en tendencia alcista confirmada, en BTC, ETH, SOL, BNB y XRP. Opera poco, con riesgo bajo y objetivo cercano para buscar más aciertos.'); b.preset = k; S.bots.push(b); log(b, 'creación', 'Bot «Seguro» creado por Nova Bot Lab: pruébalo y enciéndelo para verlo en vivo.'); }
     save();
+  }
+  /* Ajuste único (nov 2026): los «Seguro» solo compraban y el «Nova Nexus» solo compraba en BTC 1h; con el mercado bajista no entraban nunca.
+     Pasan a operar en ambos sentidos (nueva versión principal, se guarda la anterior) y se crean los bots Nova Nexus v2.7 optimizados. Todos quedan en vivo (paper). */
+  function fixNov26() {
+    S.seeded = S.seeded || {}; if (S.seeded.nov26 || !B.PRESETS.nova27x4h || !PP()) return; S.seeded.nov26 = Date.now();
+    const bump = (b, sp, note) => { const nv = Math.max(...b.versions.map(x => x.v)) + 1; b.versions.forEach(x => { if (x.v === b.mainV) x.state = 'anterior'; }); b.versions.push({v: nv, spec: B.normalizeSpec(sp), at: Date.now(), note, origin: 'Nova Bot Lab', state: 'principal'}); b.mainV = nv; if (sp.name) b.name = sp.name; log(b, 'versión', note + ` (v${nv}).`); };
+    const goLive = b => { if (b.status === 'archived') return; const run = (b.paper || []).filter(x => x.status === 'running'); for (const x of run) { x.status = 'stopped'; x.pausedAt = Date.now(); } if (b.status === 'paused') b.status = 'draft'; startLive(b, b.mainV, mainSpec(b).risk.capital); };
+    for (const b of S.bots) {
+      if (b.status === 'archived') continue;
+      if (b.preset === 'safe1h' || b.preset === 'safe4h') { bump(b, B.PRESETS[b.preset](), 'Ahora también vende (cortos) en tendencia bajista: antes solo compraba y con el mercado bajista no entraba nunca'); goLive(b); continue; }
+      const sp = mainSpec(b), usesNova = JSON.stringify(sp.entry || {}).includes('"novaBuy"');
+      if (usesNova && sp.sides === 'long' && !b.preset) { const n = B.novaVolBoth(sp); bump(b, n, 'Ahora también vende con la señal de VENTA de Nova Nexus: antes solo compraba y casi todas las señales recientes eran de venta'); goLive(b); }
+    }
+    for (const [k, color, icon, desc] of [['nova27x4h', '#a78bfa', 'vortice', 'Señales de Nova Nexus · iA Signals v2.7 en 4h, compras y ventas con puntaje ≥ 4, en 8 monedas. Cierra solo: take profit a 1× ATR y stop loss a 4× ATR. Riesgo 2 % por operación, apalancamiento máx. 5×.'], ['nova27x1h', '#f06b79', 'cometa', 'Señales de VENTA de Nova Nexus v2.7 en 1h, solo en tendencia (ADX ≥ 25), en 8 monedas. Cierra en la señal de compra contraria o en SL 4× ATR / TP 2.5× ATR. Riesgo 2 %, apalancamiento máx. 5×.']]) {
+      if (S.bots.some(b => b.preset === k)) continue; newLook = {color, icon}; const b = newBot(B.PRESETS[k](), 'nova', desc); b.preset = k; S.bots.push(b); log(b, 'creación', 'Bot creado por Nova Bot Lab a partir de tu indicador Nova Nexus v2.7, optimizado con validación fuera de muestra.'); goLive(b);
+    }
+    save(); toast('Nova Bot Lab: tus bots ya operan en ambos sentidos y se crearon los bots Nova Nexus v2.7 (en vivo, simulado)');
   }
   function libView() {
     const act = S.bots.filter(b => b.status !== 'archived').sort((a, b) => (isLive(b) - isLive(a)) || (b.updatedAt - a.updatedAt)), arch = S.bots.filter(b => b.status === 'archived');

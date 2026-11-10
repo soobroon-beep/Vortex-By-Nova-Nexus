@@ -242,23 +242,40 @@
   }
 
   /* ───────── Plantillas para empezar ───────── */
-  function safeSpec(name, interval, maxBars) {
+  function safeSpec(name, interval, maxBars, both) {
+    const sp = safeSpec0(name, interval, maxBars); if (!both) return sp;
+    sp.sides = 'both'; sp.entry.short = [{a: {k: 'close'}, op: 'lt', b: {k: 'ema', n: 200}}, {a: {k: 'ema', n: 50}, op: 'lt', b: {k: 'ema', n: 200}}, {a: {k: 'adx', n: 14}, op: 'gt', b: {k: 'num', v: 20}}, {a: {k: 'rsi', n: 14}, op: 'crossDown', b: {k: 'num', v: 55}}];
+    sp.exit.short = [{a: {k: 'close'}, op: 'crossUp', b: {k: 'ema', n: 200}}]; return sp;
+  }
+  function safeSpec0(name, interval, maxBars) {
     return Object.assign(defaultSpec(), {name, symbol: 'BTCUSDT', basket: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'], interval, sides: 'long',
       entry: {long: [{a: {k: 'close'}, op: 'gt', b: {k: 'ema', n: 200}}, {a: {k: 'ema', n: 50}, op: 'gt', b: {k: 'ema', n: 200}}, {a: {k: 'adx', n: 14}, op: 'gt', b: {k: 'num', v: 20}}, {a: {k: 'rsi', n: 14}, op: 'crossUp', b: {k: 'num', v: 45}}], short: []},
       exit: {long: [{a: {k: 'close'}, op: 'crossDown', b: {k: 'ema', n: 200}}], short: []},
       filters: {minVolRatio: 0, minAtrPct: 0, maxAtrPct: interval === '1h' ? 2.5 : 5, hoursUtc: null},
       risk: {capital: 10000, riskPct: 0.5, sizePct: 10, maxLeverage: 1, atrLen: 14, sl: {type: 'atr', v: 2}, tp: {type: 'rr', v: 1}, trail: null, maxBars, maxDailyLossPct: 2, maxDrawdownPct: 10}});
   }
+  const NOVA8 = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LINKUSDT'];
+  /* Nova Nexus + volumen ahora en ambos sentidos (antes solo compraba y casi todas las señales recientes eran de venta) */
+  const novaVolBoth = sp => { sp = JSON.parse(JSON.stringify(sp)); sp.sides = 'both'; sp.entry.short = [{a: {k: 'novaSell'}, op: 'is'}, {a: {k: 'volRatio', n: 20}, op: 'gt', b: {k: 'num', v: 1}}]; sp.exit.short = [{a: {k: 'novaBuy'}, op: 'is'}]; return sp; };
   const PRESETS = {
     emaRsi: () => Object.assign(defaultSpec(), {name: 'EMA 20/50 + RSI', entry: {long: [{a: {k: 'ema', n: 20}, op: 'crossUp', b: {k: 'ema', n: 50}}, {a: {k: 'rsi', n: 14}, op: 'gt', b: {k: 'num', v: 50}}], short: []}, exit: {long: [{a: {k: 'ema', n: 20}, op: 'crossDown', b: {k: 'ema', n: 50}}], short: []}}),
     novaNexus: () => Object.assign(defaultSpec(), {name: 'Nova Nexus + volumen', entry: {long: [{a: {k: 'novaBuy'}, op: 'is'}, {a: {k: 'volRatio', n: 20}, op: 'gt', b: {k: 'num', v: 1}}], short: []}, exit: {long: [{a: {k: 'novaSell'}, op: 'is'}], short: []}}),
     /* «Seguro»: solo compras, solo en tendencia alcista confirmada, entrando en un retroceso que ya se recupera; stop amplio, objetivo cercano (más aciertos), riesgo bajo y freno de pérdidas. Opera poco a propósito. */
-    safe1h: () => safeSpec('Seguro 1h · BTC ETH SOL BNB XRP', '1h', 36),
-    safe4h: () => safeSpec('Seguro 4h · BTC ETH SOL BNB XRP', '4h', 18),
+    safe1h: () => safeSpec('Seguro 1h · BTC ETH SOL BNB XRP', '1h', 36, true),
+    safe4h: () => safeSpec('Seguro 4h · BTC ETH SOL BNB XRP', '4h', 18, true),
+    /* Nova Nexus · iA Signals v2.7 como bot (optimizado con validación fuera de muestra en 8 monedas; ver scripts/botlab-diag.js).
+       4h: compras y ventas con puntaje ≥ 4; objetivo cercano (1× ATR) y stop amplio (4× ATR): muchos aciertos y pérdidas raras pero más grandes. */
+    nova27x4h: () => Object.assign(defaultSpec(), {name: 'Nova Nexus v2.7 · 4h', symbol: 'BTCUSDT', basket: NOVA8.slice(), interval: '4h', sides: 'both',
+      entry: {long: [{a: {k: 'novaBuy'}, op: 'is'}, {a: {k: 'novaScore'}, op: 'gte', b: {k: 'num', v: 4}}], short: [{a: {k: 'novaSell'}, op: 'is'}, {a: {k: 'novaScore'}, op: 'gte', b: {k: 'num', v: 4}}]}, exit: {long: [], short: []},
+      risk: {capital: 10000, riskPct: 2, sizePct: 10, maxLeverage: 5, atrLen: 14, sl: {type: 'atr', v: 4}, tp: {type: 'atr', v: 1}, trail: null, maxBars: 0, maxDailyLossPct: 6, maxDrawdownPct: 25}, costs: {feePct: 0.05, slipPct: 0.03}}),
+    /* 1h: solo ventas (en 1 h las compras de la señal no pasaron la validación); solo en tendencia (ADX ≥ 25), cierra en la señal contraria o en SL/TP */
+    nova27x1h: () => Object.assign(defaultSpec(), {name: 'Nova Nexus v2.7 · 1h cortos', symbol: 'BTCUSDT', basket: NOVA8.slice(), interval: '1h', sides: 'short',
+      entry: {long: [], short: [{a: {k: 'novaSell'}, op: 'is'}, {a: {k: 'novaRange'}, op: 'lt', b: {k: 'num', v: 1}}]}, exit: {long: [], short: [{a: {k: 'novaBuy'}, op: 'is'}]},
+      risk: {capital: 10000, riskPct: 2, sizePct: 10, maxLeverage: 5, atrLen: 14, sl: {type: 'atr', v: 4}, tp: {type: 'atr', v: 2.5}, trail: null, maxBars: 0, maxDailyLossPct: 6, maxDrawdownPct: 25}, costs: {feePct: 0.05, slipPct: 0.03}}),
     macdTrend: () => Object.assign(defaultSpec(), {name: 'Tendencia + MACD', entry: {long: [{a: {k: 'close'}, op: 'gt', b: {k: 'ema', n: 200}}, {a: {k: 'macd'}, op: 'crossUp', b: {k: 'macdSignal'}}], short: []}, exit: {long: [{a: {k: 'macd'}, op: 'crossDown', b: {k: 'macdSignal'}}], short: []}})
   };
 
-  const api = {IV_MS, OPERANDS, OPS, ema, sma, rsi, atr, macd, bb, adx, backtest, backtestBasket, verdict, tradeStats, defaultSpec, normalizeSpec, validateSpec, describeSpec, condText, opText, PRESETS, series, maxDD};
+  const api = {novaVolBoth, NOVA8, IV_MS, OPERANDS, OPS, ema, sma, rsi, atr, macd, bb, adx, backtest, backtestBasket, verdict, tradeStats, defaultSpec, normalizeSpec, validateSpec, describeSpec, condText, opText, PRESETS, series, maxDD};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTBotLab = api;
 })(typeof self !== 'undefined' ? self : this);
