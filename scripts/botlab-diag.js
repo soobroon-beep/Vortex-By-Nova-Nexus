@@ -28,6 +28,7 @@ function pool(rs) { // junta las operaciones de varias monedas (cada una con su 
   const data = {}; for (const iv of Object.keys(BARS)) for (const s of COINS) { try { data[s + iv] = await history(s, iv, BARS[iv]); } catch (e) { console.log('sin velas', s, iv, e.message); } }
   const D = (s, iv) => data[s + iv];
 
+  if (!process.env.DETAIL) {
   console.log('\n══════ 1) DIAGNÓSTICO DE LOS BOTS ACTUALES (últimos 14 días) ══════');
   for (const [k, sp0] of [['safe1h', B.PRESETS.safe1h()], ['safe4h', B.PRESETS.safe4h()]]) {
     console.log(`\n· ${sp0.name}`);
@@ -40,9 +41,11 @@ function pool(rs) { // junta las operaciones de varias monedas (cada una con su 
   console.log('\n══════ 2) SEÑALES v2.7 POR MONEDA Y TEMPORALIDAD (últimos 30 días) ══════');
   for (const iv of Object.keys(BARS)) console.log(iv + ': ' + COINS.map(s => { const C = D(s, iv); if (!C) return s + ' —'; const g = NN.compute(C).signals.filter(x => x.t > Date.now() - 30 * 864e5); return s.replace('USDT', '') + ' ' + g.length; }).join(' · '));
 
+  }
   console.log('\n══════ 3) OPTIMIZACIÓN v2.7 (cesta de ' + COINS.length + ' monedas; riesgo 1 %/op; comisión 0.05 % + slippage 0.03 %) ══════');
-  const SL = [1, 1.5, 2, 3], TP = [['atr', 1], ['atr', 1.5], ['atr', 2.5], ['atr', 4], ['rr', 1], ['rr', 2]], SC = [1, 3, 4], REG = ['all', 'trend', 'range'], SIDES = ['both', 'long', 'short'], EX = ['opp', 'none'], TR = [null, 2];
-  for (const iv of Object.keys(BARS)) {
+  const DETAIL = process.env.DETAIL === '1', IVS = DETAIL ? ['1h', '4h'] : Object.keys(BARS);
+  const SL = DETAIL ? [2, 2.5, 3, 4] : [1, 1.5, 2, 3], TP = [['atr', 1], ['atr', 1.5], ['atr', 2.5], ['atr', 4], ['rr', 1], ['rr', 2]], SC = [1, 3, 4], REG = ['all', 'trend', 'range'], SIDES = ['both', 'long', 'short'], EX = ['opp', 'none'], TR = [null, 2];
+  for (const iv of IVS) {
     const rows = [];
     for (const sides of SIDES) for (const sc of SC) for (const reg of REG) for (const ex of EX) for (const sl of SL) for (const [tt, tv] of TP) for (const tr of TR) {
       const extra = c => { const o = []; if (sc > 1) o.push({a: {k: 'novaScore'}, op: 'gte', b: {k: 'num', v: sc}}); if (reg === 'trend') o.push({a: {k: 'novaRange'}, op: 'lt', b: {k: 'num', v: 1}}); if (reg === 'range') o.push({a: {k: 'novaRange'}, op: 'is'}); return o; };
@@ -59,5 +62,6 @@ function pool(rs) { // junta las operaciones de varias monedas (cada una con su 
     show('MEJOR BALANCE (gana también fuera de muestra) ordenado por profit factor', good.slice().sort((a, b) => b.pf - a.pf));
     show('MÁS ACIERTOS (gana también fuera de muestra)', good.slice().sort((a, b) => b.win - a.win));
     console.log(`  (${good.length} de ${rows.length} combinaciones pasan la validación)`);
+    if (DETAIL) for (const sd of ['long', 'short', 'both']) show('TOP ' + sd + ' por resultado FUERA de muestra (val+prueba), pase o no', rows.filter(r => r.cfg.startsWith(sd + ' ') && r.n >= 30).sort((a, b) => (b.va + b.te) - (a.va + a.te)));
   }
 })().catch(e => { console.error(e); process.exit(1); });

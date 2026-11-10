@@ -3,6 +3,7 @@ name: Diagnóstico de bots (Nova Bot Lab)
 on:
   workflow_dispatch:
     inputs:
+      detail: {description: '1 = solo 1h/4h con detalle por dirección', default: '0'}
       coins: {description: 'Monedas (coma)', default: 'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT,AVAXUSDT,LINKUSDT,SUIUSDT'}
 permissions: {contents: read}
 jobs:
@@ -14,4 +15,4 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 20}
       - run: node scripts/botlab-diag.js
-        env: {COINS: '${{ inputs.coins }}'}
+        env: {COINS: '${{ inputs.coins }}', DETAIL: '${{ inputs.detail }}'}
