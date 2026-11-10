@@ -57,7 +57,7 @@
   function tradeErr(e) { // al operar: la lectura ya funcionó, así que casi siempre es un permiso de la API
     const m = String(e && e.message || e), raw = rawOf(e), auth = /AuthenticationError|PermissionDenied|Invalid API|-2015|-2014|permission|10005|50120|40014/i.test((e && e.constructor && e.constructor.name) + ' ' + m);
     if (!auth) return errText(e) + (raw && !errText(e).includes(raw) ? ` (${raw})` : '');
-    const tip = {binance: cfg.market === 'spot' ? 'En Binance › Gestión de API, edita la clave y activa «Habilitar trading spot y de margen».' : 'En Binance › Gestión de API, edita la clave y activa «Habilitar futuros» (tu cuenta de Futuros debe estar abierta ANTES de crear la clave; si es más vieja, crea una nueva).', bybit: 'En Bybit › API, dale permiso de «Contratos/Órdenes» (o Spot) a la clave.', bingx: 'En BingX › Gestión de API, activa «Trading de futuros perpetuos» (o Spot).', okx: 'En OKX › API, dale permiso «Trade» a la clave.', bitget: 'En Bitget › API, activa el permiso de trading de Futuros/Spot.'}[cfg.id] || 'En tu exchange, dale permiso de trading (Futuros o Spot) a la API Key.';
+    const tip = {binance: cfg.market === 'spot' ? 'En Binance › Gestión de API, edita la clave y activa «Habilitar trading spot y de margen».' : 'En Binance › Gestión de API, edita la clave y activa «Habilitar futuros» (tu cuenta de Futuros debe estar abierta ANTES de crear la clave; si es más vieja, crea una nueva).', bybit: 'En Bybit › API, dale permiso de «Contratos/Órdenes» (o Spot) a la clave.', bingx: /created without the permission|100004/i.test(raw) ? 'BingX no deja agregar ese permiso a una clave que ya existe: crea una API Key NUEVA en BingX › Gestión de API marcando «Trading de futuros perpetuos» (sin retiros) y pégala en Conectar exchange.' : 'En BingX › Gestión de API, activa «Trading de futuros perpetuos» (o Spot).', okx: 'En OKX › API, dale permiso «Trade» a la clave.', bitget: 'En Bitget › API, activa el permiso de trading de Futuros/Spot.'}[cfg.id] || 'En tu exchange, dale permiso de trading (Futuros o Spot) a la API Key.';
     return `Tu API Key lee bien pero ${nameOf(cfg.id)} no la deja operar. ${tip} (${raw})`;
   }
   function errText(e) {
@@ -161,22 +161,33 @@
   /* ───────── Ventana: lista de exchanges → claves → conectado ───────── */
   let ov = null, step = 'list', pickId = '', q = '', all = null;
   const REQ = {apiKey: ['API Key', 'Tu clave pública'], secret: ['Secret Key', 'Tu clave secreta'], password: ['Passphrase', 'La frase que elegiste al crear la API'], uid: ['UID', 'Tu ID de usuario del exchange']};
+  /* Logo de cada exchange: el de CCXT; si no carga, el ícono de su sitio; si tampoco, sus iniciales */
+  const logoCache = {};
+  function logoOf(id) {
+    if (logoCache[id] !== undefined) return logoCache[id]; let u = null;
+    try { const X = root.ccxt; if (X && X[id]) { const d = X[id].prototype.describe(), w = d.urls || {}; let www = Array.isArray(w.www) ? w.www[0] : w.www; const host = www ? new URL(www).hostname : ''; u = {logo: typeof w.logo === 'string' ? w.logo : '', fav: host ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : ''}; } } catch {}
+    if (root.ccxt) logoCache[id] = u; return u; // sin CCXT cargado aún no se guarda (se vuelve a intentar al pintar)
+  }
+  function lg(id, big) {
+    const L = logoOf(id), ini = esc(nameOf(id).slice(0, 2)), src = L && (L.fav || L.logo);
+    return `<span class="xc-lg${big ? ' big' : ''}${src ? ' img' : ''}">${src ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-alt="${esc(L.logo && L.fav ? L.logo : '')}" onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt=''}else{this.parentNode.classList.remove('img');this.replaceWith(document.createTextNode('${ini}'))}">` : ini}</span>`;
+  }
   function listHtml() {
     const ids = all || FEATURED.map(x => x[0]), qq = q.trim().toLowerCase(), feat = FEATURED.map(x => x[0]);
     const rows = ids.filter(id => !qq || id.includes(qq) || nameOf(id).toLowerCase().includes(qq)).sort((a, b) => { const ia = feat.indexOf(a), ib = feat.indexOf(b); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.localeCompare(b); });
-    return rows.map(id => `<button type="button" class="xc-it${cfg && cfg.id === id ? ' on' : ''}" data-xc-pick="${esc(id)}"><span class="xc-lg">${esc(nameOf(id).slice(0, 2))}</span><span class="xc-nm">${esc(nameOf(id))}</span>${feat.includes(id) ? '<em>Popular</em>' : ''}${cfg && cfg.id === id ? '<i>Conectado</i>' : ''}</button>`).join('') || '<p class="xc-empty">No encontré ese exchange.</p>';
+    return rows.map(id => `<button type="button" class="xc-it${cfg && cfg.id === id ? ' on' : ''}" data-xc-pick="${esc(id)}">${lg(id)}<span class="xc-nm">${esc(nameOf(id))}</span>${feat.includes(id) ? '<em>Popular</em>' : ''}${cfg && cfg.id === id ? '<i>Conectado</i>' : ''}</button>`).join('') || '<p class="xc-empty">No encontré ese exchange.</p>';
   }
   async function credsFor(id) { try { const X = await loadCcxt(), r = new X[id]().requiredCredentials || {}; return Object.keys(REQ).filter(k => r[k]); } catch { return ['apiKey', 'secret']; } }
   async function paint() {
     if (!ov || ov.hidden) return; const box = ov.querySelector('.xc-body');
     if (step === 'list') {
       box.innerHTML = `${cfg ? statusHtml() : ''}<label class="xc-search">${svg('<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>', 16)}<input type="search" placeholder="Busca tu exchange" value="${esc(q)}" data-xc-q autocomplete="off"></label><div class="xc-list">${listHtml()}</div>${all ? `<p class="xc-note">${all.length} exchanges disponibles.</p>` : '<p class="xc-note">Cargando la lista completa…</p>'}`;
-      if (!all) loadCcxt().then(X => { all = (Array.isArray(X.exchanges) ? X.exchanges.slice() : Object.keys(X.exchanges || {}).length ? Object.keys(X.exchanges) : Object.keys(X).filter(k => /^[a-z0-9]+$/.test(k) && typeof X[k] === 'function' && X[k].prototype && typeof X[k].prototype.describe === 'function')).filter(k => typeof X[k] === 'function'); const l = ov && ov.querySelector('.xc-list'); if (l) { l.innerHTML = listHtml(); const n = ov.querySelector('.xc-note'); if (n) n.textContent = all.length + ' exchanges disponibles.'; } }).catch(e => { const n = ov && ov.querySelector('.xc-note'); if (n) n.textContent = e.message; });
+      if (!all) loadCcxt().then(X => { all = (Array.isArray(X.exchanges) ? X.exchanges.slice() : Object.keys(X.exchanges || {}).length ? Object.keys(X.exchanges) : Object.keys(X).filter(k => /^[a-z0-9]+$/.test(k) && typeof X[k] === 'function' && X[k].prototype && typeof X[k].prototype.describe === 'function')).filter(k => typeof X[k] === 'function'); if (ov && !ov.hidden && step === 'list') { const qi = ov.querySelector('[data-xc-q]'), hadF = qi && document.activeElement === qi; paint(); if (hadF) { const q2 = ov.querySelector('[data-xc-q]'); q2 && q2.focus(); } return; } const l = ov && ov.querySelector('.xc-list'); if (l) { l.innerHTML = listHtml(); const n = ov.querySelector('.xc-note'); if (n) n.textContent = all.length + ' exchanges disponibles.'; } }).catch(e => { const n = ov && ov.querySelector('.xc-note'); if (n) n.textContent = e.message; });
       return;
     }
     const id = pickId, same = cfg && cfg.id === id, need = await credsFor(id), mk = same ? cfg.market : 'swap';
     box.innerHTML = `<button type="button" class="xc-back" data-xc-back>${svg('<path d="m15 6-6 6 6 6"/>', 16)} Exchanges</button>
-      <div class="xc-hd"><span class="xc-lg big">${esc(nameOf(id).slice(0, 2))}</span><div><b>${esc(nameOf(id))}</b><small>Crea una API en tu cuenta de ${esc(nameOf(id))} y pégala aquí. Nunca actives el permiso de <b>retiro</b>.</small></div></div>
+      <div class="xc-hd">${lg(id, true)}<div><b>${esc(nameOf(id))}</b><small>Crea una API en tu cuenta de ${esc(nameOf(id))} y pégala aquí. Nunca actives el permiso de <b>retiro</b>.</small></div></div>
       ${need.map(k => `<label class="xc-f"><span>${REQ[k][0]}</span><input type="${k === 'secret' || k === 'password' ? 'password' : 'text'}" data-xc-in="${k}" placeholder="${REQ[k][1]}" autocomplete="off" spellcheck="false" value="${same && cfg[k] ? esc(cfg[k]) : ''}"></label>`).join('')}
       <div class="xc-f"><span>Mercado</span><div class="seg" role="group"><button type="button" data-xc-mk="swap" aria-pressed="${mk !== 'spot'}">Futuros perpetuos</button><button type="button" data-xc-mk="spot" aria-pressed="${mk === 'spot'}">Spot</button></div></div>
       <div class="xc-trade"><div><b>Permitir operar en vivo</b><small>Operar desde el gráfico mandará órdenes reales con tu dinero (siempre te pide confirmar). Apagado = solo lectura: saldo, posiciones y Nexus Lens.</small></div><button type="button" class="toggle${same && cfg.trade ? ' on' : ''}" data-xc-trade role="switch" aria-checked="${!!(same && cfg.trade)}" aria-label="Permitir operar en vivo"></button></div>
@@ -187,7 +198,7 @@
   }
   function statusHtml() {
     const s = snap, eq = Number.isFinite(s.equity) ? s.equity.toLocaleString('es-MX', {style: 'currency', currency: 'USD'}) : '…';
-    return `<div class="xc-cur"><span class="xc-lg">${esc(nameOf(cfg.id).slice(0, 2))}</span><div class="xc-cur-t"><b>${esc(nameOf(cfg.id))} conectado</b><small>${s.err ? '⚠ ' + esc(s.err) : `Saldo ${eq} · ${cfg.market === 'spot' ? 'Spot' : 'Perpetuos'} · ${cfg.trade ? 'puede operar' : 'solo lectura'}`}</small>${permWarn() ? `<small class="xc-warn">⚠ ${esc(permWarn())}</small>` : ''}</div><button type="button" class="tr-mini" data-xc-pick="${esc(cfg.id)}">Editar</button><button type="button" class="tr-mini dn" data-xc-off>Desconectar</button></div><div class="sg-label">Cambiar de exchange</div>`;
+    return `<div class="xc-cur">${lg(cfg.id)}<div class="xc-cur-t"><b>${esc(nameOf(cfg.id))} conectado</b><small>${s.err ? '⚠ ' + esc(s.err) : `Saldo ${eq} · ${cfg.market === 'spot' ? 'Spot' : 'Perpetuos'} · ${cfg.trade ? 'puede operar' : 'solo lectura'}`}</small>${permWarn() ? `<small class="xc-warn">⚠ ${esc(permWarn())}</small>` : ''}</div><button type="button" class="tr-mini" data-xc-pick="${esc(cfg.id)}">Editar</button><button type="button" class="tr-mini dn" data-xc-off>Desconectar</button></div><div class="sg-label">Cambiar de exchange</div>`;
   }
   function open() {
     if (!ov) {

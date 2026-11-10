@@ -639,7 +639,8 @@ $('#popRows').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key
 
 /* ───────── Alertas de precio ───────── */
 const alertPrice = {}; // último precio conocido por símbolo (para alertas fuera del seguimiento)
-let trHit = [], trDrag = null; // operaciones demo: zonas tocables y arrastre en curso
+let trHit = [], trDrag = null, trOpen = ''; // trOpen: en el celular, la operación cuyos botones (+TP, +SL, ✕) están desplegados
+ // operaciones demo: zonas tocables y arrastre en curso
 let selAlertId = null, alDrag = null, alConfirm = null; // alerta seleccionada en el gráfico, arrastre en curso y confirmación pendiente
 const alDiscordReady = () => { try { return !!(window.CCT_discordStore && CCT_discordStore.get().url); } catch { return false; } };
 const TONE_SEQ = {beep: [[880, 0, .6, 'sine']], chime: [[988, 0, .35, 'sine'], [1319, .16, .55, 'sine']], pulse: [[440, 0, .14, 'triangle'], [440, .22, .14, 'triangle'], [440, .44, .14, 'triangle']], alarm: [[780, 0, .18, 'square'], [620, .2, .18, 'square'], [780, .4, .18, 'square']]};
@@ -1524,7 +1525,7 @@ function ibItems() {
   const out = [];
   for (const [key, title, desc, col] of indicatorMeta) { if (key.startsWith('nn') || (LEGACY_IND.includes(key) && !state.indicators[key])) continue; out.push({kind: 'std', key, title, desc, col, cat: STD_CAT[key] || 'trend', on: !!state.indicators[key], premium: key === 'liqmap'}); }
   for (const f of window.CCTFree || []) { const p = state.pine.find(x => x.sid === 'free:' + f.id); out.push({kind: 'free', key: f.id, sid: 'free:' + f.id, title: f.name, desc: f.desc, col: f.col, art: f.art, cat: f.cat, on: !!(p && p.on), p}); }
-  for (const c of window.CCTCatalog || []) { const p = catPineOf(c); out.push({kind: 'cat', c, title: c.name, desc: c.desc, cat: 'nova', on: !!(p && p.on)}); }
+  for (const c of window.CCTCatalog || []) { const p = catPineOf(c); out.push({kind: 'cat', c, title: nnName(c.name), desc: c.desc, cat: 'nova', on: !!(p && p.on)}); }
   for (const x of userScripts()) { const p = state.pine.find(q => q.sid === x.id); out.push({kind: 'mine', x, title: x.name, desc: '', cat: 'mine', on: !!(p && p.on), p}); }
   return out;
 }
@@ -1538,7 +1539,7 @@ function ibCard(it) {
   else if (p && p.on && r && r.ok) { const u = r.warnings.filter(w => w.level === 'unsupported').length; st += u ? ` · <span class="pine-warn">${u} parte(s) sin soporte</span>` : ' · <span class="ib-okt">funcionando</span>'; }
   else if (p && p.on && !r) st += ' · calculando…';
   const bad = (p && r && (!r.ok || r.warnings.some(w => w.level === 'unsupported'))) || scriptPrev(x) === 'err';
-  return `<div class="ib-card mine ${it.on ? 'on' : ''}"><div class="ib-thumb">${prevImg(x)}</div><div class="ib-t"><b>${esc(x.name)}</b><small>${st}</small>
+  return `<div class="ib-card mine ${it.on ? 'on' : ''}"><div class="ib-thumb">${prevImg(x)}</div><div class="ib-t"><b>${esc(nnName(x.name))}</b><small>${st}</small>
     <div class="ib-btns">${p ? `<button class="ib-pill" data-pine-set="${x.id}">${I('gear', 13)} Ajustes</button><button class="ib-pill" data-pine-del="${x.id}">Quitar del gráfico</button>` : `<button class="ib-pill main" data-pine-add="${x.id}">＋ Al gráfico</button>`}${bad ? `<button class="ib-pill warn" data-pine-conv="${x.id}">${I('wrench', 13)} Convertir de nuevo</button>` : ''}<button class="ib-pill" data-ib-view="${x.id}">Código</button><button class="ib-pill del" data-ib-del="${x.id}" aria-label="Eliminar ${esc(x.name)}">${I('trash', 13)}</button></div></div>${p ? `<div class="ib-act">${tog(`data-pine-tog="${x.id}"`, p.on, x.name)}</div>` : ''}</div>`;
 }
 function ibList() {
@@ -3191,16 +3192,23 @@ function renderCore() {
       g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
       // etiqueta a la izquierda: texto · PnL · ×  (en posición también +TP / +SL)
       const parts = L.kind === 'pos' || L.kind === 'liq' ? [] : [{t: L.txt, k: 'lbl'}]; /* minimalista: la posición solo muestra PnL y botones; la liquidación solo su línea y el precio en la escala */ if (Number.isFinite(L.pnl)) parts.push({t: uFmt(L.pnl) + (L.sub ? ' ' + L.sub : ''), k: 'pnl', c: L.pnl >= 0 ? up : down});
-      if (L.addTp) parts.push({t: '+TP', k: 'addtp'}); if (L.addSl) parts.push({t: '+SL', k: 'addsl'}); if (L.x) parts.push({t: '✕', k: 'x'});
-      const totW = parts.reduce((s0, q) => s0 + g.measureText(q.t).width + 17, 0); let x0 = Math.max(left + 8, w - right - 14 - totW); const hh = 20, ty = yy - hh / 2; // etiquetas pegadas a la derecha, junto a la escala
+      const cmp = !isDesktop(), key = L.id + '|' + L.kind, opened = trOpen === key;
+      if (cmp) { // celular: una sola pastilla chica a la izquierda (PnL o TP/SL); al tocarla se despliegan +TP, +SL y ✕
+        const pn = parts.find(q => q.k === 'pnl'); if (pn) { pn.k = 'more'; pn.t = uFmt(L.pnl); } else if (parts.length) parts[0].k = L.drag ? 'lbl' : 'more';
+        if (!pn && L.x && parts[0] && L.drag) parts.push({t: '⋯', k: 'more'});
+        if (opened) { if (L.addTp) parts.push({t: '+TP', k: 'addtp'}); if (L.addSl) parts.push({t: '+SL', k: 'addsl'}); if (L.x) parts.push({t: '✕', k: 'x'}); }
+        g.font = '600 10px system-ui';
+      } else { if (L.addTp) parts.push({t: '+TP', k: 'addtp'}); if (L.addSl) parts.push({t: '+SL', k: 'addsl'}); if (L.x) parts.push({t: '✕', k: 'x'}); }
+      const pad = cmp ? 10 : 14, totW = parts.reduce((s0, q) => s0 + g.measureText(q.t).width + pad + 3, 0); let x0 = cmp ? left + 6 : Math.max(left + 8, w - right - 14 - totW); const hh = cmp ? 16 : 20, ty = yy - hh / 2; // PC: junto a la escala · celular: a la izquierda, chiquitas
       for (const pt of parts) {
-        const tw = g.measureText(pt.t).width + 14, isBtn = pt.k !== 'lbl' && pt.k !== 'pnl';
+        const tw = g.measureText(pt.t).width + pad, isBtn = pt.k !== 'lbl' && pt.k !== 'pnl';
         g.fillStyle = pt.k === 'lbl' ? col : isBtn ? (bg || '#0b0f18') : (bg || '#0b0f18'); g.globalAlpha = pt.k === 'lbl' ? .95 : .92; roundRect(x0, ty, tw, hh, 4); g.fill(); g.globalAlpha = 1;
         g.strokeStyle = col; g.lineWidth = 1; roundRect(x0 + .5, ty + .5, tw - 1, hh - 1, 4); g.stroke();
-        g.fillStyle = pt.k === 'lbl' ? (L.kind === 'liq' ? '#1a1300' : '#fff') : pt.c || text; g.textAlign = 'left'; g.fillText(pt.t, x0 + 7, yy + 4);
+        g.fillStyle = pt.k === 'lbl' ? (L.kind === 'liq' ? '#1a1300' : '#fff') : pt.c || text; g.textAlign = 'left'; g.fillText(pt.t, x0 + pad / 2, yy + (cmp ? 3.5 : 4));
         if (pt.k !== 'pnl') trHit.push({x: x0, y: ty, w: tw, h: hh, id: L.id, kind: L.kind, act: pt.k === 'lbl' ? (L.drag ? 'drag' : 'sel') : pt.k});
         x0 += tw + 3;
       }
+      g.font = '600 11px system-ui';
       g.fillStyle = col; g.fillRect(w - right + 2, yy - 9, right - 3, 18); g.fillStyle = L.kind === 'liq' ? '#1a1300' : '#fff'; g.font = '11px system-ui'; g.fillText(fmt(price), w - right + 5, yy + 3.5); g.font = '600 11px system-ui';
       if (L.drag) trHit.push({line: 1, yy, id: L.id, kind: L.kind});
     }
@@ -3241,8 +3249,8 @@ function renderCore() {
     if (paneOf({p, r}) !== 'main') continue;
     const id = 'm:p:' + p.sid;
     addLeg(id, () => {
-      if (p.hide) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)}`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main', mid: id}, true); g.globalAlpha = 1; ly2 += LS; }
-      else { g.fillStyle = text; const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main', mid: id}); ly2 += LS; }
+      if (p.hide) { const tx = nnName(r.meta.title || r.meta.short || '').slice(0, 30); g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main', mid: id}, true); g.globalAlpha = 1; ly2 += LS; }
+      else { g.fillStyle = text; const tx = nnName(r.meta.title || r.meta.short || '').slice(0, 32); legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main', mid: id}); ly2 += LS; }
     });
   }
   if (novaOn() && ind.nn) addLeg('m:nova', () => { const tx = 'Nova Nexus'; g.fillStyle = '#11cf77'; legLabel(tx, left + 8, ly2, {t: 'nova', mid: 'm:nova'}); ly2 += LS; });
@@ -4103,7 +4111,7 @@ function endPointer(e, cancelled) {
   if (gs.mode === 'brush') { const live = brushLive; brushLive = null; if (!cancelled) commitBrush(live); scheduleRender(); return; }
   if (cancelled) { cross = null; preview = null; scheduleRender(); return; }
   if (gs.mode === 'cross') { cross = null; scheduleRender(); return; }
-  if (gs.mode === 'trbtn') { const q = gs.tr; if (!gs.moved && window.CCTTrade) { if (q.act === 'x') CCTTrade.xLine(q.id, q.kind); else if (q.act === 'addtp') CCTTrade.addTpSl(q.id, 'tp'); else if (q.act === 'addsl') CCTTrade.addTpSl(q.id, 'sl'); } return; }
+  if (gs.mode === 'trbtn') { const q = gs.tr; if (!gs.moved && window.CCTTrade) { if (q.act === 'more') { const k = q.id + '|' + q.kind; trOpen = trOpen === k ? '' : k; scheduleRender(); return; } trOpen = ''; if (q.act === 'x') CCTTrade.xLine(q.id, q.kind); else if (q.act === 'addtp') CCTTrade.addTpSl(q.id, 'tp'); else if (q.act === 'addsl') CCTTrade.addTpSl(q.id, 'sl'); } return; }
   if (gs.mode === 'trmove') { const d = trDrag; trDrag = null; if (gs.moved && d && d.p != null && window.CCTTrade) CCTTrade.moveLine(d.id, d.kind, d.p); else scheduleRender(); return; }
   if (gs.mode === 'almove') { if (gs.moved && gs.al.p != null) askMoveAlert(gs.al.id, gs.al.p); else { alDrag = null; scheduleRender(); } return; }
   if (gs.mode === 'handle') { save(); render(); return; }
@@ -4233,7 +4241,8 @@ area.addEventListener('contextmenu', e => {
   let ctxPrice = NaN; try { const q = local(e); if (geo && q.y >= 0) ctxPrice = +PRICE(q.y).toPrecision(8); } catch {}
   const m = document.createElement('div'); m.className = 'pop-menu chart-ctx';
   window.__ctxPrice = ctxPrice;
-  m.innerHTML = (window.CCTTrade && ctxPrice > 0 ? `<button data-a="trbuy" class="ctx-buy">${SV('<path d="M12 19V5M6 11l6-6 6 6"/>', 16)}<span>Comprar en ${fmt(ctxPrice)}</span></button><button data-a="trsell" class="ctx-sell">${SV('<path d="M12 5v14M6 13l6 6 6-6"/>', 16)}<span>Vender en ${fmt(ctxPrice)}</span></button>` : '') + `<button data-a="risk">${SV('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11v6M8 14h2M12 14h2M8 17h2M12 17h2"/>', 16)}<span>Calculadora de riesgo</span></button><button data-a="copyp">${SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 16)}<span>Copiar precio ${fmt(ctxPrice)}</span></button>${PANE ? '' : `<button data-a="alertp">${SV('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 16)}<span>Añadir alerta en ${fmt(ctxPrice)}</span></button>`}<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
+  m.innerHTML = `<button data-a="copyp">${SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 16)}<span>Copiar precio ${fmt(ctxPrice)}</span></button>${PANE ? '' : `<button data-a="alertp">${SV('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 16)}<span>Añadir alerta en ${fmt(ctxPrice)}</span></button>`}<i class="ctx-sep"></i>` // lo que más se usa, arriba
+    + (window.CCTTrade && ctxPrice > 0 ? `<button data-a="trbuy" class="ctx-buy">${SV('<path d="M12 19V5M6 11l6-6 6 6"/>', 16)}<span>Comprar en ${fmt(ctxPrice)}</span></button><button data-a="trsell" class="ctx-sell">${SV('<path d="M12 5v14M6 13l6 6 6-6"/>', 16)}<span>Vender en ${fmt(ctxPrice)}</span></button>` : '') + `<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><i class="ctx-sep"></i><button data-a="risk">${SV('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11v6M8 14h2M12 14h2M8 17h2M12 17h2"/>', 16)}<span>Calculadora de riesgo</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
   document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
   const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
@@ -4529,7 +4538,7 @@ function migrateCatalog() { // copias antiguas (pegadas a mano) de los scripts i
 function renderScripts() {
   migrateCatalog();
   const mine = userScripts();
-  $('#scriptList').innerHTML = mine.length ? mine.map(x => `<div class="setting-row script-row"><div><b>${esc(x.name)}</b><small>${x.lines} líneas · ${Math.max(1, Math.round(x.size / 1024))} KB · guardado</small></div><div class="script-btns"><button class="small-button" data-pine-add="${x.id}">Al gráfico</button><button class="small-button" data-view-script="${x.id}">Ver</button><button class="small-button danger" data-del-script="${x.id}" aria-label="Eliminar">✕</button></div></div>`).join('')
+  $('#scriptList').innerHTML = mine.length ? mine.map(x => `<div class="setting-row script-row"><div><b>${esc(nnName(x.name))}</b><small>${x.lines} líneas · ${Math.max(1, Math.round(x.size / 1024))} KB · guardado</small></div><div class="script-btns"><button class="small-button" data-pine-add="${x.id}">Al gráfico</button><button class="small-button" data-view-script="${x.id}">Ver</button><button class="small-button danger" data-del-script="${x.id}" aria-label="Eliminar">✕</button></div></div>`).join('')
     : '<div class="setting-row"><div><b>Sin scripts guardados</b><small>Importa un archivo .pine o pega el código.</small></div></div>';
   renderIndicators(); pineKey = ''; schedulePine();
 }
@@ -4586,7 +4595,20 @@ document.addEventListener('click', e => {
 });
 /* ───────── Scripts de Pine en el gráfico (intérprete propio: pine.js; dibujo: pine-draw.js) ───────── */
 const activePine = () => state.pine.filter(p => p.on && scripts.some(s => s.id === p.sid));
-const pineName = sid => { const s = scripts.find(x => x.id === sid); return s ? s.name : 'Script'; };
+/* Nombres de tus indicadores Nova: siempre «Nova Nexus© - Nombre» (Personal, IA Signals, Oscilador, Señales, Screener, LITE…) */
+function nnName(t) {
+  t = String(t || '').trim(); if (!/^\s*(nova|nexus)/i.test(t)) return t;
+  let r = t.replace(/^\s*nova\s*nexus\s*(©|\(c\))?/i, '').replace(/^\s*nova\b\s*(©)?/i, '').replace(/^[\s·:\-–—|]+/, '').trim();
+  r = r.replace(/\s*\[.*$/, '').replace(/\s+v?\d+(\.\d+)*\s*$/i, '').replace(/\s+\d+\s*cryptos?$/i, '').trim();
+  if (/^oscillat/i.test(r)) r = 'Oscilador';
+  else if (/^se[ñn]ales\s*i?a\b|^signals?\b/i.test(r)) r = 'Señales';
+  else if (/^i?a\s*signals?/i.test(r)) r = 'IA Signals';
+  else if (/^screener/i.test(r)) r = 'Screener';
+  else if (/^lite\b/i.test(r)) r = 'LITE';
+  else r = r.replace(/\s+v\d+.*$/i, '');
+  return r ? 'Nova Nexus© - ' + r : 'Nova Nexus©';
+}
+const pineName = sid => { const s = scripts.find(x => x.id === sid); return s ? nnName(s.name) : 'Script'; };
 function pineInline(code, opts) {
   try { return window.CCTPine ? CCTPine.run(code, opts.cs || candles, opts) : {ok: false, error: {msg: 'El motor de Pine no está disponible', line: 0}}; }
   catch (e) { return {ok: false, error: {msg: String(e && e.message || e), line: 0}}; }
@@ -4764,7 +4786,7 @@ const catPineOf = c => state.pine.find(p => p.sid === 'cat:' + c.id);
 function catalogCards(list) {
   return (list || window.CCTCatalog || []).map(c => {
     const p = catPineOf(c);
-    return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)} ${c.tier === 'pro' ? '<span class="prem-tag"><svg viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>PRO</span>' : '<span class="free-tag">GRATIS</span>'}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small><button class="small-button" data-pine-retry="${p.sid}">↻ Reintentar</button>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">${I('gear', 14)} Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
+    return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(nnName(c.name))} ${c.tier === 'pro' ? '<span class="prem-tag"><svg viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>PRO</span>' : '<span class="free-tag">GRATIS</span>'}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small><button class="small-button" data-pine-retry="${p.sid}">↻ Reintentar</button>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">${I('gear', 14)} Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
   }).join('');
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-std-set]'); if (b) openStdDialog(b.dataset.stdSet); const r = e.target.closest('[data-pine-retry]'); if (r) { delete pineRes[r.dataset.pineRetry]; pineKey = ''; schedulePine(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh(); } });
@@ -4786,7 +4808,7 @@ function pineSection() {
     if (!p.on) st = 'Apagado'; else if (!r) st = 'Calculando…';
     else if (!r.ok) st = `<span class="pine-err">Error${r.error.line ? ' · línea ' + r.error.line : ''}: ${esc(r.error.msg)}</span>`;
     else { const u = r.warnings.filter(w => w.level === 'unsupported').length; st = `${r.plots.length} plot${r.plots.length === 1 ? '' : 's'} · ` + (u ? `<span class="pine-warn">${I('warn', 14)} ${u} aviso${u > 1 ? 's' : ''} de no soportado</span>` : r.warnings.length ? `${r.warnings.length} aviso${r.warnings.length > 1 ? 's' : ''}` : 'sin avisos') + (r.meta.overlay ? '' : ' · panel propio') + (r.strategy ? ` · <b class="${r.strategy.stats.net >= 0 ? 'positive' : 'negative'}">Estrategia ${r.strategy.stats.net >= 0 ? '+' : ''}${r.strategy.stats.netPct.toFixed(2)}% · ${r.strategy.tradesTotal} ops</b>` : ''); }
-    return `<div class="setting-row pine-row">${prevImg(s)}<div><b>${esc(s.name)}</b><small>${st}</small>${r && r.ok ? `<select class="pane-sel" data-pine-pane="${p.sid}" aria-label="Panel"><option value="" ${!p.pane ? 'selected' : ''}>Panel: automático (${r.meta.overlay ? 'sobre el gráfico' : 'abajo'})</option><option value="main" ${p.pane === 'main' ? 'selected' : ''}>Panel: sobre el gráfico</option><option value="top" ${p.pane === 'top' ? 'selected' : ''}>Panel: arriba (propio)</option><option value="bottom" ${p.pane === 'bottom' ? 'selected' : ''}>Panel: abajo (propio)</option></select>` : ''}</div><div class="script-btns">${r && r.ok && r.strategy ? `<button class="small-button" data-pine-rep="${p.sid}" aria-label="Informe">${I('chart', 16)}</button>` : ''}<button class="small-button" data-pine-set="${p.sid}" aria-label="Ajustes">${I('gear', 16)}</button><button class="small-button danger" data-pine-del="${p.sid}" aria-label="Quitar">✕</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${p.on}" aria-label="Activar"></button></div></div>`;
+    return `<div class="setting-row pine-row">${prevImg(s)}<div><b>${esc(nnName(s.name))}</b><small>${st}</small>${r && r.ok ? `<select class="pane-sel" data-pine-pane="${p.sid}" aria-label="Panel"><option value="" ${!p.pane ? 'selected' : ''}>Panel: automático (${r.meta.overlay ? 'sobre el gráfico' : 'abajo'})</option><option value="main" ${p.pane === 'main' ? 'selected' : ''}>Panel: sobre el gráfico</option><option value="top" ${p.pane === 'top' ? 'selected' : ''}>Panel: arriba (propio)</option><option value="bottom" ${p.pane === 'bottom' ? 'selected' : ''}>Panel: abajo (propio)</option></select>` : ''}</div><div class="script-btns">${r && r.ok && r.strategy ? `<button class="small-button" data-pine-rep="${p.sid}" aria-label="Informe">${I('chart', 16)}</button>` : ''}<button class="small-button" data-pine-set="${p.sid}" aria-label="Ajustes">${I('gear', 16)}</button><button class="small-button danger" data-pine-del="${p.sid}" aria-label="Quitar">✕</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${p.on}" aria-label="Activar"></button></div></div>`;
   }).join('');
   return `<div class="pine-head"><b>Scripts de Pine</b><small>Pega código de TradingView: se interpreta aquí y se dibuja en el gráfico</small></div>${rows}<div class="setting-row"><button class="primary" data-pine-new="1">＋ Pegar / convertir Pine</button></div>`;
 }
@@ -4967,7 +4989,7 @@ function drawPinePane(x, top0, H, lo, hi, o) {
   g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip();
   g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
   g.font = '10px system-ui'; g.fillStyle = text; g.textAlign = 'left';
-  { const tx = (r.meta.short || r.meta.title || '').slice(0, 22); legLabel(tx, left + 4, top + 16, {t: 'pine', sid: x.p.sid, pane: x.p.pane || 'bottom'}); }
+  { const tx = nnName(r.meta.title || r.meta.short || '').slice(0, 30); legLabel(tx, left + 4, top + 16, {t: 'pine', sid: x.p.sid, pane: x.p.pane || 'bottom'}); }
   g.fillText(CCTPineDraw.fmtV(mx - pad), w - right + 6, top + 9); g.fillText(CCTPineDraw.fmtV(mn + pad), w - right + 6, top + height);
   const pr = w - right; // el panel usa todo el ancho hasta el eje (incluye el margen derecho del gráfico): si no, al desplazarse quedaba un cuadro vacío que tapaba las últimas velas
   g.beginPath(); g.rect(left, top0, pr - left + 2, H); g.clip();

@@ -794,3 +794,6 @@ body[data-tier="infinity"] .prem-tag{display:none!important}
 .bl-parts{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:6px 0 8px}
 .bl-part{border:1px solid var(--line);border-radius:12px;padding:9px 11px;background:var(--surface);display:flex;flex-direction:column;gap:2px}
 .bl-part b{font-size:13px}.bl-part span{font-size:16px;font-weight:800}.bl-part small{color:var(--muted);font-size:11px}
+.chart-ctx .ctx-sep{display:block;height:1px;margin:4px 6px;background:var(--line);opacity:.7}
+.xc-lg.img{background:#fff;padding:3px;box-sizing:border-box;overflow:hidden}
+.xc-lg.img img{width:100%;height:100%;object-fit:contain;display:block;border-radius:6px}

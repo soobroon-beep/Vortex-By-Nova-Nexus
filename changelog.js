@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.16', d: '10 nov 2026', t: 'Nombres Nova Nexus©, logos de exchanges y operación compacta en el celular', items: [
+    'Tus indicadores se llaman «Nova Nexus© - Personal», «- IA Signals», «- Oscilador», «- Señales», «- Screener»… y la leyenda ya no muestra la «ƒ».',
+    'En el celular, tu operación ocupa solo una pastilla pequeña a la izquierda; tócala para ver +TP, +SL y ✕. Conectar exchange muestra el logo de cada exchange.',
+    'Clic derecho: Copiar precio y Añadir alerta van primero. Si BingX no deja operar, te explica que hay que crear una clave nueva con el permiso de futuros.'
+  ]},
   {v: '3.15', d: '10 nov 2026', t: 'Gráfico siempre en vivo y botón VORTEX para todos tus dispositivos', items: [
     'El gráfico ya no se congela al dejarlo abierto: si la conexión en vivo se cuelga (la compu durmió o cambió la red), se reconecta solo en segundos.',
     'El botón VORTEX ahora guarda y actualiza en TODOS tus dispositivos abiertos: cada uno sube lo suyo, se mezcla sin pisarse y se refresca.',
