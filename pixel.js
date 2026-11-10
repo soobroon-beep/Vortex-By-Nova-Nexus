@@ -44,10 +44,12 @@
     <form class="px-in"><input type="text" placeholder="Pídeme algo: «dibuja el canal»…" autocomplete="off" enterkeyhint="send" aria-label="Escríbele a Nexus Pixel"><button type="button" class="px-mic" aria-label="Hablarle a Nexus Pixel" title="Háblale"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button><button type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></form>`;
   const layer = document.createElement('div'); layer.className = 'px-layer'; layer.append(av, bub, fab); (document.getElementById('app') || document.body).appendChild(layer); area.appendChild(ink); // capa sobre toda la app; la tinta sigue dentro del gráfico
   const tip = document.createElement('button'); tip.type = 'button'; tip.className = 'px-tip'; tip.hidden = true; layer.appendChild(tip);
+  const setTip = t => { tip.innerHTML = `<span class="px-tip-t">${esc(t)}</span><span class="px-tip-x" role="button" aria-label="Cerrar mensaje" title="Cerrar">&times;</span>`; tip.classList.remove('px-closing'); };
+  function closeTip(now) { clearTimeout(tipTimer); clearTimeout(watchHide); fab.classList.remove('peek-up'); if (tip.hidden) return; if (now || REDUCED) { tip.hidden = true; tip.classList.remove('px-watch', 'px-closing'); return; } tip.classList.add('px-closing'); setTimeout(() => { if (tip.classList.contains('px-closing')) { tip.hidden = true; tip.classList.remove('px-watch', 'px-closing'); } }, 190); }
   const cv = av.querySelector('.px-cv'), msg = bub.querySelector('.px-msg'), input = bub.querySelector('input'), st = bub.querySelector('.px-st');
 
   /* ── estado ── */
-  let M = null, loading = null, open = false, busy = false, pos = {x: 0, y: 0}, lastAct = Date.now(), hist = [], typer = 0;
+  let M = null, loading = null, open = false, busy = false, gen = 0, hiding = false, flyTok = 0, closeT = 0, pos = {x: 0, y: 0}, lastAct = Date.now(), hist = [], typer = 0;
   const AV = () => mobile() ? {w: 112, h: 132} : {w: 150, h: 176};
   const AW = () => layer.clientWidth || innerWidth, AH = () => layer.clientHeight || innerHeight;
   const ao = () => { const r = area.getBoundingClientRect(), l = layer.getBoundingClientRect(); return {x: r.left - l.left, y: r.top - l.top, w: r.width, h: r.height}; }; // gráfico → capa
@@ -78,18 +80,19 @@
   }
   const ease = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
   function flyTo(x, y, ms) {
+    if (!open && !hiding) return Promise.resolve(); const tk = ++flyTok;
     const s = AV(); x = clamp(x, -s.w * .25, AW() - s.w * .75); y = clamp(y, -s.h * .2, AH() - s.h * .2);
     const x0 = pos.x, y0 = pos.y, dist = Math.hypot(x - x0, y - y0); ms = ms || clamp(dist * 1.6, 260, 1100); if (REDUCED) ms = 1;
     const far = dist > 90, prev = M ? M.pose : 'idle'; if (M && far) { M.setPose('fly'); M.setYaw(x > x0 ? .55 : -.55); }
     return new Promise(res => { const t0 = performance.now(); let lx = x0, ly = y0;
-      const step = now => { const k = Math.min(1, (now - t0) / ms), e = ease(k), nx = x0 + (x - x0) * e, ny = y0 + (y - y0) * e - Math.sin(k * Math.PI) * Math.min(60, dist * .12); if (M) M.setVel((nx - lx) * 12, (ny - ly) * 12); lx = nx; ly = ny; place(nx, ny);
+      const step = now => { if (tk !== flyTok) { res(); return; } const k = Math.min(1, (now - t0) / ms), e = ease(k), nx = x0 + (x - x0) * e, ny = y0 + (y - y0) * e - Math.sin(k * Math.PI) * Math.min(60, dist * .12); if (M) M.setVel((nx - lx) * 12, (ny - ly) * 12); lx = nx; ly = ny; place(nx, ny);
         if (k < 1) requestAnimationFrame(step); else { if (M) { M.setVel(0, 0); M.setYaw(0); if (far) M.setPose(prev === 'fly' ? 'idle' : prev); } res(); } };
       requestAnimationFrame(step); });
   }
 
   /* ── globo de texto ── */
   function say(text, opts = {}) {
-    clearInterval(typer); bub.hidden = false; placeBubble(); bub.classList.toggle('busy', !!opts.busy);
+    clearInterval(typer); if (!open || hiding) return; clearTimeout(closeT); bub.classList.remove('px-closing'); bub.hidden = false; placeBubble(); bub.classList.toggle('busy', !!opts.busy);
     if (REDUCED || opts.instant) { msg.textContent = text; placeBubble(); return; }
     let i = 0; msg.textContent = ''; typer = setInterval(() => { i += 2; msg.textContent = text.slice(0, i); if (i % 12 === 0) placeBubble(); if (i >= text.length) { clearInterval(typer); placeBubble(); } }, 16);
   }
@@ -110,7 +113,7 @@
   }
   async function drawAnimated(d) {
     const segs = segsOf(d); if (!segs.length || !H()) return;
-    const col = d.col || '#a78bfa', s = AV(); sizeInk();
+    const col = d.col || '#a78bfa', s = AV(); sizeInk(); if (!open) { H().add([d]); return; }
     const first = segs[0][0](), hand0 = M ? M.handScreen() : {x: s.w * .8, y: s.h * .55};
     mood('focused', 'point'); { const f = V2(first); await flyTo(f.x - hand0.x, f.y - hand0.y); } mood('focused', 'draw');
     const done = [];
@@ -123,7 +126,7 @@
         inkCtx.beginPath(); inkCtx.moveTo(a.x, a.y); inkCtx.lineTo(tip.x, tip.y); inkCtx.stroke();
         inkCtx.shadowBlur = 22; inkCtx.fillStyle = '#fff'; inkCtx.beginPath(); inkCtx.arc(tip.x, tip.y, 3.2, 0, 7); inkCtx.fill(); // chispa en la punta del lápiz
         inkCtx.restore();
-        const h = M ? M.handScreen() : hand0, tv = V2(tip); place(tv.x - h.x, tv.y - h.y); if (M) M.setVel((b.x - a.x) / ms * 30, (b.y - a.y) / ms * 30);
+        if (open && !hiding) { const h = M ? M.handScreen() : hand0, tv = V2(tip); place(tv.x - h.x, tv.y - h.y); } if (M) M.setVel((b.x - a.x) / ms * 30, (b.y - a.y) / ms * 30);
         if (k < 1) requestAnimationFrame(step); else res(); };
         requestAnimationFrame(step); });
       done.push([fa, fb]);
@@ -394,9 +397,9 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
   let lastSec = '', lastTip = 0, tipTimer = 0;
   function maybeTip(sec) {
     if (open || busy || CFG().tips === false || !TIPS[sec] || Date.now() - lastTip < 90000) return; const day = new Date().toDateString(); ls.tips = ls.tips || {}; if (ls.tips[sec] === day) return;
-    clearTimeout(tipTimer); tipTimer = setTimeout(() => { if (open || section() !== sec) return; ls.tips[sec] = day; store(); lastTip = Date.now(); tip.textContent = TIPS[sec][0]; tip.dataset.q = TIPS[sec][1]; tip.hidden = false; const r = fab.getBoundingClientRect(), l = layer.getBoundingClientRect(); tip.style.left = clamp(r.left - l.left + r.width / 2 - 110, 8, AW() - 228) + 'px'; tip.style.top = (r.top - l.top - 46) + 'px'; fab.classList.add('peek-up'); setTimeout(() => { tip.hidden = true; fab.classList.remove('peek-up'); }, 6500); }, 2500);
+    clearTimeout(tipTimer); tipTimer = setTimeout(() => { if (open || section() !== sec) return; ls.tips[sec] = day; store(); lastTip = Date.now(); setTip(TIPS[sec][0]); tip.dataset.q = TIPS[sec][1]; tip.hidden = false; const r = fab.getBoundingClientRect(), l = layer.getBoundingClientRect(); tip.style.left = clamp(r.left - l.left + r.width / 2 - 110, 8, AW() - 228) + 'px'; tip.style.top = (r.top - l.top - 46) + 'px'; fab.classList.add('peek-up'); tipTimer = setTimeout(() => closeTip(), 6500); }, 2500);
   }
-  tip.addEventListener('click', async () => { const q = tip.dataset.q; tip.hidden = true; tip.classList.remove('px-watch'); fab.classList.remove('peek-up'); await show(false); ask(q); });
+  tip.addEventListener('click', async e => { if (e.target.closest('.px-tip-x')) { e.stopPropagation(); closeTip(); return; } const q = tip.dataset.q; closeTip(true); await show(false); if (open) ask(q); });
   setInterval(() => { const sec = section(); if (sec !== lastSec) { lastSec = sec; placePeek(); if (open) { setChips(); if (!busy) { const h = home(); flyTo(h.x, h.y, 500); } } else maybeTip(sec); } }, 1200);
 
   /* ── Vigía de tus reglas: cada cierto tiempo mira el gráfico, lo compara con tus reglas y te deja un mensajito con su lectura ──
@@ -405,10 +408,10 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
   function showWatch(text) {
     lastTip = Date.now(); hist.push({role: 'assistant', content: text}); if (hist.length > 12) hist.splice(0, hist.length - 12);
     if (open) { if (busy) return; wake(); mood('excited', 'idle'); bub.hidden = false; say(text); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2600); return; }
-    clearTimeout(tipTimer); clearTimeout(watchHide); tip.textContent = text; tip.dataset.q = '¿Por qué lo dices? Explícame tu lectura del gráfico con mis reglas'; tip.classList.add('px-watch'); tip.hidden = false;
+    clearTimeout(tipTimer); clearTimeout(watchHide); setTip(text); tip.dataset.q = '¿Por qué lo dices? Explícame tu lectura del gráfico con mis reglas'; tip.classList.add('px-watch'); tip.hidden = false;
     const r = fab.getBoundingClientRect(), l = layer.getBoundingClientRect(), w = tip.offsetWidth, hh = tip.offsetHeight;
     tip.style.left = clamp(r.left - l.left + r.width / 2 - w + 24, 8, Math.max(8, AW() - w - 8)) + 'px'; tip.style.top = Math.max(8, r.top - l.top - hh - 10) + 'px'; fab.classList.add('peek-up');
-    watchHide = setTimeout(() => { tip.hidden = true; tip.classList.remove('px-watch'); fab.classList.remove('peek-up'); }, 14000);
+    watchHide = setTimeout(() => closeTip(), 14000);
   }
   async function ruleWatch(force) {
     const h = H(), c = CFG(), every = W ? W.every(c) : 0; if (!W || !h || (!every && !force) || watchBusy || busy || document.hidden || !onChart() || !fab.getClientRects().length) return null;
@@ -435,33 +438,47 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     return loading;
   }
   async function show(greet) {
-    if (open) return; open = true; ls.open = true; store(); fab.classList.add('on'); fab.setAttribute('aria-label', 'Nexus Pixel está activo');
-    const s = AV(), pk = peekSpot(); place(pk.x - s.w / 2, pk.y + 30); av.hidden = false; fab.classList.add('out'); // sale desde donde se estaba asomando
-    try { await ensureModel(); } catch { av.hidden = true; open = false; fab.classList.remove('on', 'out'); try { window.CCT_bot && window.CCT_bot.toast('No se pudo cargar a Nexus Pixel. Revisa tu conexión.'); } catch {} return; }
-    mood('excited', 'fly'); const h = home(); await flyTo(h.x, h.y, greet ? 1000 : 500);
+    if (open && !hiding) return; const g = ++gen; open = true; hiding = false; ls.open = true; store(); fab.classList.add('on'); fab.setAttribute('aria-label', 'Nexus Pixel está activo'); closeTip(true);
+    clearTimeout(closeT); bub.classList.remove('px-closing'); av.classList.remove('px-fading');
+    const s = AV(), pk = peekSpot(); if (av.hidden) place(pk.x - s.w / 2, pk.y + 30); av.hidden = false; fab.classList.add('out'); // sale desde donde se estaba asomando
+    try { await ensureModel(); } catch { if (g !== gen) return; av.hidden = true; open = false; fab.classList.remove('on', 'out'); try { window.CCT_bot && window.CCT_bot.toast('No se pudo cargar a Nexus Pixel. Revisa tu conexión.'); } catch {} return; }
+    if (g !== gen) return; if (M) M.pause(false);
+    mood('excited', 'fly'); const h = home(); await flyTo(h.x, h.y, greet ? 1000 : 500); if (g !== gen) return;
     setChips(); const sec = section(), G = {newsView: 'Te puedo resumir las noticias o decirte qué mueve al mercado.', screenerView: 'Te digo cuál tiene la mejor entrada, las mejores LONG o SHORT y cuál tiene más confluencias.', alertsView: 'Dime qué alerta quieres, por ejemplo «avísame si BTC pasa 70 mil», y yo la creo.', lensView: 'Te explico qué llenar y dónde sacar tus datos de BingX.', botLabView: 'Armemos juntos un bot o te doy consejos para mejorar los tuyos.', watchView: 'Te digo cuál se mueve más o te enseño dónde está cada cosa.', aiView: 'Te ayudo en toda la app: pregúntame dónde está algo o qué puedo hacer en cada sección.', settingsView: 'Pregúntame dónde se configura cualquier cosa.'};
     if (greet) { mood('happy', 'wave'); say(`¡Hola${CFG().nombre ? ', ' + CFG().nombre : ''}! Soy Nexus Pixel. ${G[sec] && !(H() && H().desktop()) ? G[sec] : 'Pídeme que te dibuje el canal, el rango, soportes y resistencias… o pregúntame lo que quieras de ' + (H() ? H().symbol() : 'tu gráfico') + '.' + (G[sec] && H() && H().desktop() ? ' ' + G[sec] : '')}`); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2400); }
     else { mood('neutral', 'idle'); say('Aquí sigo. ¿Qué te dibujo?', {instant: true}); }
     lastAct = Date.now();
   }
   async function hide() {
-    if (!open) return; stopMic(); open = false; ls.open = false; store(); bub.hidden = true; mood('wink', 'wave'); await sleep(REDUCED ? 0 : 450); mood('happy', 'fly'); { const s = AV(), pk = peekSpot(); await flyTo(pk.x - s.w / 2, pk.y - s.h * .6, 600); await flyTo(pk.x - s.w / 2, pk.y + 20, 260); }
-    av.hidden = true; fab.classList.remove('on', 'out'); fab.setAttribute('aria-label', 'Abrir a Nexus Pixel'); if (M) M.pause(true);
+    if (!open || hiding) return; const g = ++gen; cancelMic(); clearInterval(typer); closeTip(true); open = false; hiding = true; ls.open = false; store();
+    bub.classList.add('px-closing'); clearTimeout(closeT); closeT = setTimeout(() => { if (!open) { bub.hidden = true; bub.classList.remove('px-closing', 'busy', 'working', 'long', 'listening'); } }, REDUCED ? 0 : 190); // el globo se desvanece (no se queda colgado)
+    mood('wink', 'wave'); await sleep(REDUCED ? 0 : 320); if (g !== gen) return;
+    mood('happy', 'fly'); { const s = AV(), pk = peekSpot(); await flyTo(pk.x - s.w / 2, pk.y - s.h * .5, 520); if (g !== gen) return; av.classList.add('px-fading'); await flyTo(pk.x - s.w / 2, pk.y + 20, 240); if (g !== gen) return; }
+    hiding = false; av.hidden = true; av.classList.remove('px-fading'); fab.classList.remove('on', 'out'); fab.setAttribute('aria-label', 'Abrir a Nexus Pixel'); if (M) { M.setVel(0, 0); M.pause(true); }
   }
   fab.addEventListener('click', () => { if (open) { if (bub.hidden) { bub.hidden = false; placeBubble(); input.focus({preventScroll: true}); } else hide(); } else show(true); });
   bub.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (q) { ask(q.dataset.q); return; } if (e.target.closest('[data-px=close]')) hide(); });
-  bub.querySelector('form').addEventListener('submit', e => { e.preventDefault(); ask(input.value); });
+  bub.querySelector('form').addEventListener('submit', e => { e.preventDefault(); if (micOn()) { stopMic(); return; } ask(input.value); }); // grabando: «enviar» manda tu audio
   input.addEventListener('keydown', e => e.stopPropagation());
 
-  /* ── Micrófono: háblale a Pixel. En el celular usa el dictado del navegador (rápido). En PC (y si el dictado falla) graba tu voz
-       y la transcribe el servidor de IA de VORTEX: así funciona aunque el navegador o la app de escritorio no traigan dictado. ── */
-  const mic = bub.querySelector('.px-mic'), SR = window.SpeechRecognition || window.webkitSpeechRecognition; let rec = null, heard = '', srBroken = !!ls.srBroken;
-  const VXURL = 'https://vortex-push.soobroon.workers.dev';
-  const useRecorder = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder) && (!SR || srBroken || (H() && H().desktop()));
-  let mr = null, mStream = null, mCtx = null, mTimer = 0;
-  function micUI(on, msg) { mic.classList.toggle('on', on); bub.classList.toggle('listening', on); input.placeholder = on ? (msg || 'Te escucho… habla ahora (toca el micrófono para terminar)') : 'Pídeme algo: «dibuja el canal»…'; if (on) { input.value = ''; mood('surprised', 'idle'); status('te escucho…'); } }
-  function stopMic() { if (rec) { try { rec.stop(); } catch {} } if (mr && mr.state === 'recording') { try { mr.stop(); } catch {} } }
-  function relMic() { clearInterval(mTimer); mTimer = 0; try { mStream && mStream.getTracks().forEach(t => t.stop()); } catch {} mStream = null; try { mCtx && mCtx.close(); } catch {} mCtx = null; }
+  /* ── Micrófono: háblale a Pixel. Tocas el micrófono y te escucha SIN cortarte (aunque hagas pausas) hasta que vuelvas a tocarlo
+       o le des «enviar»; entonces manda tu audio. Graba tu voz y la transcribe el servidor de IA de VORTEX (celular y PC).
+       Si el navegador no puede grabar, usa su dictado y lo reinicia solo en cada pausa para que no se apague. ── */
+  const mic = bub.querySelector('.px-mic'), SR = window.SpeechRecognition || window.webkitSpeechRecognition; let rec = null;
+  const VXURL = 'https://vortex-push.soobroon.workers.dev', MAXREC = 5 * 60000; // tope de seguridad: 5 minutos por audio
+  const canRecord = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+  let mr = null, mStream = null, mTimer = 0, micClock = 0, cancelled = false, wantRec = false;
+  const micOn = () => !!(rec || (mr && mr.state === 'recording'));
+  function micUI(on) {
+    mic.classList.toggle('on', on); bub.classList.toggle('listening', on); clearInterval(micClock); mic.removeAttribute('data-t');
+    mic.setAttribute('aria-label', on ? 'Terminar y enviar tu audio' : 'Hablarle a Nexus Pixel'); mic.title = on ? 'Toca para terminar y enviar' : 'Háblale';
+    input.placeholder = on ? 'Te escucho… habla con calma. Toca el micrófono o enviar cuando termines' : 'Pídeme algo: «dibuja el canal»…';
+    if (on) { input.value = ''; mood('surprised', 'idle'); status('te escucho…'); const t0 = Date.now(); const tick = () => { const sec = Math.floor((Date.now() - t0) / 1000); mic.dataset.t = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }; tick(); micClock = setInterval(tick, 500); }
+    else status('IA de VORTEX');
+  }
+  function stopMic() { wantRec = false; if (rec) { try { rec.stop(); } catch {} } if (mr && mr.state === 'recording') { try { mr.stop(); } catch {} } }
+  function cancelMic() { if (!micOn()) return; cancelled = true; stopMic(); } // al despedir a Pixel: se descarta, no se manda
+  function relMic() { clearTimeout(mTimer); mTimer = 0; try { mStream && mStream.getTracks().forEach(t => t.stop()); } catch {} mStream = null; }
   function toWav(buf) { // 16 kHz mono, 16 bits
     const n = buf.length, out = new DataView(new ArrayBuffer(44 + n * 2)), W = (o, t) => { for (let i = 0; i < t.length; i++) out.setUint8(o + i, t.charCodeAt(i)); };
     W(0, 'RIFF'); out.setUint32(4, 36 + n * 2, true); W(8, 'WAVE'); W(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true); out.setUint32(24, 16000, true); out.setUint32(28, 32000, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); W(36, 'data'); out.setUint32(40, n * 2, true);
@@ -471,47 +488,52 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
   async function transcribe(blob) {
     const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(), dec = await ac.decodeAudioData(await blob.arrayBuffer()); try { ac.close(); } catch {}
     const len = Math.ceil(dec.duration * 16000), off = new OfflineAudioContext(1, Math.max(1, len), 16000), src = off.createBufferSource(); src.buffer = dec; src.connect(off.destination); src.start(); const pcm = (await off.startRendering()).getChannelData(0);
-    const body = {model: 'openai-audio', temperature: 0, max_tokens: 300, messages: [{role: 'system', content: 'Eres un transcriptor. Escribe EXACTAMENTE lo que dice la persona en el audio, en español, sin responderle, sin comillas y sin agregar nada. Si no se entiende nada, responde solo: ""'}, {role: 'user', content: [{type: 'text', text: 'Transcribe este audio.'}, {type: 'input_audio', input_audio: {data: b64(toWav(pcm)), format: 'wav'}}]}]};
-    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 30000);
+    const body = {model: 'openai-audio', temperature: 0, max_tokens: 1200, messages: [{role: 'system', content: 'Eres un transcriptor. Escribe EXACTAMENTE lo que dice la persona en el audio, completo de principio a fin, en español, sin responderle, sin comillas y sin agregar nada. Si no se entiende nada, responde solo: ""'}, {role: 'user', content: [{type: 'text', text: 'Transcribe este audio completo.'}, {type: 'input_audio', input_audio: {data: b64(toWav(pcm)), format: 'wav'}}]}]};
+    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 30000 + Math.min(60000, dec.duration * 400));
     try { const r = await fetch(VXURL + '/ai', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body), signal: ctl.signal}); if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(), m = j && j.choices && j.choices[0] && j.choices[0].message || {}, t = m.content || (m.audio && m.audio.transcript) || ''; return String(t || '').replace(/^["«“\s]+|["»”\s]+$/g, '').trim(); }
     finally { clearTimeout(to); }
   }
   async function recordVoice() {
+    cancelled = false;
     try { mStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}}); }
-    catch (e) { relMic(); say(e && e.name === 'NotFoundError' ? 'No encontré ningún micrófono conectado. Conecta uno y vuelve a intentarlo.' : 'Necesito permiso para usar el micrófono: permítelo en el aviso del navegador (o en el candado de la barra de direcciones) y vuelve a tocarlo.'); return; }
+    catch (e) { relMic(); if (SR && e && e.name !== 'NotAllowedError' && e.name !== 'NotFoundError') { dictate(); return; } say(e && e.name === 'NotFoundError' ? 'No encontré ningún micrófono conectado. Conecta uno y vuelve a intentarlo.' : 'Necesito permiso para usar el micrófono: permítelo en el aviso del navegador (o en el candado de la barra de direcciones) y vuelve a tocarlo.'); return; }
+    if (!open) { relMic(); return; }
     const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find(m => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } }) || '';
     const chunks = []; mr = new MediaRecorder(mStream, mime ? {mimeType: mime} : {}); mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-    let spoke = false, quietSince = 0; const t0 = Date.now();
-    try { const AC = window.AudioContext || window.webkitAudioContext; mCtx = new AC(); const an = mCtx.createAnalyser(); an.fftSize = 1024; mCtx.createMediaStreamSource(mStream).connect(an); const d = new Uint8Array(an.fftSize);
-      mTimer = setInterval(() => { an.getByteTimeDomainData(d); let e = 0; for (const v of d) e += (v - 128) * (v - 128); const rms = Math.sqrt(e / d.length) / 128, now = Date.now();
-        if (rms > .045) { spoke = true; quietSince = 0; } else if (spoke) { quietSince = quietSince || now; if (now - quietSince > 1500) stopMic(); } // te callas 1.5 s → se manda solo
-        if ((!spoke && now - t0 > 8000) || now - t0 > 25000) stopMic(); }, 100); } catch {}
+    const t0 = Date.now(); mTimer = setTimeout(stopMic, MAXREC); // sin corte por silencio: solo tú decides cuándo termina
     mr.onstop = async () => { const dur = Date.now() - t0, type = (mr && mr.mimeType) || mime || 'audio/webm'; relMic(); mr = null; micUI(false);
+      if (cancelled || !open) { cancelled = false; mood('neutral', 'idle'); return; }
       if (!chunks.length || dur < 600) { mood('neutral', 'idle'); say('No alcancé a escucharte. Toca el micrófono y habla.'); return; }
       busy = true; bub.classList.add('working'); mood('thinking', 'think'); say('Escuchando lo que dijiste…', {busy: true}); status('transcribiendo…');
       let t = ''; try { t = await transcribe(new Blob(chunks, {type})); } catch (e) { console.warn('Pixel voz', e); }
-      busy = false; bub.classList.remove('working'); status('IA de VORTEX');
+      busy = false; bub.classList.remove('working'); status('IA de VORTEX'); if (!open) return;
       if (!t || t.length < 2) { mood('surprised', 'idle'); say('No te entendí bien. Intenta de nuevo hablando un poco más cerca del micrófono, o escríbeme.'); return; }
       input.value = t; ask(t); };
     mr.start(250); micUI(true);
   }
-  function dictate() { // dictado del navegador (celular)
-    rec = new SR(); rec.lang = 'es-MX'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1; heard = ''; let fail = '';
-    rec.onstart = () => micUI(true, 'Te escucho… habla ahora');
-    rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; heard = t.trim(); input.value = heard; };
-    rec.onerror = e => { fail = e.error; };
-    rec.onend = () => { micUI(false); status('IA de VORTEX'); rec = null; mood('neutral', 'idle'); const t = heard; heard = '';
-      if (t) { ask(t); return; }
-      if (fail === 'not-allowed') { say('Necesito permiso para usar el micrófono: actívalo en los permisos del navegador (o de VORTEX) y vuelve a tocarlo.'); return; }
-      if (fail === 'no-speech' || fail === 'aborted') { say('No te escuché. Toca el micrófono y vuelve a intentarlo.'); return; }
-      if (window.MediaRecorder && navigator.mediaDevices) { srBroken = true; ls.srBroken = true; store(); recordVoice(); return; } // el dictado del navegador no funciona aquí: grabo y transcribo en el servidor
-      say('El dictado por voz no está disponible en este navegador. Puedes escribirme o usar el micrófono del teclado.'); };
-    try { rec.start(); } catch { rec = null; if (window.MediaRecorder) recordVoice(); else say('No se pudo iniciar el micrófono. Inténtalo otra vez.'); }
+  function dictate() { // respaldo: dictado del navegador, reiniciado en cada pausa para que no se apague mientras hablas
+    cancelled = false; wantRec = true; let said = '', part = '', fail = '', restarts = 0, lastStart = 0, first = true;
+    const start = () => {
+      rec = new SR(); rec.lang = 'es-MX'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1; part = ''; fail = ''; lastStart = Date.now();
+      rec.onstart = () => { if (first) { first = false; micUI(true); } };
+      rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; part = t.trim(); input.value = (said + ' ' + part).trim(); };
+      rec.onerror = e => { fail = e.error; };
+      rec.onend = () => { said = (said + ' ' + part).trim(); part = '';
+        const fatal = ['not-allowed', 'service-not-allowed', 'audio-capture', 'language-not-supported'].includes(fail);
+        if (Date.now() - lastStart < 700) restarts++; else restarts = 0;
+        if (wantRec && !cancelled && open && !fatal && restarts < 6) { try { start(); return; } catch {} }
+        rec = null; wantRec = false; micUI(false); mood('neutral', 'idle'); if (cancelled || !open) { cancelled = false; return; }
+        if (said) { ask(said); return; }
+        if (fail === 'not-allowed' || fail === 'service-not-allowed') { say('Necesito permiso para usar el micrófono: actívalo en los permisos del navegador (o de VORTEX) y vuelve a tocarlo.'); return; }
+        say('No te escuché. Toca el micrófono y vuelve a intentarlo.'); };
+      rec.start();
+    };
+    try { start(); } catch { rec = null; wantRec = false; say('No se pudo iniciar el micrófono. Inténtalo otra vez.'); }
   }
   mic.addEventListener('click', () => {
-    if (rec || (mr && mr.state === 'recording')) { stopMic(); return; }
+    if (micOn()) { stopMic(); return; } // segundo toque: termina y manda tu audio
     if (busy) return; wake();
-    if (useRecorder()) { recordVoice(); return; }
+    if (canRecord()) { recordVoice(); return; }
     if (SR) { dictate(); return; }
     say('Tu navegador no permite usar el micrófono. Puedes escribirme o usar el micrófono del teclado.');
   });
