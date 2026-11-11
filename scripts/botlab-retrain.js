@@ -9,6 +9,8 @@
 const BR = require('../botlab-brain.js'), NT = require('../botlab-notify.js'), B = require('../botlab-engine.js'), O = require('../botlab-optimizer.js'), P = require('../botlab-paper.js'), RK = require('../botlab-risk.js');
 try { require('../nova-nexus.js'); } catch {}
 let Pine = null; try { Pine = require('../pine.js'); } catch {}
+/* Indicadores incluidos en la app (catálogo: Nova Nexus, Señales iA 2.7…): los bots los usan como 'cat:<id>' y no viven en data/scripts */
+function catalogScripts() { try { const vm = require('vm'), fs = require('fs'), ctx = {}; vm.runInNewContext(fs.readFileSync(require('path').join(__dirname, '..', 'catalog.js'), 'utf8'), ctx); return (ctx.CCTCatalog || []).map(c => ({id: 'cat:' + c.id, name: c.name, code: c.code, builtin: true})); } catch { return []; } }
 const BASES = ['https://data-api.binance.vision/api/v3', 'https://api.binance.com/api/v3']; // los runners de GitHub no siempre llegan a api.binance.com
 
 async function history(sym, itv, count) { // velas CERRADAS, paginadas hacia atrás
@@ -71,7 +73,7 @@ async function main() {
     let links = {}; try { const bb = await u.collection('data').doc('brain_bots').get(); links = (bb.exists && bb.data().bots) || {}; } catch {} const linked = b => links[b.id] && links[b.id].auto !== false;
     const all = S.bots || [], cyc = MODE !== 'paper' ? all.filter(b => b && ((b.cycle && b.cycle.enabled) || linked(b))) : [], pap = MODE !== 'retrain' ? all.filter(b => b && (b.paper || []).some(x => x.status === 'running')) : []; if (!cyc.length && !pap.length) continue;
     const sd = await u.collection('data').doc('botlab_server').get(), prev = sd.exists ? sd.data() : {}, results = Object.assign({}, prev.results || {}), paper = Object.assign({}, prev.paper || {}), brainMem = Object.assign({}, prev.brainMem || {}); let scripts = null, changed = false;
-    const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(s.data().items || '[]') : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } };
+    const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(s.data().items || '[]') : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } scripts = scripts.concat(catalogScripts().filter(c => !scripts.some(x => x.id === c.id))); };
     for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force, linked(b))) continue; await loadScripts(); const bc = linked(b) ? {link: links[b.id], memory: brainMem[b.id] || []} : null; const r = await retrainBot(b, scripts, getCandles, now, bc); if (bc && bc.out) { brainMem[b.id] = JSON.parse(JSON.stringify(bc.out.memory || [])); nbr++; } results[b.id] = JSON.parse(JSON.stringify(r)); changed = true; nr++; console.log(`· bot ${nr}${bc ? ' (con cerebro)' : ''}: ${r.status}${r.status === 'error' ? ' · ' + String(r.reason || '').slice(0, 120) : ' · ' + r.decision + (r.brain ? ` · ideas probadas: ${(r.brain.tried || []).length}` : '')}`); if (r.decision === 'propuesta') np++; }
     const gateF = RK.gateFor(S.risk, all.flatMap(x => x.status === 'archived' ? [] : x.paper || []), now);
     for (const b of pap) { await loadScripts(); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.notify); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
