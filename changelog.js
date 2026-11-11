@@ -1,5 +1,13 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.20', d: '11 nov 2026', t: 'Planes activos, varias copias de un indicador y pestañas independientes', items: [
+    'Al abrir VORTEX sin sesión aparece una ventana para iniciar sesión con Google; si la cierras sigues con el plan Gratis.',
+    'Plus se verifica con tu suscripción al canal de YouTube e Infinity con tu UID de BingX registrado con el código. Nada se cobra.',
+    'Todo lo premium bloqueado lleva fondo de galaxia y al tocarlo se abren los planes; cuando lo desbloqueas se ve normal.',
+    'Puedes poner varias EMA, SMA, WMA o Bandas de Bollinger a la vez (botón «＋»), cada una con su propia configuración.',
+    'Cada pestaña de gráfico guarda sus propios indicadores y ajustes: cambiar uno en una pestaña ya no cambia las demás.',
+    'Nuevo cursor Estrella con estela, e icono de la app 35 «Neón sobre negro».'
+  ]},
   {v: '3.19', d: '10 nov 2026', t: 'Nexus Pixel te recuerda tus reglas y la barra del celular más liquid glass', items: [
     'Nexus Pixel mira tu gráfico cada cierto tiempo, lo compara con las reglas que le configuraste y se asoma con un mensajito: te recuerda la regla que aplica y te dice su lectura. Eliges cada cuánto (o lo apagas) en su tarjeta de la IA: «Avisos de tus reglas».',
     'Celular: la barra y sus menús son más transparentes, los botones se despliegan como píldoras (Indicadores, Liquidaciones, Dibujar, Plantillas…), la estrella ya no es amarilla y puedes cambiar de temporalidad deslizando el dedo arriba o abajo sobre ella.',

@@ -1613,25 +1613,25 @@ body.rp-picking #chartArea{cursor:crosshair}
 
 /* ───────── Liquidaciones: botón «pro» con fondo de galaxia (estrellas que pasan), sin la etiqueta PRO · celular y escritorio ───────── */
 .prem-btn .prem-tag{display:none!important}
-body[data-tier="infinity"] #chartView #liqBtn{position:relative;overflow:hidden;isolation:isolate;gap:6px;color:rgba(238,240,255,.92)!important;font-weight:650;letter-spacing:.15px;text-shadow:none;
+#chartView #liqBtn.gx-lock{position:relative;overflow:hidden;isolation:isolate;gap:6px;color:rgba(238,240,255,.92)!important;font-weight:650;letter-spacing:.15px;text-shadow:none;
   border:1px solid transparent!important;
   background:radial-gradient(90% 140% at 18% 0%,rgba(124,77,255,.16),transparent 62%) padding-box,radial-gradient(80% 140% at 100% 100%,rgba(56,96,200,.12),transparent 64%) padding-box,linear-gradient(135deg,#0a0b16,#0d0e1f 55%,#0a0d1a) padding-box,linear-gradient(120deg,rgba(167,139,250,.38),rgba(255,255,255,.1) 45%,rgba(129,140,248,.32)) border-box!important;
   box-shadow:none!important;filter:none!important;transition:box-shadow .25s,color .2s}
-body[data-tier="infinity"] #chartView #liqBtn .ic{color:#b9acf5!important;filter:none}
-body[data-tier="infinity"] #chartView #liqBtn::before,body[data-tier="infinity"] #chartView #liqBtn::after{content:''!important;position:absolute;inset:0;z-index:-1;pointer-events:none;transform:none;background-repeat:repeat}
+#chartView #liqBtn.gx-lock .ic{color:#b9acf5!important;filter:none}
+#chartView #liqBtn.gx-lock::before,#chartView #liqBtn.gx-lock::after{content:''!important;position:absolute;inset:0;z-index:-1;pointer-events:none;transform:none;background-repeat:repeat}
 /* estrellas que pasan despacio (blancas, casi sin color) */
-body[data-tier="infinity"] #chartView #liqBtn::before{background-image:radial-gradient(1px 1px at 6px 5px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 18px 22px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1px 1px at 27px 11px,rgba(214,204,255,.7),transparent 70%),radial-gradient(1px 1px at 39px 30px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1.2px 1.2px at 52px 4px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 58px 19px,rgba(196,212,255,.6),transparent 70%),radial-gradient(1px 1px at 71px 33px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1px 1px at 84px 13px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 93px 26px,rgba(214,204,255,.7),transparent 70%),radial-gradient(1px 1px at 104px 7px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1.1px 1.1px at 113px 31px,rgba(255,255,255,.8),transparent 70%),radial-gradient(0.8px 0.8px at 33px 2px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 76px 2px,rgba(196,212,255,.6),transparent 70%),radial-gradient(0.8px 0.8px at 98px 17px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 12px 34px,rgba(214,204,255,.7),transparent 70%),radial-gradient(0.8px 0.8px at 47px 16px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 66px 8px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 118px 20px,rgba(196,212,255,.6),transparent 70%);background-size:124px 38px;opacity:.85;animation:liqStars 26s linear infinite!important}
+#chartView #liqBtn.gx-lock::before{background-image:radial-gradient(1px 1px at 6px 5px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 18px 22px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1px 1px at 27px 11px,rgba(214,204,255,.7),transparent 70%),radial-gradient(1px 1px at 39px 30px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1.2px 1.2px at 52px 4px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 58px 19px,rgba(196,212,255,.6),transparent 70%),radial-gradient(1px 1px at 71px 33px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1px 1px at 84px 13px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 93px 26px,rgba(214,204,255,.7),transparent 70%),radial-gradient(1px 1px at 104px 7px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1.1px 1.1px at 113px 31px,rgba(255,255,255,.8),transparent 70%),radial-gradient(0.8px 0.8px at 33px 2px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 76px 2px,rgba(196,212,255,.6),transparent 70%),radial-gradient(0.8px 0.8px at 98px 17px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 12px 34px,rgba(214,204,255,.7),transparent 70%),radial-gradient(0.8px 0.8px at 47px 16px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 66px 8px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 118px 20px,rgba(196,212,255,.6),transparent 70%);background-size:124px 38px;opacity:.85;animation:liqStars 26s linear infinite!important}
 /* galaxia muy tenue: una nebulosa que se desliza y unas pocas estrellas que titilan */
-body[data-tier="infinity"] #chartView #liqBtn::after{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='38' viewBox='0 0 160 38'%3E%3Cg fill='none' stroke='%23c4b5fd' stroke-opacity='.32' stroke-width='.6' stroke-linecap='round'%3E%3Cpath d='M14 27 L30 17 L46 21 L58 9 L74 13'/%3E%3Cpath d='M46 21 L52 31'/%3E%3Cpath d='M104 30 L116 18 L132 22 L146 8'/%3E%3Cpath d='M116 18 L122 6'/%3E%3C/g%3E%3Cg fill='%23fff'%3E%3Ccircle cx='14' cy='27' r='1.1'/%3E%3Ccircle cx='30' cy='17' r='1.4'/%3E%3Ccircle cx='46' cy='21' r='1.1'/%3E%3Ccircle cx='58' cy='9' r='1.6'/%3E%3Ccircle cx='74' cy='13' r='1'/%3E%3Ccircle cx='52' cy='31' r='.9'/%3E%3Ccircle cx='104' cy='30' r='1'/%3E%3Ccircle cx='116' cy='18' r='1.5'/%3E%3Ccircle cx='132' cy='22' r='1.1'/%3E%3Ccircle cx='146' cy='8' r='1.3'/%3E%3Ccircle cx='122' cy='6' r='.9'/%3E%3C/g%3E%3Cg fill='%23e9d5ff'%3E%3Ccircle cx='58' cy='9' r='3' opacity='.18'/%3E%3Ccircle cx='116' cy='18' r='3' opacity='.16'/%3E%3C/g%3E%3C/svg%3E"),radial-gradient(1.5px 1.5px at 20px 14px,rgba(255,255,255,.85),transparent 70%),radial-gradient(1.4px 1.4px at 66px 27px,rgba(230,220,255,.75),transparent 70%),radial-gradient(1.3px 1.3px at 92px 9px,rgba(255,255,255,.7),transparent 70%),radial-gradient(70px 24px at 50% 55%,rgba(139,92,246,.13),transparent 70%);background-size:160px 38px,110px 38px,110px 38px,110px 38px,150px 38px;background-position:0 50%,0 0,0 0,0 0,0 0;animation:liqConst 40s linear infinite,liqTwinkle 3.6s ease-in-out infinite!important}
+#chartView #liqBtn.gx-lock::after{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='38' viewBox='0 0 160 38'%3E%3Cg fill='none' stroke='%23c4b5fd' stroke-opacity='.32' stroke-width='.6' stroke-linecap='round'%3E%3Cpath d='M14 27 L30 17 L46 21 L58 9 L74 13'/%3E%3Cpath d='M46 21 L52 31'/%3E%3Cpath d='M104 30 L116 18 L132 22 L146 8'/%3E%3Cpath d='M116 18 L122 6'/%3E%3C/g%3E%3Cg fill='%23fff'%3E%3Ccircle cx='14' cy='27' r='1.1'/%3E%3Ccircle cx='30' cy='17' r='1.4'/%3E%3Ccircle cx='46' cy='21' r='1.1'/%3E%3Ccircle cx='58' cy='9' r='1.6'/%3E%3Ccircle cx='74' cy='13' r='1'/%3E%3Ccircle cx='52' cy='31' r='.9'/%3E%3Ccircle cx='104' cy='30' r='1'/%3E%3Ccircle cx='116' cy='18' r='1.5'/%3E%3Ccircle cx='132' cy='22' r='1.1'/%3E%3Ccircle cx='146' cy='8' r='1.3'/%3E%3Ccircle cx='122' cy='6' r='.9'/%3E%3C/g%3E%3Cg fill='%23e9d5ff'%3E%3Ccircle cx='58' cy='9' r='3' opacity='.18'/%3E%3Ccircle cx='116' cy='18' r='3' opacity='.16'/%3E%3C/g%3E%3C/svg%3E"),radial-gradient(1.5px 1.5px at 20px 14px,rgba(255,255,255,.85),transparent 70%),radial-gradient(1.4px 1.4px at 66px 27px,rgba(230,220,255,.75),transparent 70%),radial-gradient(1.3px 1.3px at 92px 9px,rgba(255,255,255,.7),transparent 70%),radial-gradient(70px 24px at 50% 55%,rgba(139,92,246,.13),transparent 70%);background-size:160px 38px,110px 38px,110px 38px,110px 38px,150px 38px;background-position:0 50%,0 0,0 0,0 0,0 0;animation:liqConst 40s linear infinite,liqTwinkle 3.6s ease-in-out infinite!important}
 @keyframes liqConst{to{background-position:-160px 50%,-110px 0,-110px 0,-110px 0,-150px 0}}
-body[data-tier="infinity"] #chartView #liqBtn:hover{color:#fff!important;box-shadow:0 0 12px rgba(139,92,246,.22)!important}
-body[data-tier="infinity"] #chartView #liqBtn.on{color:#fff!important;box-shadow:0 0 0 1px rgba(196,181,253,.28),0 0 12px rgba(139,92,246,.25)!important;
+#chartView #liqBtn.gx-lock:hover{color:#fff!important;box-shadow:0 0 12px rgba(139,92,246,.22)!important}
+#chartView #liqBtn.gx-lock.on{color:#fff!important;box-shadow:0 0 0 1px rgba(196,181,253,.28),0 0 12px rgba(139,92,246,.25)!important;
   background:radial-gradient(90% 140% at 18% 0%,rgba(124,77,255,.28),transparent 62%) padding-box,radial-gradient(80% 140% at 100% 100%,rgba(56,96,200,.22),transparent 64%) padding-box,linear-gradient(135deg,#0e0d22,#141233 55%,#0e1328) padding-box,linear-gradient(120deg,rgba(196,181,253,.6),rgba(255,255,255,.18) 45%,rgba(165,180,252,.5)) border-box!important}
-body[data-tier="infinity"] #chartView #liqBtn.on .ic{color:#e4dcff!important}
+#chartView #liqBtn.gx-lock.on .ic{color:#e4dcff!important}
 @keyframes liqStars{to{background-position:-120px 0}}
 @keyframes liqStars2{to{background-position:-110px 0}}
 @keyframes liqTwinkle{0%,100%{opacity:.6}50%{opacity:1}}
-@media (prefers-reduced-motion:reduce){body[data-tier="infinity"] #chartView #liqBtn::before,body[data-tier="infinity"] #chartView #liqBtn::after{animation:none!important}}
+@media (prefers-reduced-motion:reduce){#chartView #liqBtn.gx-lock::before,#chartView #liqBtn.gx-lock::after{animation:none!important}}
 
 /* ───────── Mi seguimiento: el color de cada moneda es un punto a la izquierda, todos en la misma columna (sin franja ni fondo de color) ───────── */
 #watchRows .watch-row:not(.sec-head):not(.sec-row)::before{content:'';flex:none;width:10px;height:10px;margin:0 -5px 0 2px;border-radius:50%;background:transparent}
@@ -1677,3 +1677,43 @@ body:not(.light) :is(.cfg-dlg,.pc-dlg,.rk-dlg,.dz-box,.row-menu,.pop-menu,.tag-p
 .px-tip-x:hover{background:rgba(240,107,121,.25);color:#f06b79}
 .px-x{display:grid;place-items:center;flex:none}
 .px-in .px-mic.on::after{content:attr(data-t);position:absolute;bottom:calc(100% + 4px);left:50%;translate:-50% 0;font-size:10px;font-weight:700;color:#f06b79;white-space:nowrap}
+
+/* ───────── Planes: todo lo premium BLOQUEADO lleva fondo de galaxia (estrellas que pasan despacio); desbloqueado se ve normal ───────── */
+.gx-lock:not(#liqBtn){
+  --gx-stars:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='124' height='38'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='6' cy='5' r='.7' opacity='.8'/%3E%3Ccircle cx='18' cy='22' r='.6' opacity='.5'/%3E%3Ccircle cx='27' cy='11' r='.7' fill='%23d6ccff' opacity='.7'/%3E%3Ccircle cx='39' cy='30' r='.6' opacity='.5'/%3E%3Ccircle cx='52' cy='4' r='.8' opacity='.85'/%3E%3Ccircle cx='58' cy='19' r='.6' fill='%23c4d4ff' opacity='.6'/%3E%3Ccircle cx='71' cy='33' r='.6' opacity='.5'/%3E%3Ccircle cx='84' cy='13' r='.7' opacity='.8'/%3E%3Ccircle cx='93' cy='26' r='.6' fill='%23d6ccff' opacity='.7'/%3E%3Ccircle cx='104' cy='7' r='.6' opacity='.5'/%3E%3Ccircle cx='113' cy='31' r='.75' opacity='.8'/%3E%3Ccircle cx='12' cy='34' r='.5' opacity='.6'/%3E%3Ccircle cx='47' cy='16' r='.5' opacity='.5'/%3E%3Ccircle cx='118' cy='20' r='.5' opacity='.6'/%3E%3C/g%3E%3C/svg%3E");
+  --gx-const:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='38'%3E%3Cg fill='none' stroke='%23c4b5fd' stroke-opacity='.3' stroke-width='.6'%3E%3Cpath d='M14 27 30 17 46 21 58 9 74 13M46 21l6 10M104 30l12-12 16 4 14-14M116 18l6-12'/%3E%3C/g%3E%3Cg fill='%23fff'%3E%3Ccircle cx='30' cy='17' r='1.2'/%3E%3Ccircle cx='58' cy='9' r='1.4'/%3E%3Ccircle cx='116' cy='18' r='1.3'/%3E%3Ccircle cx='146' cy='8' r='1.1'/%3E%3Ccircle cx='14' cy='27' r='.9'/%3E%3Ccircle cx='132' cy='22' r='.9'/%3E%3C/g%3E%3C/svg%3E");
+  background-color:#0b0920!important;
+  background-image:var(--gx-stars),var(--gx-const),radial-gradient(90% 140% at 18% 0%,rgba(124,77,255,.26),transparent 62%),radial-gradient(80% 140% at 100% 100%,rgba(56,96,200,.2),transparent 64%)!important;
+  background-size:124px 38px,160px 38px,100% 100%,100% 100%!important;background-repeat:repeat,repeat,no-repeat,no-repeat!important;
+  border-color:rgba(167,139,250,.34)!important;box-shadow:inset 0 0 0 1px rgba(167,139,250,.08),0 0 14px rgba(124,77,255,.12)!important;
+  animation:gxDrift 34s linear infinite}
+.gx-lock:not(#liqBtn) :is(b,strong,.tn,span:not(.prem-tag)){color:#efeaff}
+.gx-lock:not(#liqBtn) small{color:rgba(225,215,255,.66)}
+:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock{color:#d9ccff!important;border-radius:12px}
+@keyframes gxDrift{to{background-position:-124px 0,-160px 0,0 0,0 0}}
+@media (prefers-reduced-motion:reduce){.gx-lock{animation:none!important}}
+.light .gx-lock:not(#liqBtn){color:#efeaff}
+.pl-col.want{box-shadow:0 0 0 2px #b79cff inset,0 0 24px rgba(139,92,246,.25)}
+
+/* ───────── Bienvenida: iniciar sesión con Google al abrir (si la cierras, sigues con Gratis) ───────── */
+.vw-ov{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:16px;background:rgba(3,5,10,.5);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);opacity:0;transition:opacity .22s}
+.vw-ov.open{opacity:1}
+.vw-box{position:relative;overflow:hidden;width:min(400px,100%);padding:30px 24px 20px;border-radius:24px;text-align:center;color:#eef1ff;
+  background:radial-gradient(120% 70% at 50% 0%,rgba(124,77,255,.28),transparent 60%),radial-gradient(90% 60% at 100% 100%,rgba(56,96,200,.18),transparent 65%),rgba(9,10,22,.78);
+  border:1px solid rgba(255,255,255,.13);-webkit-backdrop-filter:blur(30px) saturate(1.7);backdrop-filter:blur(30px) saturate(1.7);box-shadow:0 24px 60px rgba(0,0,0,.5);transform:translateY(10px) scale(.97);transition:transform .25s}
+.vw-ov.open .vw-box{transform:none}
+.vw-fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.vw-box>*:not(.vw-fx){position:relative}
+.vw-x{position:absolute!important;top:12px;right:12px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(255,255,255,.08);color:#c9cfe0;font-size:15px}
+.vw-x:hover{background:rgba(255,255,255,.16);color:#fff}
+.vw-logo{width:74px;height:74px;border-radius:20px;box-shadow:0 10px 30px rgba(124,77,255,.35)}
+.vw-box h2{margin:14px 0 6px;font-size:21px;letter-spacing:-.4px}
+.vw-box p{margin:0 auto 16px;max-width:320px;font-size:13px;line-height:1.55;color:rgba(225,230,245,.75)}
+.vw-tiers{list-style:none;margin:0 0 6px;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.vw-t{padding:9px 6px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+.vw-t b{display:block;font-size:13px}.vw-t small{display:block;margin-top:3px;font-size:10px;line-height:1.3;color:rgba(225,230,245,.6)}
+.vw-t.plus b{color:#ff8a8a}.vw-t.infinity b{color:#c9b6ff}
+.vw-go{margin-top:14px!important}
+.vw-alt{display:flex;justify-content:center;gap:6px;margin-top:10px;flex-wrap:wrap}
+.vw-alt button{border:0;background:none;color:rgba(225,230,245,.72);font-size:12.5px;padding:8px 10px;border-radius:9px}
+.vw-alt button:hover{background:rgba(255,255,255,.07);color:#fff}

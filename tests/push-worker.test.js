@@ -163,3 +163,16 @@ test('/ai: un modelo que no es de chat (qwen3guard) se cambia por openai', async
   try { await w.default.fetch(new Request('https://x.workers.dev/ai', {method: 'POST', headers: {origin: 'https://soobroon-beep.github.io', 'cf-connecting-ip': '9.9.9.9'}, body: JSON.stringify({model: 'qwen/qwen3guard-gen-8b', messages: []})}), env); assert.deepStrictEqual(seen, ['openai']); }
   finally { globalThis.fetch = realFetch; }
 });
+
+test('plan Infinity: comprueba el referido de BingX con la API de afiliado (firma HMAC, sin exponer la llave)', async () => {
+  const W = await import('../worker/push-alerts.mjs');
+  assert.deepEqual(await W.bingxInvite({}, '12345678'), {ok: false, setup: true});
+  assert.equal((await W.bingxInvite({BINGX_AGENT_KEY: 'k', BINGX_AGENT_SECRET: 's'}, 'abc')).error, 'UID inválido');
+  let url = '', hdr = null;
+  const f = async (u, o) => { url = u; hdr = o.headers; return {json: async () => ({code: 0, data: {uid: 12345678, inviteResult: true, deposit: true, trade: false}})}; };
+  const r = await W.bingxInvite({BINGX_AGENT_KEY: 'k', BINGX_AGENT_SECRET: 's'}, '12345678', f);
+  assert.equal(r.invited, true); assert.equal(hdr['X-BX-APIKEY'], 'k');
+  assert.match(url, /inviteRelationCheck\?uid=12345678&timestamp=\d+&signature=[0-9a-f]{64}$/);
+  const no = await W.bingxInvite({BINGX_AGENT_KEY: 'k', BINGX_AGENT_SECRET: 's'}, '12345678', async () => ({json: async () => ({code: 0, data: {inviteResult: false}})}));
+  assert.equal(no.invited, false);
+});

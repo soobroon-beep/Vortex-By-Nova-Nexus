@@ -15,6 +15,22 @@ const MOVE_TOP = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT'];
 const MOVE_WIN = [[5, '5 min', 1], [60, '1 h', 2.5]], MOVE_COOL = 15 * 60000;
 const MAX_ALERTS = 50, MAX_DEVICES = 20, APP_URL = 'https://soobroon-beep.github.io/Vortex-By-Nova-Nexus/';
 
+/* ───────── Plan Infinity: comprobar el referido de BingX ─────────
+   Usa la API de afiliado (agente) de BingX con TU llave: secretos BINGX_AGENT_KEY y BINGX_AGENT_SECRET del Worker (solo lectura).
+   Sin esos secretos contesta {setup: true} y la app deja el UID guardado como pendiente. */
+export async function bingxInvite(env, uid, fetchFn = fetch) {
+  uid = String(uid == null ? '' : uid).replace(/\D/g, ''); if (!/^\d{6,14}$/.test(uid)) return {error: 'UID inválido'};
+  const key = env.BINGX_AGENT_KEY, sec = env.BINGX_AGENT_SECRET; if (!key || !sec) return {ok: false, setup: true};
+  const q = `uid=${uid}&timestamp=${Date.now()}`;
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(sec), {name: 'HMAC', hash: 'SHA-256'}, false, ['sign']);
+  const sig = [...new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(q)))].map(x => x.toString(16).padStart(2, '0')).join('');
+  try {
+    const r = await fetchFn(`https://open-api.bingx.com/openApi/agent/v1/account/inviteRelationCheck?${q}&signature=${sig}`, {headers: {'X-BX-APIKEY': key}});
+    const j = await r.json(); if (j.code !== 0) return {ok: false, invited: false, msg: String(j.msg || 'BingX no respondió')};
+    const d = j.data || {}; return {ok: true, invited: d.inviteResult === true || d.inviteResult === 'true', deposit: !!d.deposit, trade: !!d.trade};
+  } catch { return {ok: false, invited: false, msg: 'BingX sin respuesta'}; }
+}
+
 /* ───────── utilidades ───────── */
 const enc = new TextEncoder();
 export const b64u = buf => { let s = ''; for (const b of new Uint8Array(buf)) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
@@ -302,6 +318,10 @@ export default {
       } catch (e) { return json({error: 'Exchange sin respuesta'}, 502); }
     }
     if (req.method === 'GET' && path === '/vapid') return json({key: (await vapidKeys(env)).pub});
+    if (req.method === 'POST' && path === '/plan/bingx') { // plan Infinity: ¿este UID abrió su cuenta de BingX con tu código? (API de afiliado; la llave nunca sale del servidor)
+      let b; try { b = JSON.parse((await req.text()).slice(0, 400)); } catch { return json({error: 'JSON inválido'}, 400); }
+      const r = await bingxInvite(env, b && b.uid); return json(r, r.error ? 400 : 200);
+    }
     if (req.method !== 'POST') return json({error: 'Método no permitido'}, 405);
     const raw = await req.text(); if (raw.length > 60000) return json({error: 'Demasiado grande'}, 413);
     let b; try { b = JSON.parse(raw); } catch { return json({error: 'JSON inválido'}, 400); }

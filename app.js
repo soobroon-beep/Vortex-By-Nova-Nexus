@@ -77,7 +77,7 @@ function sanChartStyle(c) {
   if (['Guiones', 'Sólida', 'Puntos'].includes(c.alertS)) o.alertS = c.alertS;
   return o;
 }
-const STD_SCHEMA = {
+const STD_SCHEMA_BASE = {
   ema20: [['len', 'Período', 'int', 20, 1, 500], ['color', 'Color y opacidad', 'color', '#f5c568'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]], ema50: [['len', 'Período', 'int', 50, 1, 500], ['color', 'Color y opacidad', 'color', '#6ca5f9'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]],
   sma200: [['len', 'Período', 'int', 200, 1, 1000], ['color', 'Color y opacidad', 'color', '#b58dff'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]], wma20: [['len', 'Período', 'int', 20, 1, 500], ['color', 'Color y opacidad', 'color', '#4dd0e1'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]],
   bollinger: [['len', 'Período', 'int', 20, 2, 500], ['mult', 'Desviaciones', 'float', 2, .1, 10], ['color', 'Color y opacidad', 'color', '#748bab'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Guiones', 0, 0, ['Sólida', 'Guiones', 'Puntos']], ['fill', 'Relleno entre bandas', 'color', '#748bab00']],
@@ -112,16 +112,31 @@ const STD_SCHEMA = {
   vpvr: [['rows', 'Número de filas', 'int', 24, 4, 200], ['va', 'Área de valor (% del volumen)', 'int', 70, 10, 100], ['mode', 'Volumen', 'string', 'Arriba/Abajo', 0, 0, ['Arriba/Abajo', 'Total', 'Delta']], ['place', 'Ubicación', 'string', 'Derecha', 0, 0, ['Derecha', 'Izquierda']], ['wpct', 'Ancho (% del gráfico)', 'int', 30, 5, 90],
     ['cUp', 'Volumen comprador (arriba)', 'color', '#2962ff'], ['cDn', 'Volumen vendedor (abajo)', 'color', '#fbc02d'], ['pocOn', 'Línea POC', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cPoc', 'Color POC', 'color', '#ff5252'], ['vaOn', 'Líneas VAH / VAL', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cVa', 'Color VAH / VAL', 'color', '#2962ff']]
 };
+/* Copias de un mismo indicador (dos EMA, tres SMA…): la copia se llama base_c2, base_c3… y usa el esquema de su base */
+const COPYABLE = {ema20: 'EMA', sma200: 'SMA', wma20: 'WMA', bollinger: 'Bollinger'}, COPY_RE = /^(ema20|sma200|wma20|bollinger)_c(\d{1,2})$/, MAX_COPIES = 8;
+const baseOf = k => { const m = COPY_RE.exec(k); return m ? m[1] : k; }, isCopy = k => COPY_RE.test(k);
+const STD_SCHEMA = new Proxy(STD_SCHEMA_BASE, {get: (t, k) => typeof k === 'string' && isCopy(k) ? t[baseOf(k)] : t[k]});
+const COPY_COLS = ['#ff7ab6', '#4dd0e1', '#9ccc65', '#ffb74d', '#b39ddb', '#4fc3f7', '#f06292', '#aed581'];
+const copyKeys = b => Object.keys(state.indicators || {}).filter(k => baseOf(k) === b && isCopy(k)).sort((x, y) => +x.split('_c')[1] - +y.split('_c')[1]);
+function addCopy(b) { // agrega otra copia del indicador con su propio color (y para la EMA, otro período) y la deja encendida
+  if (!COPYABLE[b]) return null; const have = copyKeys(b); if (have.length >= MAX_COPIES) { toast(`Máximo ${MAX_COPIES + 1} ${COPYABLE[b]}`); return null; }
+  let n = 2; while (state.indicators[`${b}_c${n}`] !== undefined) n++; const k = `${b}_c${n}`;
+  const q = Object.assign({}, (state.stdParams || {})[b]); q.color = COPY_COLS[(n - 2) % COPY_COLS.length];
+  if (b !== 'bollinger') q.len = [50, 100, 200, 9, 21, 34, 89, 144][(n - 2) % 8];
+  state.indicators[k] = true; state.stdParams = sanStdParams(Object.assign({}, state.stdParams, {[k]: q})); return k;
+}
+function removeCopy(k) { if (!isCopy(k)) return; delete state.indicators[k]; if (state.stdParams) delete state.stdParams[k]; if (state.stdHide) delete state.stdHide[k]; }
+function bbands(c, bl, bm) { const n = c.length, m = sma(c, bl), up = Array(n).fill(null), lo = Array(n).fill(null); for (let i = bl - 1; i < n; i++) { let s = 0; for (let j = i - bl + 1; j <= i; j++) { const d = c[j] - m[i]; s += d * d; } const sd = Math.sqrt(s / bl); up[i] = m[i] + bm * sd; lo[i] = m[i] - bm * sd; } return {up, lo}; }
 const sp = (key, name) => { const v = state.stdParams && state.stdParams[key] && state.stdParams[key][name]; if (v !== undefined) return v; const e = (STD_SCHEMA[key] || []).find(x => x[0] === name); return e ? e[3] : undefined; };
 function sanStdParams(p) {
   const o = {}; if (!p || typeof p !== 'object' || Array.isArray(p)) return o;
-  for (const key of Object.keys(STD_SCHEMA)) { const src = p[key]; if (!src || typeof src !== 'object') continue; const q = {};
+  for (const key of [...Object.keys(STD_SCHEMA_BASE), ...Object.keys(p).filter(isCopy).slice(0, 40)]) { const src = p[key]; if (!src || typeof src !== 'object') continue; const q = {};
     for (const [nm, , type, def, mn, mx, opts] of STD_SCHEMA[key]) { const v = src[nm]; if (type === 'color') { if (typeof v === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(v) && v !== def) q[nm] = v; } else if (type === 'string') { if (typeof v === 'string' && opts && opts.includes(v) && v !== def) q[nm] = v; } else if (Number.isFinite(v)) { const x = type === 'int' ? Math.round(v) : v; if (x >= mn && x <= mx && x !== def) q[nm] = x; } }
     if (Object.keys(q).length) o[key] = q; }
   return o;
 }
 const stdOn = k => !!state.indicators[k] && !(state.stdHide && state.stdHide[k]); // activo y no oculto con el ojito de la leyenda
-const stdName = k => ({derivs: 'Derivados en vivo', oi: 'Interés abierto', funding: 'Funding', lsr: 'Ratio Long/Short', taker: 'Compra/venta agresiva', ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', adx: `ADX ${sp('adx', 'len')}`, cci: `CCI ${sp('cci', 'len')}`, willr: `Williams %R ${sp('willr', 'len')}`, mfi: `MFI ${sp('mfi', 'len')}`, roc: `ROC ${sp('roc', 'len')}`, stochrsi: 'Estoc. RSI', ao: 'Awesome Osc.', cmf: `CMF ${sp('cmf', 'len')}`, donchian: `Donchian ${sp('donchian', 'len')}`, keltner: `Keltner ${sp('keltner', 'len')}`, ichimoku: 'Ichimoku', psar: 'Parabolic SAR', vpvr: 'VPVR', liqmap: 'Liquidaciones (heatmap)', patterns: 'Patrones', dchan: 'Canales dinámicos', cross: 'Cruces EMA 20/50'}[k] || k);
+const stdName = k => isCopy(k) ? (baseOf(k) === 'bollinger' ? `Bollinger ${sp(k, 'len')}` : `${COPYABLE[baseOf(k)]} ${sp(k, 'len')}`) : ({derivs: 'Derivados en vivo', oi: 'Interés abierto', funding: 'Funding', lsr: 'Ratio Long/Short', taker: 'Compra/venta agresiva', ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', adx: `ADX ${sp('adx', 'len')}`, cci: `CCI ${sp('cci', 'len')}`, willr: `Williams %R ${sp('willr', 'len')}`, mfi: `MFI ${sp('mfi', 'len')}`, roc: `ROC ${sp('roc', 'len')}`, stochrsi: 'Estoc. RSI', ao: 'Awesome Osc.', cmf: `CMF ${sp('cmf', 'len')}`, donchian: `Donchian ${sp('donchian', 'len')}`, keltner: `Keltner ${sp('keltner', 'len')}`, ichimoku: 'Ichimoku', psar: 'Parabolic SAR', vpvr: 'VPVR', liqmap: 'Liquidaciones (heatmap)', patterns: 'Patrones', dchan: 'Canales dinámicos', cross: 'Cruces EMA 20/50'}[k] || k);
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
 const OLD_BG = /^#(0d1019|101725|090e19)$/i; // fondos por defecto anteriores: pasan al tema nuevo más oscuro
@@ -153,6 +168,10 @@ function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estil
   if (o.o != null) { const x = CCTDrawCfg.sanitize(o.o); if (x) o.o = x; else delete o.o; } // ajustes propios de la herramienta (niveles, fondo, extensiones…)
   return o;
 }
+function tabCfgSan(cfg) { // configuración propia de cada pestaña (indicadores, sus ajustes, colores, paneles): misma limpieza que una plantilla
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return {}; const d = sanDesigns([{id: 'tab', name: 'tab', snap: cfg}])[0]; if (!d) return {};
+  delete d.snap.ctype; return {cfg: d.snap};
+}
 const DESIGN_KEYS = ['indicators', 'stdParams', 'stdHide', 'pine', 'chartStyle', 'ctype', 'novaParams', 'novaSaved', 'pn'];
 function sanDesigns(a) { // diseños guardados (configuración completa del gráfico): máx. 20 y de tamaño acotado, viajan a la cuenta
   const out = [], seen = new Set(); if (!Array.isArray(a)) return out;
@@ -180,6 +199,7 @@ function dSanO(o) { const x = o ? CCTDrawCfg.sanitize(o) : null; return x ? {o: 
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
+  for (const k of Object.keys(o.indicators)) if (/_c\d+$/.test(k) && (!isCopy(k) || typeof o.indicators[k] !== 'boolean')) delete o.indicators[k]; // copias (EMA 2, SMA 2…): solo las válidas
   if (!o.drawings || typeof o.drawings !== 'object' || Array.isArray(o.drawings)) o.drawings = {};
   { // pincel: solo trazos bien formados y de tamaño acotado (el estado completo viaja en un documento de Firestore de máx. 1 MB)
     const okPt = q => Array.isArray(q) && q.length === 2 && Number.isFinite(q[0]) && Number.isFinite(q[1]);
@@ -222,7 +242,7 @@ function merge(s) {
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
-  o.tabs = Array.isArray(o.tabs) ? o.tabs.filter(t => t && typeof t.s === 'string' && /^[\w.:\-/]{2,32}$/.test(t.s)).slice(0, 8).map((t, i) => ({id: /^[a-z0-9]{3,12}$/.test(t.id) ? t.id : 't' + i + Date.now().toString(36).slice(-4), s: t.s, i: INTERVALS.includes(t.i) ? t.i : '1h', c: CTYPES.some(x => x[0] === t.c) ? t.c : 'candles'})) : [];
+  o.tabs = Array.isArray(o.tabs) ? o.tabs.filter(t => t && typeof t.s === 'string' && /^[\w.:\-/]{2,32}$/.test(t.s)).slice(0, 8).map((t, i) => Object.assign({id: /^[a-z0-9]{3,12}$/.test(t.id) ? t.id : 't' + i + Date.now().toString(36).slice(-4), s: t.s, i: INTERVALS.includes(t.i) ? t.i : '1h', c: CTYPES.some(x => x[0] === t.c) ? t.c : 'candles'}, tabCfgSan(t.cfg))) : [];
   o.tab = typeof o.tab === 'string' ? o.tab.slice(0, 12) : ''; o.tabRev = Number.isFinite(+o.tabRev) ? +o.tabRev : 0;
   if (typeof o.symbol !== 'string') o.symbol = o.symbols[0];
   return o;
@@ -1341,7 +1361,7 @@ const IND_ART = {
   dchan: '<path d="M2 22 38 8" stroke-dasharray="2 3"/><path d="M2 31 38 17" stroke-dasharray="2 3"/><path d="M2 26.5 38 12.5" opacity=".4" stroke-dasharray="1 3"/>',
   patterns: '<path d="M3 20 11 6l6 9 7-12 6 10 7-5"/><circle cx="11" cy="6" r="1.6" fill="currentColor"/><circle cx="24" cy="3" r="1.6" fill="currentColor"/>'
 };
-const indArt = (k, col) => IND_ART[k] ? `<span class="ind-art" style="color:${col}"><svg viewBox="0 0 40 24" width="40" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IND_ART[k]}</svg></span>` : '';
+const indArt = (k, col) => (k = baseOf(k), IND_ART[k]) ? `<span class="ind-art" style="color:${col}"><svg viewBox="0 0 40 24" width="40" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IND_ART[k]}</svg></span>` : '';
 const indicatorMeta = [
   ['ema20','EMA','Media móvil exponencial: cambia el período en el engrane (20 por defecto)','#f5c568'],
   ['ema50','EMA 50','Media móvil exponencial de 50 períodos','#6ca5f9'],
@@ -1428,6 +1448,8 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   if (!T || !n) return;
   const c = candles.map(x => x.c), iv = IV_MS[state.interval];
   ind.wma20 = I.wma20 ? T.wma(c, sp('wma20', 'len')) : null;
+  for (const k of Object.keys(I)) { if (!isCopy(k)) continue; if (!I[k]) { ind[k] = null; continue; } const bs = baseOf(k); // copias del mismo indicador (EMA 2, SMA 2…)
+    ind[k] = bs === 'ema20' ? ema(c, sp(k, 'len')) : bs === 'sma200' ? sma(c, sp(k, 'len')) : bs === 'wma20' ? T.wma(c, sp(k, 'len')) : bbands(c, sp(k, 'len'), sp(k, 'mult')); }
   ind.vwap = I.vwap ? T.vwap(candles, iv) : null;
   const st = I.supertrend ? T.supertrend(candles, sp('supertrend', 'len'), sp('supertrend', 'factor')) : null; ind.stUp = st && st.up; ind.stDn = st && st.dn; ind.stDir = st && st.dir;
   ind.cross = I.cross ? T.crosses(ind.ema20, ind.ema50) : null;
@@ -1453,7 +1475,7 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.rev = I.nnRev ? T.reversalBands(candles, NP('revLen')) : null;
   ind.sr = I.nnSR ? T.supportResistance(candles, {lookback: NP('srLookback'), retSince: NP('srSince'), retValid: NP('srLimit')}) : null;
   ind.piv = I.nnPiv ? T.pivots(candles, NP('pivLen')) : null;
-  { const lk = `${state.symbol}|${state.interval}|${candles.length}|${candles[0].t}|${sp('liqmap', 'rows')}|${Math.floor(Date.now() / 20000)}`; if (!I.liqmap) ind.lm = null; else if (!ind.lm || ind.lm._k !== lk) { ind.lm = T.liquidationHeatmap(candles, {rows: sp('liqmap', 'rows')}); if (ind.lm) ind.lm._k = lk; } }
+  { const lk = `${state.symbol}|${state.interval}|${candles.length}|${candles[0].t}|${sp('liqmap', 'rows')}|${Math.floor(Date.now() / 20000)}`; if (!I.liqmap || !planOk('liq')) ind.lm = null; else if (!ind.lm || ind.lm._k !== lk) { ind.lm = T.liquidationHeatmap(candles, {rows: sp('liqmap', 'rows')}); if (ind.lm) ind.lm._k = lk; } }
   ind.liq = I.nnLiq ? T.liquidations(candles, iv, {lookback: NP('liqLookback')}) : null;
   ind.dch = I.dchan && window.CCTChannels ? CCTChannels.detect(candles, {len: sp('dchan', 'len'), count: sp('dchan', 'count'), brk: sp('dchan', 'brk')}) : null;
   { const Q = k => sp('patterns', k); ind.pat = I.patterns && window.CCTPatterns ? CCTPatterns.detect(candles, {len: Q('len'), dev: Q('dev'), tol: Q('tol') / 100, min: Q('min'), max: Q('max'), keep: Q('keep'), p123: Q('g123') === 'Sí', abc: Q('gabc') === 'Sí', harm: Q('gharm') === 'Sí', chart: Q('gchart') === 'Sí', ell: Q('gell') === 'Sí'}) : null; }
@@ -1553,7 +1575,7 @@ const IB_CATS = [['active', 'En el gráfico', '<path d="M4 19V5M4 19h16"/><path 
   ['trend', 'Tendencia', '<path d="M3 17 9 11l4 4 8-8"/><path d="M15 7h6v6"/>'], ['osc', 'Osciladores', '<path d="M2 12c2.5-6 5-6 7.5 0s5 6 7.5 0 3-4 5-2"/>'], ['volume', 'Volumen', '<path d="M5 20v-6M10 20V8M15 20v-9M20 20V4"/>'],
   ['volat', 'Volatilidad y canales', '<path d="M3 8c4-3 8 3 18-2M3 16c4-3 8 3 18-2"/>'], ['struct', 'Estructura y patrones', '<path d="M3 18 9 6l5 8 3-5 4 9"/>'],
   ['deriv', 'Derivados', '<path d="M3 17 8 12l4 3 4-6 5 4"/><circle cx="8" cy="12" r="1.4"/><circle cx="16" cy="9" r="1.4"/><path d="M3 21h18"/>'],
-  ['nova', 'Nova Nexus', '<path d="M12 2 14.6 9.4 22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6z"/>'], ['mine', 'Mis indicadores', '<path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6"/>']];
+  ['nova', 'Nova Nexus ©', '<path d="M12 2 14.6 9.4 22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6z"/>'], ['mine', 'Mis indicadores', '<path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6"/>']];
 const STD_CAT = {ema20: 'trend', ema50: 'trend', sma200: 'trend', wma20: 'trend', vwap: 'trend', supertrend: 'trend', cross: 'trend', ichimoku: 'trend', psar: 'trend',
   rsi: 'osc', macd: 'osc', stoch: 'osc', stochrsi: 'osc', cci: 'osc', willr: 'osc', roc: 'osc', ao: 'osc', volume: 'volume', obv: 'volume', mfi: 'volume', cmf: 'volume', vpvr: 'volume',
   bollinger: 'volat', donchian: 'volat', keltner: 'volat', atr: 'volat', adx: 'volat', dchan: 'volat', patterns: 'struct', liqmap: 'struct', derivs: 'deriv', oi: 'deriv', funding: 'deriv', lsr: 'deriv', taker: 'deriv'};
@@ -1563,7 +1585,8 @@ const ibNorm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-
 const ibIc = d => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 function ibItems() {
   const out = [];
-  for (const [key, title, desc, col] of indicatorMeta) { if (key.startsWith('nn') || (LEGACY_IND.includes(key) && !state.indicators[key])) continue; out.push({kind: 'std', key, title, desc, col, cat: STD_CAT[key] || 'trend', on: !!state.indicators[key], premium: key === 'liqmap'}); }
+  for (const [key, title, desc, col] of indicatorMeta) { if (key.startsWith('nn') || (LEGACY_IND.includes(key) && !state.indicators[key])) continue; out.push({kind: 'std', key, title, desc, col, cat: STD_CAT[key] || 'trend', on: !!state.indicators[key], premium: key === 'liqmap', copyable: !!COPYABLE[key]});
+    if (COPYABLE[key]) for (const k of copyKeys(key)) out.push({kind: 'std', key: k, title: stdName(k), desc: 'Copia: tiene su propia configuración', col: sp(k, 'color'), cat: STD_CAT[key] || 'trend', on: true, copy: true}); }
   for (const f of window.CCTFree || []) { const p = state.pine.find(x => x.sid === 'free:' + f.id); out.push({kind: 'free', key: f.id, sid: 'free:' + f.id, title: f.name, desc: f.desc, col: f.col, art: f.art, cat: f.cat, on: !!(p && p.on), p}); }
   for (const c of window.CCTCatalog || []) { const p = catPineOf(c); out.push({kind: 'cat', c, title: nnName(c.name), desc: c.desc, cat: 'nova', on: !!(p && p.on)}); }
   for (const x of userScripts()) { const p = state.pine.find(q => q.sid === x.id); out.push({kind: 'mine', x, title: x.name, desc: '', cat: 'mine', on: !!(p && p.on), p}); }
@@ -1571,7 +1594,7 @@ function ibItems() {
 }
 function ibCard(it) {
   const tog = (attr, on, t) => `<button class="toggle ${on ? 'on' : ''}" ${attr} aria-label="${esc(t)}" aria-pressed="${!!on}"></button>`;
-  if (it.kind === 'std') return `<div class="ib-card ${it.on ? 'on' : ''}">${indArt(it.key, it.col)}<div class="ib-t"><b>${esc(it.title)}${it.premium ? ' <span class="prem-tag"><svg viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>PRO</span>' : ''}</b><small>${esc(it.desc)}</small></div><div class="ib-act">${STD_SCHEMA[it.key] ? `<button class="ib-ib" data-std-set="${it.key}" aria-label="Ajustes de ${esc(it.title)}">${I('gear', 15)}</button>` : ''}${tog(`data-ind="${it.key}"`, it.on, it.title)}</div></div>`;
+  if (it.kind === 'std') return `<div class="ib-card ${it.on ? 'on' : ''}">${indArt(it.key, it.col)}<div class="ib-t"><b>${esc(it.title)}${it.premium ? ' <span class="prem-tag"><svg viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>PRO</span>' : ''}</b><small>${esc(it.desc)}</small></div><div class="ib-act">${it.copyable ? `<button class="ib-ib ib-copy" data-std-copy="${it.key}" title="Agregar otra ${esc(COPYABLE[it.key])} al gráfico" aria-label="Agregar otra ${esc(COPYABLE[it.key])}">${I('plus', 15)}</button>` : ''}${STD_SCHEMA[it.key] ? `<button class="ib-ib" data-std-set="${it.key}" aria-label="Ajustes de ${esc(it.title)}">${I('gear', 15)}</button>` : ''}${tog(`data-ind="${it.key}"`, it.on, it.title)}</div></div>`;
   if (it.kind === 'free') return `<div class="ib-card ${it.on ? 'on' : ''}">${indArt(it.art, it.col)}<div class="ib-t"><b>${esc(it.title)}</b><small>${esc(it.desc)}</small></div><div class="ib-act">${it.p ? `<button class="ib-ib" data-pine-set="${it.sid}" aria-label="Ajustes de ${esc(it.title)}">${I('gear', 15)}</button>` : ''}${tog(`data-free="${it.key}"`, it.on, it.title)}</div></div>`;
   if (it.kind === 'cat') return catalogCards([it.c]);
   const x = it.x, p = it.p, r = p && pineRes[p.sid]; let st = `${x.lines} líneas · ${Math.max(1, Math.round(x.size / 1024))} KB`;
@@ -1607,10 +1630,16 @@ document.addEventListener('click', e => {
 function ibRefresh() { const sl = $('#sheetList'); if (sheetMode !== 'indicators' || !sl || !$('#sheet').classList.contains('open')) return; const l = sl.querySelector('.ib-list'), y = l ? l.scrollTop : 0; sl.innerHTML = indBrowser(); const n = sl.querySelector('.ib-list'); if (n) n.scrollTop = y; }
 function syncLiqBtn() { const b = $('#liqBtn'); if (!b) return; const on = !!state.indicators.liqmap; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }
 { const b = $('#liqBtn'); if (b) b.addEventListener('click', () => { state.indicators.liqmap = !state.indicators.liqmap; if (state.stdHide) delete state.stdHide.liqmap; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast(state.indicators.liqmap ? 'Heatmap de liquidaciones activado (estimado)' : 'Heatmap de liquidaciones apagado'); }); }
+document.addEventListener('click', e => { // «＋» en EMA, SMA, WMA y Bollinger: agrega otra copia con su propia configuración
+  const b = e.target.closest('[data-std-copy]'); if (!b) return; e.stopPropagation();
+  const k = addCopy(b.dataset.stdCopy); if (!k) return;
+  save(); renderIndicators(); countIndicators(); if (candles.length) calcExtra(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh(); scheduleRender();
+  toast(`${stdName(k)} agregada · cámbiale el período o el color con el engrane`);
+});
 function countIndicators() { syncLiqBtn(); const n = Object.entries(state.indicators).filter(([k, v]) => v && !k.startsWith('nn') && k !== 'derivs').length + (novaOn() ? 1 : 0); $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-ind]'); if (!b) return;
-  state.indicators[b.dataset.ind] = !state.indicators[b.dataset.ind]; if (state.stdHide) delete state.stdHide[b.dataset.ind];
+  if (isCopy(b.dataset.ind)) removeCopy(b.dataset.ind); else { state.indicators[b.dataset.ind] = !state.indicators[b.dataset.ind]; if (state.stdHide) delete state.stdHide[b.dataset.ind]; }
   save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); }
   if (/^(derivs|oi|funding|lsr|taker)$/.test(b.dataset.ind)) dvRefresh(true);
   if (['indicators', 'novaSet'].includes(sheetMode) && $('#sheet').classList.contains('open')) renderSheet();
@@ -1982,18 +2011,21 @@ function renderTabs() {
   const on = bar.querySelector('.ctab.on'); if (on && bar.scrollWidth > bar.clientWidth) on.scrollIntoView({inline: 'nearest', block: 'nearest'});
 }
 function loadTabChart() { clearTransient(); closeWS(); candles = []; ind = {}; updateChartHeader(); renderFrames(); syncCtypeBtn(); render(); loadCandles(); }
+const tabSnap = () => { const sn = designSnap(); delete sn.ctype; return structuredClone(sn); };
+function tabStore() { const o = state.tabs.find(x => x.id === state.tab); if (o && !PANE) o.cfg = tabSnap(); } // guarda en la pestaña activa sus indicadores y ajustes actuales
+function tabApply(t) { if (t && t.cfg) applyDesign({snap: t.cfg}); else { renderIndicators(); countIndicators(); } }
 function switchTab(id) {
   const t = state.tabs.find(x => x.id === id); if (!t || id === state.tab) return;
-  tabTouch(); hideTabPrev(); state.tab = id; state.tabRev = Date.now(); state.symbol = t.s; state.interval = t.i; state.ctype = t.c; save(); renderTabs(); loadTabChart();
+  tabTouch(); hideTabPrev(); tabStore(); state.tab = id; state.tabRev = Date.now(); state.symbol = t.s; state.interval = t.i; state.ctype = t.c; tabApply(t); renderIndicators(); countIndicators(); save(); renderTabs(); loadTabChart();
 }
 function newTab() {
   if (state.tabs.length >= MAX_TABS) { toast(`Máximo ${MAX_TABS} pestañas`); return; }
-  tabTouch(); const id = 't' + Date.now().toString(36).slice(-6); state.tabs.push({id, s: state.symbol, i: state.interval, c: state.ctype || 'candles'}); state.tab = id; state.tabRev = Date.now(); save(); renderTabs(); openSheet(); // elige la moneda para la pestaña nueva
+  tabTouch(); tabStore(); const id = 't' + Date.now().toString(36).slice(-6); state.tabs.push({id, s: state.symbol, i: state.interval, c: state.ctype || 'candles', cfg: tabSnap()}); state.tab = id; // la pestaña nueva empieza con la misma configuración, pero desde aquí cada una es independiente state.tabRev = Date.now(); save(); renderTabs(); openSheet(); // elige la moneda para la pestaña nueva
 }
 function closeTab(id) {
   if (state.tabs.length < 2) return; const i = state.tabs.findIndex(x => x.id === id); if (i < 0) return; const wasOn = id === state.tab;
   state.tabs.splice(i, 1); state.tabRev = Date.now();
-  if (wasOn) { const n = state.tabs[Math.min(i, state.tabs.length - 1)]; state.tab = n.id; state.symbol = n.s; state.interval = n.i; state.ctype = n.c; save(); renderTabs(); loadTabChart(); } else { save(); renderTabs(); }
+  if (wasOn) { const n = state.tabs[Math.min(i, state.tabs.length - 1)]; state.tab = n.id; state.symbol = n.s; state.interval = n.i; state.ctype = n.c; tabApply(n); renderIndicators(); countIndicators(); save(); renderTabs(); loadTabChart(); } else { save(); renderTabs(); }
 }
 function hideTabPrev() { if (tabPrevEl) { tabPrevEl.remove(); tabPrevEl = null; } }
 function showTabPrev(el) { // vista previa de la pestaña: moneda, temporalidad, tipo de vela, precio y mini gráfico de 24 h
@@ -2930,7 +2962,7 @@ document.addEventListener('click', e => {
       state.stdHide = state.stdHide || {}; if (state.stdHide[id]) delete state.stdHide[id]; else state.stdHide[id] = true;
       save(); legSig = ''; legStruct = ''; scheduleRender(); return;
     }
-    state.indicators[id] = false; if (state.stdHide) delete state.stdHide[id]; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast('Indicador apagado: puedes volver a activarlo en Indicadores');
+    if (isCopy(id)) removeCopy(id); else state.indicators[id] = false; if (state.stdHide) delete state.stdHide[id]; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast('Indicador apagado: puedes volver a activarlo en Indicadores');
   }
 });
 function render() { renderCore(); syncLegend(); syncLegToggle(); }
@@ -2983,10 +3015,10 @@ function render() { renderCore(); syncLegend(); syncLegToggle(); }
   box.addEventListener('dblclick', e => { const el = e.target.closest('.pane-grip'); if (!el) return; delete paneH[el.dataset.gk]; savePaneH(); legSig = ''; scheduleRender(); toast('Altura automática'); });
 })();
 function openStdDialog(key) {
-  const meta = indicatorMeta.find(m => m[0] === key), schema = STD_SCHEMA[key];
+  const meta = indicatorMeta.find(m => m[0] === key), schema = STD_SCHEMA[key], cTitle = isCopy(key) ? stdName(key) : '';
   if (!schema) { toast('Este indicador no tiene parámetros'); return; }
   const inputs = schema.map(([nm, title, type, def, mn, mx, opts]) => Object.assign({key: nm, title, type, def, min: mn, max: mx, value: sp(key, nm), group: type === 'color' || nm === 'width' || nm === 'dash' ? 'ESTILO' : 'PARÁMETROS'}, opts ? {options: opts} : {}));
-  CCTSettings.open({title: meta ? meta[1] : key, tabs: ['in'], note: 'Parámetros del indicador. Las alertas con este indicador siguen usando los valores clásicos.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
+  CCTSettings.open({title: cTitle || (meta ? meta[1] : key), tabs: ['in'], note: 'Parámetros del indicador. Las alertas con este indicador siguen usando los valores clásicos.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
     const q = {}; for (const i of inputs) { let v = res.inputs[i.key]; if (v === undefined) continue; if (i.type === 'string') { if (!i.options.includes(v) || v === i.def) continue; } else if (i.type !== 'color') { v = +v; if (!Number.isFinite(v)) continue; v = Math.max(i.min, Math.min(i.max, v)); if (i.type === 'int') v = Math.round(v); } if (v !== i.def) q[i.key] = v; }
     const sps = Object.assign({}, state.stdParams); if (Object.keys(q).length) sps[key] = q; else delete sps[key]; state.stdParams = sanStdParams(sps);
     save(); if (candles.length) recalc(); scheduleRender(); toast('Configuración aplicada');
@@ -3120,6 +3152,9 @@ function renderCore() {
   if (stdOn('keltner') && ind.keltner) { const c0 = sp('keltner', 'color'), ls = lineSty('keltner'); overlays.push(['Keltner', ind.keltner.up, c0, false, 'keltner', ls], ['Keltner inf', ind.keltner.lo, c0, false, null, ls], ['Keltner medio', ind.keltner.mid, c0, false, null, {w: 1, d: [4, 4]}]); }
   if (stdOn('ichimoku') && ind.ichimoku) { const w = sp('ichimoku', 'width'), I2 = ind.ichimoku; overlays.push(['Ichimoku', I2.tenkan, sp('ichimoku', 'cT'), false, 'ichimoku', {w, d: []}], ['Kijun', I2.kijun, sp('ichimoku', 'cK'), false, null, {w, d: []}], ['Chikou', I2.chikou, sp('ichimoku', 'cC'), false, null, {w: 1, d: []}], ['Senkou A', I2.spanA, sp('ichimoku', 'cUp').slice(0, 7), false, null, {w: 1, d: []}], ['Senkou B', I2.spanB, sp('ichimoku', 'cDn').slice(0, 7), false, null, {w: 1, d: []}]); }
   if (stdOn('bollinger')) overlays.push(['BB sup', ind.bbU, sp('bollinger', 'color'), false, 'bollinger', lineSty('bollinger')], ['BB inf', ind.bbL, sp('bollinger', 'color'), false, null, lineSty('bollinger')]);
+  for (const k of Object.keys(state.indicators)) { if (!isCopy(k) || !stdOn(k) || !ind[k]) continue; // copias: EMA 2, SMA 2, Bollinger 2…
+    if (baseOf(k) === 'bollinger') overlays.push([stdName(k), ind[k].up, sp(k, 'color'), false, k, lineSty(k)], [stdName(k) + ' inf', ind[k].lo, sp(k, 'color'), false, null, lineSty(k)]);
+    else overlays.push([stdName(k), ind[k], sp(k, 'color'), false, k, lineSty(k)]); }
   for (const [, arr] of overlays) for (let i = lo; i < hi; i++) if (arr[i] != null) { if (arr[i] < min) min = arr[i]; if (arr[i] > max) max = arr[i]; }
   if (state.indicators.nnTrail && ind.trail) for (let i = lo; i < hi; i++) { const v = ind.trail.trail[i]; if (v != null) { if (v < min) min = v; if (v > max) max = v; } }
   const nn = ind.nn;
@@ -3208,6 +3243,7 @@ function renderCore() {
   }
   // medias y bandas
   if (stdOn('bollinger') && ind.bbU && sp('bollinger', 'fill') !== '#748bab00') fillBetween(ind.bbU, ind.bbL, lo, hi, sp('bollinger', 'fill'), 1);
+  for (const k of copyKeys('bollinger')) if (stdOn(k) && ind[k] && sp(k, 'fill') !== '#748bab00') fillBetween(ind[k].up, ind[k].lo, lo, hi, sp(k, 'fill'), 1);
   if (stdOn('donchian') && ind.donchian && sp('donchian', 'fill') !== '#4dd0e100') fillBetween(ind.donchian.up, ind.donchian.lo, lo, hi, sp('donchian', 'fill'), 1);
   if (stdOn('keltner') && ind.keltner && sp('keltner', 'fill') !== '#f5c56800') fillBetween(ind.keltner.up, ind.keltner.lo, lo, hi, sp('keltner', 'fill'), 1);
   if (stdOn('ichimoku') && ind.ichimoku) { // nube: verde cuando Senkou A > Senkou B, roja cuando no
@@ -3357,7 +3393,7 @@ function renderCore() {
   const ovBy = {}; for (const o of overlays) if (o[4]) ovBy[o[4]] = o;
   const SLOTS = ['ema20', 'ema50', 'sma200', 'wma20', 'vwap', 'bollinger', 'donchian', 'keltner', 'ichimoku', 'psar', 'volume', 'patterns', 'dchan', 'liqmap', 'vpvr'], PLAIN = {psar: 'Parabolic SAR', volume: 'Volumen', patterns: 'Patrones', dchan: 'Canales dinámicos', liqmap: 'Liquidaciones', vpvr: 'VPVR'};
   const legItems = [], addLeg = (id, fn) => legItems.push({id, fn});
-  for (const k of SLOTS) {
+  for (const k of SLOTS.flatMap(b => [b, ...(COPYABLE[b] ? copyKeys(b) : [])])) {
     if (!state.indicators[k]) continue;
     const id = 'm:' + k; // el nombre de cada indicador de la leyenda se puede mover: se ordenan por lo que el usuario arrastró
     if (!isHid(k) && !ovBy[k] && !(PLAIN[k] && (k !== 'volume' || candles.length))) continue;
@@ -4738,7 +4774,7 @@ document.addEventListener('click', e => {
   if (t.dataset.novaAll !== undefined) { if (t.dataset.novaAll === '1') { for (const k of NN_KEYS) state.indicators[k] = k !== 'nnLiqBars'; } else for (const k of NN_KEYS) state.indicators[k] = false; state.novaSaved = null; novaAfter(); }
 });
 /* ───────── Scripts de Pine en el gráfico (intérprete propio: pine.js; dibujo: pine-draw.js) ───────── */
-const activePine = () => state.pine.filter(p => p.on && scripts.some(s => s.id === p.sid));
+const activePine = () => state.pine.filter(p => p.on && scripts.some(s => s.id === p.sid) && !(proSid(p.sid) && !planOk('novaNexus'))); // los Nova Nexus PRO solo se calculan con el plan que los incluye (no se borran de tu configuración)
 /* Nombres de tus indicadores Nova: siempre «Nova Nexus© - Nombre» (Personal, IA Signals, Oscilador, Señales, Screener, LITE…) */
 function nnName(t) {
   t = String(t || '').trim(); if (!/^\s*(nova|nexus)/i.test(t)) return t;
@@ -5160,6 +5196,7 @@ function applyState(data, soft = false) {
   if (sameChart) { drawHist.u.length = drawHist.r.length = 0; updateDrawUI(); } else clearTransient(); // mismo gráfico: se conserva la escala manual, la retícula y lo que se esté dibujando
   if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader(); renderAcct(); renderMoveAlerts();
   if (!sameChart || prevSource !== state.source) { closeWS(); candles = []; ind = {}; loadCandles(); }
+  if (window.CCTPlans && state.plan) CCTPlans.importSaved(state.plan);
 }
 
 /* ───────── Cuenta de Google + guardado en la nube (Firebase Auth + Firestore) ───────── */
@@ -5322,6 +5359,40 @@ async function signIn() {
   }
 }
 async function signOut() { if (!auth) return; clearTimeout(pushTimer); try { await cloudPushNow(); } catch {} auth.signOut(); } // antes de salir se sube lo último que cambiaste (el envío tiene 1 s de espera)
+/* Bienvenida: al abrir VORTEX sin sesión aparece una ventana para iniciar sesión con Google (y ver tu plan).
+   Si la cierras sigues usando el gráfico con el plan Gratis. Sale una vez cada vez que abres la app. */
+function showWelcome() {
+  if (PANE || fbUser || !cloudEnabled || document.querySelector('.vw-ov')) return;
+  try { if (sessionStorage.getItem('cct_welcome')) return; sessionStorage.setItem('cct_welcome', '1'); } catch {}
+  const ov = document.createElement('div'); ov.className = 'vw-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Bienvenido a VORTEX');
+  const T = window.CCTPlans ? CCTPlans.TIERS : null, row = (k, t) => `<li class="vw-t ${k}"><b>${t}</b><small>${T && T[k] ? esc(T[k].sub) : ''}</small></li>`;
+  ov.innerHTML = `<div class="vw-box"><canvas class="vw-fx" aria-hidden="true"></canvas><button type="button" class="vw-x" data-wl="close" aria-label="Cerrar y seguir gratis">✕</button>
+    <img class="vw-logo" data-app-icon src="icons/${(window.CCTAppIcons && CCTAppIcons.selected) || 'i01'}-192.png" alt="">
+    <h2>Bienvenido a VORTEX</h2><p>Inicia sesión con Google para guardar tu gráfico en todos tus dispositivos y desbloquear tu plan. Nada se cobra.</p>
+    <ul class="vw-tiers">${row('free', 'Gratis')}${row('plus', 'Plus')}${row('infinity', 'Infinity')}</ul>
+    <button type="button" class="google-btn vw-go" data-wl="login"><span class="g">G</span> Iniciar sesión con Google</button>
+    <div class="vw-alt"><button type="button" data-wl="plans">Ver los planes</button><button type="button" data-wl="close">Seguir con el plan Gratis</button></div></div>`;
+  document.body.appendChild(ov); requestAnimationFrame(() => ov.classList.add('open'));
+  // fondo de estrellas que se mueven despacio
+  const cv = ov.querySelector('.vw-fx'), g = cv.getContext('2d'); let raf = 0, stars = null;
+  const draw = t => { const r = cv.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1); if (cv.width !== Math.round(r.width * d)) { cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); stars = Array.from({length: 90}, () => ({x: Math.random(), y: Math.random(), r: Math.random() * 1.2 + .3, v: Math.random() * .012 + .003, p: Math.random() * 6})); }
+    g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, r.width, r.height);
+    for (const s of stars) { s.x -= s.v / 60; if (s.x < 0) s.x = 1; g.fillStyle = `rgba(255,255,255,${.25 + .45 * (.5 + .5 * Math.sin(t / 700 + s.p))})`; g.beginPath(); g.arc(s.x * r.width, s.y * r.height, s.r, 0, 7); g.fill(); }
+    if (ov.isConnected) raf = requestAnimationFrame(draw); };
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) raf = requestAnimationFrame(draw);
+  const close = () => { cancelAnimationFrame(raf); ov.classList.remove('open'); setTimeout(() => ov.remove(), 220); document.removeEventListener('keydown', key); };
+  const key = e => { if (e.key === 'Escape') { close(); toast('Usando VORTEX con el plan Gratis'); } };
+  document.addEventListener('keydown', key);
+  ov.addEventListener('click', e => { const b = e.target.closest('[data-wl]'); if (e.target === ov || (b && b.dataset.wl === 'close')) { close(); toast('Usando VORTEX con el plan Gratis'); return; } if (!b) return;
+    if (b.dataset.wl === 'login') { close(); signIn(); } else if (b.dataset.wl === 'plans') { close(); if (window.CCTPlans) CCTPlans.open(); } });
+}
+window.CCT_signIn = () => signIn(); window.CCT_showWelcome = showWelcome;
+window.CCT_planSave = p => { if (PANE || !fbUser) return; state.plan = p; save(); }; // el plan verificado viaja en tu cuenta a tus otros dispositivos
+var planSeen = '';
+window.CCT_planChanged = t => { if (t === planSeen) return; const first = !planSeen; planSeen = t; if (first) return; // al cambiar de plan se recalcula lo que depende de él (liquidaciones, indicadores Nova Nexus)
+  try { pineKey = ''; renderIndicators(); countIndicators(); if (candles.length) { calcExtra(); schedulePine(); } scheduleRender(); } catch {} };
+function planOk(f) { return !window.CCTPlans || CCTPlans.can(f); }
+function proSid(sid) { return typeof sid === 'string' && sid.startsWith('cat:') && (window.CCTCatalog || []).some(c => 'cat:' + c.id === sid && c.tier === 'pro'); }
 async function onUser(user) {
   if (unsubCloud) { unsubCloud(); unsubCloud = null; }
   if (unsubScripts) { unsubScripts(); unsubScripts = null; }
@@ -5329,7 +5400,7 @@ async function onUser(user) {
   if (!user) {
     try { localStorage.removeItem(LASTUID); } catch {}
     if (uid) { uid = null; stateUid = null; lastRemote = ''; scriptsRemote = ''; applyState(readLocal(STORE)); scripts = withCatalog(readScripts()); renderScripts(); } // vuelve al estado local sin sesión; los datos de la cuenta no se quedan visibles
-    syncStatus = ''; renderAccount(); return;
+    syncStatus = ''; renderAccount(); showWelcome(); return;
   }
   uid = user.uid; try { localStorage.setItem(LASTUID, uid); } catch {}
   if (stateUid !== uid && lsGet(storeKey())) { try { applyState(readLocal(storeKey())); } catch {} } // cambios de esta cuenta guardados aquí que aún no subieron (no el estado de «sin sesión»)
@@ -5564,7 +5635,7 @@ if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud(); if (!PANE) refreshPop();
 
 /* Solo para pruebas automáticas: se activa añadiendo ?cct_debug=1 a la dirección */
-if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, save, setDrawings, pickTool, get FB() { return FB; }, get FAVS() { return FAVS; }, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, toggleFav, handlesOf, cancelTool, select: id => { selectedId = id; updateDrawUI(); render(); }, get view() { return {pan, visible}; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
+if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, save, setDrawings, pickTool, get FB() { return FB; }, get FAVS() { return FAVS; }, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, toggleFav, handlesOf, cancelTool, select: id => { selectedId = id; updateDrawUI(); render(); }, get view() { return {pan, visible}; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT, addCopy, isCopy, stdName, sp, calcExtra, scheduleRender, sanStdParams, newTab, switchTab, closeSheet, get ind() { return ind; }, setState: o => { state = o; }, setIbCat: c => { ibCat = c; }};
 
 /* ───────── Puente para el Screener (screener.js) ───────── */
 window.CCT_switchView = id => switchView(id);
