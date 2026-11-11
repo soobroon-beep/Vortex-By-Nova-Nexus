@@ -219,6 +219,44 @@ const AI_MODELS_OK = ['openai', 'openai-fast', 'openai-large', 'mistral', 'gemin
 const sha256 = async t => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))].map(b => b.toString(16).padStart(2, '0')).join('');
 const aiHits = new Map(); // límite por IP (por instancia): evita que alguien gaste tus créditos a lo loco
 function aiAllowed(ip, now = Date.now()) { const h = (aiHits.get(ip) || []).filter(t => now - t < 60000); if (h.length >= 20) return false; h.push(now); aiHits.set(ip, h); if (aiHits.size > 5000) aiHits.clear(); return true; }
+/* ───────── IA open source y gratis (sin créditos): Cloudflare Workers AI → Groq → Pollinations ─────────
+   Cada uso tiene su modelo: chat (Nexus Pixel, briefing), vision (Analizar gráfico con captura) y code (Laboratorio de Pine).
+   Workers AI usa el cupo diario gratis de tu cuenta de Cloudflare (enlace «AI» del Worker). Groq se usa si existe el secreto GROQ_KEY (cuenta gratis). */
+export const OPEN_AI = {
+  chat: {wai: ['@cf/openai/gpt-oss-120b', '@cf/meta/llama-4-scout-17b-16e-instruct'], groq: ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile']},
+  vision: {wai: ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/mistralai/mistral-small-3.1-24b-instruct'], groq: ['meta-llama/llama-4-scout-17b-16e-instruct']},
+  code: {wai: ['@cf/qwen/qwen2.5-coder-32b-instruct', '@cf/openai/gpt-oss-120b'], groq: ['openai/gpt-oss-120b', 'qwen/qwen3-32b']}
+};
+const OPEN_NAME = m => m.replace(/^@cf\/[^/]+\//, '').replace(/^(openai|meta-llama|qwen)\//, '');
+export const hasImg = msgs => (msgs || []).some(m => Array.isArray(m.content) && m.content.some(p => p && p.type === 'image_url'));
+export const noImg = msgs => (msgs || []).map(m => Array.isArray(m.content) ? {role: m.role, content: m.content.filter(p => p && p.type === 'text').map(p => p.text).join('\n') + '\n(La captura no se pudo analizar: usa los datos numéricos del gráfico.)'} : m);
+export function aiText(j) { // respuesta de Workers AI o de una API tipo OpenAI → texto
+  if (!j) return ''; if (typeof j === 'string') return j;
+  const r = j.result || j; if (typeof r.response === 'string') return r.response;
+  const c = r.choices && r.choices[0]; if (c) return (c.message && (typeof c.message.content === 'string' ? c.message.content : Array.isArray(c.message.content) ? c.message.content.map(x => x.text || '').join('') : '')) || c.text || '';
+  if (typeof r.output_text === 'string') return r.output_text;
+  if (Array.isArray(r.output)) return r.output.filter(o => o && o.type === 'message').flatMap(o => o.content || []).map(x => x.text || '').join('');
+  return '';
+}
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error('tiempo')), ms))]);
+export async function openChain(env, task, messages, opts = {}, fetchFn = fetch) {
+  const T = OPEN_AI[task] || OPEN_AI.chat, max_tokens = Math.min(+opts.max_tokens || 1600, AI_MAX_TOKENS), temperature = Number.isFinite(+opts.temperature) ? +opts.temperature : .4, tried = [];
+  const clean = t => String(t || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  const viaGroq = async (m, msgs) => {
+    const r = await fetchFn('https://api.groq.com/openai/v1/chat/completions', {method: 'POST', headers: {'content-type': 'application/json', authorization: 'Bearer ' + env.GROQ_KEY}, body: JSON.stringify({model: m, messages: msgs, max_tokens, temperature}), signal: AbortSignal.timeout(45000)});
+    if (!r.ok) throw new Error('groq ' + r.status); return clean(aiText(await r.json()));
+  };
+  const viaWai = async (m, msgs) => clean(aiText(await withTimeout(env.AI.run(m, {messages: msgs, max_tokens, temperature}), 55000)));
+  const routes = []; const add = (who, list, fn) => { for (const m of list) routes.push([who, m, fn]); };
+  if (env.GROQ_KEY) add('Groq', T.groq, viaGroq); // Groq primero si tienes clave: es el más rápido
+  if (env.AI) add('Cloudflare', T.wai, viaWai);
+  for (const [who, m, fn] of routes) {
+    try { const text = await fn(m, messages); if (text && text.length > 1) return {text, model: OPEN_NAME(m) + ' · ' + who}; tried.push(m + ': vacío'); }
+    catch (e) { tried.push(m + ': ' + String(e && e.message || e).slice(0, 60)); }
+  }
+  if (task === 'vision' && hasImg(messages)) { const r = await openChain(env, 'chat', noImg(messages), opts, fetchFn); if (r) return Object.assign(r, {image: false}); } // sin visión disponible: analiza con los datos
+  return tried.length ? null : null;
+}
 async function aiKey(env) { return env.POLLEN_KEY || (await env.KV.get('ai:pollen')) || POLLEN_KEY; }
 async function aiRoute(req, env, path, json, cors) {
   if (path === '/ai/status') return json({ok: true, ready: !!(await aiKey(env))});
@@ -227,13 +265,17 @@ async function aiRoute(req, env, path, json, cors) {
     const k = String(b.key || '').trim(); if (!/^sk_[\w-]{10,}$/.test(k) || await sha256(k) !== AI_KEY_HASH) return json({error: 'Esa no es la clave autorizada para este servidor'}, 403);
     await env.KV.put('ai:pollen', k); return json({ok: true, ready: true});
   }
-  const key = await aiKey(env); if (!key) return json({error: 'El servidor aún no tiene la clave de IA', kind: 'nokey'}, 503);
+  const key = await aiKey(env); if (!key && !env.AI && !env.GROQ_KEY) return json({error: 'El servidor aún no tiene la clave de IA', kind: 'nokey'}, 503);
   if (!aiAllowed(req.headers.get('cf-connecting-ip') || 'x')) return json({error: 'Demasiadas consultas seguidas; espera un minuto'}, 429);
   if (path === '/ai/models') { const r = await fetch(AI_MODELS, {headers: {authorization: 'Bearer ' + key}}); return new Response(r.body, {status: r.status, headers: {...cors, 'content-type': 'application/json', 'cache-control': 'max-age=1800'}}); }
   if (path === '/ai' && req.method === 'POST') {
     const raw = await req.text(); if (raw.length > AI_MAX_BODY) return json({error: 'La consulta es demasiado grande'}, 413);
     let b; try { b = JSON.parse(raw); } catch { return json({error: 'JSON inválido'}, 400); }
     const want = String(b.model || 'openai'), model = AI_MODELS_OK.includes(want) ? want : 'openai'; // solo modelos de chat (nunca filtros tipo qwen3guard)
+    if (model !== 'openai-audio' && (env.AI || env.GROQ_KEY)) { // IA open source y gratis primero (Workers AI / Groq); si no contesta, sigue con Pollinations
+      const msgs = Array.isArray(b.messages) ? b.messages.slice(-16) : [], task = ['chat', 'vision', 'code'].includes(b.task) ? b.task : hasImg(msgs) ? 'vision' : 'chat';
+      try { const r = await openChain(env, task === 'chat' && hasImg(msgs) ? 'vision' : task, msgs, b); if (r) return json({object: 'chat.completion', model: r.model, image: r.image !== false && hasImg(msgs), choices: [{index: 0, message: {role: 'assistant', content: r.text}, finish_reason: 'stop'}]}); } catch {}
+    }
     const body = {model, messages: Array.isArray(b.messages) ? b.messages.slice(-16) : [], temperature: Number.isFinite(+b.temperature) ? +b.temperature : .4, max_tokens: Math.min(+b.max_tokens || 1200, AI_MAX_TOKENS), stream: !!b.stream};
     if (model === 'openai-audio') body.modalities = ['text']; // dictado: solo queremos el texto, no una respuesta hablada
     const r = await fetch(AI_URL, {method: 'POST', headers: {'content-type': 'application/json', authorization: 'Bearer ' + key}, body: JSON.stringify(body)});

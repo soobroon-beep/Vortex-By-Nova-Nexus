@@ -176,3 +176,16 @@ test('plan Infinity: comprueba el referido de BingX con la API de afiliado (firm
   const no = await W.bingxInvite({BINGX_AGENT_KEY: 'k', BINGX_AGENT_SECRET: 's'}, '12345678', async () => ({json: async () => ({code: 0, data: {inviteResult: false}})}));
   assert.equal(no.invited, false);
 });
+
+test('IA open source: cada uso con su modelo, Groq primero si hay clave, Cloudflare de respaldo y captura → datos si no hay visión', async () => {
+  const W = await import('../worker/push-alerts.mjs'), runs = [];
+  const AI = {run: async (m, i) => { runs.push(m); if (/llama-4-scout|mistral-small/.test(m)) throw new Error('sin visión hoy'); return {response: 'respuesta de ' + m}; }};
+  const chat = await W.openChain({AI}, 'chat', [{role: 'user', content: 'hola'}]);
+  assert.match(chat.text, /gpt-oss-120b/); assert.match(chat.model, /Cloudflare/);
+  const code = await W.openChain({AI}, 'code', [{role: 'user', content: 'pine'}]); assert.match(code.text, /qwen2.5-coder/);
+  const img = [{role: 'user', content: [{type: 'text', text: 'analiza'}, {type: 'image_url', image_url: {url: 'data:image/png;base64,AAA'}}]}];
+  const v = await W.openChain({AI}, 'vision', img); assert.equal(v.image, false); assert.match(v.text, /gpt-oss/);
+  let gUrl = ''; const g = await W.openChain({AI, GROQ_KEY: 'gk'}, 'chat', [{role: 'user', content: 'hola'}], {}, async (u) => { gUrl = u; return {ok: true, json: async () => ({choices: [{message: {content: 'desde groq'}}]})}; });
+  assert.equal(g.text, 'desde groq'); assert.match(g.model, /Groq/); assert.match(gUrl, /api\.groq\.com/);
+  assert.equal(W.aiText({result: {choices: [{message: {content: 'x'}}]}}), 'x'); assert.equal(W.aiText({output: [{type: 'message', content: [{text: 'y'}]}]}), 'y');
+});

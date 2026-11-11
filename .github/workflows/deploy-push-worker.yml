@@ -27,6 +27,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           BINGX_AGENT_KEY: ${{ secrets.BINGX_AGENT_KEY }}
+          GROQ_KEY: ${{ secrets.GROQ_KEY }}
           BINGX_AGENT_SECRET: ${{ secrets.BINGX_AGENT_SECRET }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
@@ -39,3 +40,5 @@ jobs:
           # plan Infinity: llave de AFILIADO de BingX (solo lectura) para comprobar que el UID entró con tu código
           if [ -n "$BINGX_AGENT_KEY" ]; then printf '%s' "$BINGX_AGENT_KEY" | npx --yes wrangler@4 secret put BINGX_AGENT_KEY --config worker/wrangler-push.toml; fi
           if [ -n "$BINGX_AGENT_SECRET" ]; then printf '%s' "$BINGX_AGENT_SECRET" | npx --yes wrangler@4 secret put BINGX_AGENT_SECRET --config worker/wrangler-push.toml; fi
+          # IA gratis de respaldo (Groq): solo si existe el secreto GROQ_KEY
+          if [ -n "$GROQ_KEY" ]; then printf '%s' "$GROQ_KEY" | npx --yes wrangler@4 secret put GROQ_KEY --config worker/wrangler-push.toml; fi

@@ -18,5 +18,9 @@ service = "vortex-push"
 binding = "KV"
 id = "c6d98896a2a3496b89228e7994cedda2"
 
+# IA open source gratis de tu cuenta de Cloudflare (Workers AI, cupo diario sin costo)
+[ai]
+binding = "AI"
+
 [vars]
 ALLOWED_ORIGIN = "https://soobroon-beep.github.io,https://vortex-nexus.pages.dev,https://dev.vortex-nexus.pages.dev"
