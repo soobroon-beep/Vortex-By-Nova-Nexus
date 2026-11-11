@@ -958,7 +958,7 @@ async function indAlertTick(force) {
   if (changed) { save(); renderAlerts(); }
 }
 window.CCTAlerts = {stdHit, pineHit, STD_CONDS}; // expuesto para pruebas
-window.CCTPushBridge = {state: () => state, prefs: () => PR, save: () => save(), setSound: on => setPref('sound', on ? 'on' : 'off'), renderPrefs: () => renderPrefs(), renderAlerts: () => renderAlerts(), scheduleRender: () => scheduleRender(), toast: m => toast(m)}; // para push.js (avisos con la app cerrada)
+window.CCTPushBridge = {state: () => state, prefs: () => PR, save: () => save(), setSound: on => setPref('sound', on ? 'on' : 'off'), renderPrefs: () => renderPrefs(), renderAlerts: () => renderAlerts(), scheduleRender: () => scheduleRender(), toast: m => toast(m), uid: () => (fbUser && fbUser.uid) || ''}; // para push.js (avisos con la app cerrada)
 /* Seguimiento de tus trades abiertos (trade-watch.js): avisos de cómo va cada posición real de tu exchange y resaltado en Mi seguimiento */
 if (window.CCTTradeWatch && CCTTradeWatch.host) CCTTradeWatch.host({
   prefs: () => PR, fmt: v => fmt(v),
@@ -4747,6 +4747,7 @@ function renderPrefs() {
     + irow(ico('#b07cff', '<path d="M5 4v16M5 14c3-6 6 2 9-4s4-2 5-3"/>'), 'Alertas de indicador', 'Señales de tus indicadores', tg('ind', PR.n.ind, 'Alertas de indicador'))
     + irow(ico('#f5b942', '<path d="M3 17l6-6 4 4 8-8"/><circle cx="21" cy="7" r="1.6" fill="currentColor"/><path d="M3 21h18"/>'), 'Mis trades abiertos', 'Ganancia o pérdida, cerca de TP, SL o liquidación, regreso a la entrada y tus niveles. Solo con trades abiertos', tg('trade', PR.n.trade !== false, 'Mis trades abiertos'))
     + (PR.n.trade !== false ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Avisar cada', 'Escalón de ganancia o pérdida sobre tu margen (ROE, como lo muestra el exchange)', `<select id="tradeStep" class="pref-sel" aria-label="Avisar cada">${(window.CCTTradeWatch ? CCTTradeWatch.STEPS : [10]).map(v => `<option value="${v}" ${(window.CCTTradeWatch ? CCTTradeWatch.step() : 10) === v ? 'selected' : ''}>±${v} %</option>`).join('')}</select>`, sub) : '')
+    + irow(ico('#7c87ff', '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/>'), 'Mis bots (Nova Bot Lab)', 'Cuando un bot encendido compra, vende o cierra, también con la app cerrada', tg('bots', PR.n.bots !== false, 'Mis bots'))
     + irow(ico('#f06b79', '<path d="M3 12h4l2-6 4 12 2-6h6"/>'), 'Movimientos bruscos', 'Sube o cae fuerte en minutos · top 5 (BTC, ETH, BNB, XRP, SOL)', tg('move', !!M.on, 'Movimientos bruscos'))
     + (M.on ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Sensibilidad', `También avisa si pasa ±${(M.pct * 2.5).toFixed(M.pct * 2.5 % 1 ? 1 : 0)} % en 1 hora`, `<select id="moveLvl" class="pref-sel" aria-label="Sensibilidad">${MOVE_LEVELS.map(l => `<option value="${l[0]}" ${l[0] === near[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select>`, sub) : '')
     + irow(ico('#c084fc', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7.5"/>'), 'Grandes oportunidades', 'Nexus Pixel revisa el Screener cada hora, filtra, lo confirma con IA y aprende de los resultados', tg('radar', !!(window.CCTRadar && CCTRadar.on()), 'Grandes oportunidades'))
@@ -4767,7 +4768,7 @@ function renderPrefs() {
   const onClick = e => {
     const b = e.target.closest('[data-pk]'); if (b && b.tagName === 'BUTTON') { const v = b.dataset.v; setPref(b.dataset.pk, /^\d+$/.test(v) ? +v : v); return; }
     const w = e.target.closest('[data-sw]');
-    if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'radar') { if (window.CCTRadar) { CCTRadar.setOn(!CCTRadar.on()); toast(CCTRadar.on() ? 'Radar encendido: Nexus Pixel te avisará de las grandes oportunidades' : 'Radar apagado'); } renderPrefs(); } else if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); save(); renderPrefs(); renderMoveAlerts(); if (window.VortexPush) VortexPush.sync(true); } else if (k === 'scr' || k === 'scrH1' || k === 'scrH4') { const S = {...(state.scrPush || {})}; if (k === 'scr') S.on = !S.on; else if (k === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false; state.scrPush = sanScrPush(S); save(); renderPrefs(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true); } else { setPref(k, !PR.n[k], true); if (k === 'trade' && window.CCTTradeWatch) { CCTTradeWatch.refresh(); renderWatch(); } }; return; }
+    if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'radar') { if (window.CCTRadar) { CCTRadar.setOn(!CCTRadar.on()); toast(CCTRadar.on() ? 'Radar encendido: Nexus Pixel te avisará de las grandes oportunidades' : 'Radar apagado'); } renderPrefs(); } else if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); save(); renderPrefs(); renderMoveAlerts(); if (window.VortexPush) VortexPush.sync(true); } else if (k === 'scr' || k === 'scrH1' || k === 'scrH4') { const S = {...(state.scrPush || {})}; if (k === 'scr') S.on = !S.on; else if (k === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false; state.scrPush = sanScrPush(S); save(); renderPrefs(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true); } else { setPref(k, !PR.n[k], true); if (k === 'trade' && window.CCTTradeWatch) { CCTTradeWatch.refresh(); renderWatch(); } if (window.VortexPush) VortexPush.sync(true); }; return; }
     if (e.target.closest('[data-play]')) { const t = $('#notifBox select[data-pk=tone]'); alertBeep(true, t && t.value); return; }
     if (e.target.closest('[data-news]')) openNews();
   };
@@ -4928,6 +4929,7 @@ function convertPine(code, name) { // convertidor profesional (pasos + correcci�
   else addScript(code, name);
 }
 window.CCT_toast = t => toast(t);
+window.CCT_botNotify = (title, body, tag) => { if (PR.n.bots === false) return; toast(title.replace(/^VORTEX · /, '') + ' · ' + body); if (PR.sound !== 'off') { alertBeep(); try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {} } if (!(window.VortexPush && VortexPush.on)) sysNotify(title, body, tag); }; // avisos de tus bots de Nova Bot Lab
 function addScript(code, fallbackName, quiet) {
   code = String(code || '').replace(/\r\n?/g, '\n');
   if (!code.trim()) { toast('El script está vacío'); return false; }

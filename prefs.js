@@ -1,7 +1,7 @@
 /* Preferencias de VORTEX (zona horaria, hora, fecha, decimales, separadores, sonido y avisos). Funciones puras: se usan igual en la app y en las pruebas. */
 (function (root) {
   'use strict';
-  const DEF = {tz: 'auto', clock: '24', date: 'dmy', dec: 'auto', sep: 'en', sym: '', sound: 'on', tone: 'beep', n: {price: true, ind: true, trade: true, discord: true}};
+  const DEF = {tz: 'auto', clock: '24', date: 'dmy', dec: 'auto', sep: 'en', sym: '', sound: 'on', tone: 'beep', n: {price: true, ind: true, trade: true, bots: true, discord: true}};
   const TZ = [['auto', 'Automática (la de tu dispositivo)'], ['UTC', 'UTC'], ['America/Mexico_City', 'Ciudad de México'], ['America/New_York', 'Nueva York'], ['America/Bogota', 'Bogotá'], ['America/Argentina/Buenos_Aires', 'Buenos Aires'],
     ['America/Sao_Paulo', 'São Paulo'], ['Europe/London', 'Londres'], ['Europe/Madrid', 'Madrid'], ['Asia/Dubai', 'Dubái'], ['Asia/Singapore', 'Singapur'], ['Asia/Tokyo', 'Tokio'], ['Australia/Sydney', 'Sídney']];
   const TONES = [['beep', 'Pitido'], ['chime', 'Campana'], ['pulse', 'Pulso'], ['alarm', 'Alarma']];

@@ -49,13 +49,19 @@ async function retrainBot(bot, scripts, getCandles, now, brainCtx) {
       decision: opt.decision, reasons: opt.reasons, changes: opt.changes, folds: opt.folds, oos: opt.oos, holdout: opt.holdout, candidate: opt.candidate, dims: opt.dims};
   } catch (e) { return {at: now, v: bot.mainV, status: 'error', reason: String(e.message || e).slice(0, 300)}; }
 }
+const PUSH_URL = process.env.PUSH_URL || 'https://vortex-push.soobroon.workers.dev';
+async function botPush(uid, msgs) { // avisos de los bots a tus celulares (Worker «vortex-push», con la llave derivada de FIREBASE_SERVICE_ACCOUNT)
+  const key = require('./bot-push-key.js').botPushKey(process.env.FIREBASE_SERVICE_ACCOUNT); if (!key) return;
+  try { const r = await fetch(PUSH_URL + '/bot-push', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({key, uid, msgs: msgs.slice(-6)})}); const j = await r.json().catch(() => ({})); console.log(`avisos al celular: ${j.sent || 0} enviados a ${j.devices || 0} dispositivo(s)${j.error ? ' · ' + j.error : ''}`); } catch (e) { console.log('avisos al celular: ' + String(e.message || e).slice(0, 120)); }
+}
 async function postDiscord(url, embeds) { try { const r = await fetch(url + '?wait=false', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: embeds.slice(0, 10), allowed_mentions: {parse: []}})}); return r.ok; } catch { return false; } }
-async function paperBot(bot, scripts, getCandles, now, gateF, notify) { // avanza las sesiones de paper trading activas (mismo motor que la app; no envía órdenes)
+async function paperBot(bot, scripts, getCandles, now, gateF, notify, pushOut) { // avanza las sesiones de paper trading activas (mismo motor que la app; no envía órdenes)
   const out = []; for (const sess of bot.paper || []) {
     if (sess.status !== 'running') continue; const iv = B.IV_MS[sess.spec.interval]; if (sess.last && now < sess.last.t + 2 * iv) continue; const ropts = {nova: globalThis.NovaNexus, user: null, gate: gateF ? gateF(sess) : null};
     try { await P.step(sess, async (sym, itv, count) => { const C = await getCandles(sym, itv, count); const u = userSeries(sess.spec, C, scripts); ropts.user = Object.keys(u).length ? u : null; return C; }, ropts, now); sess.err = null; sess.checkedAt = now; sess.by = 'servidor'; }
     catch (e) { sess.err = String(e.message || e).slice(0, 200); sess.checkedAt = now; sess.by = 'servidor'; }
-    const evs = NT.pending(sess); if (evs.length && notify && notify.url && notify.bots !== false && bot.notify !== false && /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\//.test(notify.url)) await postDiscord(notify.url, evs.slice(-6).map(e => NT.embed(bot, sess, e)));
+    const evs = NT.pending(sess); if (evs.length && pushOut && bot.notify !== false) for (const e of evs.slice(-6)) pushOut.push(NT.push(bot, sess, e)); // también a tu celular (servidor de avisos)
+    if (evs.length && notify && notify.url && notify.bots !== false && bot.notify !== false && /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\//.test(notify.url)) await postDiscord(notify.url, evs.slice(-6).map(e => NT.embed(bot, sess, e)));
     const L = sess.ledger; for (let i = 0; i < L.length - 300; i++) { delete L[i].reasonIn; delete L[i].ctx; delete L[i].sl; delete L[i].tp; } out.push(sess);
   } return out;
 }
@@ -76,7 +82,9 @@ async function main() {
     const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(s.data().items || '[]') : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } scripts = scripts.concat(catalogScripts().filter(c => c.code && !scripts.some(x => x.id === c.id))); try { const pro = await db.collection('pro').get(); for (const d of pro.docs) if (!scripts.some(x => x.id === 'cat:' + d.id)) scripts.push({id: 'cat:' + d.id, name: d.id, code: d.data().code, builtin: true}); } catch {} }; // los Nova Nexus PRO ya no están en el repo: se leen de Firestore
     for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force, linked(b))) continue; await loadScripts(); const bc = linked(b) ? {link: links[b.id], memory: brainMem[b.id] || []} : null; const r = await retrainBot(b, scripts, getCandles, now, bc); if (bc && bc.out) { brainMem[b.id] = JSON.parse(JSON.stringify(bc.out.memory || [])); nbr++; } results[b.id] = JSON.parse(JSON.stringify(r)); changed = true; nr++; console.log(`· bot ${nr}${bc ? ' (con cerebro)' : ''}: ${r.status}${r.status === 'error' ? ' · ' + String(r.reason || '').slice(0, 120) : ' · ' + r.decision + (r.brain ? ` · ideas probadas: ${(r.brain.tried || []).length}` : '')}`); if (r.decision === 'propuesta') np++; }
     const gateF = RK.gateFor(S.risk, all.flatMap(x => x.status === 'archived' ? [] : x.paper || []), now);
-    for (const b of pap) { await loadScripts(); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.notify); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
+    const pushOut = [];
+    for (const b of pap) { await loadScripts(); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.notify, pushOut); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
+    if (pushOut.length) await botPush(u.id, pushOut);
     if (changed) { for (const id of Object.keys(results)) if (!all.some(b => b.id === id)) delete results[id]; for (const id of Object.keys(paper)) if (!all.some(b => b.id === id)) delete paper[id]; for (const id of Object.keys(brainMem)) if (!all.some(b => b.id === id)) delete brainMem[id]; await u.collection('data').doc('botlab_server').set({results, paper, brainMem, updatedAt: admin.firestore.FieldValue.serverTimestamp()}); }
   }
   console.log(`Modo ${MODE} · ciclos: ${nb} · reentrenados: ${nr} · con cerebro: ${nbr} · con propuesta: ${np} · sesiones paper avanzadas: ${nps}`);

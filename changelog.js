@@ -2,7 +2,8 @@
 window.CCT_CHANGELOG = [
   {v: '3.23', d: '11 nov 2026', t: 'Favoritos en la píldora del gráfico y dock de cristal', items: [
     'En el celular, deja presionado un botón del menú del gráfico (Indicadores, Liquidaciones, Operar…) para fijarlo junto a la estrella; la píldora crece con tus favoritos (hasta 5).',
-    'La barra de abajo del celular (Seguimiento, Gráfico, Noticias…) es de cristal oscuro y deja ver el contenido al pasar por detrás.'
+    'La barra de abajo del celular (Seguimiento, Gráfico, Noticias…) es de cristal oscuro y deja ver el contenido al pasar por detrás.',
+    'Tus bots de Nova Bot Lab ahora también te avisan en el celular (no solo en Discord) cuando compran, venden o cierran, aunque VORTEX esté cerrada. Se apaga en Avisos › Mis bots.'
   ]},
   {v: '3.22', d: '11 nov 2026', t: 'Nombres de pestañas, menús de ver y borrar', items: [
     'Clic derecho (o doble clic) en una pestaña para cambiarle el nombre o cerrarla.',

@@ -637,7 +637,11 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
   }
   const paperBusy = new Set();
   const discordOk = () => { try { const D = window.CCT_discordStore && window.CCT_discordStore.get(); return !!(D && D.url && (D.on || {}).bots !== false); } catch { return false; } };
-  function notify(b, sess) { const N = window.CCTBotNotify; if (!N) return; const evs = N.pending(sess); if (!evs.length || b.notify === false || !discordOk() || !window.CCTDiscord) return; window.CCTDiscord.send(evs.slice(-6).map(e => N.embed(b, sess, e))); }
+  function notify(b, sess) {
+    const N = window.CCTBotNotify; if (!N) return; const evs = N.pending(sess); if (!evs.length || b.notify === false) return;
+    if (window.CCT_botNotify && N.push) for (const e of evs.slice(-3)) { const m = N.push(b, sess, e); window.CCT_botNotify(m.title, m.body, m.tag); } // aviso en la app y en el celular (misma etiqueta que el servidor)
+    if (discordOk() && window.CCTDiscord) window.CCTDiscord.send(evs.slice(-6).map(e => N.embed(b, sess, e)));
+  }
   async function paperUpdate(b, sess, quiet) {
     if (paperBusy.has(sess.id)) return; paperBusy.add(sess.id);
     try { await paperStep(b, sess); sess.err = null; } catch (e) { sess.err = String(e.message || e); if (!quiet) toast('Paper trading: ' + sess.err); touch(b); }

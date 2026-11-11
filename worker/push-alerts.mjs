@@ -362,6 +362,7 @@ export default {
       await Promise.all(urls.map(async u => { try { const r = await fetch(u, {headers: {'user-agent': 'Mozilla/5.0 (compatible; VORTEX/2.0)', accept: 'application/json'}}); const t = await r.text(); out[u.split('?')[0]] = r.status + ' ' + t.slice(0, 80); } catch (e) { out[u] = 'err ' + e.message; } }));
       return json({colo: (req.cf && req.cf.colo) || '', out});
     }
+    if (req.method === 'POST' && path === '/bot-push') return botPush(req, env); // Nova Bot Lab (GitHub Actions): avisos de tus bots a tus celulares
     if (!ok) return json({error: 'Origen no permitido'}, 403);
     if (path === '/ai' || path.startsWith('/ai/')) return aiRoute(req, env, path, json, cors);
     if (req.method === 'GET' && path === '/macro') return macroRoute(env, json, cors);
@@ -391,6 +392,7 @@ export default {
       const incoming = (Array.isArray(b.alerts) ? b.alerts : []).map(sanAlert).filter(Boolean).slice(0, MAX_ALERTS);
       const m = mergeAlerts(incoming, cur.alerts, b.since);
       const d = {sub, lastPush: cur.lastPush, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now(),
+        uid: typeof b.uid === 'string' && /^[A-Za-z0-9]{10,64}$/.test(b.uid) ? b.uid : (b.uid === '' ? '' : cur.uid || ''), bots: b.bots == null ? cur.bots !== false : b.bots !== false,
         trades: TW.merge(b.trades, cur.trades), tradeStep: TW.STEPS.includes(+b.tradeStep) ? +b.tradeStep : TW.DEF_STEP, syncAt: cur.syncAt || 0};
       if (d.trades.length && Date.now() - d.syncAt > 12 * 3600e3) d.syncAt = Date.now(); // la app sigue viendo esos trades abiertos (se renueva cada 12 h para no gastar escrituras)
       const same = JSON.stringify({...d, updated: 0}) === JSON.stringify({...cur, updated: 0});
@@ -434,6 +436,25 @@ async function domRun(env, now = Date.now()) {
   const h = st.h || {}; for (const [k, v] of [['USDT.D', cur.usdt], ['BTC.D', cur.btc]]) h[k] = DOM.mergeSamples(h[k], [[slot, v]], DOM_Q, now - DOM_KEEP);
   await env.KV.put('dom', JSON.stringify({slot, at: now, h}));
   return {ok: true, usdt: +cur.usdt.toFixed(4), btc: +cur.btc.toFixed(4)};
+}
+
+/* ───────── Nova Bot Lab: avisos de tus bots con la app cerrada ─────────
+   El paper trading de tus bots corre cada hora en GitHub Actions (scripts/botlab-retrain.js). Cuando un bot compra, vende o cierra,
+   el script llama aquí con la llave BOT_PUSH_KEY (secreto del Worker que se deriva de FIREBASE_SERVICE_ACCOUNT al publicarlo)
+   y se avisa a los celulares en los que iniciaste sesión con esa cuenta (la app manda tu uid al registrar el celular). */
+export function sameKey(a, b) { a = String(a || ''); b = String(b || ''); if (!a || a.length !== b.length) return false; let x = 0; for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i); return x === 0; }
+async function botPush(req, env) {
+  let b; try { b = JSON.parse((await req.text()).slice(0, 20000)); } catch { return J({error: 'JSON inválido'}, 400); }
+  if (!env.BOT_PUSH_KEY || !sameKey(b && b.key, env.BOT_PUSH_KEY)) return J({error: 'No autorizado'}, 401);
+  const uid = String(b.uid || ''); if (!/^[A-Za-z0-9]{10,64}$/.test(uid)) return J({error: 'uid inválido'}, 400);
+  const msgs = (Array.isArray(b.msgs) ? b.msgs : []).slice(0, 6).map(m => ({title: String(m.title || 'VORTEX').slice(0, 80), body: String(m.body || '').slice(0, 300), tag: String(m.tag || 'bot').slice(0, 80), url: APP_URL + '#bots'})).filter(m => m.body);
+  if (!msgs.length) return J({ok: true, sent: 0});
+  const ids = (await env.KV.get('devs', 'json')) || []; let sent = 0, devices = 0;
+  for (const id of ids) {
+    const d = await env.KV.get('dev:' + id, 'json'); if (!d || !d.sub || d.uid !== uid || d.bots === false) continue; devices++;
+    try { const sts = (await self(env, '/int/push', {id, msgs})).sts || []; sent += sts.filter(x => x >= 200 && x < 300).length; } catch (e) { console.warn('bot-push', e.message); }
+  }
+  return J({ok: true, devices, sent});
 }
 
 /* ───────── Screener programado (ver worker/screener.mjs) ───────── */

@@ -18,5 +18,12 @@
     const p = (t.exit / t.entry - 1) * 100 * (long ? 1 : -1), win = t.net >= 0;
     return {title: `${win ? '✅' : '❌'} CIERRE · ${sym} · ${win ? '+' : ''}${p.toFixed(2)} %`, description: `**${name}** cerró ${long ? 'el largo' : 'el corto'}: ${fmt(t.entry)} → **${fmt(t.exit)}** · neto ${win ? '+' : '−'}$${fmt(Math.abs(t.net))}${t.why ? `\n${String(t.why).slice(0, 160)}` : ''}`, color: win ? 0x20bf9f : 0xf06b79, footer: {text: 'Nova Bot Lab · simulación (sin dinero real)'}, timestamp: new Date(t.exitT || Date.now()).toISOString()};
   }
-  return {pending, embed};
+  /* El mismo aviso como notificación del celular (texto simple). La etiqueta es igual en la app y en el servidor: si llegan los dos, el celular deja uno. */
+  function push(bot, sess, e) {
+    const t = e.t, long = t.side === 'long', sym = sess.spec.symbol, name = bot.name || 'Bot', tag = `bot-${bot.id || name}-${sym}-${t.entryT}-${e.kind}`;
+    if (e.kind === 'open') return {title: `VORTEX · ${name}: ${long ? 'COMPRA' : 'VENTA'} ${sym}`, body: `Abrió ${long ? 'un largo' : 'un corto'} en ${sess.spec.interval} a ${fmt(t.entry)}${t.sl != null && isFinite(t.sl) ? ` · SL ${fmt(t.sl)}` : ''}${t.tp != null && isFinite(t.tp) ? ` · TP ${fmt(t.tp)}` : ''} · simulación`, tag};
+    const p = (t.exit / t.entry - 1) * 100 * (long ? 1 : -1), win = t.net >= 0;
+    return {title: `VORTEX · ${name}: CIERRE ${sym} ${win ? '+' : ''}${p.toFixed(2)} %`, body: `Cerró ${long ? 'el largo' : 'el corto'}: ${fmt(t.entry)} → ${fmt(t.exit)} · neto ${win ? '+' : '−'}$${fmt(Math.abs(t.net))}${t.why ? ' · ' + String(t.why).slice(0, 100) : ''} · simulación`, tag};
+  }
+  return {pending, embed, push};
 });

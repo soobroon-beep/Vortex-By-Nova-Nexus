@@ -6,7 +6,7 @@ name: Publicar servidor de avisos (vortex-push)
 on:
   push:
     branches: [main]
-    paths: ['worker/push-alerts.mjs', 'worker/screener.mjs', 'worker/radar-server.mjs', 'radar.js', 'trade-watch.js', 'worker/wrangler-push.toml', 'nova-nexus.js', 'discord-format.js', 'dominance-core.js', '.github/workflows/deploy-push-worker.yml']
+    paths: ['worker/push-alerts.mjs', 'worker/screener.mjs', 'worker/radar-server.mjs', 'radar.js', 'trade-watch.js', 'scripts/bot-push-key.js', 'worker/wrangler-push.toml', 'nova-nexus.js', 'discord-format.js', 'dominance-core.js', '.github/workflows/deploy-push-worker.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,6 +29,7 @@ jobs:
           BINGX_AGENT_KEY: ${{ secrets.BINGX_AGENT_KEY }}
           GROQ_KEY: ${{ secrets.GROQ_KEY }}
           BINGX_AGENT_SECRET: ${{ secrets.BINGX_AGENT_SECRET }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
             echo "Falta el secreto CLOUDFLARE_API_TOKEN (Settings → Secrets and variables → Actions). No se publica nada."; exit 0
@@ -41,4 +42,6 @@ jobs:
           if [ -n "$BINGX_AGENT_KEY" ]; then printf '%s' "$BINGX_AGENT_KEY" | npx --yes wrangler@4 secret put BINGX_AGENT_KEY --config worker/wrangler-push.toml; fi
           if [ -n "$BINGX_AGENT_SECRET" ]; then printf '%s' "$BINGX_AGENT_SECRET" | npx --yes wrangler@4 secret put BINGX_AGENT_SECRET --config worker/wrangler-push.toml; fi
           # IA gratis de respaldo (Groq): solo si existe el secreto GROQ_KEY
+          # avisos de tus bots (Nova Bot Lab) a tu celular: llave compartida con el paper trading, derivada de FIREBASE_SERVICE_ACCOUNT
+          BPK="$(node scripts/bot-push-key.js)"; if [ -n "$BPK" ]; then printf '%s' "$BPK" | npx --yes wrangler@4 secret put BOT_PUSH_KEY --config worker/wrangler-push.toml; fi
           if [ -n "$GROQ_KEY" ]; then printf '%s' "$GROQ_KEY" | npx --yes wrangler@4 secret put GROQ_KEY --config worker/wrangler-push.toml; fi

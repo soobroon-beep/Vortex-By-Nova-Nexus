@@ -214,3 +214,20 @@ test('ronda programada: sigue tus trades abiertos con la app cerrada', async () 
     await call({id: ID, sub: f.sub, move: {on: false}, trades: []}); assert.strictEqual(JSON.parse(KV.m.get('dev:' + ID)).trades.length, 0);
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('/bot-push: avisos de tus bots solo a los celulares de tu cuenta y con la llave correcta', async () => {
+  const w = await W(), KV = memKV(), env = {KV, BOT_PUSH_KEY: 'k'.repeat(64)}, f = await fakeBrowserSub(w.b64u), g = await fakeBrowserSub(w.b64u);
+  const sync = body => w.default.fetch(new Request('https://x.workers.dev/sync', {method: 'POST', headers: {origin: 'https://soobroon-beep.github.io'}, body: JSON.stringify(body)}), env);
+  await sync({id: 'dev_uuuuuuuuuuuuuuuuuuuu', sub: f.sub, move: {on: false}, uid: 'UserAbc1234567'});
+  await sync({id: 'dev_vvvvvvvvvvvvvvvvvvvv', sub: {...g.sub, endpoint: 'https://fcm.googleapis.com/fcm/send/otro'}, move: {on: false}, uid: 'OtraCuenta98765'});
+  const pushes = [], realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { url = String(url); if (url.includes('fcm.googleapis.com')) { pushes.push({url, msg: JSON.parse(await decrypt(new Uint8Array(init.body), url.endsWith('/abc') ? f.kp : g.kp, url.endsWith('/abc') ? f.auth : g.auth))}); return new Response('', {status: 201}); } throw new Error('fetch inesperado ' + url); };
+  const call = body => w.default.fetch(new Request('https://x.workers.dev/bot-push', {method: 'POST', body: JSON.stringify(body)}), env).then(async r => ({status: r.status, j: await r.json()}));
+  try {
+    assert.strictEqual((await call({key: 'mala', uid: 'UserAbc1234567', msgs: [{title: 't', body: 'b'}]})).status, 401);
+    const r = await call({key: 'k'.repeat(64), uid: 'UserAbc1234567', msgs: [{title: 'VORTEX · Lucas: COMPRA BTCUSDT', body: 'Abrió un largo', tag: 'bot-x'}]});
+    assert.deepStrictEqual(r.j, {ok: true, devices: 1, sent: 1}); assert.strictEqual(pushes.length, 1); assert.ok(pushes[0].url.endsWith('/abc')); assert.strictEqual(pushes[0].msg.title, 'VORTEX · Lucas: COMPRA BTCUSDT');
+  } finally { globalThis.fetch = realFetch; }
+  const {botPushKey} = require('../scripts/bot-push-key.js'); const sa = JSON.stringify({private_key_id: 'abc', client_email: 'x@y'});
+  assert.strictEqual(botPushKey(sa), botPushKey(sa)); assert.strictEqual(botPushKey(sa).length, 64); assert.strictEqual(botPushKey(''), '');
+});
