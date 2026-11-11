@@ -1689,13 +1689,17 @@ body:not(.light) :is(.cfg-dlg,.pc-dlg,.rk-dlg,.dz-box,.row-menu,.pop-menu,.tag-p
 .gx-lock:not(#liqBtn) small{color:rgba(225,215,255,.6)}
 @keyframes gxDrift{to{background-position:-220px 0,0 0,0 0}}
 @media (prefers-reduced-motion:reduce){.gx-lock{animation:none!important}}
-/* barra derecha, barra del celular y barra de dibujo: sin fondo. El icono normal con una estrella dorada (como la del cursor Estrella) en la esquina que «respira»: crece y se encoge despacio con su halo */
-:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn){animation:gxBreathe 2.6s ease-in-out infinite!important;border-color:transparent!important;box-shadow:none!important;background-color:transparent!important;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3CradialGradient id='h'%3E%3Cstop offset='0' stop-color='%23ffd666' stop-opacity='.55'/%3E%3Cstop offset='.5' stop-color='%23ff4fd8' stop-opacity='.14'/%3E%3Cstop offset='1' stop-color='%238b5cff' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='b'%3E%3Cstop offset='0' stop-color='%23fffbe8'/%3E%3Cstop offset='.4' stop-color='%23ffe08a'/%3E%3Cstop offset='1' stop-color='%23ffb43a'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='12' fill='url(%23h)'/%3E%3Cpath d='M12 4.5Q12.9 11.1 19.5 12Q12.9 12.9 12 19.5Q11.1 12.9 4.5 12Q11.1 11.1 12 4.5Z' fill='url(%23b)'/%3E%3Ccircle cx='12' cy='12' r='.9' fill='%23fff'/%3E%3C/svg%3E")!important;
-  background-repeat:no-repeat!important;background-position:right -3px top -3px!important;background-size:var(--gxs) var(--gxs)!important}
-.bottom-nav button.gx-lock:not(#liqBtn){background-position:right calc(50% - 26px) top -6px!important}
-@property --gxs{syntax:'<length>';inherits:false;initial-value:22px}
-@keyframes gxBreathe{0%,100%{--gxs:17px}50%{--gxs:28px}} /* el tamaño se anima con una variable: así la animación funciona aunque el estilo base use !important */
+/* barra derecha, barra del celular y barra de dibujo: sin fondo. El icono normal con la estrella dorada del cursor Estrella en la esquina:
+   la estrella late apenas (±6 %, como el cursor) y su halo de luz dorado-magenta respira alrededor. No gira. */
+@property --gxs{syntax:'<length>';inherits:false;initial-value:15px}
+@property --gxh{syntax:'<length>';inherits:false;initial-value:26px}
+:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn){--gxx:9px;--gxy:9px;animation:gxBreathe 1.65s ease-in-out infinite!important;border-color:transparent!important;box-shadow:none!important;background-color:transparent!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3CradialGradient id='b'%3E%3Cstop offset='0' stop-color='%23fffbe8'/%3E%3Cstop offset='.35' stop-color='%23ffe08a'/%3E%3Cstop offset='1' stop-color='%23ffb43a'/%3E%3C/radialGradient%3E%3C/defs%3E%3Cpath d='M12 1Q13.3 10.7 23 12Q13.3 13.3 12 23Q10.7 13.3 1 12Q10.7 10.7 12 1Z' fill='url(%23b)'/%3E%3Ccircle cx='12' cy='12' r='1.3' fill='%23fff'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3CradialGradient id='h'%3E%3Cstop offset='0' stop-color='%23ffd666' stop-opacity='.5'/%3E%3Cstop offset='.45' stop-color='%23ff4fd8' stop-opacity='.16'/%3E%3Cstop offset='1' stop-color='%238b5cff' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='12' fill='url(%23h)'/%3E%3C/svg%3E")!important;
+  background-repeat:no-repeat!important;background-size:var(--gxs) var(--gxs),var(--gxh) var(--gxh)!important;
+  background-position:right calc(var(--gxx) - var(--gxs) / 2) top calc(var(--gxy) - var(--gxs) / 2),right calc(var(--gxx) - var(--gxh) / 2) top calc(var(--gxy) - var(--gxh) / 2)!important}
+.bottom-nav button.gx-lock:not(#liqBtn){--gxx:calc(50% - 12px);--gxy:10px}
+@keyframes gxBreathe{0%,100%{--gxs:14.2px;--gxh:24px}50%{--gxs:15.9px;--gxh:31px}}
 @media (prefers-reduced-motion:reduce){:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock{animation:none!important}}
 /* categoría «Nova Nexus ©» del explorador de indicadores: fondo de galaxia delicado, como el botón de Liquidaciones */
 .ib-cats :is([data-ibcat="nova"],[data-ibcat="pro"]){position:relative;color:#ece8fb!important;border:1px solid rgba(167,139,250,.22)!important;

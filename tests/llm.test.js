@@ -109,10 +109,10 @@ test('Laboratorio (code): usa su propia IA (gpt-5.4-mini) directo en Pollination
   const r = await L.chat([{role: 'user', content: 'haz un indicador'}], {purpose: 'code', cfg: {provider: 'free', lab: 'free', compat: {}}});
   assert.equal(calls[0].body.model, 'gpt-5.4-mini'); assert.match(calls[0].url, /gen\.pollinations\.ai/); assert.match(r.model, /gpt-5\.4-mini/);
 }));
-test('Tarea: un aviso de «créditos insuficientes» no se toma como respuesta; pasa a la siguiente IA', () => withDoc(async () => {
+test('Tarea: un aviso de «créditos insuficientes» no se toma como respuesta; pasa a la siguiente ruta (servidor o servicio gratis sin clave)', () => withDoc(async () => {
   const calls = mockFetch((u, o, n) => n === 1 ? mkRes(reply("The account behind this API key doesn't have enough credits. This model needs paid Pollen. Please top up")) : mkRes(reply('análisis real')));
   const r = await L.chat([{role: 'user', content: 'analiza'}], {purpose: 'chart', cfg: {provider: 'free', lab: 'free', compat: {}}});
-  assert.equal(r.text, 'análisis real'); assert.notEqual(calls[0].body.model, calls[1].body.model);
+  assert.equal(r.text, 'análisis real'); assert.notEqual(calls[0].url, calls[1].url);
 }));
 test('Tarea: si Pollinations directo falla por red, usa tu servidor VORTEX con el mismo modelo', () => withDoc(async () => {
   const calls = mockFetch((u) => { if (/pollinations/.test(u)) throw new TypeError('net'); return mkRes(reply('desde el servidor')); });
@@ -128,4 +128,10 @@ test('Nexus Pixel (purpose text) NO usa la IA nueva: sigue yendo primero a tu se
   const calls = mockFetch((u) => /models/.test(u) ? mkRes([{name: 'openai'}]) : mkRes(reply('hola Payi')));
   const r = await L.chat([{role: 'user', content: 'hola'}], {purpose: 'text', cfg: {provider: 'free', lab: 'free', compat: {}}});
   assert.equal(r.text, 'hola Payi'); const post = calls.find(c => c.body); assert.match(post.url, /vortex-push.*\/ai$/); assert.equal(post.body.model, 'openai'); assert.ok(!calls.some(c => /gen\.pollinations/.test(c.url)));
+}));
+
+test('Sin créditos en ninguna clave: Nexus Pixel usa el servicio gratis sin clave', () => withDoc(async () => {
+  const calls = mockFetch(u => /text\.pollinations\.ai\/models/.test(u) ? mkRes([{name: 'openai'}]) : /text\.pollinations\.ai\/openai/.test(u) ? mkRes(reply('hola desde el servicio gratis')) : /\/ai\/models|text\/models/.test(u) ? mkRes([{name: 'openai'}]) : mkRes(reply("The account behind this API key doesn't have enough credits. Please top up")));
+  const r = await L.chat([{role: 'user', content: 'hola'}], {cfg: {provider: 'free', lab: 'free', compat: {}}});
+  assert.equal(r.text, 'hola desde el servicio gratis'); assert.ok(calls.some(c => /text\.pollinations\.ai\/openai/.test(c.url)));
 }));

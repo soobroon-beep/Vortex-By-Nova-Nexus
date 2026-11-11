@@ -139,8 +139,8 @@
     for (const m of cand) { // cada modelo tiene su tiempo; si uno se cuelga, se prueba el siguiente (antes la app se quedaba esperando)
       if (left() < 8000 || (o.signal && o.signal.aborted)) break;
       const meta = list.find(x => x && x.name === m), vis = pk ? VX_VISION.has(m) : supportsVision(m, meta);
-      try { const text = await openaiCall(url, pk, m, img && !vis ? stripImages(messages) : messages, Object.assign({}, o, {timeout: Math.min(o.timeout || 45000, left())})); if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); return {text, model: m, image: img && vis}; }
-      catch (e) { last = e; if (e.kind === 'network' && !img) throw e; if (o.signal && o.signal.aborted) throw e; if (e.kind === 'rate') await sleep(2000); }
+      try { const text = await openaiCall(url, pk, m, img && !vis ? stripImages(messages) : messages, Object.assign({}, o, {timeout: Math.min(o.timeout || 45000, left())})); if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); if (noCredit(text)) throw new LLMError('La clave de IA se quedó sin créditos', 'credit'); return {text, model: m, image: img && vis}; }
+      catch (e) { last = e; if (e.kind === 'credit') throw e; if (e.kind === 'network' && !img) throw e; if (o.signal && o.signal.aborted) throw e; if (e.kind === 'rate') await sleep(2000); } // sin créditos: pasa directo al servicio gratis sin clave
     }
     if (img && left() > 10000) { // la captura pudo ser el problema: un intento más solo con los datos
       const m = pickFree(list, {code: o.purpose === 'code'})[0];
@@ -167,14 +167,14 @@
     const list = (vxModels && vxModels.list.length) ? vxModels.list : [];
     const img = hasImage(messages), code = o.purpose === 'code', cand = pickVx(list, {needVision: o.needVision || img, code}), end = o.deadline || (Date.now() + (code ? 150000 : 75000)); let last;
     const left = () => end - Date.now(), say = t => { try { o.onProgress && o.onProgress({text: t}); } catch {} };
-    const tryOne = async (m, msgs, cap) => { const text = await openaiCall(VX + '/ai', '', m, msgs, Object.assign({}, o, {timeout: Math.max(5000, Math.min(cap, left())), idle: code ? 45000 : 30000})); if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); return text; };
+    const tryOne = async (m, msgs, cap) => { const text = await openaiCall(VX + '/ai', '', m, msgs, Object.assign({}, o, {timeout: Math.max(5000, Math.min(cap, left())), idle: code ? 45000 : 30000})); if (noCredit(text)) { vxDown = Date.now() + 15 * 6e4; throw new LLMError('El servidor de IA se quedó sin créditos', 'credit'); } if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); return text; };
     for (const [i, m] of cand.entries()) {
       if (left() < 8000 || (o.signal && o.signal.aborted)) break; const vis = VX_VISION.has(m);
       if (i) say('Probando otro modelo de IA…');
       try { const text = await tryOne(m, img && !vis ? stripImages(messages) : messages, code ? 100000 : (img ? 35000 : 45000)); return {text, model: m + ' · servidor VORTEX', image: img && vis}; }
-      catch (e) { last = e; if (e.status === 503) { vxDown = Date.now() + 10 * 6e4; break; } if (e.kind === 'network') break; if (o.signal && o.signal.aborted) throw e; if (img) break; if (e.kind === 'rate') await sleep(1500); } // con imagen: no insistir, pasar a solo datos
+      catch (e) { last = e; if (e.kind === 'credit') break; if (e.status === 503) { vxDown = Date.now() + 10 * 6e4; break; } if (e.kind === 'network') break; if (o.signal && o.signal.aborted) throw e; if (img) break; if (e.kind === 'rate') await sleep(1500); } // con imagen: no insistir, pasar a solo datos
     }
-    if (img && left() > 8000 && !(last && (last.status === 503 || last.kind === 'network'))) { // la imagen no pasó (modelo sin visión o sin créditos para imágenes): analiza con los datos del gráfico
+    if (img && left() > 8000 && !(last && (last.status === 503 || last.kind === 'network' || last.kind === 'credit'))) { // la imagen no pasó (modelo sin visión o sin créditos para imágenes): analiza con los datos del gráfico
       say('Analizando con los datos de tu gráfico…');
       for (const m of ['openai', 'mistral']) { if (left() < 6000) break; try { const text = await tryOne(m, stripImages(messages), 40000); return {text, model: m + ' · servidor VORTEX', image: false}; } catch (e) { last = e; if (e.kind === 'network') break; } }
     }
@@ -194,14 +194,15 @@
   async function chatTask(messages, o, task) {
     const T = TASKS[task], img = hasImage(messages), end = Date.now() + (o.budget || T.budget), left = () => end - Date.now(), errs = [];
     const say = t => { try { o.onProgress && o.onProgress({text: t}); } catch {} };
-    const routes = [[GEN_URL, POLLEN_KEY, ''], [VX + '/ai', '', ' · servidor VORTEX']]; // 1) Pollinations directo con la clave de la app, 2) tu servidor VORTEX
+    const routes = [[GEN_URL, POLLEN_KEY, ''], [VX + '/ai', '', ' · servidor VORTEX'], [FREE_URL, '', ' · gratis']]; // 1) Pollinations con la clave de la app, 2) tu servidor VORTEX, 3) servicio gratis sin clave (si la clave se queda sin créditos)
     const one = async (m, msgs) => {
       let last;
       for (const [url, key, tag] of routes) {
         if (left() < 5000 || (o.signal && o.signal.aborted)) break;
         try {
           const text = await openaiCall(url, key, m, msgs, Object.assign({}, o, {timeout: Math.max(5000, Math.min(T.cap, left())), idle: T.idle}));
-          if (looksBad(text) || noCredit(text)) throw new LLMError('El modelo ' + m + ' no está disponible gratis ahora', 'model');
+          if (noCredit(text)) throw new LLMError('Sin créditos en esta ruta', 'credit');
+          if (looksBad(text)) throw new LLMError('El modelo ' + m + ' no está disponible gratis ahora', 'model');
           return {text, model: m + tag};
         } catch (e) { last = e; if (o.signal && o.signal.aborted) throw e; if (e.kind === 'model' || e.kind === 'abort') break; } // el modelo no sirve o se tardó: no insistir con él por la otra ruta
       }
