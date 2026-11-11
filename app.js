@@ -243,7 +243,7 @@ function merge(s) {
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
-  o.tabs = Array.isArray(o.tabs) ? o.tabs.filter(t => t && typeof t.s === 'string' && /^[\w.:\-/]{2,32}$/.test(t.s)).slice(0, 8).map((t, i) => Object.assign({id: /^[a-z0-9]{3,12}$/.test(t.id) ? t.id : 't' + i + Date.now().toString(36).slice(-4), s: t.s, i: INTERVALS.includes(t.i) ? t.i : '1h', c: CTYPES.some(x => x[0] === t.c) ? t.c : 'candles'}, tabCfgSan(t.cfg))) : [];
+  o.tabs = Array.isArray(o.tabs) ? o.tabs.filter(t => t && typeof t.s === 'string' && /^[\w.:@\-/]{2,40}$/.test(t.s)).slice(0, 8).map((t, i) => Object.assign({id: /^[a-z0-9]{3,12}$/.test(t.id) ? t.id : 't' + i + Date.now().toString(36).slice(-4), s: t.s, i: INTERVALS.includes(t.i) ? t.i : '1h', c: CTYPES.some(x => x[0] === t.c) ? t.c : 'candles'}, tabCfgSan(t.cfg))) : [];
   o.tab = typeof o.tab === 'string' ? o.tab.slice(0, 12) : ''; o.tabRev = Number.isFinite(+o.tabRev) ? +o.tabRev : 0;
   if (typeof o.symbol !== 'string') o.symbol = o.symbols[0];
   return o;
@@ -2023,8 +2023,10 @@ function switchTab(id) {
 }
 function newTab() {
   if (state.tabs.length >= MAX_TABS) { toast(`Máximo ${MAX_TABS} pestañas`); return; }
-  tabTouch(); tabStore(); const id = 't' + Date.now().toString(36).slice(-6); state.tabs.push({id, s: state.symbol, i: state.interval, c: state.ctype || 'candles', cfg: tabSnap()}); state.tab = id; // la pestaña nueva empieza con la misma configuración, pero desde aquí cada una es independiente
-  state.tabRev = Date.now(); save(); renderTabs(); openSheet(); // elige la moneda para la pestaña nueva
+  tabTouch(); tabStore(); const id = 't' + Date.now().toString(36).slice(-6);
+  const cfg = tabSnap(); cfg.indicators = Object.fromEntries(Object.keys(cfg.indicators || {}).map(k => [k, false])); cfg.stdHide = {}; cfg.pine = []; // la pestaña nueva empieza limpia, sin indicadores; desde aquí cada pestaña guarda los suyos
+  const t = {id, s: state.symbol, i: state.interval, c: state.ctype || 'candles', cfg}; state.tabs.push(t); state.tab = id; state.tabRev = Date.now();
+  tabApply(t); renderIndicators(); countIndicators(); save(); renderTabs(); loadTabChart(); openSheet(); // elige la moneda para la pestaña nueva
 }
 function closeTab(id) {
   if (state.tabs.length < 2) return; const i = state.tabs.findIndex(x => x.id === id); if (i < 0) return; const wasOn = id === state.tab;
