@@ -1689,11 +1689,23 @@ body:not(.light) :is(.cfg-dlg,.pc-dlg,.rk-dlg,.dz-box,.row-menu,.pop-menu,.tag-p
 .gx-lock:not(#liqBtn) small{color:rgba(225,215,255,.6)}
 @keyframes gxDrift{to{background-position:-220px 0,0 0,0 0}}
 @media (prefers-reduced-motion:reduce){.gx-lock{animation:none!important}}
-/* barra derecha, barra del celular y barra de dibujo: sin galaxia, el icono normal con una estrellita en la esquina que indica «premium» */
-:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn){animation:none!important;border-color:transparent!important;box-shadow:none!important;background-color:transparent!important;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 0c.3 2.3.9 2.9 3.2 3.2C5.9 3.5 5.3 4.1 5 6.4 4.7 4.1 4.1 3.5 1.8 3.2 4.1 2.9 4.7 2.3 5 0z' fill='%23c4b5fd'/%3E%3C/svg%3E")!important;
-  background-size:9px 9px!important;background-repeat:no-repeat!important;background-position:right 4px top 3px!important}
-.bottom-nav button.gx-lock:not(#liqBtn){background-position:right calc(50% - 16px) top 6px!important}
+/* barra derecha, barra del celular y barra de dibujo: sin fondo. El icono normal con un destello de estrella (4 puntas) en la esquina que titila despacio y un brillo lila muy suave */
+:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn){animation:gxTwinkle 3.2s ease-in-out infinite!important;border-color:transparent!important;box-shadow:none!important;background-color:transparent!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0' stop-color='%23fff'/%3E%3Cstop offset='.45' stop-color='%23e9ddff'/%3E%3Cstop offset='1' stop-color='%23b79cff'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='10' cy='10' r='6' fill='%23b79cff' opacity='.18'/%3E%3Cpath d='M10 1.5c.5 4.6 1.4 6 8.5 8.5-7.1 2.5-8 3.9-8.5 8.5-.5-4.6-1.4-6-8.5-8.5 7.1-2.5 8-3.9 8.5-8.5z' fill='url(%23g)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'%3E%3Ccircle cx='2' cy='2' r='1.2' fill='%23e9ddff'/%3E%3C/svg%3E")!important;
+  background-repeat:no-repeat!important;background-position:right 2px top 1px,right 15px top 5px!important;background-size:12px 12px,3px 3px!important}
+:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn) svg{filter:drop-shadow(0 0 5px rgba(183,156,255,.28))}
+.bottom-nav button.gx-lock:not(#liqBtn){background-position:right calc(50% - 18px) top 4px,right calc(50% - 7px) top 9px!important}
+@keyframes gxTwinkle{0%,100%{background-size:12px 12px,3px 3px}45%{background-size:7px 7px,2px 2px}55%{background-size:13px 13px,1px 1px}}
+@media (prefers-reduced-motion:reduce){:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock{animation:none!important}}
+/* categoría «Nova Nexus ©» del explorador de indicadores: fondo de galaxia delicado, como el botón de Liquidaciones */
+.ib-cats [data-ibcat="nova"]{position:relative;color:#ece8fb!important;border:1px solid rgba(167,139,250,.22)!important;
+  background-color:#0a0a16!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='12' cy='9' r='.6' opacity='.6'/%3E%3Ccircle cx='58' cy='29' r='.5' opacity='.4'/%3E%3Ccircle cx='96' cy='13' r='.65' fill='%23d6ccff' opacity='.55'/%3E%3Ccircle cx='80' cy='34' r='.45' opacity='.35'/%3E%3C/g%3E%3C/svg%3E"),radial-gradient(80% 140% at 10% 0%,rgba(124,77,255,.2),transparent 65%),radial-gradient(70% 140% at 100% 100%,rgba(56,96,200,.14),transparent 68%)!important;
+  background-size:120px 40px,100% 100%,100% 100%!important;background-repeat:repeat,no-repeat,no-repeat!important;animation:gxDrift2 40s linear infinite}
+.ib-cats [data-ibcat="nova"] svg{color:#c9b6ff}
+.ib-cats [data-ibcat="nova"].on{border-color:rgba(196,181,253,.45)!important;box-shadow:0 0 12px rgba(139,92,246,.18)}
+@keyframes gxDrift2{to{background-position:-120px 0,0 0,0 0}}
+
 .pl-col.want{box-shadow:0 0 0 2px #b79cff inset,0 0 24px rgba(139,92,246,.25)}
 
 /* ───────── Bienvenida: iniciar sesión con Google al abrir (si la cierras, sigues con Gratis) ───────── */

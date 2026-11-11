@@ -19,4 +19,4 @@ binding = "KV"
 id = "c6d98896a2a3496b89228e7994cedda2"
 
 [vars]
-ALLOWED_ORIGIN = "https://soobroon-beep.github.io,https://vortex-nexus.pages.dev"
+ALLOWED_ORIGIN = "https://soobroon-beep.github.io,https://vortex-nexus.pages.dev,https://dev.vortex-nexus.pages.dev"

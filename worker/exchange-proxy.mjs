@@ -4,7 +4,10 @@
 // Tu Secret Key NUNCA llega aquí: solo viajan la API Key y la firma, igual que si tu navegador hablara directo con el exchange.
 // Formato (el de CCXT con proxyUrl): https://vortex-exchange.<cuenta>.workers.dev/?<URL del exchange (codificada si lleva «?»)>
 // Opcional: Ajustes → Variables → ALLOWED_ORIGIN = tus sitios separados por coma (por defecto https://soobroon-beep.github.io).
-const DEFAULT_ORIGINS = 'https://soobroon-beep.github.io,https://vortex-nexus.pages.dev';
+const DEFAULT_ORIGINS = 'https://soobroon-beep.github.io,https://vortex-nexus.pages.dev,https://dev.vortex-nexus.pages.dev';
+// Solo se reenvía a los exchanges conocidos (dominio raíz o subdominio): así nadie puede usar el puente como proxy abierto hacia cualquier sitio.
+export const EX_DOMAINS = ["asterdex.com", "backpack.exchange", "binance.com", "binance.us", "binance.vision", "bingx.com", "bitfinex.com", "bitget.com", "bitget.site", "bithumb.com", "bitmart.com", "bitso.com", "bitstamp.net", "blofin.com", "bybit.com", "bytick.com", "coinbase.com", "crypto.com", "deribit.com", "dydx.exchange", "dydx.trade", "gate.com", "gate.io", "gateio.ws", "gemini.com", "htx.com", "huobi.pro", "hyperliquid.xyz", "kraken.com", "kucoin.cc", "kucoin.com", "lbank.com", "lbkex.com", "lbkex.net", "mexc.com", "okx.cab", "okx.com", "phemex.com", "poloniex.com", "toobit.com", "upbit.com", "weex.com", "whitebit.com", "woox.io", "xt.com"];
+const exAllowed = h => EX_DOMAINS.some(d => h === d || h.endsWith('.' + d));
 const DROP = new Set(['host', 'origin', 'referer', 'cookie', 'content-length', 'connection', 'accept-encoding', 'x-forwarded-for', 'x-real-ip', 'true-client-ip']);
 
 export function targetOf(reqUrl) { // URL del exchange que viene después del «?»
@@ -14,6 +17,7 @@ export function targetOf(reqUrl) { // URL del exchange que viene después del «
   if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
   const h = u.hostname.toLowerCase();
   // solo nombres de dominio públicos (nada de IPs, localhost ni redes internas)
+  if (!exAllowed(h)) return null;
   if (!h.includes('.') || /^[\d.]+$/.test(h) || h.includes(':') || /(^|\.)(localhost|local|internal|lan|home|arpa)$/.test(h) || h.endsWith('.workers.dev')) return null;
   return u;
 }

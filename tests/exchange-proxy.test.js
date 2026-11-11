@@ -13,3 +13,9 @@ test('puente de exchanges: destino y origen', async () => {
   const r = await W.default.fetch(new Request('https://w.dev/?https://api.bybit.com/x', {headers: {origin: 'https://evil.example'}}), {});
   assert.strictEqual(r.status, 403);
 });
+
+test('el puente solo reenvía a exchanges conocidos (no es un proxy abierto)', async () => {
+  const W = await import('../worker/exchange-proxy.mjs');
+  for (const ok of ['https://open-api.bingx.com/x', 'https://fapi.binance.com/fapi/v1/time', 'https://api.gateio.ws/api/v4/x', 'https://api.huobi.pro/x']) assert.ok(W.targetOf('https://w.dev/?' + encodeURIComponent(ok)), ok);
+  for (const bad of ['https://evil.com/x', 'https://binance.com.evil.com/x', 'https://example.org/']) assert.strictEqual(W.targetOf('https://w.dev/?' + encodeURIComponent(bad)), null, bad);
+});

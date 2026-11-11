@@ -1,10 +1,11 @@
 name: Publicar VORTEX en Cloudflare Pages (vortex-nexus.pages.dev)
-# Publica la app en https://vortex-nexus.pages.dev: una dirección que no lleva tu usuario de GitHub.
+# Publica la app en https://vortex-nexus.pages.dev (rama main = la página oficial).
+# La rama «dev» se publica aparte en https://dev.vortex-nexus.pages.dev para probar cambios antes de pasarlos a la oficial.
 # Usa el mismo secreto CLOUDFLARE_API_TOKEN de los Workers (necesita también el permiso «Cloudflare Pages: Edit»).
 # Se publica con cada cambio en main y cuando se actualizan noticias, dominancia o el Screener (esos cambios los sube un robot y no disparan el «push»).
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths-ignore: ['worker/**', 'tests/**', 'scripts/**', 'docs/**', '**.md']
   workflow_run:
     workflows: ['Actualizar noticias', 'Actualizar dominancia', 'Screener a Discord']
@@ -12,14 +13,14 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-concurrency: {group: deploy-pages-cf, cancel-in-progress: true}
+concurrency: {group: 'deploy-pages-cf-${{ github.event_name == ''push'' && github.ref_name || ''main'' }}', cancel-in-progress: true}
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with: {ref: main}
+        with: {ref: "${{ github.event_name == 'push' && github.ref_name || 'main' }}"}
       - uses: actions/setup-node@v4
         with: {node-version: 22}
       - name: Preparar la carpeta del sitio
@@ -35,4 +36,5 @@ jobs:
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "Falta CLOUDFLARE_API_TOKEN: no se publica."; exit 0; fi
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
           npx --yes wrangler@4 pages project create vortex-nexus --production-branch main 2>/dev/null || true
-          npx --yes wrangler@4 pages deploy dist --project-name vortex-nexus --branch main --commit-dirty=true
+          B="${{ github.event_name == 'push' && github.ref_name || 'main' }}"
+          npx --yes wrangler@4 pages deploy dist --project-name vortex-nexus --branch "$B" --commit-dirty=true

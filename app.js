@@ -135,7 +135,8 @@ function sanStdParams(p) {
     if (Object.keys(q).length) o[key] = q; }
   return o;
 }
-const stdOn = k => !!state.indicators[k] && !(state.stdHide && state.stdHide[k]); // activo y no oculto con el ojito de la leyenda
+const PLUS_IND = ['vpvr', 'dchan', 'patterns'], PLUS_FREE = ['autofib']; // indicadores que se desbloquean con el plan Plus
+const stdOn = k => !!state.indicators[k] && !(state.stdHide && state.stdHide[k]) && !(PLUS_IND.includes(k) && !planOk('proInd')); // activo y no oculto con el ojito de la leyenda
 const stdName = k => isCopy(k) ? (baseOf(k) === 'bollinger' ? `Bollinger ${sp(k, 'len')}` : `${COPYABLE[baseOf(k)]} ${sp(k, 'len')}`) : ({derivs: 'Derivados en vivo', oi: 'Interés abierto', funding: 'Funding', lsr: 'Ratio Long/Short', taker: 'Compra/venta agresiva', ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', adx: `ADX ${sp('adx', 'len')}`, cci: `CCI ${sp('cci', 'len')}`, willr: `Williams %R ${sp('willr', 'len')}`, mfi: `MFI ${sp('mfi', 'len')}`, roc: `ROC ${sp('roc', 'len')}`, stochrsi: 'Estoc. RSI', ao: 'Awesome Osc.', cmf: `CMF ${sp('cmf', 'len')}`, donchian: `Donchian ${sp('donchian', 'len')}`, keltner: `Keltner ${sp('keltner', 'len')}`, ichimoku: 'Ichimoku', psar: 'Parabolic SAR', vpvr: 'VPVR', liqmap: 'Liquidaciones (heatmap)', patterns: 'Patrones', dchan: 'Canales dinámicos', cross: 'Cruces EMA 20/50'}[k] || k);
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
@@ -1477,8 +1478,8 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.piv = I.nnPiv ? T.pivots(candles, NP('pivLen')) : null;
   { const lk = `${state.symbol}|${state.interval}|${candles.length}|${candles[0].t}|${sp('liqmap', 'rows')}|${Math.floor(Date.now() / 20000)}`; if (!I.liqmap || !planOk('liq')) ind.lm = null; else if (!ind.lm || ind.lm._k !== lk) { ind.lm = T.liquidationHeatmap(candles, {rows: sp('liqmap', 'rows')}); if (ind.lm) ind.lm._k = lk; } }
   ind.liq = I.nnLiq ? T.liquidations(candles, iv, {lookback: NP('liqLookback')}) : null;
-  ind.dch = I.dchan && window.CCTChannels ? CCTChannels.detect(candles, {len: sp('dchan', 'len'), count: sp('dchan', 'count'), brk: sp('dchan', 'brk')}) : null;
-  { const Q = k => sp('patterns', k); ind.pat = I.patterns && window.CCTPatterns ? CCTPatterns.detect(candles, {len: Q('len'), dev: Q('dev'), tol: Q('tol') / 100, min: Q('min'), max: Q('max'), keep: Q('keep'), p123: Q('g123') === 'Sí', abc: Q('gabc') === 'Sí', harm: Q('gharm') === 'Sí', chart: Q('gchart') === 'Sí', ell: Q('gell') === 'Sí'}) : null; }
+  ind.dch = I.dchan && planOk('proInd') && window.CCTChannels ? CCTChannels.detect(candles, {len: sp('dchan', 'len'), count: sp('dchan', 'count'), brk: sp('dchan', 'brk')}) : null;
+  { const Q = k => sp('patterns', k); ind.pat = I.patterns && planOk('proInd') && window.CCTPatterns ? CCTPatterns.detect(candles, {len: Q('len'), dev: Q('dev'), tol: Q('tol') / 100, min: Q('min'), max: Q('max'), keep: Q('keep'), p123: Q('g123') === 'Sí', abc: Q('gabc') === 'Sí', harm: Q('gharm') === 'Sí', chart: Q('gchart') === 'Sí', ell: Q('gell') === 'Sí'}) : null; }
   ind.vp = I.nnVP ? T.volumeProfile(candles, {rows: NP('vpRows'), lookback: NP('vpLookback'), hiThr: NP('vpHi'), loThr: NP('vpLo')}) : null;
 }
 // Parámetros de Nova Nexus editables (misma presentación que la ventana de TradingView: grupos, filas y ayudas)
@@ -1594,8 +1595,8 @@ function ibItems() {
 }
 function ibCard(it) {
   const tog = (attr, on, t) => `<button class="toggle ${on ? 'on' : ''}" ${attr} aria-label="${esc(t)}" aria-pressed="${!!on}"></button>`;
-  if (it.kind === 'std') return `<div class="ib-card ${it.on ? 'on' : ''}">${indArt(it.key, it.col)}<div class="ib-t"><b>${esc(it.title)}${it.premium ? ' <span class="prem-tag"><svg viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>PRO</span>' : ''}</b><small>${esc(it.desc)}</small></div><div class="ib-act">${it.copyable ? `<button class="ib-ib ib-copy" data-std-copy="${it.key}" title="Agregar otra ${esc(COPYABLE[it.key])} al gráfico" aria-label="Agregar otra ${esc(COPYABLE[it.key])}">${I('plus', 15)}</button>` : ''}${STD_SCHEMA[it.key] ? `<button class="ib-ib" data-std-set="${it.key}" aria-label="Ajustes de ${esc(it.title)}">${I('gear', 15)}</button>` : ''}${tog(`data-ind="${it.key}"`, it.on, it.title)}</div></div>`;
-  if (it.kind === 'free') return `<div class="ib-card ${it.on ? 'on' : ''}">${indArt(it.art, it.col)}<div class="ib-t"><b>${esc(it.title)}</b><small>${esc(it.desc)}</small></div><div class="ib-act">${it.p ? `<button class="ib-ib" data-pine-set="${it.sid}" aria-label="Ajustes de ${esc(it.title)}">${I('gear', 15)}</button>` : ''}${tog(`data-free="${it.key}"`, it.on, it.title)}</div></div>`;
+  if (it.kind === 'std') return `<div class="ib-card ${it.on ? 'on' : ''}"${it.key === 'liqmap' ? ' data-pl="inf"' : PLUS_IND.includes(it.key) ? ' data-pl="plus"' : ''}>${indArt(it.key, it.col)}<div class="ib-t"><b>${esc(it.title)}${it.premium ? ' <span class="prem-tag"><svg viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>PRO</span>' : ''}</b><small>${esc(it.desc)}</small></div><div class="ib-act">${it.copyable ? `<button class="ib-ib ib-copy" data-std-copy="${it.key}" title="Agregar otra ${esc(COPYABLE[it.key])} al gráfico" aria-label="Agregar otra ${esc(COPYABLE[it.key])}">${I('plus', 15)}</button>` : ''}${STD_SCHEMA[it.key] ? `<button class="ib-ib" data-std-set="${it.key}" aria-label="Ajustes de ${esc(it.title)}">${I('gear', 15)}</button>` : ''}${tog(`data-ind="${it.key}"`, it.on, it.title)}</div></div>`;
+  if (it.kind === 'free') return `<div class="ib-card ${it.on ? 'on' : ''}"${PLUS_FREE.includes(it.key) ? ' data-pl="plus"' : ''}>${indArt(it.art, it.col)}<div class="ib-t"><b>${esc(it.title)}</b><small>${esc(it.desc)}</small></div><div class="ib-act">${it.p ? `<button class="ib-ib" data-pine-set="${it.sid}" aria-label="Ajustes de ${esc(it.title)}">${I('gear', 15)}</button>` : ''}${tog(`data-free="${it.key}"`, it.on, it.title)}</div></div>`;
   if (it.kind === 'cat') return catalogCards([it.c]);
   const x = it.x, p = it.p, r = p && pineRes[p.sid]; let st = `${x.lines} líneas · ${Math.max(1, Math.round(x.size / 1024))} KB`;
   if (p && p.on && r && !r.ok) st = `<span class="pine-err">Error${r.error.line ? ' · línea ' + r.error.line : ''}: ${esc(r.error.msg)}</span>`;
@@ -4774,7 +4775,7 @@ document.addEventListener('click', e => {
   if (t.dataset.novaAll !== undefined) { if (t.dataset.novaAll === '1') { for (const k of NN_KEYS) state.indicators[k] = k !== 'nnLiqBars'; } else for (const k of NN_KEYS) state.indicators[k] = false; state.novaSaved = null; novaAfter(); }
 });
 /* ───────── Scripts de Pine en el gráfico (intérprete propio: pine.js; dibujo: pine-draw.js) ───────── */
-const activePine = () => state.pine.filter(p => p.on && scripts.some(s => s.id === p.sid) && !(proSid(p.sid) && !planOk('novaNexus'))); // los Nova Nexus PRO solo se calculan con el plan que los incluye (no se borran de tu configuración)
+const activePine = () => state.pine.filter(p => p.on && scripts.some(s => s.id === p.sid) && !(proSid(p.sid) && !planOk('novaNexus')) && !(PLUS_FREE.some(id => p.sid === 'free:' + id) && !planOk('proInd'))); // los Nova Nexus PRO solo se calculan con el plan que los incluye (no se borran de tu configuración)
 /* Nombres de tus indicadores Nova: siempre «Nova Nexus© - Nombre» (Personal, IA Signals, Oscilador, Señales, Screener, LITE…) */
 function nnName(t) {
   t = String(t || '').trim(); if (!/^\s*(nova|nexus)/i.test(t)) return t;

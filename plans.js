@@ -18,13 +18,13 @@
     free: {n: 'Gratis', c: 'free', sub: 'Para todos', ic: '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>',
       f: ['Gráfico completo con todas las herramientas de dibujo', 'Indicadores gratuitos', 'Nova LITE · Smart Money Concepts', 'Repetición del mercado y calculadora de riesgo', 'Operar desde el gráfico (cuenta demo)', 'Mi seguimiento, noticias, calendario y panel macro', 'Alertas de precio y de indicador', 'Diseño de un solo gráfico']},
     plus: {n: 'Plus', c: 'plus', sub: 'Suscriptores de YouTube', ic: '<rect x="3" y="6" width="18" height="12" rx="3.5"/><path d="m10.5 9.5 4 2.5-4 2.5z" fill="currentColor"/>',
-      f: ['Todo lo de Gratis', 'Análisis del gráfico con IA', 'Briefing del día con IA', 'Laboratorio de indicadores con IA', 'Screener', 'Varios gráficos a la vez', 'Discord Nova Nexus']},
+      f: ['Todo lo de Gratis', 'Análisis del gráfico con IA', 'Briefing del día con IA', 'Laboratorio de indicadores con IA', 'Screener', 'VPVR, canales dinámicos, patrones y Fibonacci automático', 'Varios gráficos a la vez', 'Discord Nova Nexus']},
     infinity: {n: 'Infinity', c: 'inf', sub: 'Cuenta BingX con mi código', ic: '<path d="M6.5 8.5c-2 0-3.5 1.6-3.5 3.5s1.5 3.5 3.5 3.5c3.5 0 7.5-7 11-7 2 0 3.5 1.6 3.5 3.5s-1.5 3.5-3.5 3.5c-3.5 0-7.5-7-11-7z"/>',
       f: ['Todo lo de Plus', 'Todos los indicadores Nova Nexus', 'Mapa de calor de liquidaciones', 'Nexus Pixel', 'Nexus Lens', 'Nova Bot Lab', 'Todas las herramientas nuevas']}
   };
   // qué plan necesita cada herramienta
   const RANK = {free: 0, plus: 1, infinity: 2};
-  const FEATURES = {chart: 'free', drawings: 'free', freeInd: 'free', replay: 'free', risk: 'free', trade: 'free', watch: 'free', news: 'free', alerts: 'free', layouts: 'plus', novaLite: 'plus', aiChart: 'plus', aiBrief: 'plus', aiLab: 'plus', screener: 'plus', discord: 'plus', novaNexus: 'infinity', liq: 'infinity', pixel: 'infinity', lens: 'infinity', botlab: 'infinity'};
+  const FEATURES = {chart: 'free', drawings: 'free', freeInd: 'free', replay: 'free', risk: 'free', trade: 'free', watch: 'free', news: 'free', alerts: 'free', layouts: 'plus', novaLite: 'plus', aiChart: 'plus', aiBrief: 'plus', aiLab: 'plus', screener: 'plus', discord: 'plus', novaNexus: 'infinity', proInd: 'plus', liq: 'infinity', pixel: 'infinity', lens: 'infinity', botlab: 'infinity'};
   const can = f => RANK[current()] >= RANK[FEATURES[f] || 'free'];
   const lastUid = () => { try { return localStorage.getItem('cct_last_uid') || ''; } catch { return ''; } };
   const real = () => { if (owner) return 'infinity'; const id = user ? user.uid : lastUid(); return id && TIERS[st.tier] && st.uid === id ? st.tier : 'free'; }; // sin sesión: Gratis (mientras carga la sesión se usa el último plan de esa cuenta)
@@ -36,6 +36,7 @@
      Bloqueado = fondo de galaxia (clase gx-lock) y al tocarlo se abren los planes. Desbloqueado = se ve normal. */
   const GATE = [['#liqBtn', 'liq'], ['[data-side="screenerView"], .bottom-nav [data-view="screenerView"], #scrOpen', 'screener'], ['#rrDiscord, #dcOpenFromSettings, #alDiscord', 'discord'],
     ['[data-side="lensView"], .bottom-nav [data-view="lensView"]', 'lens'], ['#rrBotLab', 'botlab'], ['[data-side="aiView"], .bottom-nav [data-view="aiView"]', 'aiChart'], ['#layoutBtn', 'layouts'],
+    ['.ib-card[data-pl="plus"] .ib-act', 'proInd', '.ib-card[data-pl="plus"]'],
     ['[data-feat="novaNexus"] .script-btns, .nova-card:has(.prem-tag) .script-btns, .ib-card:has(.prem-tag) .ib-act', 'novaNexus', '[data-feat="novaNexus"], .nova-card:has(.prem-tag), .ib-card:has(.prem-tag)']];
   const below = k => Object.keys(RANK).filter(t => RANK[t] < RANK[k]);
   let lockRaf = 0;
