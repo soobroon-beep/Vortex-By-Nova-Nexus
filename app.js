@@ -870,39 +870,12 @@ const STD_CONDS = [
 ];
 const crossUp = (a, b, k) => k > 0 && a[k] != null && b[k] != null && a[k - 1] != null && b[k - 1] != null && a[k - 1] <= b[k - 1] && a[k] > b[k];
 const crossDn = (a, b, k) => k > 0 && a[k] != null && b[k] != null && a[k - 1] != null && b[k - 1] != null && a[k - 1] >= b[k - 1] && a[k] < b[k];
-function stdHit(cs, k, spec) {
-  const c = cs.map(x => x.c), T = window.CCTIndicators, K = spec.k, flat = v => c.map(() => v);
-  if (K === 'ema_x_up' || K === 'ema_x_dn') { const a = ema(c, 20), b = ema(c, 50); return (K === 'ema_x_up' ? crossUp : crossDn)(a, b, k); }
-  if (K === 'px_ema20_up' || K === 'px_ema20_dn') return (K.endsWith('up') ? crossUp : crossDn)(c, ema(c, 20), k);
-  if (K === 'px_sma200_up' || K === 'px_sma200_dn') return (K.endsWith('up') ? crossUp : crossDn)(c, sma(c, 200), k);
-  if (K === 'rsi_up' || K === 'rsi_dn') { const r = rsi(c, 14), L = Number.isFinite(+spec.lvl) ? +spec.lvl : (K === 'rsi_up' ? 70 : 30); return (K === 'rsi_up' ? crossUp : crossDn)(r, flat(L), k); }
-  if (K === 'macd_up' || K === 'macd_dn') { if (!T) return false; const m = T.macd(c); return (K === 'macd_up' ? crossUp : crossDn)(m.macd || m.line, m.signal || m.sig, k); }
-  if (K === 'bb_up' || K === 'bb_dn') { const m = sma(c, 20), band = i => { if (i < 19 || m[i] == null) return null; let s = 0; for (let q = i - 19; q <= i; q++) { const d = c[q] - m[i]; s += d * d; } return Math.sqrt(s / 20) * 2; }, d1 = band(k), d0 = band(k - 1); if (d1 === null || d0 === null) return false; return K === 'bb_up' ? (c[k] > m[k] + d1 && c[k - 1] <= m[k - 1] + d0) : (c[k] < m[k] - d1 && c[k - 1] >= m[k - 1] - d0); } // primer cierre fuera de la banda
-  if (K === 'st_up' || K === 'st_dn') { if (!T) return false; const st = T.supertrend(cs, 10, 3), d = st && st.dir; if (!d || k < 1 || d[k] == null || d[k - 1] == null) return false; return K === 'st_up' ? (d[k] < 0 && d[k - 1] >= 0) : (d[k] > 0 && d[k - 1] <= 0); } // en Supertrend dir = -1 es tendencia alcista
-  return false;
-}
+const stdHit = (cs, k, spec) => CCTAlertEval.stdHit(cs, k, spec); // alert-eval.js: la misma lógica corre en el servidor con la app cerrada
 function novaOpts() {
   const I = state.indicators, NP = novaP;
   return {smc: !!(I.nnSmc || I.nnOb), emaLen: NP('emaLen'), emaMult: NP('emaMult'), minScore: NP('minScore'), cooldown: NP('cooldown'), cdBoth: NP('cdBoth'), slMult: NP('slMult'), tp1Mult: NP('tp1'), tp2Mult: NP('tp2'), tp3Mult: NP('tp3'), tpBars: NP('tpBars'), smcOpts: {mslen: NP('smcLen'), window: NP('smcWindow'), swingLimit: NP('smcSwing'), sweep: NP('smcSweep'), oblast: NP('obLast'), obmiti: NP('obMiti')}};
 }
-function pineSeriesAt(res, s, cs, k) { // s: {p: idPlot} | {price:1} | {n: número}
-  if (s.price) return cs[k] ? cs[k].c : null;
-  if (s.n !== undefined) return +s.n;
-  const pl = res.plots.find(x => x.id === s.p); const v = pl && pl.values ? pl.values[k] : null; return v === undefined || v === null || Number.isNaN(v) ? null : v;
-}
-function pineHit(res, spec, cs, k) { // → {hit, msg}
-  if (spec.t === 'ac') {
-    const it = (res.alerts || []).find(x => x.kind === spec.kind && x.title === spec.title) || (res.alerts || [])[spec.i];
-    if (!it) return {hit: false}; const hit = it.bars.includes(k); return {hit, msg: hit ? (it.msgs[k] || it.message || it.title) : ''};
-  }
-  if (spec.t === 'sh') { const sh = res.shapes.find(x => x.title === spec.title && x.kind === spec.kind) || res.shapes[spec.i]; const hit = !!(sh && sh.pts.some(p => p[0] === k)); return {hit, msg: hit ? (sh.title || 'Señal') : ''}; }
-  if (spec.t === 'x') {
-    const A = i => pineSeriesAt(res, spec.a, cs, i), B = i => pineSeriesAt(res, spec.b, cs, i), a0 = A(k - 1), a1 = A(k), b0 = B(k - 1), b1 = B(k);
-    if ([a0, a1, b0, b1].some(v => v === null)) return {hit: false};
-    const hit = spec.dir === 'up' ? (a0 <= b0 && a1 > b1) : (a0 >= b0 && a1 < b1); return {hit, msg: ''};
-  }
-  return {hit: false};
-}
+const pineHit = (res, spec, cs, k) => CCTAlertEval.pineHit(res, spec, cs, k); // → {hit, msg}
 function indSummary(a) { // texto legible de una alerta de indicador
   return a.label || 'Indicador';
 }
@@ -958,7 +931,10 @@ async function indAlertTick(force) {
   if (changed) { save(); renderAlerts(); }
 }
 window.CCTAlerts = {stdHit, pineHit, STD_CONDS}; // expuesto para pruebas
-window.CCTPushBridge = {state: () => state, prefs: () => PR, save: () => save(), setSound: on => setPref('sound', on ? 'on' : 'off'), renderPrefs: () => renderPrefs(), renderAlerts: () => renderAlerts(), scheduleRender: () => scheduleRender(), toast: m => toast(m), uid: () => (fbUser && fbUser.uid) || ''}; // para push.js (avisos con la app cerrada)
+window.CCTPushBridge = {state: () => state, prefs: () => PR, save: () => save(), setSound: on => setPref('sound', on ? 'on' : 'off'), renderPrefs: () => renderPrefs(), renderAlerts: () => renderAlerts(), scheduleRender: () => scheduleRender(), toast: m => toast(m), uid: () => (fbUser && fbUser.uid) || '',
+  indAlerts: () => state.alerts.filter(a => a.kind === 'ind').map(a => Object.assign({id: a.id, symbol: a.symbol, interval: a.interval, src: a.src, sid: a.sid, spec: a.spec, label: a.label, note: a.note, notify: a.notify, repeat: a.repeat, on: a.on, lastBar: a.lastBar || 0, firedAt: a.firedAt || 0, firedInfo: a.firedInfo || ''},
+    a.src === 'pine' ? {inputs: (state.pine.find(p => p.sid === a.sid) || {}).inputs || {}} : {}, a.src === 'nova' ? {nopt: novaOpts()} : {})), // el servidor las revisa con la app cerrada (scripts/ind-alerts.js)
+  applyInd: back => { let ch = false; for (const s of back || []) { const a = state.alerts.find(x => x.id === s.id && x.kind === 'ind'); if (!a || !(s.firedAt > (a.firedAt || 0))) continue; a.on = s.on; a.firedAt = s.firedAt; a.firedInfo = s.firedInfo || ''; a.lastBar = Math.max(a.lastBar || 0, s.lastBar || 0); ch = true; } if (ch) { save(); renderAlerts(); } }}; // para push.js (avisos con la app cerrada)
 /* Seguimiento de tus trades abiertos (trade-watch.js): avisos de cómo va cada posición real de tu exchange y resaltado en Mi seguimiento */
 if (window.CCTTradeWatch && CCTTradeWatch.host) CCTTradeWatch.host({
   prefs: () => PR, fmt: v => fmt(v),
@@ -4744,7 +4720,7 @@ function renderPrefs() {
     + irow(ico('#f5a623', '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), 'Tono', 'El sonido de tus avisos', `<select class="pref-sel" data-pk="tone" aria-label="Tono" ${mOn ? '' : 'disabled'}>${CCTPrefs.TONES.map(([v, t]) => `<option value="${v}" ${PR.tone === v ? 'selected' : ''}>${t}</option>`).join('')}</select><button type="button" class="pref-play" data-play aria-label="Probar sonido" title="Probar sonido"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg></button>`, mOn ? '' : 'off')
     + `</div><div class="sg-label">Qué te avisamos</div>${mOn ? '' : '<p class="small-note nt-hint">Enciende «Activar notificaciones» para recibir estos avisos.</p>'}<div class="pref-list${mOn ? '' : ' nt-off'}">`
     + irow(ico('#548fff', '<path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>'), 'Alertas de precio', 'Cuando el precio toca tu nivel', tg('price', PR.n.price, 'Alertas de precio'))
-    + irow(ico('#b07cff', '<path d="M5 4v16M5 14c3-6 6 2 9-4s4-2 5-3"/>'), 'Alertas de indicador', 'Señales de tus indicadores', tg('ind', PR.n.ind, 'Alertas de indicador'))
+    + irow(ico('#b07cff', '<path d="M5 4v16M5 14c3-6 6 2 9-4s4-2 5-3"/>'), 'Alertas de indicador', 'Señales de tus indicadores, también con la app cerrada (al cerrar la vela; puede tardar unos minutos)', tg('ind', PR.n.ind, 'Alertas de indicador'))
     + irow(ico('#f5b942', '<path d="M3 17l6-6 4 4 8-8"/><circle cx="21" cy="7" r="1.6" fill="currentColor"/><path d="M3 21h18"/>'), 'Mis trades abiertos', 'Ganancia o pérdida, cerca de TP, SL o liquidación, regreso a la entrada y tus niveles. Solo con trades abiertos', tg('trade', PR.n.trade !== false, 'Mis trades abiertos'))
     + (PR.n.trade !== false ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Avisar cada', 'Escalón de ganancia o pérdida sobre tu margen (ROE, como lo muestra el exchange)', `<select id="tradeStep" class="pref-sel" aria-label="Avisar cada">${(window.CCTTradeWatch ? CCTTradeWatch.STEPS : [10]).map(v => `<option value="${v}" ${(window.CCTTradeWatch ? CCTTradeWatch.step() : 10) === v ? 'selected' : ''}>±${v} %</option>`).join('')}</select>`, sub) : '')
     + irow(ico('#7c87ff', '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/>'), 'Mis bots (Nova Bot Lab)', 'Cuando un bot encendido compra, vende o cierra, también con la app cerrada', tg('bots', PR.n.bots !== false, 'Mis bots'))

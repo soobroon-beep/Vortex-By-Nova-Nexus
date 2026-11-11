@@ -1,0 +1,23 @@
+name: Alertas con indicador (app cerrada)
+# Revisa tus alertas con indicador (indicadores comunes, Nova Nexus y scripts Pine) al cerrar cada vela y te avisa
+# por el servidor de avisos aunque VORTEX y el celular estén cerrados. Cada ejecución revisa cada minuto durante ~5 min
+# y se vuelve a lanzar cada 5 min. Usa el secreto FIREBASE_SERVICE_ACCOUNT que ya tienes; sin él termina sin hacer nada.
+on:
+  schedule: [{cron: '*/5 * * * *'}]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: ind-alerts, cancel-in-progress: false}
+jobs:
+  alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12
+      - run: node scripts/ind-alerts.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          RUN_MINUTES: '5.5'

@@ -1,7 +1,7 @@
 /* VORTEX · Avisos con la app CERRADA (Web Push).
    Registra este celular en el Worker «vortex-push» (worker/push-alerts.mjs) y le manda tus alertas de PRECIO y la configuración de
    movimientos bruscos. El Worker las revisa cada minuto y te manda la notificación aunque VORTEX esté cerrada.
-   Las alertas con indicador siguen revisándose solo con la app abierta.
+   Las alertas con indicador las revisa scripts/ind-alerts.js (GitHub Actions) y avisa por este mismo servidor.
    Lee tus alertas a través de window.CCTPushBridge (app.js, que se carga antes). */
 (function () {
   'use strict';
@@ -24,7 +24,7 @@
     return j;
   }
   const priceAlerts = () => (st().alerts || []).filter(a => a.kind !== 'ind').map(a => ({id: a.id, symbol: a.symbol, on: a.on, price: a.price, dir: a.dir, cond: a.cond, repeat: a.repeat, wait: a.wait, exp: a.exp, expired: a.expired, note: a.note, notify: a.notify, firedAt: a.firedAt || 0, firedPrice: a.firedPrice}));
-  const payload = () => ({alerts: priceAlerts(), move: {on: !!(st().moveAlerts || {}).on, pct: (st().moveAlerts || {}).pct || 2}, scr: {on: !!(st().scrPush || {}).on, h1: (st().scrPush || {}).h1 !== false, h4: (st().scrPush || {}).h4 !== false}, radar: !!(window.CCTRadar && CCTRadar.on()), priceOn: !((B.prefs() || {}).n && B.prefs().n.price === false), dcUrl: (() => { try { return (B.prefs() || {}).n && B.prefs().n.discord && window.CCT_discordStore ? String(CCT_discordStore.get().url || '') : ''; } catch { return ''; } })(), trades: window.CCTTradeWatch && CCTTradeWatch.payload ? CCTTradeWatch.payload() : [], tradeStep: window.CCTTradeWatch && CCTTradeWatch.step ? CCTTradeWatch.step() : 10, uid: B.uid ? B.uid() : '', bots: !((B.prefs() || {}).n && B.prefs().n.bots === false)});
+  const payload = () => ({alerts: priceAlerts(), move: {on: !!(st().moveAlerts || {}).on, pct: (st().moveAlerts || {}).pct || 2}, scr: {on: !!(st().scrPush || {}).on, h1: (st().scrPush || {}).h1 !== false, h4: (st().scrPush || {}).h4 !== false}, radar: !!(window.CCTRadar && CCTRadar.on()), priceOn: !((B.prefs() || {}).n && B.prefs().n.price === false), dcUrl: (() => { try { return (B.prefs() || {}).n && B.prefs().n.discord && window.CCT_discordStore ? String(CCT_discordStore.get().url || '') : ''; } catch { return ''; } })(), trades: window.CCTTradeWatch && CCTTradeWatch.payload ? CCTTradeWatch.payload() : [], tradeStep: window.CCTTradeWatch && CCTTradeWatch.step ? CCTTradeWatch.step() : 10, ind: B.indAlerts ? B.indAlerts() : undefined, indOn: !((B.prefs() || {}).n && B.prefs().n.ind === false), uid: B.uid ? B.uid() : '', bots: !((B.prefs() || {}).n && B.prefs().n.bots === false)});
 
   function applyBack(back) { // alertas que el servidor disparó mientras la app estaba cerrada
     let ch = false;
@@ -44,7 +44,7 @@
       const reg = await navigator.serviceWorker.ready, sub = await ensureSub(reg);
       if (!sub) { lastErr = Notification.permission === 'denied' ? 'El celular bloqueó las notificaciones de VORTEX: actívalas en Ajustes del sistema → Apps → VORTEX/Chrome → Notificaciones. El interruptor sigue encendido y se reanuda solo.' : 'Esperando el permiso de notificaciones del celular.'; return; } // NUNCA se apaga solo: solo tú lo apagas
       const j = await api('/sync', {id: cfg.id, sub: sub.toJSON(), since: cfg.since || 0, ...p});
-      applyBack(j.back); cfg.since = j.now || Date.now(); cfg.at = Date.now(); store(cfg); srv = j.srv || null; srvNow = j.now || Date.now();
+      applyBack(j.back); if (j.backInd && j.backInd.length && B.applyInd) B.applyInd(j.backInd); cfg.since = j.now || Date.now(); cfg.at = Date.now(); store(cfg); srv = j.srv || null; srvNow = j.now || Date.now();
       lastSig = JSON.stringify(payload()); lastErr = '';
     } catch (e) { lastErr = e.message || 'Sin conexión con el servidor de avisos'; }
     finally { busy = false; render(); }

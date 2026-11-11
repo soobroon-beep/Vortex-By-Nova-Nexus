@@ -56,6 +56,29 @@ export function sanAlert(a) {
   if (['app', 'discord', 'both'].includes(a.notify)) o.notify = a.notify;
   return o;
 }
+/* Alertas con indicador (indicadores comunes, Nova Nexus o scripts Pine): las revisa scripts/ind-alerts.js en GitHub Actions
+   al cerrar cada vela y el aviso sale por aquí aunque la app esté cerrada. */
+const IV_OK = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M']);
+const jsonOk = (o, max) => { try { return o && typeof o === 'object' && !Array.isArray(o) && JSON.stringify(o).length <= max; } catch { return false; } };
+export function sanInd(a) {
+  if (!a || typeof a.id !== 'string' || a.id.length > 40 || !/^[A-Z0-9]{2,20}$/.test(a.symbol) || !IV_OK.has(a.interval) || !['pine', 'std', 'nova'].includes(a.src) || !jsonOk(a.spec, 400)) return null;
+  const o = {id: a.id, symbol: a.symbol, interval: a.interval, src: a.src, sid: typeof a.sid === 'string' ? a.sid.slice(0, 40) : '', spec: a.spec, label: String(a.label || '').slice(0, 120), note: String(a.note || '').slice(0, 140),
+    on: a.on !== false, repeat: a.repeat === 'every' ? 'every' : 'once', lastBar: +a.lastBar || 0, firedAt: +a.firedAt || 0, firedInfo: String(a.firedInfo || '').slice(0, 200)};
+  if (['app', 'discord', 'both'].includes(a.notify)) o.notify = a.notify;
+  if (a.src === 'pine' && jsonOk(a.inputs, 4000)) o.inputs = a.inputs;
+  if (a.src === 'nova' && jsonOk(a.nopt, 3000)) o.nopt = a.nopt;
+  return o;
+}
+/* Igual que mergeAlerts: si el servidor la disparó después de la última sincronización de la app, gana el servidor; la vela revisada nunca retrocede */
+export function mergeInd(incoming, server, since = 0) {
+  const byId = new Map((server || []).map(a => [a.id, a])), out = [], back = [];
+  for (const a of (Array.isArray(incoming) ? incoming : []).map(sanInd).filter(Boolean)) {
+    const s = byId.get(a.id);
+    if (s && s.firedAt > (+since || 0) && s.firedAt > a.firedAt) { const m = Object.assign({}, a, {on: s.on, firedAt: s.firedAt, firedInfo: s.firedInfo, lastBar: Math.max(a.lastBar, s.lastBar || 0)}); out.push(m); back.push({id: m.id, on: m.on, firedAt: m.firedAt, firedInfo: m.firedInfo, lastBar: m.lastBar}); }
+    else out.push(s ? Object.assign(a, {lastBar: Math.max(a.lastBar, s.lastBar || 0)}) : a);
+  }
+  return {ind: out.slice(0, MAX_ALERTS), back};
+}
 export function sanScr(x) { const q = x && typeof x === 'object' ? x : {}; return {on: q.on === true, h1: q.h1 !== false, h4: q.h4 !== false}; }
 export function sanMove(m) { const q = m && typeof m === 'object' ? m : {}; return {on: q.on !== false, pct: Math.max(0.5, Math.min(25, +q.pct || 2))}; }
 function sanSub(s) {
@@ -362,7 +385,8 @@ export default {
       await Promise.all(urls.map(async u => { try { const r = await fetch(u, {headers: {'user-agent': 'Mozilla/5.0 (compatible; VORTEX/2.0)', accept: 'application/json'}}); const t = await r.text(); out[u.split('?')[0]] = r.status + ' ' + t.slice(0, 80); } catch (e) { out[u] = 'err ' + e.message; } }));
       return json({colo: (req.cf && req.cf.colo) || '', out});
     }
-    if (req.method === 'POST' && path === '/bot-push') return botPush(req, env); // Nova Bot Lab (GitHub Actions): avisos de tus bots a tus celulares
+    if (req.method === 'POST' && path === '/bot-push') return botPush(req, env);
+    if (req.method === 'POST' && (path === '/ind/jobs' || path === '/ind/report')) return indRoute(req, env, path); // alertas con indicador (GitHub Actions) // Nova Bot Lab (GitHub Actions): avisos de tus bots a tus celulares
     if (!ok) return json({error: 'Origen no permitido'}, 403);
     if (path === '/ai' || path.startsWith('/ai/')) return aiRoute(req, env, path, json, cors);
     if (req.method === 'GET' && path === '/macro') return macroRoute(env, json, cors);
@@ -393,13 +417,15 @@ export default {
       const m = mergeAlerts(incoming, cur.alerts, b.since);
       const d = {sub, lastPush: cur.lastPush, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now(),
         uid: typeof b.uid === 'string' && /^[A-Za-z0-9]{10,64}$/.test(b.uid) ? b.uid : (b.uid === '' ? '' : cur.uid || ''), bots: b.bots == null ? cur.bots !== false : b.bots !== false,
-        trades: TW.merge(b.trades, cur.trades), tradeStep: TW.STEPS.includes(+b.tradeStep) ? +b.tradeStep : TW.DEF_STEP, syncAt: cur.syncAt || 0};
+        trades: TW.merge(b.trades, cur.trades), indOn: b.indOn == null ? cur.indOn !== false : b.indOn !== false, tradeStep: TW.STEPS.includes(+b.tradeStep) ? +b.tradeStep : TW.DEF_STEP, syncAt: cur.syncAt || 0};
+      const mi = b.ind === undefined ? {ind: cur.ind || [], back: []} : mergeInd(b.ind, cur.ind, b.since); d.ind = mi.ind;
       if (d.trades.length && Date.now() - d.syncAt > 12 * 3600e3) d.syncAt = Date.now(); // la app sigue viendo esos trades abiertos (se renueva cada 12 h para no gastar escrituras)
-      const same = JSON.stringify({...d, updated: 0}) === JSON.stringify({...cur, updated: 0});
+      const noBar = x => ({...x, updated: 0, ind: (x.ind || []).map(a => ({...a, lastBar: 0}))}), barMoved = (d.ind || []).some(a => { const c = (cur.ind || []).find(y => y.id === a.id); return !c || a.lastBar - (c.lastBar || 0) > 6 * 3600e3; });
+      const same = !barMoved && JSON.stringify(noBar(d)) === JSON.stringify(noBar(cur)); // la vela revisada de las alertas con indicador cambia a cada rato: solo se guarda si cambió algo más (pocas escrituras)
       if (!same) { d.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(d)); } // sin cambios no se escribe (el plan gratis permite 1000 escrituras al día)
       if (!ids.includes(id)) { if (ids.length >= MAX_DEVICES) return json({error: 'Demasiados dispositivos'}, 429); await env.KV.put('devs', JSON.stringify([...ids, id])); }
       const hb = (await env.KV.get('hb', 'json')) || {};
-      return json({ok: true, back: m.back, now: Date.now(), srv: {hb: hb.at || 0, lastPush: cur.lastPush || null}});
+      return json({ok: true, back: m.back, backInd: mi.back, now: Date.now(), srv: {hb: hb.at || 0, lastPush: cur.lastPush || null}});
     }
     if (path === '/pull') { const cur = await env.KV.get('dev:' + id, 'json'); return json({ok: true, active: !!cur, alerts: cur ? cur.alerts : [], now: Date.now()}); }
     if (path === '/test') {
@@ -455,6 +481,35 @@ async function botPush(req, env) {
     try { const sts = (await self(env, '/int/push', {id, msgs})).sts || []; sent += sts.filter(x => x >= 200 && x < 300).length; } catch (e) { console.warn('bot-push', e.message); }
   }
   return J({ok: true, devices, sent});
+}
+
+/* ───────── Alertas con indicador con la app cerrada (las calcula scripts/ind-alerts.js en GitHub Actions) ───────── */
+async function indRoute(req, env, path) {
+  let b; try { b = JSON.parse((await req.text()).slice(0, 200000)); } catch { return J({error: 'JSON inválido'}, 400); }
+  if (!env.BOT_PUSH_KEY || !sameKey(b && b.key, env.BOT_PUSH_KEY)) return J({error: 'No autorizado'}, 401);
+  const ids = (await env.KV.get('devs', 'json')) || [];
+  if (path === '/ind/jobs') { // alertas encendidas de cada celular (con el uid de la cuenta para leer sus scripts Pine)
+    const devs = []; for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (!d || !d.sub) continue; const alerts = (d.ind || []).filter(a => a.on); if (alerts.length) devs.push({dev: id, uid: d.uid || '', alerts}); }
+    return J({ok: true, devs, now: Date.now()});
+  }
+  // /ind/report: {results: [{dev, id, lastBar, hit, info}]} → se guarda la vela revisada y, si saltó, se avisa
+  const by = new Map(); for (const r of (Array.isArray(b.results) ? b.results : []).slice(0, 500)) if (r && ids.includes(r.dev)) (by.get(r.dev) || by.set(r.dev, []).get(r.dev)).push(r);
+  let sent = 0, fired = 0; const now = Date.now();
+  for (const [id, rs] of by) {
+    const d = await env.KV.get('dev:' + id, 'json'); if (!d || !d.sub) continue; const msgs = [], dc = []; let changed = false;
+    for (const r of rs) {
+      const a = (d.ind || []).find(x => x.id === r.id); if (!a || !a.on || !(+r.lastBar > (a.lastBar || 0))) continue; // la app ya revisó esa vela (o la alerta se apagó)
+      if (!r.hit) { if (+r.lastBar - (a.lastBar || 0) > 6 * 3600e3) { a.lastBar = +r.lastBar; changed = true; } continue; } // sin aviso: solo se anota de vez en cuando (pocas escrituras)
+      a.lastBar = +r.lastBar; a.firedAt = now; a.firedInfo = String(r.info || '').slice(0, 200); if (a.repeat === 'once') a.on = false; changed = true; fired++;
+      const text = `${baseOf(a.symbol)} ${a.interval} · ${a.label}${a.firedInfo ? ' · ' + a.firedInfo : ''}${a.note ? ' · ' + a.note : ''}`, n = a.notify || 'both';
+      if (n !== 'discord' && d.indOn !== false) msgs.push({title: 'VORTEX · Alerta', body: text, tag: 'in-' + a.id, url: APP_URL + '#alerts'});
+      if (n === 'discord' || n === 'both' && (a.notify || d.dcUrl)) dc.push(text);
+    }
+    if (msgs.length) { try { const sts = (await self(env, '/int/push', {id, msgs})).sts || []; sent += sts.filter(x => x >= 200 && x < 300).length; } catch (e) { console.warn('ind push', e.message); } }
+    if (dc.length) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of dc.slice(0, 5)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta con indicador', description: m, color: 0xb07cff}]})}); } catch {} } }
+    if (changed) { d.updated = now; await env.KV.put('dev:' + id, JSON.stringify(d)); }
+  }
+  return J({ok: true, fired, sent});
 }
 
 /* ───────── Screener programado (ver worker/screener.mjs) ───────── */
