@@ -1,8 +1,8 @@
-Fecha: Wed Nov 11 09:34:35 UTC 2026
+Fecha: Wed Nov 11 09:59:01 UTC 2026
 Cuenta de servicio: ok (firebase-adminsdk-fbsvc@criptochart-bd774.iam.gserviceaccount.com)
-Firebase dominios: añadido vortex-nexus.pages.dev
-YouTube Data API: ERROR → "Permission denied to enable service [youtube.googleapis.com]\nHelp Token: AaVM3aP3yQICCF8nHxPQMdOdL1XlZfomELotoYw2RHbOfVIwg83fD4hLYT_ONxRDWC36wKB3ran0v57nYL0iy-X0SDoXBsDZpcIQvF1hyqSf-d7h"
+Firebase dominios: añadido dev.vortex-nexus.pages.dev
+YouTube Data API: ERROR → "Permission denied to enable service [youtube.googleapis.com]\nHelp Token: AaVM3aMNYaKvhRu9q-5bPJ2HYhbytfPZ1135-b3otxJH8A2EVKr3vpn7Q1oSfJ8E4Dk5RcJd1aRZG7j_ip1D5SpBXbPowi5q-81EyjJevVW_RMuq"
 YouTube Data API estado: Permission denied to get service [youtube.googleapis.com]
-Help Token: AaVM3aPTgIZla2QRS5XIRlq_pzu_zlfxmmOFrEBqXVwtOaVAg7ni1nqa3MDrEB3XYKQzoRzqN0pO90LdlJfpupayOefMdVXlORo5dNnPaROz1Q2n
-Pages proyecto:   🪵  Logs were written to "/home/runner/.config/.wrangler/logs/wrangler-2026-11-11_09-34-49_140.log" 
-Pages publicación: ✨ Success! Uploaded 274 files (2.08 sec)  🌎 Deploying... ✨ Deployment complete! Take a peek over at https://44bb3d3d.vortex-nexus.pages.dev 
+Help Token: AaVM3aMFakXWjKL0WpRRqg6M1FO7Zml7wonAsUmL_eQp6ZfwJDj_jE-372IGW7o4KyXWGp7VMDN3GiQZjF3B0MhXuvR2A8sbuljRpRieHKQnILpG
+Pages proyecto:   🪵  Logs were written to "/home/runner/.config/.wrangler/logs/wrangler-2026-11-11_09-59-14_986.log" 
+Pages publicación:  ✨ Uploading _headers 🌎 Deploying... ✨ Deployment complete! Take a peek over at https://c89d66d8.vortex-nexus.pages.dev 
