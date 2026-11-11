@@ -2023,7 +2023,8 @@ function switchTab(id) {
 }
 function newTab() {
   if (state.tabs.length >= MAX_TABS) { toast(`Máximo ${MAX_TABS} pestañas`); return; }
-  tabTouch(); tabStore(); const id = 't' + Date.now().toString(36).slice(-6); state.tabs.push({id, s: state.symbol, i: state.interval, c: state.ctype || 'candles', cfg: tabSnap()}); state.tab = id; // la pestaña nueva empieza con la misma configuración, pero desde aquí cada una es independiente state.tabRev = Date.now(); save(); renderTabs(); openSheet(); // elige la moneda para la pestaña nueva
+  tabTouch(); tabStore(); const id = 't' + Date.now().toString(36).slice(-6); state.tabs.push({id, s: state.symbol, i: state.interval, c: state.ctype || 'candles', cfg: tabSnap()}); state.tab = id; // la pestaña nueva empieza con la misma configuración, pero desde aquí cada una es independiente
+  state.tabRev = Date.now(); save(); renderTabs(); openSheet(); // elige la moneda para la pestaña nueva
 }
 function closeTab(id) {
   if (state.tabs.length < 2) return; const i = state.tabs.findIndex(x => x.id === id); if (i < 0) return; const wasOn = id === state.tab;

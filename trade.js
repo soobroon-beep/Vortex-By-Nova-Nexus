@@ -255,7 +255,8 @@
   }
 
   function bind(h) {
-    Object.assign(H, h); if (X()) X().onChange(() => { if (panel && !panel.hidden) { renderMode(); renderLive(); } H.render(); }); // las líneas de tu posición real se actualizan en el gráfico clearInterval(timer); timer = setInterval(poll, 2000); if (root.CCTJournal) setTimeout(() => CCTJournal.sync(A), 0);
+    Object.assign(H, h); if (X()) X().onChange(() => { if (panel && !panel.hidden) { renderMode(); renderLive(); } H.render(); }); // las líneas de tu posición real se actualizan en el gráfico
+    clearInterval(timer); timer = setInterval(poll, 2000); if (root.CCTJournal) setTimeout(() => CCTJournal.sync(A), 0);
     if (ui.open) setTimeout(() => toggle(true), 0);
   }
   const symChanged = () => { if (panel && !panel.hidden) { inp('price').value = ''; if (ui.type !== 'market') inp('price').value = rp(px(H.sym())); renderPanel(); } };
