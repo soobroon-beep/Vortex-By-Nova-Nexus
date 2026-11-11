@@ -74,7 +74,7 @@
   function friendly(e) {
     if (!e) return 'Error desconocido de la IA.';
     if (e.kind === 'network') return 'No hay conexión con el modelo de IA. Revisa tu internet o cambia de proveedor en ⚙.';
-    if (e.kind === 'rate') return 'El servicio gratuito está saturado (límite de uso). Espera unos segundos e inténtalo otra vez, o usa otro proveedor en ⚙.';
+    if (e.kind === 'rate') return 'La IA gratuita tiene límite de uso: espera unos 45 segundos e inténtalo otra vez.';
     if (e.kind === 'auth') return 'El servidor rechazó la clave o el permiso. Revisa los datos del proveedor en ⚙.';
     if (e.kind === 'model') return 'El modelo no está disponible en ese servidor. Cambia el nombre del modelo en ⚙.';
     if (e.kind === 'abort') return 'Se canceló o tardó demasiado.';
@@ -139,7 +139,7 @@
     for (const m of cand) { // cada modelo tiene su tiempo; si uno se cuelga, se prueba el siguiente (antes la app se quedaba esperando)
       if (left() < 8000 || (o.signal && o.signal.aborted)) break;
       const meta = list.find(x => x && x.name === m), vis = pk ? VX_VISION.has(m) : supportsVision(m, meta);
-      try { const text = await openaiCall(url, pk, m, img && !vis ? stripImages(messages) : messages, Object.assign({}, o, {timeout: Math.min(o.timeout || 45000, left())})); if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); if (noCredit(text)) throw new LLMError('La clave de IA se quedó sin créditos', 'credit'); return {text, model: m, image: img && vis}; }
+      try { const text = await openaiCall(url, pk, m, img && !vis ? stripImages(messages) : messages, Object.assign({}, o, {timeout: Math.min(o.timeout || 45000, left())})); if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); if (noCredit(text)) throw new LLMError('La clave de IA se quedó sin créditos', 'credit'); if (freeLimit(text)) throw new LLMError('Límite del servicio gratis: ' + text.slice(0, 80), 'rate'); return {text, model: m, image: img && vis}; }
       catch (e) { last = e; if (e.kind === 'credit') throw e; if (e.kind === 'network' && !img) throw e; if (o.signal && o.signal.aborted) throw e; if (e.kind === 'rate') await sleep(2000); } // sin créditos: pasa directo al servicio gratis sin clave
     }
     if (img && left() > 10000) { // la captura pudo ser el problema: un intento más solo con los datos
@@ -190,6 +190,7 @@
     code: {models: ['gpt-5.4-mini', 'grok-fast', 'openai', 'deepseek'], vision: new Set(['gpt-5.4-mini', 'grok-fast', 'openai']), cap: 75000, idle: 40000, budget: 170000}
   };
   const taskOf = p => p === 'vision' || p === 'chart' ? 'chart' : p === 'code' || p === 'lab' ? 'code' : null;
+  const freeLimit = t => String(t || '').length < 400 && /free limit reached|per ip|retry after \d+s/i.test(t); // el servicio gratis sin clave contesta así cuando se pide muy seguido
   const noCredit = t => String(t || '').length < 800 && /enough credits|top up|paid pollen|insufficient (balance|credits)|requires? (a )?paid/i.test(t);
   async function chatTask(messages, o, task) {
     const T = TASKS[task], img = hasImage(messages), end = Date.now() + (o.budget || T.budget), left = () => end - Date.now(), errs = [];
@@ -202,6 +203,7 @@
         try {
           const text = await openaiCall(url, key, m, msgs, Object.assign({}, o, {timeout: Math.max(5000, Math.min(T.cap, left())), idle: T.idle}));
           if (noCredit(text)) throw new LLMError('Sin créditos en esta ruta', 'credit');
+          if (freeLimit(text)) throw new LLMError('Límite del servicio gratis', 'rate');
           if (looksBad(text)) throw new LLMError('El modelo ' + m + ' no está disponible gratis ahora', 'model');
           return {text, model: m + tag};
         } catch (e) { last = e; if (o.signal && o.signal.aborted) throw e; if (e.kind === 'model' || e.kind === 'abort') break; } // el modelo no sirve o se tardó: no insistir con él por la otra ruta

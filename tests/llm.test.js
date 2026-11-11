@@ -40,7 +40,7 @@ test('servidor compatible: URL, clave y modelo configurados; quita <think>', asy
 });
 test('errores: límite, red y mensajes en español', async () => {
   mockFetch(() => mkRes({error: 'x'}, false, 429));
-  await assert.rejects(L.chat([{role: 'user', content: 'q'}], {cfg: {provider: 'compat', compat: {url: 'http://x/v1', model: 'm'}}}), e => e.kind === 'rate' && /saturado/.test(e.message));
+  await assert.rejects(L.chat([{role: 'user', content: 'q'}], {cfg: {provider: 'compat', compat: {url: 'http://x/v1', model: 'm'}}}), e => e.kind === 'rate' && /límite de uso/.test(e.message));
   global.fetch = async () => { throw new TypeError('fail'); };
   await assert.rejects(L.chat([{role: 'user', content: 'q'}], {cfg: {provider: 'compat', compat: {url: 'http://x/v1', model: 'm'}}}), e => e.kind === 'network' && /conexión/.test(e.message));
 });
