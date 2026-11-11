@@ -312,7 +312,7 @@ function setSide(id) {
 }
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
-    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView' || id === 'botLabView' || id === 'customView' || id === 'notifView') { setSide(id); if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
+    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView' || id === 'botLabView' || id === 'customView' || id === 'notifView') { setSide(id); if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } if (id === 'watchView') { wlOpenSym = null; renderWatch(); } if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
     id = 'chartView';
   }
   if (id === 'alertsView' && currentView !== id && !SUB_VIEWS.includes(currentView)) alBackTo = currentView;
@@ -325,7 +325,7 @@ function switchView(id) {
   if (id === 'chartView' && typeof dvRefresh === 'function') setTimeout(() => dvRefresh(), 0);
   if (id !== 'chartView') document.body.classList.remove('expanded');
   if (id === 'chartView') requestAnimationFrame(() => { if (!candles.length) loadCandles(); render(); });
-  if (id === 'watchView') renderWatch();
+  if (id === 'watchView') { wlOpenSym = null; renderWatch(); }
   if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); if (window.CCTRadar) CCTRadar.paint(); }
   if (isDesktop()) renderWatch();
   syncFullscreenLabel();
@@ -435,6 +435,13 @@ function openRowMenu(k, x, y) {
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', onKey, true); });
 }
 const grpOf = k => (state.symGroup && state.symGroup[k]) || '';
+/* Agregar a Mi seguimiento: la moneda nueva queda HASTA ABAJO de tu lista (si tienes secciones, al final de la última; las monedas sin sección salen arriba de las secciones) */
+function wlAdd(s) {
+  if (!s || state.symbols.includes(s)) return false;
+  state.symbols.push(s); const g = (state.groups || [])[state.groups.length - 1];
+  if (g) { state.symGroup[s] = g.id; if (g.collapsed) g.collapsed = false; }
+  return true;
+}
 function watchRow(s) {
   const t = tickers[s], change = Number(t?.priceChangePercent), price = Number(t?.lastPrice);
   let flash = '';
@@ -658,7 +665,7 @@ $('#popMore').onclick = () => { popMore = !popMore; renderPopular(); };
 $('#popRows').addEventListener('click', e => {
   const add = e.target.closest('[data-padd]'), row = e.target.closest('.pop-row');
   if (e.target.closest('.pop-retry')) { refreshPop(); return; }
-  if (add) { const s = add.dataset.padd; if (!state.symbols.includes(s)) { state.symbols.push(s); save(); renderWatch(); renderPopular(); fetchTicker(); toast(`${base(s)} añadido a tu seguimiento`); } return; }
+  if (add) { const s = add.dataset.padd; if (wlAdd(s)) { save(); renderWatch(); renderPopular(); fetchTicker(); toast(`${base(s)} añadido a tu seguimiento`); } return; }
   if (row) selectSymbol(row.dataset.symbol);
 });
 $('#popRows').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('pop-row')) { e.preventDefault(); selectSymbol(e.target.dataset.symbol); } });
@@ -1136,7 +1143,7 @@ $('#timeframes').addEventListener('click', e => {
 });
 /* Botón «+» al lado derecho de la tarjeta de la moneda (nombre/precio): agrega la moneda abierta a Mi seguimiento.
    Se coloca pegado a la tarjeta aunque cambie de ancho (precio más largo, chips de derivados); si ya está en tu lista se vuelve una palomita. */
-var wlFab = $('#wlAddFab'); // var: renderWatch() puede llamar a paintWlFab() antes de llegar aquí
+var wlOpenSym = null, wlFab = $('#wlAddFab'); // var: renderWatch() puede llamar a paintWlFab() antes de llegar aquí
 function placeWlFab() {
   const h = $('#chartSymHead'); if (!wlFab || !h) return;
   const vis = h.offsetParent !== null && h.offsetWidth > 0; wlFab.hidden = !vis; if (!vis) return;
@@ -1148,13 +1155,15 @@ function placeWlFab() {
 function paintWlFab() {
   if (!wlFab) return; const on = state.symbols.includes(state.symbol), t = on ? `${base(state.symbol)} ya está en Mi seguimiento` : `Agregar ${base(state.symbol)} a Mi seguimiento`;
   if (wlFab.classList.contains('in') !== on) wlFab.classList.toggle('in', on);
+  const fresh = wlOpenSym !== state.symbol; // destello solo al cambiar de moneda (la lista se repinta con cada precio)
+  for (const r of document.querySelectorAll('#watchRows .watch-row[data-symbol]')) { const o = r.dataset.symbol === state.symbol; if (r.classList.contains('is-open') !== o) r.classList.toggle('is-open', o); if (o && fresh) { r.classList.add('sheen'); wlOpenSym = state.symbol; } } // la moneda abierta en el gráfico se resalta en Mi seguimiento
   if (wlFab.title !== t) { wlFab.title = t; wlFab.setAttribute('aria-label', t); }
 }
 if (wlFab) {
   wlFab.addEventListener('click', () => {
     const s = state.symbol; if (!s) return;
     if (state.symbols.includes(s)) { toast(`${base(s)} ya está en tu seguimiento`); return; }
-    state.symbols.push(s); save(); renderWatch(); fetchTicker(); paintWlFab();
+    wlAdd(s); save(); renderWatch(); fetchTicker(); paintWlFab();
     wlFab.classList.remove('pop'); void wlFab.offsetWidth; wlFab.classList.add('pop');
     try { navigator.vibrate && navigator.vibrate(12); } catch {}
     toast(`${base(s)} añadido a tu seguimiento${srcOf(s) !== 'binance' ? ' (' + exName(s) + ')' : ''}`);
@@ -1917,9 +1926,9 @@ function renderSheet() {
   list.innerHTML = rows.map(r => `<button class="sheet-item pick-row" data-pick="${esc(r.key)}"><span class="pk-main"><strong>${esc(r.base + '/' + r.quote)}</strong> <small>${esc(meta(r.key)[0])}</small></span>${tag(r)}<span class="pk-go">${state.symbols.includes(r.key) ? (sheetMode === 'add' ? '✓' : '→') : '＋'}</span></button>`).join('') || '<p class="small-note">No se encontraron monedas.</p>';
   $$('[data-pick]').forEach(b => b.onclick = () => {
     const s = b.dataset.pick;
-    if (sheetMode !== 'add') { if (!state.symbols.includes(s)) { state.symbols.push(s); save(); renderWatch(); fetchTicker(); } selectSymbol(s); return; }
+    if (sheetMode !== 'add') { if (wlAdd(s)) { save(); renderWatch(); fetchTicker(); } selectSymbol(s); return; }
     if (state.symbols.includes(s)) { closeSheet(); return; }
-    state.symbols.push(s); save(); renderWatch(); fetchTicker(); toast(`${base(s)} añadido (${exName(s)})`); closeSheet();
+    wlAdd(s); save(); renderWatch(); fetchTicker(); toast(`${base(s)} añadido (${exName(s)})`); closeSheet();
   });
 }
 const sheetLoad = {};
@@ -2000,8 +2009,8 @@ function renderSymEx() {
 }
 const M_ORDER = r => CCTMarkets.ORDER.indexOf(r.src);
 function symPick(key) {
-  if (symMode === 'add') { if (!state.symbols.includes(key)) { state.symbols.push(key); save(); renderWatch(); fetchTicker(); toast(`${base(key)} añadido (${exName(key)})`); } closeSym(); return; }
-  if (!state.symbols.includes(key)) { state.symbols.push(key); save(); renderWatch(); fetchTicker(); }
+  if (symMode === 'add') { if (wlAdd(key)) { save(); renderWatch(); fetchTicker(); toast(`${base(key)} añadido (${exName(key)})`); } closeSym(); return; }
+  if (wlAdd(key)) { save(); renderWatch(); fetchTicker(); }
   selectSymbol(key);
 }
 function openSym(mode) {
@@ -4856,7 +4865,8 @@ document.addEventListener('click', e => {
 const activePine = () => state.pine.filter(p => p.on && scripts.some(s => s.id === p.sid) && !(proSid(p.sid) && !planOk('novaNexus')) && !(PLUS_FREE.some(id => p.sid === 'free:' + id) && !planOk('proInd'))); // los Nova Nexus PRO solo se calculan con el plan que los incluye (no se borran de tu configuración)
 /* Nombres de tus indicadores Nova: siempre «Nova Nexus© - Nombre» (Personal, IA Signals, Oscilador, Señales, Screener, LITE…) */
 function nnName(t) {
-  t = String(t || '').trim(); if (!/^\s*(nova|nexus)/i.test(t)) return t;
+  t = String(t || '').trim().replace(/^cr[iy]pto\s*-?\s*cham[aá]n\s*[·:\-–—|]*\s*(?=nova|nexus)/i, ''); // «CriptoChaman - Nova Nexus©» → «Nova Nexus©»
+  if (!/^\s*(nova|nexus)/i.test(t)) return t;
   let r = t.replace(/^\s*nova\s*nexus\s*(©|\(c\))?/i, '').replace(/^\s*nova\b\s*(©)?/i, '').replace(/^[\s·:\-–—|]+/, '').trim();
   r = r.replace(/\s*\[.*$/, '').replace(/\s+v?\d+(\.\d+)*\s*$/i, '').replace(/\s+\d+\s*cryptos?$/i, '').trim();
   if (/^oscillat/i.test(r)) r = 'Oscilador';
@@ -5733,7 +5743,7 @@ window.CCT_host = {
   openSignal(sym, itv) { // abre el gráfico de la moneda con Nova Nexus activo para ver la señal
     if (INTERVALS.includes(itv)) state.interval = itv;
     const p = state.pine.find(x => x.sid === 'cat:nova-nexus'); if (p) p.on = true; else if (state.pine.length < 12) state.pine.unshift({sid: 'cat:nova-nexus', on: true, inputs: {}});
-    if (!state.symbols.includes(sym)) state.symbols.push(sym);
+    wlAdd(sym);
     renderFrames(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); selectSymbol(sym);
   }
 };
@@ -5843,7 +5853,7 @@ window.CCT_pixel = {
   go(v) { if (isDesktop()) { if (v === 'chartView') return; const b = document.querySelector(`.right-rail [data-side="${v}"]`); if (b) b.click(); else setSide(v); } else { const b = document.querySelector(`.bottom-nav [data-view="${v}"]`); if (b) b.click(); else switchView(v); } },
   tools: () => TOOL_GROUPS.flatMap(gr => gr.tools.map(t => ({k: t[0], t: t[1], d: t[2], g: gr.name, gid: gr.id}))),
   pickTool: k => { switchView('chartView'); pickTool(k); },
-  openSymbol(sym, itv) { if (itv && INTERVALS.includes(itv)) { state.interval = itv; renderFrames(); } if (!state.symbols.includes(sym)) { state.symbols.push(sym); save(); renderWatch(); } selectSymbol(sym); },
+  openSymbol(sym, itv) { if (itv && INTERVALS.includes(itv)) { state.interval = itv; renderFrames(); } if (wlAdd(sym)) { save(); renderWatch(); } selectSymbol(sym); },
   async price(sym) { let p = curPrice(sym); if (!Number.isFinite(p)) { try { p = +(await getJSON(`${API}/ticker/price?symbol=${sym}`)).price; } catch {} } return Number.isFinite(p) ? p : null; },
   current: () => symOf(state.symbol), symbols: () => state.symbols.slice(),
   addAlert(f) { // misma lógica que el diálogo de crear alerta
