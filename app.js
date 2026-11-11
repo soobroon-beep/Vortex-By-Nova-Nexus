@@ -312,7 +312,7 @@ function setSide(id) {
 }
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
-    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView' || id === 'botLabView' || id === 'customView' || id === 'notifView') { setSide(id); if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
+    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView' || id === 'botLabView' || id === 'customView' || id === 'notifView') { setSide(id); if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } if (id === 'watchView') { wlOpenSym = null; renderWatch(); } if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
     id = 'chartView';
   }
   if (id === 'alertsView' && currentView !== id && !SUB_VIEWS.includes(currentView)) alBackTo = currentView;
@@ -325,7 +325,7 @@ function switchView(id) {
   if (id === 'chartView' && typeof dvRefresh === 'function') setTimeout(() => dvRefresh(), 0);
   if (id !== 'chartView') document.body.classList.remove('expanded');
   if (id === 'chartView') requestAnimationFrame(() => { if (!candles.length) loadCandles(); render(); });
-  if (id === 'watchView') renderWatch();
+  if (id === 'watchView') { wlOpenSym = null; renderWatch(); }
   if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); if (window.CCTRadar) CCTRadar.paint(); }
   if (isDesktop()) renderWatch();
   syncFullscreenLabel();
@@ -435,13 +435,23 @@ function openRowMenu(k, x, y) {
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', onKey, true); });
 }
 const grpOf = k => (state.symGroup && state.symGroup[k]) || '';
+/* Agregar a Mi seguimiento: la moneda nueva queda HASTA ABAJO de tu lista (si tienes secciones, al final de la última; las monedas sin sección salen arriba de las secciones) */
+function wlAdd(s) {
+  if (!s || state.symbols.includes(s)) return false;
+  state.symbols.push(s); const g = (state.groups || [])[state.groups.length - 1];
+  if (g) { state.symGroup[s] = g.id; if (g.collapsed) g.collapsed = false; }
+  return true;
+}
 function watchRow(s) {
   const t = tickers[s], change = Number(t?.priceChangePercent), price = Number(t?.lastPrice);
   let flash = '';
   if (Number.isFinite(price) && lastShown[s] != null && price !== lastShown[s]) flash = price > lastShown[s] ? ' flash-up' : ' flash-down';
   if (Number.isFinite(price)) lastShown[s] = price;
-  const main = `${coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small><span class="nm">${esc(meta(s)[0])}</span>${srcOf(s) !== 'binance' ? `<em class="ex-tag ex-${srcOf(s)}">${esc(CCTMarkets.SHORT[srcOf(s)])}</em>` : ''}</small></span>`;
-  const tg = tagOf(s), tgA = tg ? ` tagged" style="--tag:${tg}` : '';
+  const tr = window.CCTTradeWatch && CCTTradeWatch.of ? CCTTradeWatch.of(baseOnly(s)) : null, trS = tr ? (tr.side > 0 ? 'long' : 'short') : ''; // ¿tienes un trade abierto en esta moneda?
+  const trR = tr && Number.isFinite(tr.roe) ? `${tr.roe >= 0 ? '+' : '−'}${Math.abs(tr.roe).toFixed(Math.abs(tr.roe) >= 10 ? 0 : 1)}%` : '';
+  const trPill = tr ? `<em class="tr-pill ${trS}" title="Trade abierto: ${tr.side > 0 ? 'LONG' : 'SHORT'}${tr.lev > 1 ? ' ' + tr.lev + 'x' : ''}${trR ? ' · ROE ' + trR : ''}">${tr.side > 0 ? 'L' : 'S'}${trR ? `<b class="${tr.roe >= 0 ? 'pos' : 'neg'}">${trR}</b>` : ''}</em>` : '';
+  const main = `${tr ? `<span class="tr-ring ${trS}">${coinBadge(s)}</span>` : coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small>${trPill || `<span class="nm">${esc(meta(s)[0])}</span>`}${srcOf(s) !== 'binance' ? `<em class="ex-tag ex-${srcOf(s)}">${esc(CCTMarkets.SHORT[srcOf(s)])}</em>` : ''}</small></span>`;
+  const tg = tagOf(s), tgA = (tr ? ' in-trade ' + trS : '') + (tg ? ` tagged" style="--tag:${tg}` : '');
   if (editMode) {
     const opts = `<option value="">Sin sección</option>` + state.groups.map(g => `<option value="${g.id}" ${grpOf(s) === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
     return `<div class="watch-row editing${tgA}" data-symbol="${esc(s)}"><span class="drag-h" aria-hidden="true">⠿</span>${main}<span class="row-edit">${state.groups.length ? `<select class="sec-pick" data-assign="${esc(s)}" aria-label="Sección de ${esc(base(s))}">${opts}</select>` : ''}<button data-remove="${esc(s)}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
@@ -465,6 +475,7 @@ function renderWatch() {
   $('#winners').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) > 0).length;
   $('#losers').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) < 0).length;
   const as = $('#addSection'); if (as) as.hidden = false;
+  paintWlFab();
 }
 const moveInGroup = (k, dir) => { const g = grpOf(k), idx = state.symbols.map((x, i) => grpOf(x) === g ? i : -1).filter(i => i >= 0), p = idx.indexOf(state.symbols.indexOf(k)), o = idx[p + dir]; if (o === undefined) return; const i = state.symbols.indexOf(k); [state.symbols[i], state.symbols[o]] = [state.symbols[o], state.symbols[i]]; };
 const newSecId = () => 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36);
@@ -654,7 +665,7 @@ $('#popMore').onclick = () => { popMore = !popMore; renderPopular(); };
 $('#popRows').addEventListener('click', e => {
   const add = e.target.closest('[data-padd]'), row = e.target.closest('.pop-row');
   if (e.target.closest('.pop-retry')) { refreshPop(); return; }
-  if (add) { const s = add.dataset.padd; if (!state.symbols.includes(s)) { state.symbols.push(s); save(); renderWatch(); renderPopular(); fetchTicker(); toast(`${base(s)} añadido a tu seguimiento`); } return; }
+  if (add) { const s = add.dataset.padd; if (wlAdd(s)) { save(); renderWatch(); renderPopular(); fetchTicker(); toast(`${base(s)} añadido a tu seguimiento`); } return; }
   if (row) selectSymbol(row.dataset.symbol);
 });
 $('#popRows').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('pop-row')) { e.preventDefault(); selectSymbol(e.target.dataset.symbol); } });
@@ -948,6 +959,26 @@ async function indAlertTick(force) {
 }
 window.CCTAlerts = {stdHit, pineHit, STD_CONDS}; // expuesto para pruebas
 window.CCTPushBridge = {state: () => state, prefs: () => PR, save: () => save(), setSound: on => setPref('sound', on ? 'on' : 'off'), renderPrefs: () => renderPrefs(), renderAlerts: () => renderAlerts(), scheduleRender: () => scheduleRender(), toast: m => toast(m)}; // para push.js (avisos con la app cerrada)
+/* Seguimiento de tus trades abiertos (trade-watch.js): avisos de cómo va cada posición real de tu exchange y resaltado en Mi seguimiento */
+if (window.CCTTradeWatch && CCTTradeWatch.host) CCTTradeWatch.host({
+  prefs: () => PR, fmt: v => fmt(v),
+  levels: b => { // tus líneas y rayos horizontales de esa moneda (en cualquier exchange) = niveles importantes
+    const out = []; for (const [k, arr] of Object.entries(state.drawings || {})) { if (CCTTradeWatch.stripBase(baseOnly(k)) !== b || !Array.isArray(arr)) continue; for (const d of arr) if (d && (d.type === 'horizontal' || d.type === 'hray') && d.a && +d.a.p > 0) out.push(+d.a.p); }
+    return out;
+  },
+  async prices(keys) {
+    const out = {}, bin = keys.filter(k => !k.includes('@')), oth = keys.filter(k => k.includes('@'));
+    if (bin.length) try { for (const t of await getJSON(`${API}/ticker/price?symbols=${encodeURIComponent(JSON.stringify(bin))}`)) out[t.symbol] = +t.price; } catch {}
+    if (oth.length && window.CCTMarkets) try { const t = await CCTMarkets.tickers(oth); for (const k of oth) if (t[k]) out[k] = +t[k].lastPrice; } catch {}
+    return out;
+  },
+  notify(title, body, tag, kind) {
+    toast(body);
+    if (PR.sound !== 'off') { alertBeep(); try { navigator.vibrate && navigator.vibrate(kind === 'liqN' || kind === 'liq' || kind === 'sl' ? [120, 60, 120, 60, 120] : [200, 100, 200]); } catch {} }
+    if (!(window.VortexPush && VortexPush.on)) sysNotify(title, body, tag); // con los avisos de app cerrada encendidos la notificación del sistema la manda el servidor (misma etiqueta, sin duplicados)
+  }
+});
+if (window.CCTTradeWatch && CCTTradeWatch.onChange) CCTTradeWatch.onChange(() => renderWatch());
 setInterval(() => { if (!document.hidden) indAlertTick(); }, 15000);
 setTimeout(indAlertTick, 4000);
 
@@ -1110,12 +1141,44 @@ $('#timeframes').addEventListener('click', e => {
   const b = e.target.closest('[data-tf]'); if (!b) return;
   state.interval = b.dataset.tf; save(); renderFrames(); clearTransient(); loadCandles();
 });
+/* Botón «+» al lado derecho de la tarjeta de la moneda (nombre/precio): agrega la moneda abierta a Mi seguimiento.
+   Se coloca pegado a la tarjeta aunque cambie de ancho (precio más largo, chips de derivados); si ya está en tu lista se vuelve una palomita. */
+var wlOpenSym = null, wlFab = $('#wlAddFab'); // var: renderWatch() puede llamar a paintWlFab() antes de llegar aquí
+function placeWlFab() {
+  const h = $('#chartSymHead'); if (!wlFab || !h) return;
+  const vis = h.offsetParent !== null && h.offsetWidth > 0; wlFab.hidden = !vis; if (!vis) return;
+  const s = innerWidth <= 760 ? 26 : 34, gap = innerWidth <= 760 ? 6 : 8;
+  wlFab.style.left = Math.round(h.offsetLeft + h.offsetWidth + gap) + 'px';
+  wlFab.style.top = Math.round(h.offsetTop + Math.min(h.offsetHeight, innerWidth <= 760 ? 44 : 52) / 2 - s / 2) + 'px';
+  requestAnimationFrame(() => wlFab.classList.add('ready'));
+}
+function paintWlFab() {
+  if (!wlFab) return; const on = state.symbols.includes(state.symbol), t = on ? `${base(state.symbol)} ya está en Mi seguimiento` : `Agregar ${base(state.symbol)} a Mi seguimiento`;
+  if (wlFab.classList.contains('in') !== on) wlFab.classList.toggle('in', on);
+  const fresh = wlOpenSym !== state.symbol; // destello solo al cambiar de moneda (la lista se repinta con cada precio)
+  for (const r of document.querySelectorAll('#watchRows .watch-row[data-symbol]')) { const o = r.dataset.symbol === state.symbol; if (r.classList.contains('is-open') !== o) r.classList.toggle('is-open', o); if (o && fresh) { r.classList.add('sheen'); wlOpenSym = state.symbol; } } // la moneda abierta en el gráfico se resalta en Mi seguimiento
+  if (wlFab.title !== t) { wlFab.title = t; wlFab.setAttribute('aria-label', t); }
+}
+if (wlFab) {
+  wlFab.addEventListener('click', () => {
+    const s = state.symbol; if (!s) return;
+    if (state.symbols.includes(s)) { toast(`${base(s)} ya está en tu seguimiento`); return; }
+    wlAdd(s); save(); renderWatch(); fetchTicker(); paintWlFab();
+    wlFab.classList.remove('pop'); void wlFab.offsetWidth; wlFab.classList.add('pop');
+    try { navigator.vibrate && navigator.vibrate(12); } catch {}
+    toast(`${base(s)} añadido a tu seguimiento${srcOf(s) !== 'binance' ? ' (' + exName(s) + ')' : ''}`);
+  });
+  wlFab.addEventListener('animationend', () => wlFab.classList.remove('pop'));
+  { const h = $('#chartSymHead'); if (h && window.ResizeObserver) new ResizeObserver(placeWlFab).observe(h); }
+  addEventListener('resize', placeWlFab); setTimeout(placeWlFab, 300);
+}
 const symHeadH = () => { const e = $('#chartSymHead'); return e && e.offsetParent !== null ? e.offsetHeight + 4 : 0; }; // alto que ocupa el nombre/precio flotante: solo baja la leyenda, el gráfico llega hasta arriba
 function updateChartHeader() {
   const b = base(state.symbol), t = tickers[state.symbol];
   const last = candles.length ? candles[candles.length - 1].c : Number(t?.lastPrice);
   const ch = Number(t?.priceChangePercent);
   { const ci = $('#coinIcon'), sb = baseOnly(state.symbol), key = state.symbol; if (ci.dataset.k !== key) { ci.dataset.k = key; ci.classList.remove('has-img'); ci.innerHTML = esc(meta(state.symbol)[1]) + (sb.endsWith('.D') || srcOf(state.symbol) === 'dom' ? '' : coinImg(sb)); } }
+  paintWlFab();
   $('#coinTitle').textContent = pairLbl(state.symbol).replace('/', ' / '); { const sl = $('#srcLabel'); if (sl) sl.textContent = (SOURCES[dataSrc || srcOf(state.symbol)] || 'Binance Spot').toUpperCase() + ' ▾'; }
   $('#chartLabel').textContent = symOf(state.symbol);
   $('#intervalLabel').textContent = state.interval;
@@ -1243,7 +1306,7 @@ function replayBar() {
 { // elegir el punto de inicio: un toque/clic en el gráfico mientras se elige
   const area = $('#chartArea');
   if (area) area.addEventListener('pointerdown', e => {
-    if (!replayPick || e.target.closest('#rpBar, .chart-symhead, .chart-controls, .favbar, .fav-fab')) return;
+    if (!replayPick || e.target.closest('#rpBar, .chart-symhead, .wl-add-fab, .chart-controls, .favbar, .fav-fab')) return;
     const r = area.getBoundingClientRect(), x = e.clientX - r.left; if (!geo || !geo.step) return;
     e.preventDefault(); e.stopImmediatePropagation(); replayBegin(geo.start + (x - geo.left) / geo.step - .5);
   }, true);
@@ -1863,9 +1926,9 @@ function renderSheet() {
   list.innerHTML = rows.map(r => `<button class="sheet-item pick-row" data-pick="${esc(r.key)}"><span class="pk-main"><strong>${esc(r.base + '/' + r.quote)}</strong> <small>${esc(meta(r.key)[0])}</small></span>${tag(r)}<span class="pk-go">${state.symbols.includes(r.key) ? (sheetMode === 'add' ? '✓' : '→') : '＋'}</span></button>`).join('') || '<p class="small-note">No se encontraron monedas.</p>';
   $$('[data-pick]').forEach(b => b.onclick = () => {
     const s = b.dataset.pick;
-    if (sheetMode !== 'add') { if (!state.symbols.includes(s)) { state.symbols.push(s); save(); renderWatch(); fetchTicker(); } selectSymbol(s); return; }
+    if (sheetMode !== 'add') { if (wlAdd(s)) { save(); renderWatch(); fetchTicker(); } selectSymbol(s); return; }
     if (state.symbols.includes(s)) { closeSheet(); return; }
-    state.symbols.push(s); save(); renderWatch(); fetchTicker(); toast(`${base(s)} añadido (${exName(s)})`); closeSheet();
+    wlAdd(s); save(); renderWatch(); fetchTicker(); toast(`${base(s)} añadido (${exName(s)})`); closeSheet();
   });
 }
 const sheetLoad = {};
@@ -1946,8 +2009,8 @@ function renderSymEx() {
 }
 const M_ORDER = r => CCTMarkets.ORDER.indexOf(r.src);
 function symPick(key) {
-  if (symMode === 'add') { if (!state.symbols.includes(key)) { state.symbols.push(key); save(); renderWatch(); fetchTicker(); toast(`${base(key)} añadido (${exName(key)})`); } closeSym(); return; }
-  if (!state.symbols.includes(key)) { state.symbols.push(key); save(); renderWatch(); fetchTicker(); }
+  if (symMode === 'add') { if (wlAdd(key)) { save(); renderWatch(); fetchTicker(); toast(`${base(key)} añadido (${exName(key)})`); } closeSym(); return; }
+  if (wlAdd(key)) { save(); renderWatch(); fetchTicker(); }
   selectSymbol(key);
 }
 function openSym(mode) {
@@ -4168,7 +4231,7 @@ const area = $('#chartArea'), ptrs = new Map();
 let gest = null, pinch = null, lastTap = null, brushLive = null, alHinted = false;
 const local = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
 area.addEventListener('pointerdown', e => { stopMotion();
-  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.pbar,.pbar-pop,.pbar-hidden,.leg-toggle,.favbar,.fav-fab,.brand-fab,.al-confirm')) return;
+  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.pbar,.pbar-pop,.pbar-hidden,.leg-toggle,.favbar,.fav-fab,.brand-fab,.wl-add-fab,.al-confirm')) return;
   if (alConfirm) closeAlConfirm(true);
   try { area.setPointerCapture(e.pointerId); } catch {} ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   if (!geo) return;
@@ -4538,6 +4601,8 @@ function renderPrefs() {
     + `</div><div class="sg-label">Qué te avisamos</div>${mOn ? '' : '<p class="small-note nt-hint">Enciende «Activar notificaciones» para recibir estos avisos.</p>'}<div class="pref-list${mOn ? '' : ' nt-off'}">`
     + irow(ico('#548fff', '<path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>'), 'Alertas de precio', 'Cuando el precio toca tu nivel', tg('price', PR.n.price, 'Alertas de precio'))
     + irow(ico('#b07cff', '<path d="M5 4v16M5 14c3-6 6 2 9-4s4-2 5-3"/>'), 'Alertas de indicador', 'Señales de tus indicadores', tg('ind', PR.n.ind, 'Alertas de indicador'))
+    + irow(ico('#f5b942', '<path d="M3 17l6-6 4 4 8-8"/><circle cx="21" cy="7" r="1.6" fill="currentColor"/><path d="M3 21h18"/>'), 'Mis trades abiertos', 'Ganancia o pérdida, cerca de TP, SL o liquidación, regreso a la entrada y tus niveles. Solo con trades abiertos', tg('trade', PR.n.trade !== false, 'Mis trades abiertos'))
+    + (PR.n.trade !== false ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Avisar cada', 'Escalón de ganancia o pérdida sobre tu margen (ROE, como lo muestra el exchange)', `<select id="tradeStep" class="pref-sel" aria-label="Avisar cada">${(window.CCTTradeWatch ? CCTTradeWatch.STEPS : [10]).map(v => `<option value="${v}" ${(window.CCTTradeWatch ? CCTTradeWatch.step() : 10) === v ? 'selected' : ''}>±${v} %</option>`).join('')}</select>`, sub) : '')
     + irow(ico('#f06b79', '<path d="M3 12h4l2-6 4 12 2-6h6"/>'), 'Movimientos bruscos', 'Sube o cae fuerte en minutos · top 5 (BTC, ETH, BNB, XRP, SOL)', tg('move', !!M.on, 'Movimientos bruscos'))
     + (M.on ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Sensibilidad', `También avisa si pasa ±${(M.pct * 2.5).toFixed(M.pct * 2.5 % 1 ? 1 : 0)} % en 1 hora`, `<select id="moveLvl" class="pref-sel" aria-label="Sensibilidad">${MOVE_LEVELS.map(l => `<option value="${l[0]}" ${l[0] === near[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select>`, sub) : '')
     + irow(ico('#c084fc', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7.5"/>'), 'Grandes oportunidades', 'Nexus Pixel revisa el Screener cada hora, filtra, lo confirma con IA y aprende de los resultados', tg('radar', !!(window.CCTRadar && CCTRadar.on()), 'Grandes oportunidades'))
@@ -4558,11 +4623,11 @@ function renderPrefs() {
   const onClick = e => {
     const b = e.target.closest('[data-pk]'); if (b && b.tagName === 'BUTTON') { const v = b.dataset.v; setPref(b.dataset.pk, /^\d+$/.test(v) ? +v : v); return; }
     const w = e.target.closest('[data-sw]');
-    if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'radar') { if (window.CCTRadar) { CCTRadar.setOn(!CCTRadar.on()); toast(CCTRadar.on() ? 'Radar encendido: Nexus Pixel te avisará de las grandes oportunidades' : 'Radar apagado'); } renderPrefs(); } else if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); save(); renderPrefs(); renderMoveAlerts(); if (window.VortexPush) VortexPush.sync(true); } else if (k === 'scr' || k === 'scrH1' || k === 'scrH4') { const S = {...(state.scrPush || {})}; if (k === 'scr') S.on = !S.on; else if (k === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false; state.scrPush = sanScrPush(S); save(); renderPrefs(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true); } else setPref(k, !PR.n[k], true); return; }
+    if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'radar') { if (window.CCTRadar) { CCTRadar.setOn(!CCTRadar.on()); toast(CCTRadar.on() ? 'Radar encendido: Nexus Pixel te avisará de las grandes oportunidades' : 'Radar apagado'); } renderPrefs(); } else if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); save(); renderPrefs(); renderMoveAlerts(); if (window.VortexPush) VortexPush.sync(true); } else if (k === 'scr' || k === 'scrH1' || k === 'scrH4') { const S = {...(state.scrPush || {})}; if (k === 'scr') S.on = !S.on; else if (k === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false; state.scrPush = sanScrPush(S); save(); renderPrefs(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true); } else { setPref(k, !PR.n[k], true); if (k === 'trade' && window.CCTTradeWatch) { CCTTradeWatch.refresh(); renderWatch(); } }; return; }
     if (e.target.closest('[data-play]')) { const t = $('#notifBox select[data-pk=tone]'); alertBeep(true, t && t.value); return; }
     if (e.target.closest('[data-news]')) openNews();
   };
-  const onChange = e => { if (e.target.id === 'moveLvl') { state.moveAlerts = sanMoveAlerts({...state.moveAlerts, pct: +e.target.value}); save(); renderPrefs(); if (window.VortexPush) VortexPush.sync(true); return; } const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
+  const onChange = e => { if (e.target.id === 'tradeStep') { if (window.CCTTradeWatch) CCTTradeWatch.setStep(+e.target.value); return; } if (e.target.id === 'moveLvl') { state.moveAlerts = sanMoveAlerts({...state.moveAlerts, pct: +e.target.value}); save(); renderPrefs(); if (window.VortexPush) VortexPush.sync(true); return; } const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
   for (const r of [$('#settingsView'), $('#customView'), $('#notifView')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
   // Hora, fecha y formato: se despliega dentro de Personalización › Apariencia (mismo estilo que el resto de la app)
   const fb = $('#cuFmt'), fp = $('#prefsBox');
@@ -4800,7 +4865,8 @@ document.addEventListener('click', e => {
 const activePine = () => state.pine.filter(p => p.on && scripts.some(s => s.id === p.sid) && !(proSid(p.sid) && !planOk('novaNexus')) && !(PLUS_FREE.some(id => p.sid === 'free:' + id) && !planOk('proInd'))); // los Nova Nexus PRO solo se calculan con el plan que los incluye (no se borran de tu configuración)
 /* Nombres de tus indicadores Nova: siempre «Nova Nexus© - Nombre» (Personal, IA Signals, Oscilador, Señales, Screener, LITE…) */
 function nnName(t) {
-  t = String(t || '').trim(); if (!/^\s*(nova|nexus)/i.test(t)) return t;
+  t = String(t || '').trim().replace(/^cr[iy]pto\s*-?\s*cham[aá]n\s*[·:\-–—|]*\s*(?=nova|nexus)/i, ''); // «CriptoChaman - Nova Nexus©» → «Nova Nexus©»
+  if (!/^\s*(nova|nexus)/i.test(t)) return t;
   let r = t.replace(/^\s*nova\s*nexus\s*(©|\(c\))?/i, '').replace(/^\s*nova\b\s*(©)?/i, '').replace(/^[\s·:\-–—|]+/, '').trim();
   r = r.replace(/\s*\[.*$/, '').replace(/\s+v?\d+(\.\d+)*\s*$/i, '').replace(/\s+\d+\s*cryptos?$/i, '').trim();
   if (/^oscillat/i.test(r)) r = 'Oscilador';
@@ -5677,7 +5743,7 @@ window.CCT_host = {
   openSignal(sym, itv) { // abre el gráfico de la moneda con Nova Nexus activo para ver la señal
     if (INTERVALS.includes(itv)) state.interval = itv;
     const p = state.pine.find(x => x.sid === 'cat:nova-nexus'); if (p) p.on = true; else if (state.pine.length < 12) state.pine.unshift({sid: 'cat:nova-nexus', on: true, inputs: {}});
-    if (!state.symbols.includes(sym)) state.symbols.push(sym);
+    wlAdd(sym);
     renderFrames(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); selectSymbol(sym);
   }
 };
@@ -5787,7 +5853,7 @@ window.CCT_pixel = {
   go(v) { if (isDesktop()) { if (v === 'chartView') return; const b = document.querySelector(`.right-rail [data-side="${v}"]`); if (b) b.click(); else setSide(v); } else { const b = document.querySelector(`.bottom-nav [data-view="${v}"]`); if (b) b.click(); else switchView(v); } },
   tools: () => TOOL_GROUPS.flatMap(gr => gr.tools.map(t => ({k: t[0], t: t[1], d: t[2], g: gr.name, gid: gr.id}))),
   pickTool: k => { switchView('chartView'); pickTool(k); },
-  openSymbol(sym, itv) { if (itv && INTERVALS.includes(itv)) { state.interval = itv; renderFrames(); } if (!state.symbols.includes(sym)) { state.symbols.push(sym); save(); renderWatch(); } selectSymbol(sym); },
+  openSymbol(sym, itv) { if (itv && INTERVALS.includes(itv)) { state.interval = itv; renderFrames(); } if (wlAdd(sym)) { save(); renderWatch(); } selectSymbol(sym); },
   async price(sym) { let p = curPrice(sym); if (!Number.isFinite(p)) { try { p = +(await getJSON(`${API}/ticker/price?symbol=${sym}`)).price; } catch {} } return Number.isFinite(p) ? p : null; },
   current: () => symOf(state.symbol), symbols: () => state.symbols.slice(),
   addAlert(f) { // misma lógica que el diálogo de crear alerta

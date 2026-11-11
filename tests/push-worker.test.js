@@ -189,3 +189,28 @@ test('IA open source: cada uso con su modelo, Groq primero si hay clave, Cloudfl
   assert.equal(g.text, 'desde groq'); assert.match(g.model, /Groq/); assert.match(gUrl, /api\.groq\.com/);
   assert.equal(W.aiText({result: {choices: [{message: {content: 'x'}}]}}), 'x'); assert.equal(W.aiText({output: [{type: 'message', content: [{text: 'y'}]}]}), 'y');
 });
+
+test('ronda programada: sigue tus trades abiertos con la app cerrada', async () => {
+  const w = await W(), KV = memKV(), env = {KV}, f = await fakeBrowserSub(w.b64u), ID = 'dev_tttttttttttttttttttt';
+  const call = body => w.default.fetch(new Request('https://x.workers.dev/sync', {method: 'POST', headers: {origin: 'https://soobroon-beep.github.io'}, body: JSON.stringify(body)}), env);
+  await call({id: ID, sub: f.sub, move: {on: false}, trades: [{k: 'BTCUSDT', b: 'BTC', side: 1, entry: 100, lev: 5, sl: 95}], tradeStep: 10});
+  assert.strictEqual(JSON.parse(KV.m.get('dev:' + ID)).trades.length, 1);
+  let price = '100'; const pushes = [], realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    url = String(url);
+    if (url.includes('/api/v3/ticker/price')) return new Response(JSON.stringify([{symbol: 'BTCUSDT', price}]));
+    if (url.includes('fcm.googleapis.com')) { pushes.push(JSON.parse(await decrypt(new Uint8Array(init.body), f.kp, f.auth))); return new Response('', {status: 201}); }
+    throw new Error('fetch inesperado ' + url);
+  };
+  try {
+    const t0 = Date.now();
+    await w.tick(env, t0); assert.strictEqual(pushes.length, 0); // primera vez: solo toma nota
+    price = '102.2'; await w.tick(env, t0 + 60000);
+    assert.strictEqual(pushes.length, 1); assert.strictEqual(pushes[0].title, 'VORTEX · Tu trade va ganando'); assert.match(pushes[0].body, /BTC LONG 5x: \+11\.0 %/);
+    price = '102.3'; await w.tick(env, t0 + 120000); assert.strictEqual(pushes.length, 1); // mismo escalón: no repite
+    price = '95'; await w.tick(env, t0 + 180000); assert.strictEqual(pushes[pushes.length - 1].title, 'VORTEX · Tocó tu stop loss');
+    const n = pushes.length; price = '90'; await w.tick(env, t0 + 240000); assert.strictEqual(pushes.length, n); // ya no lo sigue
+    // la app ya no ve el trade (se cerró): el servidor lo quita
+    await call({id: ID, sub: f.sub, move: {on: false}, trades: []}); assert.strictEqual(JSON.parse(KV.m.get('dev:' + ID)).trades.length, 0);
+  } finally { globalThis.fetch = realFetch; }
+});

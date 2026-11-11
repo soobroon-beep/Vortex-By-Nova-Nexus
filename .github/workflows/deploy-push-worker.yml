@@ -6,7 +6,7 @@ name: Publicar servidor de avisos (vortex-push)
 on:
   push:
     branches: [main]
-    paths: ['worker/push-alerts.mjs', 'worker/screener.mjs', 'worker/radar-server.mjs', 'radar.js', 'worker/wrangler-push.toml', 'nova-nexus.js', 'discord-format.js', 'dominance-core.js', '.github/workflows/deploy-push-worker.yml']
+    paths: ['worker/push-alerts.mjs', 'worker/screener.mjs', 'worker/radar-server.mjs', 'radar.js', 'trade-watch.js', 'worker/wrangler-push.toml', 'nova-nexus.js', 'discord-format.js', 'dominance-core.js', '.github/workflows/deploy-push-worker.yml']
   workflow_dispatch:
 permissions:
   contents: read

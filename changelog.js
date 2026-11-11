@@ -1,5 +1,14 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.21', d: '11 nov 2026', t: 'Seguimiento de tus trades y botón «+» en el gráfico', items: [
+    'Junto a la tarjeta de la moneda en el gráfico hay un botón «+» para agregarla a Mi seguimiento (más pequeño en el celular).',
+    'Con tu exchange conectado y un trade abierto, VORTEX te va avisando cómo va: cada escalón de ganancia o pérdida, cerca de tu TP, SL o liquidación, si regresa a tu entrada y si cruza tus líneas horizontales.',
+    'Los avisos de tus trades también llegan con la app cerrada si activaste las notificaciones; puedes apagarlos o elegir cada cuánto en Avisos.',
+    'En Mi seguimiento, las monedas en las que estás en un trade tienen un anillo animado y una etiqueta L o S con tu ganancia o pérdida.',
+    'La moneda que tienes abierta en el gráfico se resalta ligeramente en Mi seguimiento, con un destello al cambiar de moneda.',
+    'Las monedas que agregas quedan hasta abajo de tu lista.',
+    'El indicador se llama solo «Nova Nexus©» y las cajas de order blocks ya no tienen contorno azul.'
+  ]},
   {v: '3.20', d: '11 nov 2026', t: 'Planes activos, varias copias de un indicador y pestañas independientes', items: [
     'Al abrir VORTEX sin sesión aparece una ventana para iniciar sesión con Google; si la cierras sigues con el plan Gratis.',
     'Plus se verifica con tu suscripción al canal de YouTube e Infinity con tu UID de BingX registrado con el código. Nada se cobra.',

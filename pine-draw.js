@@ -137,7 +137,8 @@
       if (isn(b.l) || isn(b.r) || isn(b.t) || isn(b.b)) continue;
       let x1 = X(b.l), x2 = X(b.r); if (b.extend === 'left' || b.extend === 'both') x1 = left; if (b.extend === 'right' || b.extend === 'both') x2 = right;
       const y1 = Y(b.t), y2 = Y(b.b); g.fillStyle = profileRowFill(b, col(b.fci)) || 'transparent'; g.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
-      g.strokeStyle = col(b.bci) || '#2962FF'; g.lineWidth = Math.min(4, b.bw || 1); g.setLineDash(DASH[b.bstyle] || []); g.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)); g.setLineDash([]);
+      const bsc = b.bci == null ? '' : col(b.bci); // border_color = na → sin contorno (antes salía una línea azul en las cajas, p. ej. los order blocks de Nova Nexus)
+      if (bsc) { g.strokeStyle = bsc; g.lineWidth = Math.min(4, b.bw || 1); g.setLineDash(DASH[b.bstyle] || []); g.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)); g.setLineDash([]); }
       if (b.text) { // el texto se alinea (left/center/right), se ajusta al tamaño de la caja y se recorta dentro de ella, como en TradingView (antes se imprimía centrado y sin recortar, y las filas del perfil de volumen se montaban)
         const bx = Math.min(x1, x2), bw = Math.abs(x2 - x1), by = Math.min(y1, y2), bh = Math.abs(y2 - y1);
         if (bw >= 6 && bh >= 5) {
