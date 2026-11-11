@@ -1155,6 +1155,8 @@ function placeWlFab() {
 function paintWlFab() {
   if (!wlFab) return; const on = state.symbols.includes(state.symbol), t = on ? `${base(state.symbol)} ya está en Mi seguimiento` : `Agregar ${base(state.symbol)} a Mi seguimiento`;
   if (wlFab.classList.contains('in') !== on) wlFab.classList.toggle('in', on);
+  const gone = on && !(wlFab.dataset.just === state.symbol); // ya está en tu lista: el botón no aparece (solo se ve la palomita un momento al agregarla)
+  if (wlFab.classList.contains('gone') !== gone) { wlFab.classList.toggle('gone', gone); wlFab.tabIndex = gone ? -1 : 0; wlFab.setAttribute('aria-hidden', String(gone)); }
   const fresh = wlOpenSym !== state.symbol; // destello solo al cambiar de moneda (la lista se repinta con cada precio)
   for (const r of document.querySelectorAll('#watchRows .watch-row[data-symbol]')) { const o = r.dataset.symbol === state.symbol; if (r.classList.contains('is-open') !== o) r.classList.toggle('is-open', o); if (o && fresh) { r.classList.add('sheen'); wlOpenSym = state.symbol; } } // la moneda abierta en el gráfico se resalta en Mi seguimiento
   if (wlFab.title !== t) { wlFab.title = t; wlFab.setAttribute('aria-label', t); }
@@ -1165,6 +1167,7 @@ if (wlFab) {
     if (state.symbols.includes(s)) { toast(`${base(s)} ya está en tu seguimiento`); return; }
     wlAdd(s); save(); renderWatch(); fetchTicker(); paintWlFab();
     wlFab.classList.remove('pop'); void wlFab.offsetWidth; wlFab.classList.add('pop');
+    wlFab.dataset.just = s; clearTimeout(wlFab._t); wlFab._t = setTimeout(() => { delete wlFab.dataset.just; paintWlFab(); }, 1100); paintWlFab();
     try { navigator.vibrate && navigator.vibrate(12); } catch {}
     toast(`${base(s)} añadido a tu seguimiento${srcOf(s) !== 'binance' ? ' (' + exName(s) + ')' : ''}`);
   });

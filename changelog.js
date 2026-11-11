@@ -4,7 +4,8 @@ window.CCT_CHANGELOG = [
     'Clic derecho (o doble clic) en una pestaña para cambiarle el nombre o cerrarla.',
     'En el celular, el menú del gráfico tiene Pestañas (cambiar, renombrar, cerrar o crear), Ver (ocultar o mostrar dibujos e indicadores) y Borrar.',
     'La basura, también en escritorio, deja elegir si borras solo los dibujos o solo los indicadores; el ojo oculta dibujos, indicadores o todo.',
-    'La moneda abierta en el gráfico se resalta en Mi seguimiento con un tono morado sutil.'
+    'La moneda abierta en el gráfico se resalta en Mi seguimiento con un tono morado sutil.',
+    'El botón «+» junto a la moneda solo aparece cuando la moneda todavía no está en tu lista.'
   ]},
   {v: '3.21', d: '11 nov 2026', t: 'Seguimiento de tus trades y botón «+» en el gráfico', items: [
     'Junto a la tarjeta de la moneda en el gráfico hay un botón «+» para agregarla a Mi seguimiento (más pequeño en el celular).',
