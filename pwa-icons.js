@@ -13,7 +13,7 @@
     ['i25', '25 Planeta ámbar'], ['i26', '26 Lavanda y montañas'], ['i27', '27 Planeta azul'],
     ['i28', '28 Hexágonos'], ['i29', '29 Atardecer'], ['i30', '30 Velas trading'],
     ['i31', '31 Olas azules'], ['i32', '32 Llamas rojas'], ['i33', '33 Ópalo'],
-    ['i34', '34 Camuflaje dorado']
+    ['i34', '34 Camuflaje dorado'], ['i35', '35 Neón sobre negro']
   ];
   const key = 'cct_app_icon_v1', valid = id => variants.some(v => v[0] === id);
   const query = new URLSearchParams(location.search).get('appIcon');

@@ -62,7 +62,8 @@ function sanDiscord(a) { // Discord: webhook del canal #vortex, invitación al s
 }
 const CTYPES = [['candles', 'Velas', 'c_candles'], ['hollow', 'Velas huecas', 'c_hollow'], ['ha', 'Heikin Ashi', 'c_ha'], ['bars', 'Barras OHLC', 'c_bars'], ['hlc', 'Barras HLC', 'c_hlc'], ['line', 'Línea', 'c_line'], ['area', 'Área', 'c_area'], ['step', 'Línea escalonada', 'c_step']];
 const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', bybitf: 'Bybit Perpetuos', okx: 'OKX Spot', okxf: 'OKX Perpetuos', coinbase: 'Coinbase', bingx: 'BingX Spot', bingxf: 'BingX Perpetuos', kucoin: 'KuCoin', gate: 'Gate.io', mexc: 'MEXC', bitget: 'Bitget', htx: 'HTX', kraken: 'Kraken', dom: 'Dominancia USDT/BTC'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
-const CHART_DEF = {bg: '#07090e', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1, alertCol: '', alertA: 28, alertS: 'Puntos', alertW: 1};
+const CURSOR_MODES = ['Cruz', 'Flecha', 'Estrella']; // tipo de puntero sobre el gráfico (la estrella deja estela al mantener presionado: star-cursor.js)
+const CHART_DEF = {bg: '#07090e', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1, cursor: 'Cruz', alertCol: '', alertA: 28, alertS: 'Puntos', alertW: 1};
 function sanChartStyle(c) {
   const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
   for (const k of ['bg', 'grid', 'up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick', 'cross', 'alertCol']) if (typeof c[k] === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(c[k])) o[k] = c[k];
@@ -70,6 +71,7 @@ function sanChartStyle(c) {
   if (Number.isFinite(+c.crossA) && c.crossA !== '') o.crossA = Math.max(5, Math.min(100, Math.round(+c.crossA)));
   if (Number.isFinite(+c.crossW) && c.crossW !== '') o.crossW = Math.max(1, Math.min(4, Math.round(+c.crossW)));
   if (['Guiones', 'Sólida', 'Puntos'].includes(c.crossS)) o.crossS = c.crossS;
+  if (CURSOR_MODES.includes(c.cursor)) o.cursor = c.cursor;
   if (Number.isFinite(+c.alertA) && c.alertA !== '') o.alertA = Math.max(5, Math.min(100, Math.round(+c.alertA)));
   if (Number.isFinite(+c.alertW) && c.alertW !== '') o.alertW = Math.max(1, Math.min(4, Math.round(+c.alertW)));
   if (['Guiones', 'Sólida', 'Puntos'].includes(c.alertS)) o.alertS = c.alertS;
@@ -2422,7 +2424,7 @@ const lastOf = gr => (railLast[gr.id] && gr.tools.some(t => t[0] === railLast[gr
 const RAIL_OPTS = [['magnet', 'Imán: ajusta a máximo, mínimo, apertura y cierre', IC.magnet], ['stay', 'Mantener la herramienta activa después de dibujar', IC.keep], ['lock', 'Bloquear dibujos (no se seleccionan ni se mueven)', IC.lock], ['hide', 'Ocultar dibujos', IC.eye], ['clear', 'Borrar todos los dibujos de este activo', IC.trash]];
 function buildRail() {
   const rail = $('#toolRail'); if (!rail) return;
-  rail.innerHTML = `<button class="rail-btn" data-rail="cursor" title="Cursor (Esc)" aria-label="Cursor">${SV(IC.cursor)}</button><div class="rail-sep"></div>`
+  rail.innerHTML = `<button class="rail-btn grp" data-rail="cursor" title="Cursor (Esc)" aria-label="Cursor">${SV(CURSOR_IC[cstyle().cursor] || CURSOR_IC.Cruz)}<i class="caret" data-curfly="1" title="Elegir cursor: cruz, flecha o estrella"></i></button><div class="rail-sep"></div>`
     + (FAVS.length ? favTools().map(t => `<button class="rail-btn fav" data-ftool="${t[0]}" title="${esc(t[1])} (favorito)" aria-label="${esc(t[1])}">${SV(t[3])}</button>`).join('') + `<div class="rail-sep"></div>` : '')
     + TOOL_GROUPS.map(gr => { const t = toolOf(lastOf(gr)); return `<button class="rail-btn grp" data-group="${gr.id}" data-last="${t[0]}" title="${esc(t[1])}" aria-label="${esc(gr.name)}">${SV(t[3])}<i class="caret" data-fly="${gr.id}" title="${esc(gr.name)}: ver todas"></i></button>`; }).join('')
     + `<div class="rail-spacer"></div><div class="rail-sep"></div>`
@@ -2448,6 +2450,22 @@ function openFly(id, btn) {
   const gr = TOOL_GROUPS.find(x => x.id === id); if (!gr) return;
   const f = document.createElement('div'); f.id = 'railFly'; f.className = 'rail-fly'; f.dataset.g = id;
   f.innerHTML = `<h4>${esc(gr.name)}</h4>` + gr.tools.map(([k, t, d, ic]) => `<button data-rtool="${k}" title="${esc(d)}" class="${drawTool === k ? 'on' : ''}"><span class="ti">${SV(ic, 20)}</span><span class="tn">${esc(t)}</span>${starBtn(k)}</button>`).join('');
+  document.body.appendChild(f);
+  const r = btn.getBoundingClientRect(); f.style.left = (r.right + 6) + 'px'; f.style.top = Math.max(8, Math.min(innerHeight - f.offsetHeight - 8, r.top)) + 'px';
+}
+const CURSOR_IC = {Cruz: '<path d="M12 3v7M12 14v7M3 12h7M14 12h7"/>', Flecha: IC.cursor, Estrella: '<path d="M12 3c.6 4.6 1.4 5.4 6 6-4.6.6-5.4 1.4-6 6-.6-4.6-1.4-5.4-6-6 4.6-.6 5.4-1.4 6-6z"/><path d="M18.5 15.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z"/>'};
+const CURSOR_TXT = {Cruz: ['Cruz', 'Retícula con líneas de precio y tiempo'], Flecha: ['Flecha', 'Puntero normal, sin líneas'], Estrella: ['Estrella', 'Estrella galáctica que deja estela al mantener presionado']};
+let curModeShown = '';
+function syncCursorMode(m) { // aplica el tipo de cursor al gráfico (clases CSS + lienzo de la estrella) y al botón de la barra izquierda
+  m = CURSOR_MODES.includes(m) ? m : 'Cruz'; if (m === curModeShown) return; curModeShown = m;
+  try { window.CCTStarCursor && CCTStarCursor.setMode(m); } catch {}
+  const b = document.querySelector('#toolRail [data-rail="cursor"]'); if (b) { const old = b.querySelector('svg'); if (old) old.outerHTML = SV(CURSOR_IC[m]); b.title = `Cursor: ${CURSOR_TXT[m][0]} (Esc)`; }
+}
+function setCursorMode(m) { if (!CURSOR_MODES.includes(m)) return; state.chartStyle = sanChartStyle(Object.assign({}, state.chartStyle || {}, {cursor: m})); if (m === 'Cruz') delete state.chartStyle.cursor; save(); cancelTool(); syncCursorMode(m); scheduleRender(); toast(`Cursor: ${CURSOR_TXT[m][0]}`); }
+function openCurFly(btn) {
+  const old = $('#railFly'); if (old) { const same = old.dataset.g === 'cursor'; old.remove(); if (same) return; }
+  const cur = cstyle().cursor || 'Cruz', f = document.createElement('div'); f.id = 'railFly'; f.className = 'rail-fly'; f.dataset.g = 'cursor';
+  f.innerHTML = `<h4>Cursor</h4>` + CURSOR_MODES.map(k => `<button data-cur="${k}" title="${esc(CURSOR_TXT[k][1])}" class="${cur === k ? 'on' : ''}"><span class="ti">${SV(CURSOR_IC[k], 20)}</span><span class="tn">${esc(CURSOR_TXT[k][0])}<small class="cur-sub">${esc(CURSOR_TXT[k][1])}</small></span></button>`).join('');
   document.body.appendChild(f);
   const r = btn.getBoundingClientRect(); f.style.left = (r.right + 6) + 'px'; f.style.top = Math.max(8, Math.min(innerHeight - f.offsetHeight - 8, r.top)) + 'px';
 }
@@ -2569,15 +2587,17 @@ function toggleOpt(k) {
   rail.addEventListener('click', e => {
     const fav = e.target.closest('[data-ftool]'); if (fav) { closeFly(); pickTool(fav.dataset.ftool); return; }
     const cav = e.target.closest('[data-fly]'), grp = e.target.closest('[data-group]'), opt = e.target.closest('[data-opt]');
+    if (e.target.closest('[data-curfly]')) { openCurFly(e.target.closest('.rail-btn')); return; }
     if (cav) { openFly(cav.dataset.fly, cav.closest('.rail-btn')); return; }
     closeFly();
     if (grp) { pickTool(grp.dataset.last); return; }
     if (opt) { toggleOpt(opt.dataset.opt); return; }
     if (e.target.closest('[data-rail="cursor"]')) cancelTool();
   });
-  rail.addEventListener('contextmenu', e => { const grp = e.target.closest('[data-group]'); if (!grp) return; e.preventDefault(); openFly(grp.dataset.group, grp); });
+  rail.addEventListener('contextmenu', e => { if (e.target.closest('[data-rail="cursor"]')) { e.preventDefault(); openCurFly(e.target.closest('.rail-btn')); return; } const grp = e.target.closest('[data-group]'); if (!grp) return; e.preventDefault(); openFly(grp.dataset.group, grp); });
   document.addEventListener('click', e => {
     const stf = e.target.closest('#railFly [data-star]'); if (stf) { e.stopPropagation(); toggleFav(stf.dataset.star); return; }
+    const cu = e.target.closest('#railFly [data-cur]'); if (cu) { closeFly(); setCursorMode(cu.dataset.cur); return; }
     const it = e.target.closest('#railFly [data-rtool]'); if (it) { const k = it.dataset.rtool; closeFly(); pickTool(k); return; }
     if (!e.target.closest('#railFly,#toolRail')) closeFly();
   });
@@ -2981,7 +3001,7 @@ function openChartStyle() {
     P('upBorder', 'Alcista · borde', 'color', cs.upBorder || cs.up, 'VELAS'), P('downBorder', 'Bajista · borde', 'color', cs.downBorder || cs.down, 'VELAS'),
     P('upWick', 'Alcista · mecha', 'color', cs.upWick || cs.up, 'VELAS'), P('downWick', 'Bajista · mecha', 'color', cs.downWick || cs.down, 'VELAS'),
     P('hollow', 'Velas alcistas huecas', 'bool', false, 'VELAS'),
-    P('cross', 'Color del cursor (cruz)', 'color', document.body.classList.contains('light') ? '#0b1220' : '#edf3fc', 'CURSOR'), P('crossA', 'Opacidad del cursor (%)', 'int', 55, 'CURSOR', {min: 5, max: 100}), P('crossS', 'Estilo de línea', 'string', 'Guiones', 'CURSOR', {options: ['Guiones', 'Sólida', 'Puntos']}), P('crossW', 'Grosor (px)', 'int', 1, 'CURSOR', {min: 1, max: 4}),
+    P('cursor', 'Tipo de cursor', 'string', 'Cruz', 'CURSOR', {options: CURSOR_MODES}), P('cross', 'Color del cursor (cruz)', 'color', document.body.classList.contains('light') ? '#0b1220' : '#edf3fc', 'CURSOR'), P('crossA', 'Opacidad del cursor (%)', 'int', 55, 'CURSOR', {min: 5, max: 100}), P('crossS', 'Estilo de línea', 'string', 'Guiones', 'CURSOR', {options: ['Guiones', 'Sólida', 'Puntos']}), P('crossW', 'Grosor (px)', 'int', 1, 'CURSOR', {min: 1, max: 4}),
     P('alertCol', 'Color de la línea', 'color', document.body.classList.contains('light') ? '#5b6678' : '#8a96a8', 'LÍNEA DE ALERTA'), P('alertA', 'Opacidad (%)', 'int', 28, 'LÍNEA DE ALERTA', {min: 5, max: 100}), P('alertS', 'Estilo de línea', 'string', 'Puntos', 'LÍNEA DE ALERTA', {options: ['Puntos', 'Guiones', 'Sólida']}), P('alertW', 'Grosor (px)', 'int', 1, 'LÍNEA DE ALERTA', {min: 1, max: 4}), {key: 'reset', title: 'Restablecer todo a los valores por defecto', type: 'bool', def: false, value: false, group: 'RESTABLECER'}];
   CCTSettings.open({title: 'Aspecto del gráfico', tabs: ['in'], note: 'Colores, cuadrícula, cursor y línea de las alertas. Se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
     const v = res.inputs, o = {};
@@ -3397,11 +3417,13 @@ function renderCore() {
   if (nn && state.indicators.nnIa && nn.last) drawNovaScore(nn.last);
   // retícula (mantener pulsado)
   let shown = candles[hi - 1];
+  syncCursorMode(CS.cursor);
   if (cross) {
     const fi = IDX(cross.x), i = clamp(Math.round(fi), 0, n - 1), c = candles[i]; shown = c;
     const free = fi > n - 1 + .5 || fi < -.5, cx = free ? clamp(cross.x, left, w - right) : X(i), cy = clamp(cross.y, plotTop, plotTop + plotH); // fuera de las velas (zona vacía a la derecha) la cruz sigue al puntero sin ajustarse a una vela
     g.strokeStyle = CS.cross || fg; g.globalAlpha = CS.crossA / 100; g.lineWidth = CS.crossW; g.setLineDash(CS.crossS === 'Sólida' ? [] : CS.crossS === 'Puntos' ? [1.5, 3] : [4, 4]);
-    g.beginPath(); g.moveTo(cx, top0); g.lineTo(cx, h - axisH); g.moveTo(left, cy); g.lineTo(w - right + 2, cy); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+    if (CS.cursor === 'Cruz' || !CS.cursor || drawTool) { g.beginPath(); g.moveTo(cx, top0); g.lineTo(cx, h - axisH); g.moveTo(left, cy); g.lineTo(w - right + 2, cy); g.stroke(); } // con Flecha o Estrella no hay líneas: solo las etiquetas de precio y hora
+    g.setLineDash([]); g.globalAlpha = 1;
     g.fillStyle = CS.cross || fg; g.fillRect(w - right + 2, cy - 9, right - 3, 18); g.fillStyle = bg; g.fillText(fmt(PRICE(cy)), w - right + 5, cy + 3.5);
     const tl = CCTPrefs.full(free ? timeOfIdx(Math.round(fi)) : c.t, PR);
     const tw = g.measureText(tl).width + 12, tx = clamp(cx - tw / 2, left, w - right - tw);

@@ -796,3 +796,9 @@ body[data-tier="infinity"] .prem-tag{display:none!important}
 .chart-ctx .ctx-sep{display:block;height:1px;margin:4px 6px;background:var(--line);opacity:.7}
 .xc-lg.img{background:#fff;padding:3px;box-sizing:border-box;overflow:hidden}
 .xc-lg.img img{width:100%;height:100%;object-fit:contain;display:block;border-radius:6px}
+
+/* Tipo de cursor del gráfico: Flecha (puntero normal) o Estrella (la dibuja star-cursor.js con su estela) */
+.chart-area.cur-arrow,.chart-area.cur-arrow canvas{cursor:default}
+.chart-area.cur-star,.chart-area.cur-star canvas{cursor:none}
+.chart-area.cur-arrow.drawing,.chart-area.cur-arrow.drawing canvas,.chart-area.cur-star.drawing,.chart-area.cur-star.drawing canvas{cursor:crosshair}
+.rail-fly .cur-sub{display:block;font-size:10.5px;color:var(--muted);margin-top:2px}
