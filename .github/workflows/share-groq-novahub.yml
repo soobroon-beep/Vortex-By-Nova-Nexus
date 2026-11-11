@@ -1,0 +1,46 @@
+name: Compartir IA Groq con NOVA HUB
+# Copia la clave de Groq de VORTEX (secreto GROQ_KEY) al servidor de NOVA HUB (Worker «nova-hub-push»),
+# para que NOVA HUB, Cortex, el briefing y Neural Brain usen Groq sin pegar la clave otra vez.
+# La clave nunca se imprime ni queda en el código. Después prueba el briefing igual que el botón «Generar ahora».
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/share-groq-novahub.yml']
+permissions:
+  contents: read
+jobs:
+  share:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Pasar la clave de Groq a nova-hub-push
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GROQ_KEY: ${{ secrets.GROQ_KEY }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$GROQ_KEY" ]; then echo "Falta CLOUDFLARE_API_TOKEN o GROQ_KEY en este repo."; exit 0; fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
+          printf '%s' "$GROQ_KEY" | npx --yes wrangler@4 secret put GROQ_KEY --name nova-hub-push
+      - uses: actions/checkout@v4
+        with: {repository: soobroon-beep/Nova-HUB, path: nova-hub}
+      - name: Probar la IA de NOVA HUB (estado y briefing)
+        working-directory: nova-hub
+        run: |
+          sleep 15
+          curl -sS https://nova-hub-push.soobroon.workers.dev/ai/status; echo
+          cat > diag.mjs <<'JS'
+          const AI = await import('./worker/ai.mjs');
+          const B = await import('./worker/briefing.mjs');
+          const withOrigin = (u, i = {}) => { const t = Date.now(); i.headers = Object.assign({}, i.headers, {origin: 'https://soobroon-beep.github.io'}); return fetch(u, i).then(r => { console.log('  ', r.status, u.split('/')[2], (Date.now() - t) + 'ms'); return r; }); };
+          for (const url of [AI.NH_URL, AI.VX_URL]) {
+            try { const r = await withOrigin(url, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({model: 'openai', task: 'json', messages: [{role: 'system', content: 'Devuelve solo JSON {"ok":true}'}, {role: 'user', content: 'hola'}]})}); const j = await r.json(); console.log(url, j.model || '', JSON.stringify(j).slice(0, 160)); } catch (e) { console.log(url, 'ERROR', e.message); }
+          }
+          const t = Date.now();
+          try { const e = await B.generateBriefing({name: 'Payi', fetchFn: withOrigin, source: 'manual'}); console.log('BRIEFING OK', (Date.now() - t) + 'ms', JSON.stringify(e).slice(0, 300)); }
+          catch (e) { console.log('BRIEFING FALLÓ', (Date.now() - t) + 'ms', e.message); }
+          JS
+          node diag.mjs
