@@ -20,7 +20,16 @@
     const del = Object.assign({}, a.deleted, b.deleted), map = new Map(); for (const x of [...a.bots, ...b.bots]) { const y = map.get(x.id); if (!y || (x.updatedAt || 0) > (y.updatedAt || 0)) map.set(x.id, x); }
     const ra = a.risk, rb = b.risk, risk = !ra ? rb : !rb ? ra : ((rb.updatedAt || 0) > (ra.updatedAt || 0) ? rb : ra);
     const ca = a.claudio, cb = b.claudio, CK = window.CCTClaudio, claudio = !ca ? cb : !cb ? ca : {cfg: ((cb.cfg || {}).at || 0) > ((ca.cfg || {}).at || 0) ? cb.cfg : ca.cfg, s: CK ? CK.newer(ca.s, cb.s) : ca.s};
-    return {v: 1, bots: [...map.values()].filter(x => !(del[x.id] >= (x.updatedAt || 0))), deleted: del, risk: risk || null, claudio: claudio || null, seeded: Object.assign({}, a.seeded, b.seeded)};
+    return dedupe({v: 1, bots: [...map.values()].filter(x => !(del[x.id] >= (x.updatedAt || 0))), deleted: del, risk: risk || null, claudio: claudio || null, seeded: Object.assign({}, a.seeded, b.seeded)});
+  }
+  /* Bots repetidos: los bots que crea Nova Bot Lab (Seguro, Nova v2.7, Lucas…) se creaban otra vez cuando un dispositivo los sembraba antes de recibir los de tu cuenta.
+     Se queda UNO por plantilla (el que más ha operado en simulado; si empatan, el más antiguo) y los demás se marcan como borrados en todos tus dispositivos. */
+  function dedupe(o) {
+    const act = b => (b.paper || []).reduce((n, x) => n + ((x.ledger || []).length), 0), by = new Map(), now = Date.now(); let gone = 0;
+    for (const b of o.bots) { if (!b.preset) continue; const k = b.preset, y = by.get(k); if (!y) { by.set(k, b); continue; }
+      const keep = act(b) > act(y) || (act(b) === act(y) && (b.createdAt || 0) < (y.createdAt || 0)) ? b : y, drop = keep === b ? y : b; by.set(k, keep); o.deleted[drop.id] = Math.max(now, (drop.updatedAt || 0) + 1); gone++; }
+    if (gone) o.bots = o.bots.filter(b => !o.deleted[b.id] || o.deleted[b.id] < (b.updatedAt || 0));
+    return o;
   }
   function save() {
     try { const D = window.CCT_discordStore && window.CCT_discordStore.get(); S.notify = D && D.url ? {url: D.url, bots: (D.on || {}).bots !== false} : null; } catch {}
@@ -880,7 +889,7 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
 
   /* ----- Arranque ----- */
   function init() {
-    root = $('#botLabRoot'); if (!root) return; S = readLocal(); bind(); setTimeout(() => { if (!(H.cloud && H.cloud())) { seedSafe(); seedLucas(); if (view === 'lib') render(); } }, 12000); if (window.CCTClaudioUI) window.CCTClaudioUI.onChange = () => { if (view === 'lib') render(); }; render();
+    root = $('#botLabRoot'); if (!root) return; S = dedupe(Object.assign({deleted: {}}, readLocal())); bind(); setTimeout(() => { if (!(H.cloud && H.cloud())) { seedSafe(); seedLucas(); if (view === 'lib') render(); } }, 12000); if (window.CCTClaudioUI) window.CCTClaudioUI.onChange = () => { if (view === 'lib') render(); }; render();
     const open = () => { S = merge(S, readLocal()); setTimeout(() => { if (view === 'lib') render(); }, 30); pullCloud(); paperTick(); };
     const rb = $('#rrBotLab'); rb && rb.addEventListener('click', open);
     paperTick(); setInterval(() => { if (!document.hidden) paperTick(); }, 60000);

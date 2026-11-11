@@ -4,7 +4,7 @@
 // Pasos (3 minutos): dash.cloudflare.com → Workers y Pages → Crear → Crear Worker → Implementar → Editar código → pega este archivo → Implementar.
 // Copia la URL que termina en .workers.dev y pégala una sola vez en Nexus Lens («Proxy URL»).
 // Opcional: Ajustes → Variables → ALLOWED_ORIGIN = tu sitio (por defecto https://soobroon-beep.github.io; varios separados por coma).
-const HOST = 'https://open-api.bingx.com', DEFAULT_ORIGIN = 'https://soobroon-beep.github.io';
+const HOST = 'https://open-api.bingx.com', DEFAULT_ORIGIN = 'https://soobroon-beep.github.io,https://vortex-nexus.pages.dev';
 export default {
   async fetch(req, env) {
     const allowed = String(env.ALLOWED_ORIGIN || DEFAULT_ORIGIN).split(',').map(s => s.trim()).filter(Boolean);

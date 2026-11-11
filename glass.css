@@ -1678,21 +1678,22 @@ body:not(.light) :is(.cfg-dlg,.pc-dlg,.rk-dlg,.dz-box,.row-menu,.pop-menu,.tag-p
 .px-x{display:grid;place-items:center;flex:none}
 .px-in .px-mic.on::after{content:attr(data-t);position:absolute;bottom:calc(100% + 4px);left:50%;translate:-50% 0;font-size:10px;font-weight:700;color:#f06b79;white-space:nowrap}
 
-/* ───────── Planes: todo lo premium BLOQUEADO lleva fondo de galaxia (estrellas que pasan despacio); desbloqueado se ve normal ───────── */
+/* ───────── Planes: lo premium BLOQUEADO lleva un fondo de galaxia discreto (pocas estrellas que pasan despacio); desbloqueado se ve normal ───────── */
 .gx-lock:not(#liqBtn){
-  --gx-stars:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='124' height='38'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='6' cy='5' r='.7' opacity='.8'/%3E%3Ccircle cx='18' cy='22' r='.6' opacity='.5'/%3E%3Ccircle cx='27' cy='11' r='.7' fill='%23d6ccff' opacity='.7'/%3E%3Ccircle cx='39' cy='30' r='.6' opacity='.5'/%3E%3Ccircle cx='52' cy='4' r='.8' opacity='.85'/%3E%3Ccircle cx='58' cy='19' r='.6' fill='%23c4d4ff' opacity='.6'/%3E%3Ccircle cx='71' cy='33' r='.6' opacity='.5'/%3E%3Ccircle cx='84' cy='13' r='.7' opacity='.8'/%3E%3Ccircle cx='93' cy='26' r='.6' fill='%23d6ccff' opacity='.7'/%3E%3Ccircle cx='104' cy='7' r='.6' opacity='.5'/%3E%3Ccircle cx='113' cy='31' r='.75' opacity='.8'/%3E%3Ccircle cx='12' cy='34' r='.5' opacity='.6'/%3E%3Ccircle cx='47' cy='16' r='.5' opacity='.5'/%3E%3Ccircle cx='118' cy='20' r='.5' opacity='.6'/%3E%3C/g%3E%3C/svg%3E");
-  --gx-const:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='38'%3E%3Cg fill='none' stroke='%23c4b5fd' stroke-opacity='.3' stroke-width='.6'%3E%3Cpath d='M14 27 30 17 46 21 58 9 74 13M46 21l6 10M104 30l12-12 16 4 14-14M116 18l6-12'/%3E%3C/g%3E%3Cg fill='%23fff'%3E%3Ccircle cx='30' cy='17' r='1.2'/%3E%3Ccircle cx='58' cy='9' r='1.4'/%3E%3Ccircle cx='116' cy='18' r='1.3'/%3E%3Ccircle cx='146' cy='8' r='1.1'/%3E%3Ccircle cx='14' cy='27' r='.9'/%3E%3Ccircle cx='132' cy='22' r='.9'/%3E%3C/g%3E%3C/svg%3E");
-  background-color:#0b0920!important;
-  background-image:var(--gx-stars),var(--gx-const),radial-gradient(90% 140% at 18% 0%,rgba(124,77,255,.26),transparent 62%),radial-gradient(80% 140% at 100% 100%,rgba(56,96,200,.2),transparent 64%)!important;
-  background-size:124px 38px,160px 38px,100% 100%,100% 100%!important;background-repeat:repeat,repeat,no-repeat,no-repeat!important;
-  border-color:rgba(167,139,250,.34)!important;box-shadow:inset 0 0 0 1px rgba(167,139,250,.08),0 0 14px rgba(124,77,255,.12)!important;
-  animation:gxDrift 34s linear infinite}
-.gx-lock:not(#liqBtn) :is(b,strong,.tn,span:not(.prem-tag)){color:#efeaff}
-.gx-lock:not(#liqBtn) small{color:rgba(225,215,255,.66)}
-:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock{color:#d9ccff!important;border-radius:12px}
-@keyframes gxDrift{to{background-position:-124px 0,-160px 0,0 0,0 0}}
+  background-color:#0a0a16!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='90'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='18' cy='14' r='.6' opacity='.55'/%3E%3Ccircle cx='96' cy='62' r='.5' opacity='.4'/%3E%3Ccircle cx='150' cy='22' r='.7' fill='%23d6ccff' opacity='.5'/%3E%3Ccircle cx='200' cy='74' r='.5' opacity='.35'/%3E%3Ccircle cx='60' cy='80' r='.45' opacity='.3'/%3E%3C/g%3E%3C/svg%3E"),radial-gradient(70% 120% at 12% 0%,rgba(124,77,255,.13),transparent 65%),radial-gradient(60% 120% at 100% 100%,rgba(56,96,200,.09),transparent 68%)!important;
+  background-size:220px 90px,100% 100%,100% 100%!important;background-repeat:repeat,no-repeat,no-repeat!important;
+  border-color:rgba(167,139,250,.22)!important;box-shadow:none!important;
+  animation:gxDrift 60s linear infinite}
+.gx-lock:not(#liqBtn) :is(b,strong,.tn,span:not(.prem-tag)){color:#ece8fb}
+.gx-lock:not(#liqBtn) small{color:rgba(225,215,255,.6)}
+@keyframes gxDrift{to{background-position:-220px 0,0 0,0 0}}
 @media (prefers-reduced-motion:reduce){.gx-lock{animation:none!important}}
-.light .gx-lock:not(#liqBtn){color:#efeaff}
+/* barra derecha, barra del celular y barra de dibujo: sin galaxia, el icono normal con una estrellita en la esquina que indica «premium» */
+:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn){animation:none!important;border-color:transparent!important;box-shadow:none!important;background-color:transparent!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 0c.3 2.3.9 2.9 3.2 3.2C5.9 3.5 5.3 4.1 5 6.4 4.7 4.1 4.1 3.5 1.8 3.2 4.1 2.9 4.7 2.3 5 0z' fill='%23c4b5fd'/%3E%3C/svg%3E")!important;
+  background-size:9px 9px!important;background-repeat:no-repeat!important;background-position:right 4px top 3px!important}
+.bottom-nav button.gx-lock:not(#liqBtn){background-position:right calc(50% - 16px) top 6px!important}
 .pl-col.want{box-shadow:0 0 0 2px #b79cff inset,0 0 24px rgba(139,92,246,.25)}
 
 /* ───────── Bienvenida: iniciar sesión con Google al abrir (si la cierras, sigues con Gratis) ───────── */

@@ -9,11 +9,11 @@
 import * as SCR from './screener.mjs';
 import {radarInternal, loadState as radarState} from './radar-server.mjs';
 import DOM from '../dominance-core.js';
-const DEFAULT_ORIGINS = 'https://soobroon-beep.github.io';
+const DEFAULT_ORIGINS = 'https://soobroon-beep.github.io,https://vortex-nexus.pages.dev';
 const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com', 'https://api1.binance.com'];
 const MOVE_TOP = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT'];
 const MOVE_WIN = [[5, '5 min', 1], [60, '1 h', 2.5]], MOVE_COOL = 15 * 60000;
-const MAX_ALERTS = 50, MAX_DEVICES = 20, APP_URL = 'https://soobroon-beep.github.io/Vortex-By-Nova-Nexus/';
+const MAX_ALERTS = 50, MAX_DEVICES = 20, APP_URL = 'https://vortex-nexus.pages.dev/';
 
 /* ───────── Plan Infinity: comprobar el referido de BingX ─────────
    Usa la API de afiliado (agente) de BingX con TU llave: secretos BINGX_AGENT_KEY y BINGX_AGENT_SECRET del Worker (solo lectura).

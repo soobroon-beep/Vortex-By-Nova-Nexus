@@ -1,0 +1,62 @@
+name: Configurar planes y dirección (una vez)
+# Hace los pasos de configuración que no se pueden hacer desde la app y deja el resultado en docs/setup-log.txt:
+#  1) Firebase: añade vortex-nexus.pages.dev a los dominios autorizados (para iniciar sesión con Google en la dirección nueva).
+#  2) Google Cloud: activa «YouTube Data API v3» (para verificar la suscripción del plan Plus).
+#  3) Cloudflare Pages: crea el proyecto vortex-nexus y publica la app.
+# Usa los secretos que ya existen: FIREBASE_SERVICE_ACCOUNT, CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/setup-plans.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROJECT: criptochart-bd774
+      DOMAIN: vortex-nexus.pages.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Configurar
+        run: |
+          L=docs/setup-log.txt; : > $L; log() { echo "$*" | tee -a $L; }
+          log "Fecha: $(date -u)"
+          if [ -n "$SA" ]; then
+            umask 077; printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+            gcloud auth activate-service-account --key-file="$RUNNER_TEMP/sa.json" >/dev/null 2>&1 && log "Cuenta de servicio: ok ($(gcloud config get-value account 2>/dev/null))" || log "Cuenta de servicio: ERROR"
+            TOK=$(gcloud auth print-access-token 2>/dev/null)
+            # 1) dominio autorizado en Firebase Auth
+            CUR=$(curl -s -H "Authorization: Bearer $TOK" -H "x-goog-user-project: $PROJECT" "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT/config")
+            DOMS=$(echo "$CUR" | jq -c '.authorizedDomains // empty')
+            if [ -z "$DOMS" ]; then log "Firebase dominios: no se pudo leer → $(echo "$CUR" | jq -c '.error.message // .' | head -c 300)";
+            elif echo "$DOMS" | jq -e --arg d "$DOMAIN" 'index($d)' >/dev/null; then log "Firebase dominios: $DOMAIN ya estaba";
+            else NEW=$(echo "$DOMS" | jq -c --arg d "$DOMAIN" '. + [$d]')
+              R=$(curl -s -X PATCH -H "Authorization: Bearer $TOK" -H "x-goog-user-project: $PROJECT" -H 'content-type: application/json' "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT/config?updateMask=authorizedDomains" -d "{\"authorizedDomains\":$NEW}")
+              echo "$R" | jq -e '.authorizedDomains' >/dev/null && log "Firebase dominios: añadido $DOMAIN" || log "Firebase dominios: ERROR → $(echo "$R" | jq -c '.error.message // .' | head -c 300)"; fi
+            # 2) YouTube Data API v3
+            R=$(curl -s -X POST -H "Authorization: Bearer $TOK" -H 'content-type: application/json' "https://serviceusage.googleapis.com/v1/projects/$PROJECT/services/youtube.googleapis.com:enable" -d '{}')
+            echo "$R" | jq -e '.error' >/dev/null && log "YouTube Data API: ERROR → $(echo "$R" | jq -c '.error.message' | head -c 300)" || log "YouTube Data API: activada"
+            S=$(curl -s -H "Authorization: Bearer $TOK" "https://serviceusage.googleapis.com/v1/projects/$PROJECT/services/youtube.googleapis.com" | jq -r '.state // .error.message'); log "YouTube Data API estado: $S"
+            rm -f "$RUNNER_TEMP/sa.json"
+          else log "Falta FIREBASE_SERVICE_ACCOUNT"; fi
+          # 3) Cloudflare Pages
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
+            mkdir -p dist; rsync -a --exclude '.git' --exclude '.github' --exclude 'worker' --exclude 'tests' --exclude 'scripts' --exclude 'docs' --exclude 'dist' --exclude '*.md' --exclude '*.py' --exclude 'tools-gen-*' --exclude 'pwa.test.js' --exclude 'firestore.rules' --exclude 'firebase.json' ./ dist/
+            C=$(npx --yes wrangler@4 pages project create vortex-nexus --production-branch main 2>&1 | tail -3 | tr '\n' ' '); log "Pages proyecto: $C"
+            D=$(npx --yes wrangler@4 pages deploy dist --project-name vortex-nexus --branch main --commit-dirty=true 2>&1 | tail -4 | tr '\n' ' '); log "Pages publicación: $D"
+          else log "Falta CLOUDFLARE_API_TOKEN"; fi
+          sed -i -E 's/[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{20,}//g' $L
+      - name: Guardar el resultado
+        run: |
+          git config user.name "vortex-bot"; git config user.email "actions@users.noreply.github.com"
+          git add docs/setup-log.txt; git commit -m "setup: resultado de la configuración" || exit 0
+          for i in 1 2 3; do git pull --rebase -q && git push -q && break; sleep 5; done

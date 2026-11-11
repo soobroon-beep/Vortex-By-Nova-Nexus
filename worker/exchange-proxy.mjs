@@ -4,7 +4,7 @@
 // Tu Secret Key NUNCA llega aquí: solo viajan la API Key y la firma, igual que si tu navegador hablara directo con el exchange.
 // Formato (el de CCXT con proxyUrl): https://vortex-exchange.<cuenta>.workers.dev/?<URL del exchange (codificada si lleva «?»)>
 // Opcional: Ajustes → Variables → ALLOWED_ORIGIN = tus sitios separados por coma (por defecto https://soobroon-beep.github.io).
-const DEFAULT_ORIGINS = 'https://soobroon-beep.github.io';
+const DEFAULT_ORIGINS = 'https://soobroon-beep.github.io,https://vortex-nexus.pages.dev';
 const DROP = new Set(['host', 'origin', 'referer', 'cookie', 'content-length', 'connection', 'accept-encoding', 'x-forwarded-for', 'x-real-ip', 'true-client-ip']);
 
 export function targetOf(reqUrl) { // URL del exchange que viene después del «?»

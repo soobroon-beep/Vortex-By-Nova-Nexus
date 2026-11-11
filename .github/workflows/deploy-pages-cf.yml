@@ -1,0 +1,38 @@
+name: Publicar VORTEX en Cloudflare Pages (vortex-nexus.pages.dev)
+# Publica la app en https://vortex-nexus.pages.dev: una dirección que no lleva tu usuario de GitHub.
+# Usa el mismo secreto CLOUDFLARE_API_TOKEN de los Workers (necesita también el permiso «Cloudflare Pages: Edit»).
+# Se publica con cada cambio en main y cuando se actualizan noticias, dominancia o el Screener (esos cambios los sube un robot y no disparan el «push»).
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['worker/**', 'tests/**', 'scripts/**', 'docs/**', '**.md']
+  workflow_run:
+    workflows: ['Actualizar noticias', 'Actualizar dominancia', 'Screener a Discord']
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: deploy-pages-cf, cancel-in-progress: true}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Preparar la carpeta del sitio
+        run: |
+          mkdir -p dist
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'worker' --exclude 'tests' --exclude 'scripts' --exclude 'docs' --exclude 'dist' \
+            --exclude '*.md' --exclude '*.py' --exclude 'tools-gen-*' --exclude 'pwa.test.js' --exclude 'firestore.rules' --exclude 'firebase.json' ./ dist/
+      - name: Publicar
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "Falta CLOUDFLARE_API_TOKEN: no se publica."; exit 0; fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
+          npx --yes wrangler@4 pages project create vortex-nexus --production-branch main 2>/dev/null || true
+          npx --yes wrangler@4 pages deploy dist --project-name vortex-nexus --branch main --commit-dirty=true
