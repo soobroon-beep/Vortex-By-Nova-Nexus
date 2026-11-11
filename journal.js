@@ -10,7 +10,22 @@
   let J = load(), ov = null, sel = null, F = {per: '30', side: 'all', tag: ''}, calM = null;
 
   function load() { try { const j = JSON.parse(localStorage.getItem(LS) || 'null'); if (j && Array.isArray(j.items)) return Object.assign({items: [], seen: [], open: {}, tags: []}, j); } catch {} return {items: [], seen: [], open: {}, tags: []}; }
-  const save = () => { try { localStorage.setItem(LS, JSON.stringify(J)); } catch { if (J.items.length > 200) { J.items.length = Math.floor(J.items.length * .8); save(); } } };
+  const save = () => { cloudMirror(); try { localStorage.setItem(LS, JSON.stringify(J)); } catch { if (J.items.length > 200) { J.items.length = Math.floor(J.items.length * .8); save(); } } };
+  /* Copia del diario en tu cuenta (users/<uid>/data/journal), sin capturas: así tus operaciones no se quedan solo en este dispositivo
+     y tu cerebro (Neural Brain) puede aprender de ellas. Se mezcla con lo que ya haya en la nube (por id), nunca se pisa. */
+  let cloudT = 0;
+  const cloudKeep = it => { const o = {}; for (const k of ['id', 'src', 'sym', 'side', 'qty', 'entry', 'exit', 'pnl', 'fees', 'lev', 'why', 'tOpen', 'tClose', 'sl', 'tp', 'r', 'tags', 'note']) if (it[k] != null) o[k] = it[k]; return o; };
+  function cloudMirror() {
+    clearTimeout(cloudT); cloudT = setTimeout(async () => {
+      const C = root.CCTCloudPriv; if (!C || !C.ready()) return;
+      try {
+        const d = await C.get('journal'); let cloud = []; try { cloud = d && d.items ? JSON.parse(d.items) : []; } catch {}
+        const map = new Map(); for (const it of (Array.isArray(cloud) ? cloud : [])) if (it && it.id) map.set(it.id, it); for (const it of J.items) if (it && it.id) map.set(it.id, cloudKeep(it));
+        const all = [...map.values()].sort((a, b) => (b.tClose || 0) - (a.tClose || 0)).slice(0, 800), str = JSON.stringify(all);
+        if (!d || d.items !== str) await C.set('journal', {items: str, at: Date.now()});
+      } catch {}
+    }, 4000);
+  }
 
   /* ───────── imágenes en IndexedDB (las capturas no caben en localStorage) ───────── */
   let dbP = null;

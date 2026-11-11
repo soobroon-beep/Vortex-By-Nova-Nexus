@@ -7,7 +7,7 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null
                             && request.auth.uid == userId
-                            && docId in ['cct_mobile', 'scripts', 'botlab', 'claudio', 'exchanges', 'radar']
+                            && docId in ['cct_mobile', 'scripts', 'botlab', 'claudio', 'exchanges', 'radar', 'journal']
                             && request.resource.size() < 1000000;   // tope de Firestore: 1 MiB por documento
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
@@ -16,6 +16,8 @@ service cloud.firestore {
     // Claudio: 'claudio' (encendido, interruptor de emergencia, capital) lo escribe la app; 'claudio_server' (la sesión del agente) solo el trabajo programado.
 
     // 'exchanges': tu exchange conectado (API Key para el saldo, Nexus Lens y Operar). Solo tú puedes leerlo o escribirlo.
+
+    // 'journal': copia de tu diario de trading (sin capturas). 'brain': lo que te dejan tus cerebros de Neural Brain; solo lo escribe el conector (servidor), tú solo lo lees.
 
     // Cualquier otra ruta, bloqueada.
     match /{document=**} {

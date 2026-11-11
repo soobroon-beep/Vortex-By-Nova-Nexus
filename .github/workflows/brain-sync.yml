@@ -1,0 +1,27 @@
+name: Cerebro · conector de VORTEX
+# Cada 30 min manda a tu cerebro (Neural Brain) tu actividad en VORTEX (seguimiento, alertas, ideas Long/Short, indicadores,
+# scripts, bots y sus resultados, operaciones del diario) y las actualizaciones de la app; y de regreso deja en
+# users/<uid>/data/brain lo que aprendieron tus cerebros de trading, para la IA de VORTEX (Analizar gráfico y Briefing).
+# Necesita el secreto NEURAL_BRAIN_SERVICE_ACCOUNT; sin él termina sin hacer nada.
+on:
+  schedule: [{cron: '*/30 * * * *'}]
+  push: {branches: [main]}
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: brain-sync, cancel-in-progress: false}
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 400}
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12
+      - run: node scripts/brain-sync.js
+        env:
+          BRAIN_APP: vortex
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          NEURAL_BRAIN_SERVICE_ACCOUNT: ${{ secrets.NEURAL_BRAIN_SERVICE_ACCOUNT }}

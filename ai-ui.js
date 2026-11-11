@@ -57,6 +57,21 @@ FORMATO (máximo ~260 palabras, viñetas cortas): ### Niveles clave (soportes y 
 ### Mi lectura del mercado (OBLIGATORIA: 2-3 frases con tu opinión como analista tras leer todo lo anterior: si es más probable que el mercado siga bajando, lateralice o suba, y por qué; usa lenguaje de probabilidad, nunca certezas)
 ### Qué vigilar hoy (1-2 líneas de cautela y horarios)
 Cierra con «Análisis educativo, no asesoría financiera.»`;
+  /* Tu cerebro (Neural Brain): lo que le enseñaste y lo que aprendió de tu forma de operar. Lo deja el conector del servidor en
+     users/<uid>/data/brain; aquí solo se lee (caché 10 min). Lo usan Analizar gráfico y el Briefing; Nexus Pixel no. */
+  const brainC = {t: 0, text: ''};
+  async function brainText() {
+    const C = window.CCTCloudPriv; if (!C || !C.ready()) return '';
+    if (Date.now() - brainC.t < 6e5) return brainC.text;
+    try { const d = await Promise.race([C.get('brain'), new Promise(r => setTimeout(() => r(null), 4000))]); brainC.text = d && typeof d.text === 'string' ? d.text.slice(0, 7500) : ''; brainC.t = Date.now(); } catch {}
+    return brainC.text;
+  }
+  async function withBrain(sys, how) {
+    const t = await brainText(); if (!t) return sys;
+    return sys + `\n\nCONTEXTO PERSONAL DEL USUARIO (su «cerebro» de trading: reglas, estrategias de traders que sigue y patrones aprendidos de cómo opera). ${how}\nNo lo cites completo ni inventes reglas que no estén aquí; si algo del gráfico o del día rompe una de sus reglas maestras, avísale con una línea clara.\n${t}`;
+  }
+  const BRAIN_CHART = 'Úsalo para adaptar el análisis a SU estrategia: compara lo que ves con sus reglas y estrategias, y añade al final una sección ### Según tu estrategia (2-4 viñetas: qué cumple, qué no y qué haría alguien que sigue sus reglas, en lenguaje de escenarios).';
+  const BRAIN_BRIEF = 'Úsalo SOLO para personalizar «Mi lectura del mercado» y «Qué vigilar hoy» según sus reglas (p. ej. horarios en los que no opera, eventos que evita); el resto del briefing sigue siendo general.';
   const NOVA_RE = /nova\s*nexus|novanexus|cripto\s*chaman|criptochaman/i; // nombre de tu indicador Nova Nexus (faltaba: el análisis tronaba con scripts Pine en el gráfico)
   function userData(ctx) { // solo lo que el usuario realmente tiene en el gráfico (sin EMA/RSI/MACD calculados por la app)
     const c = ctx.candles, r = x => x == null ? null : +(+x).toPrecision(7), hi = Math.max(...c.slice(-120).map(k => k.h)), lo = Math.min(...c.slice(-120).map(k => k.l));
@@ -127,7 +142,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     let prompt, msgs; const b = bubble('bot', note('Analizando…'), 'typing');
     try { // si algo falla al preparar los datos, se avisa y se libera el botón (antes se quedaba «Analizando…» para siempre)
     prompt = `Resume este gráfico de ${ctx.symbol} en ${ctx.interval} usando solo mis indicadores (captura y datos).\n\nDATOS DE MIS INDICADORES (JSON, actualizados ahora):\n${dataBlock(ctx, g.extra)}`;
-    msgs = [{role: 'system', content: SYS_CHART}, cap ? LLM.imageMessage(prompt, cap.url) : {role: 'user', content: prompt}];
+    msgs = [{role: 'system', content: await withBrain(SYS_CHART, BRAIN_CHART)}, cap ? LLM.imageMessage(prompt, cap.url) : {role: 'user', content: prompt}];
       const r = await callLLM(msgs, {purpose: 'chart', needVision: !!cap, maxTokens: 1400}, b); b.classList.remove('typing');
       b.insertAdjacentHTML('beforeend', note(cap ? (r.image ? 'La IA recibió la captura del gráfico junto con los datos.' : 'La captura no se pudo usar en este momento: la IA analizó los datos reales de tus velas e indicadores.') : 'No se pudo tomar la captura (abre la pestaña Gráfico primero): analizó solo los datos numéricos.') + note('Modelo: ' + r.model));
       st.chart.hist.push({role: 'user', content: msgs[1].content, text: prompt, hidden: true}, {role: 'assistant', content: r.text, text: r.text});
@@ -140,7 +155,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     if (!ctx) { bubble('bot', md('Abre un gráfico con velas para que pueda responderte con datos reales.')); setBusy(false); return; }
     const b = bubble('bot', note('Pensando…'), 'typing'); let text;
     try { text = `${q}\n\nDATOS ACTUALES DE MIS INDICADORES (JSON):\n${dataBlock(ctx, g.extra)}`; const hist = st.chart.hist.slice(-7);
-      const msgs = [{role: 'system', content: SYS_CHART}, ...hist.map(m => ({role: m.role, content: m.content})), {role: 'user', content: text}];
+      const msgs = [{role: 'system', content: await withBrain(SYS_CHART, BRAIN_CHART)}, ...hist.map(m => ({role: m.role, content: m.content})), {role: 'user', content: text}];
       const r = await callLLM(msgs, {purpose: 'chart', needVision: LLM.hasImage(msgs), maxTokens: 800}, b); b.classList.remove('typing'); st.chart.hist.push({role: 'user', content: text, text: q, show: q, hidden: true}, {role: 'assistant', content: r.text, text: r.text}); }
     catch (e) { b.classList.remove('typing'); let loc = ''; try { loc = AI.answerLocal(q, ctx, g.extra); } catch {} b.innerHTML = md('**El modelo no respondió.** ' + LLM.friendly(e) + (loc ? '\n\nRespuesta local:\n\n' + loc : '')); }
     finally { setBusy(false); }
@@ -159,7 +174,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     if (st.busy) return; setBusy(true); const log = $('#aivLog'); log.innerHTML = `<div class="aiv-msg bot typing">${note('Reuniendo calendario, noticias y mercado…')}</div>`;
     const g = await gather(true, 60, true), b = log.firstChild, prompt = `Genera el briefing del día (resumen corto del mercado, sin análisis de gráficos).\n\n${briefExtras(g.extra)}`;
     try {
-      const r = await callLLM([{role: 'system', content: SYS_BRIEF}, {role: 'user', content: prompt}], {maxTokens: 1000, timeout: 120000}, b);
+      const r = await callLLM([{role: 'system', content: await withBrain(SYS_BRIEF, BRAIN_BRIEF)}, {role: 'user', content: prompt}], {maxTokens: 1000, timeout: 120000}, b);
       st.brief = {text: r.text, at: Date.now(), by: 'Modelo: ' + r.model};
     } catch (e) {
       st.brief = {text: `**No pude consultar el modelo de IA** (${LLM.friendly(e)}). Este es el resumen por reglas con tus datos reales:\n\n` + AI.briefLocal(null, g.extra), at: Date.now(), by: 'Analista local por reglas (sin modelo)'};
