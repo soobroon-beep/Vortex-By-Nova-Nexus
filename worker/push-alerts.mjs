@@ -4,7 +4,7 @@
 // · La app le manda tus alertas y la suscripción de tu celular a /sync (solo alertas de PRECIO; las de indicador siguen en la app).
 // · Las claves VAPID se crean solas la primera vez y se guardan en el KV: no hay secretos que configurar.
 // · Solo escribe en el KV cuando algo cambia (el plan gratis permite 1000 escrituras al día).
-// Se publica solo con .github/workflows/deploy-push-worker.yml (configuración en worker/wrangler-push.toml). Plan Infinity: secretos BINGX_AGENT_KEY / BINGX_AGENT_SECRET.
+// Se publica solo con .github/workflows/deploy-push-worker.yml (configuración en worker/wrangler-push.toml). Secretos opcionales: BINGX_AGENT_KEY / BINGX_AGENT_SECRET (plan Infinity) y GROQ_KEY (IA gratis de respaldo).
 
 import * as SCR from './screener.mjs';
 import {radarInternal, loadState as radarState} from './radar-server.mjs';
