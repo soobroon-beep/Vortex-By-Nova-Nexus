@@ -1,0 +1,27 @@
+name: Cerebro · aprendizaje nocturno (Neural Brain)
+# Cada noche (3:20 a. m. de Ciudad de México) tus cerebros con recuerdos o enseñanzas nuevas actualizan «Lo que sé de ti».
+# El código vive en el repo Neural-Brain-Claude; aquí solo se ejecuta con la cuenta de servicio de VORTEX
+# (tiene permiso «Usuario de Cloud Datastore» en neural-brain-148a4).
+on:
+  schedule: [{cron: '20 9 * * *'}]
+  workflow_dispatch:
+    inputs:
+      force: {description: 'Aprender aunque no haya novedades (1 = sí)', required: false, default: ''}
+permissions:
+  contents: read
+jobs:
+  learn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {repository: soobroon-beep/Neural-Brain-Claude, path: neural-brain}
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12
+        working-directory: neural-brain
+      - run: node scripts/learn.js
+        working-directory: neural-brain
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FORCE: ${{ github.event.inputs.force }}
