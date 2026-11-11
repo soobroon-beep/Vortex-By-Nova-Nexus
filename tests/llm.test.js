@@ -104,20 +104,20 @@ test('si un modelo contesta como «guardián» (Safety: Safe) se prueba el sigui
 
 /* IA dedicada por tarea (Analizar gráfico / Laboratorio). Nexus Pixel («text») no debe cambiar. */
 const withDoc = async fn => { global.document = {}; try { return await fn(); } finally { delete global.document; } };
-test('Laboratorio (code): usa su propia IA (gpt-5.4-mini) directo en Pollinations', () => withDoc(async () => {
+test('Laboratorio (code): va primero a tu servidor VORTEX pidiendo la IA de código (open source)', () => withDoc(async () => {
   const calls = mockFetch(() => mkRes(reply('ok\n```pine\n//@version=5\nindicator("x")\nplot(close)\n```')));
   const r = await L.chat([{role: 'user', content: 'haz un indicador'}], {purpose: 'code', cfg: {provider: 'free', lab: 'free', compat: {}}});
-  assert.equal(calls[0].body.model, 'gpt-5.4-mini'); assert.match(calls[0].url, /gen\.pollinations\.ai/); assert.match(r.model, /gpt-5\.4-mini/);
+  assert.match(calls[0].url, /vortex-push/); assert.equal(calls[0].body.task, 'code'); assert.match(r.text, /indicator/);
 }));
 test('Tarea: un aviso de «créditos insuficientes» no se toma como respuesta; pasa a la siguiente ruta (servidor o servicio gratis sin clave)', () => withDoc(async () => {
   const calls = mockFetch((u, o, n) => n === 1 ? mkRes(reply("The account behind this API key doesn't have enough credits. This model needs paid Pollen. Please top up")) : mkRes(reply('análisis real')));
   const r = await L.chat([{role: 'user', content: 'analiza'}], {purpose: 'chart', cfg: {provider: 'free', lab: 'free', compat: {}}});
   assert.equal(r.text, 'análisis real'); assert.notEqual(calls[0].url, calls[1].url);
 }));
-test('Tarea: si Pollinations directo falla por red, usa tu servidor VORTEX con el mismo modelo', () => withDoc(async () => {
-  const calls = mockFetch((u) => { if (/pollinations/.test(u)) throw new TypeError('net'); return mkRes(reply('desde el servidor')); });
+test('Tarea: si tu servidor falla por red, usa el servicio gratis sin clave', () => withDoc(async () => {
+  const calls = mockFetch((u) => { if (/vortex-push/.test(u)) throw new TypeError('net'); return mkRes(reply('desde el servicio gratis')); });
   const r = await L.chat([{role: 'user', content: 'analiza'}], {purpose: 'chart', cfg: {provider: 'free', lab: 'free', compat: {}}});
-  assert.equal(r.text, 'desde el servidor'); assert.match(calls[1].url, /vortex-push/); assert.equal(calls[0].body.model, calls[1].body.model);
+  assert.equal(r.text, 'desde el servicio gratis'); assert.match(calls[0].url, /vortex-push/); assert.match(calls[1].url, /text\.pollinations/);
 }));
 test('Análisis con captura: modelo con visión recibe la imagen', () => withDoc(async () => {
   const calls = mockFetch(() => mkRes(reply('veo el gráfico')));

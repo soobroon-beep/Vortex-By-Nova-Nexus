@@ -106,6 +106,7 @@
     /* Límite total y límite de SILENCIO: antes, si el servidor empezaba a responder y luego se quedaba callado, la app esperaba para siempre
        (el celular se quedaba «trabado»). Ahora se corta y se prueba otro modelo o se usa el análisis local. */
     const body = {model, messages, temperature: o.temperature == null ? .4 : o.temperature, max_tokens: o.maxTokens || 1600, stream: !!o.onToken};
+    if (o.task && /vortex-push/.test(url)) body.task = o.task; // tu servidor elige la IA open source según el uso: chat, vision o code
     const headers = {'content-type': 'application/json'}; if (key) headers.authorization = 'Bearer ' + key;
     const ctl = new AbortController(), kill = () => ctl.abort(); let idle = 0; const total = setTimeout(kill, o.timeout || 60000), bump = () => { clearTimeout(idle); idle = setTimeout(kill, o.idle || 25000); };
     if (o.signal) { if (o.signal.aborted) ctl.abort(); else o.signal.addEventListener('abort', kill, {once: true}); }
@@ -167,7 +168,7 @@
     const list = (vxModels && vxModels.list.length) ? vxModels.list : [];
     const img = hasImage(messages), code = o.purpose === 'code', cand = pickVx(list, {needVision: o.needVision || img, code}), end = o.deadline || (Date.now() + (code ? 150000 : 75000)); let last;
     const left = () => end - Date.now(), say = t => { try { o.onProgress && o.onProgress({text: t}); } catch {} };
-    const tryOne = async (m, msgs, cap) => { const text = await openaiCall(VX + '/ai', '', m, msgs, Object.assign({}, o, {timeout: Math.max(5000, Math.min(cap, left())), idle: code ? 45000 : 30000})); if (noCredit(text)) { vxDown = Date.now() + 15 * 6e4; throw new LLMError('El servidor de IA se quedó sin créditos', 'credit'); } if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); return text; };
+    const tryOne = async (m, msgs, cap) => { const text = await openaiCall(VX + '/ai', '', m, msgs, Object.assign({}, o, {task: code ? 'code' : hasImage(msgs) ? 'vision' : 'chat', timeout: Math.max(5000, Math.min(cap, left())), idle: code ? 45000 : 30000})); if (noCredit(text)) { vxDown = Date.now() + 15 * 6e4; throw new LLMError('El servidor de IA se quedó sin créditos', 'credit'); } if (looksBad(text)) throw new LLMError('Modelo no apto para chat', 'model'); return text; };
     for (const [i, m] of cand.entries()) {
       if (left() < 8000 || (o.signal && o.signal.aborted)) break; const vis = VX_VISION.has(m);
       if (i) say('Probando otro modelo de IA…');
@@ -195,13 +196,13 @@
   async function chatTask(messages, o, task) {
     const T = TASKS[task], img = hasImage(messages), end = Date.now() + (o.budget || T.budget), left = () => end - Date.now(), errs = [];
     const say = t => { try { o.onProgress && o.onProgress({text: t}); } catch {} };
-    const routes = [[GEN_URL, POLLEN_KEY, ''], [VX + '/ai', '', ' · servidor VORTEX'], [FREE_URL, '', ' · gratis']]; // 1) Pollinations con la clave de la app, 2) tu servidor VORTEX, 3) servicio gratis sin clave (si la clave se queda sin créditos)
+    const routes = [[VX + '/ai', '', ''], [FREE_URL, '', ' · gratis'], [GEN_URL, POLLEN_KEY, '']]; // 1) tu servidor VORTEX (IA open source: Cloudflare / Groq), 2) servicio gratis sin clave, 3) Pollinations con la clave de la app // 1) Pollinations con la clave de la app, 2) tu servidor VORTEX, 3) servicio gratis sin clave (si la clave se queda sin créditos)
     const one = async (m, msgs) => {
       let last;
       for (const [url, key, tag] of routes) {
         if (left() < 5000 || (o.signal && o.signal.aborted)) break;
         try {
-          const text = await openaiCall(url, key, m, msgs, Object.assign({}, o, {timeout: Math.max(5000, Math.min(T.cap, left())), idle: T.idle}));
+          const text = await openaiCall(url, key, m, msgs, Object.assign({}, o, {task: task === 'code' ? 'code' : img ? 'vision' : 'chat', timeout: Math.max(5000, Math.min(T.cap, left())), idle: T.idle}));
           if (noCredit(text)) throw new LLMError('Sin créditos en esta ruta', 'credit');
           if (freeLimit(text)) throw new LLMError('Límite del servicio gratis', 'rate');
           if (looksBad(text)) throw new LLMError('El modelo ' + m + ' no está disponible gratis ahora', 'model');
