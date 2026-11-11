@@ -1,0 +1,8 @@
+Fecha: Wed Nov 11 09:34:35 UTC 2026
+Cuenta de servicio: ok (firebase-adminsdk-fbsvc@criptochart-bd774.iam.gserviceaccount.com)
+Firebase dominios: añadido vortex-nexus.pages.dev
+YouTube Data API: ERROR → "Permission denied to enable service [youtube.googleapis.com]\nHelp Token: AaVM3aP3yQICCF8nHxPQMdOdL1XlZfomELotoYw2RHbOfVIwg83fD4hLYT_ONxRDWC36wKB3ran0v57nYL0iy-X0SDoXBsDZpcIQvF1hyqSf-d7h"
+YouTube Data API estado: Permission denied to get service [youtube.googleapis.com]
+Help Token: AaVM3aPTgIZla2QRS5XIRlq_pzu_zlfxmmOFrEBqXVwtOaVAg7ni1nqa3MDrEB3XYKQzoRzqN0pO90LdlJfpupayOefMdVXlORo5dNnPaROz1Q2n
+Pages proyecto:   🪵  Logs were written to "/home/runner/.config/.wrangler/logs/wrangler-2026-11-11_09-34-49_140.log" 
+Pages publicación: ✨ Success! Uploaded 274 files (2.08 sec)  🌎 Deploying... ✨ Deployment complete! Take a peek over at https://44bb3d3d.vortex-nexus.pages.dev 
