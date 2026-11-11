@@ -1,0 +1,30 @@
+name: Proteger código Nova Nexus
+# Sube el código de los indicadores Nova Nexus PRO a Firestore (solo lo leen las cuentas Infinity) y marca al creador como Infinity.
+# El resultado (solo conteos, sin código ni correos) queda en docs/pro-log.txt.
+on:
+  push:
+    branches: [main]
+    paths: ['scripts/pro-catalog.js', '.github/workflows/pro-catalog.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: {group: pro-catalog, cancel-in-progress: false}
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: npm i --no-save firebase-admin@12 >/dev/null 2>&1
+      - name: Subir y comprobar
+        run: |
+          mkdir -p docs; { echo "Fecha: $(date -u)"; node scripts/pro-catalog.js; } 2>&1 | tee docs/pro-log.txt
+      - name: Guardar el resultado
+        run: |
+          git config user.name "vortex-bot"; git config user.email "actions@users.noreply.github.com"
+          git add docs/pro-log.txt; git commit -m "pro: resultado de la protección" || exit 0
+          for i in 1 2 3; do git pull --rebase -q && git push -q && break; sleep 5; done

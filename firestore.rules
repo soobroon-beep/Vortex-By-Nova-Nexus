@@ -19,6 +19,19 @@ service cloud.firestore {
 
     // 'journal': copia de tu diario de trading (sin capturas). 'brain': lo que te dejan tus cerebros de Neural Brain; solo lo escribe el conector (servidor), tú solo lo lees.
 
+    // Código de los indicadores Nova Nexus PRO: solo lo pueden leer las cuentas con el plan Infinity (lo marca el servidor en plans/{uid}).
+    // Nadie lo puede escribir desde la app: lo sube el flujo «Proteger código Nova Nexus» con la cuenta de servicio.
+    match /pro/{id} {
+      allow read: if request.auth != null
+                  && get(/databases/$(database)/documents/plans/$(request.auth.uid)).data.tier == 'infinity';
+      allow write: if false;
+    }
+    // Plan verificado de cada cuenta: cada quien solo lee el suyo; solo lo escribe el servidor.
+    match /plans/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
     // Cualquier otra ruta, bloqueada.
     match /{document=**} {
       allow read, write: if false;
