@@ -1136,6 +1136,47 @@ function renderFrames() {
   window.CCT_pillPos = pillPos;
   const fp = $('#favPillBtn'); if (fp) fp.addEventListener('click', e => { e.stopPropagation(); if (!FB.show) { FB.show = true; syncUi(); renderFavBar(); } setFbOpen(!fbOpen); placeFab(); });
   place(); if (deskMQ.addEventListener) deskMQ.addEventListener('change', () => { close(); place(); });
+  /* Celular: deja presionado un botón del menú (Indicadores, Liquidaciones, Dibujar, Plantillas, Operar…) para fijarlo como favorito.
+     Los favoritos salen junto a la estrella de la píldora: la píldora crece y ya no tienes que abrir el menú. Se guardan en este celular. */
+  const grp = $('#moreGroup'), pf = $('#pillFavs'), PFK = 'cct_pill_favs_v1', PF_MAX = 5;
+  let favs = (() => { try { const a = JSON.parse(localStorage.getItem(PFK) || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string').slice(0, PF_MAX) : []; } catch { return []; } })();
+  const keyOf = b => b.id || (b.dataset.panel ? 'panel-' + b.dataset.panel : '');
+  const btnOf = k => k.startsWith('panel-') ? document.querySelector(`#chartView [data-panel="${k.slice(6)}"]:not(.pf-btn)`) : document.getElementById(k);
+  const labelOf = b => { const t = (b.textContent || '').replace(/ƒx/g, '').replace(/\(\d+\)/g, '').replace(/\s+/g, ' ').trim(); return t || (b.getAttribute('title') || '').split(' · ')[0].split(':')[0]; };
+  const iconOf = b => { const s = b.querySelector('svg'); return s ? s.outerHTML : `<b class="pf-fx">${(b.textContent.trim().split(/\s+/)[0] || '•').slice(0, 2)}</b>`; };
+  const syncOne = (p, b) => { const on = b.classList.contains('on') || b.getAttribute('aria-pressed') === 'true'; p.classList.toggle('on', on); p.hidden = !!b.hidden; };
+  function renderPF() {
+    if (!pf) return; favs = favs.filter(k => btnOf(k));
+    pf.innerHTML = favs.map(k => { const b = btnOf(k); return `<button type="button" class="pf-btn" data-pf="${esc(k)}" title="${esc(labelOf(b))}" aria-label="${esc(labelOf(b))}">${iconOf(b)}</button>`; }).join('');
+    pf.querySelectorAll('[data-pf]').forEach(p => syncOne(p, btnOf(p.dataset.pf)));
+    if (grp) grp.querySelectorAll('button').forEach(b => b.classList.toggle('is-fav', favs.includes(keyOf(b))));
+    pillPos();
+  }
+  const saveFavs = () => { try { localStorage.setItem(PFK, JSON.stringify(favs)); } catch {} };
+  if (pf) pf.addEventListener('click', e => {
+    const p = e.target.closest('[data-pf]'); if (!p) return; e.stopPropagation(); close();
+    const b = btnOf(p.dataset.pf); if (!b) return;
+    const r = p.getBoundingClientRect(); b.getBoundingClientRect = () => r; // los menús que se abren junto al botón se colocan junto al favorito
+    try { b.click(); } finally { setTimeout(() => { delete b.getBoundingClientRect; }, 0); }
+    setTimeout(() => pf.querySelectorAll('[data-pf]').forEach(q => { const o = btnOf(q.dataset.pf); if (o) syncOne(q, o); }), 60);
+  });
+  if (grp) { // mantener presionado ≈0.5 s = fijar / quitar de favoritos
+    let lp = 0, rt = 0, fired = false, st = null;
+    grp.addEventListener('pointerdown', e => { if (isDesktop()) return; const b = e.target.closest('button'); if (!b || !keyOf(b)) return; fired = false; clearTimeout(rt); st = {x: e.clientX, y: e.clientY}; clearTimeout(lp);
+      lp = setTimeout(() => { fired = true; const k = keyOf(b), i = favs.indexOf(k);
+        if (i >= 0) { favs.splice(i, 1); toast(labelOf(b) + ' ya no está en la barra'); }
+        else if (favs.length >= PF_MAX) { toast(`Máximo ${PF_MAX} favoritos en la barra: deja presionado uno para quitarlo`); return; }
+        else { favs.push(k); toast(labelOf(b) + ' fijado junto a la estrella'); }
+        navigator.vibrate?.(14); saveFavs(); renderPF(); clearTimeout(rt); rt = setTimeout(() => { fired = false; }, 900); b.classList.remove('fav-pop'); void b.offsetWidth; b.classList.add('fav-pop'); }, 500); });
+    grp.addEventListener('pointermove', e => { if (st && Math.hypot(e.clientX - st.x, e.clientY - st.y) > 8) clearTimeout(lp); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => grp.addEventListener(ev, () => { clearTimeout(lp); st = null; }));
+    const block = e => { if (!fired) return; fired = false; e.stopImmediatePropagation(); e.preventDefault(); }; // el toque largo no abre la herramienta (ni los planes de un botón bloqueado)
+    window.addEventListener('click', block, true);
+    grp.addEventListener('contextmenu', e => { if (!isDesktop()) e.preventDefault(); });
+    if (window.MutationObserver) new MutationObserver(() => { if (pf) pf.querySelectorAll('[data-pf]').forEach(q => { const o = btnOf(q.dataset.pf); if (o) syncOne(q, o); }); }).observe(grp, {subtree: true, attributes: true, attributeFilter: ['class', 'aria-pressed', 'hidden']});
+    if (!grp.querySelector('.mg-hint')) { const h = document.createElement('small'); h.className = 'mg-hint mob-only'; h.textContent = 'Deja presionado un botón para fijarlo junto a la estrella'; grp.appendChild(h); }
+  }
+  renderPF(); setTimeout(renderPF, 1500); // algunos botones (Liquidaciones, Plantillas) se completan después
 })();
 $('#timeframes').addEventListener('click', e => {
   const b = e.target.closest('[data-tf]'); if (!b) return;
