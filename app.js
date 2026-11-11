@@ -4381,6 +4381,23 @@ function designsOp(m) { // en el gráfico principal: cambia la lista y guarda; e
   else if (m.op === 'upd') l = l.map(x => x.id === m.id ? {...x, t: Date.now(), snap: m.snap} : x);
   state.designs = sanDesigns(l); save(); persistLocal(); if (document.querySelector('.dz-back')) renderDesigns();
 }
+/* Código de los indicadores Nova Nexus PRO: ya no viaja en los archivos públicos de la página. Se descarga de tu cuenta (Firestore, colección «pro»)
+   solo si tu cuenta tiene el plan Infinity; las reglas de Firestore lo niegan a cualquier otra. Vive solo en memoria (no se guarda en el dispositivo). */
+function applyProCode(map) {
+  let n = 0; for (const c of window.CCTCatalog || []) if (c.tier === 'pro' && !c.code && typeof map[c.id] === 'string' && map[c.id]) { c.code = map[c.id]; n++; }
+  if (!n) return; scripts = withCatalog(scripts.filter(x => !x.builtin)); pineKey = ''; renderScripts(); renderIndicators(); countIndicators(); if (candles.length) schedulePine(); scheduleRender();
+  if (!PANE) document.querySelectorAll('iframe').forEach(f => { try { f.contentWindow.postMessage({cct: 'proCode', map}, location.origin); } catch {} });
+}
+function proMap() { const m = {}; for (const c of window.CCTCatalog || []) if (c.tier === 'pro' && c.code) m[c.id] = c.code; return m; }
+async function loadProCode() {
+  if (PANE || !db || !fbUser) return; const ids = (window.CCTCatalog || []).filter(c => c.tier === 'pro' && !c.code).map(c => c.id); if (!ids.length) return;
+  const map = {}; for (const id of ids) { try { const sn = await db.collection('pro').doc(id).get(); if (sn.exists) map[id] = sn.data().code; } catch { return; } } // sin permiso = la cuenta no es Infinity
+  applyProCode(map);
+}
+function proForget() { let n = 0; for (const c of window.CCTCatalog || []) if (c.tier === 'pro' && c.code) { c.code = ''; n++; } if (n) { scripts = withCatalog(scripts.filter(x => !x.builtin)); pineKey = ''; renderScripts(); renderIndicators(); scheduleRender(); } }
+if (PANE) { window.addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.cct === 'proCode' && e.data.map) applyProCode(e.data.map); }); try { parent.postMessage({cct: 'proReq'}, location.origin); } catch {} }
+else window.addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.cct === 'proReq') { const m = proMap(); if (Object.keys(m).length && e.source) try { e.source.postMessage({cct: 'proCode', map: m}, location.origin); } catch {} } });
+window.CCT_proReload = () => loadProCode();
 if (PANE) window.addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.cct === 'refresh') { closeWS(); loadCandles(true); fetchTicker(); } });
 if (!PANE) window.addEventListener('message', e => { const m = e.data; if (e.origin !== location.origin || !m || m.cct !== 'designs' || !['add', 'del', 'ren', 'upd'].includes(m.op)) return; designsOp({op: m.op, id: typeof m.id === 'string' ? m.id : '', name: m.name, snap: m.snap}); });
 function renderDesigns() {
@@ -4670,7 +4687,7 @@ async function unpackStr(str) {
 }
 const scriptsKey = () => uid ? `${SCRIPTS_KEY}_${uid}` : SCRIPTS_KEY;
 const readScripts = () => { const o = readLocal(scriptsKey()); if (typeof o.gz === 'string') { unpackStr(o.gz).then(raw => { try { const arr = JSON.parse(raw); if (Array.isArray(arr) && !scripts.some(x => !x.builtin)) { scripts = withCatalog(arr); renderScripts(); } } catch {} }).catch(() => {}); return []; } return Array.isArray(o.items) ? o.items : []; };
-const catalogScripts = () => (window.CCTCatalog || []).map(c => ({id: 'cat:' + c.id, name: c.name, code: c.code, size: 0, lines: c.code.split('\n').length, addedAt: 0, builtin: true}))
+const catalogScripts = () => (window.CCTCatalog || []).filter(c => c.code).map(c => ({id: 'cat:' + c.id, name: c.name, code: c.code, size: 0, lines: c.code.split('\n').length, addedAt: 0, builtin: true}))
   .concat((window.CCTFree || []).map(f => ({id: 'free:' + f.id, name: f.name, code: f.code, size: 0, lines: f.code.split('\n').length, addedAt: 0, builtin: true, free: true})));
 const withCatalog = arr => catalogScripts().concat((Array.isArray(arr) ? arr : []).filter(x => x && !x.builtin && !String(x.id).startsWith('cat:')));
 const userScripts = () => scripts.filter(x => !x.builtin && !x.temp); // los de prueba del Laboratorio IA (temp) no se guardan
@@ -4974,6 +4991,7 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-std-
 document.addEventListener('click', async e => {
   const b = e.target.closest('[data-cat-add]'); if (!b) return;
   const c = (window.CCTCatalog || []).find(x => x.id === b.dataset.catAdd); if (!c) return;
+  if (!c.code) { if (fbUser) { toast('Cargando el indicador desde tu cuenta…'); loadProCode(); } else { toast('Inicia sesión con tu cuenta Infinity para usar este indicador'); if (window.CCT_signIn) CCT_signIn(); } return; }
   if (activePine().length >= PINE_MAX) { toast(`Máximo ${PINE_MAX} scripts activos`); return; }
   const sid = 'cat:' + c.id;
   const inputs = {};
@@ -5391,7 +5409,7 @@ window.CCT_signIn = () => signIn(); window.CCT_showWelcome = showWelcome;
 window.CCT_planSave = p => { if (PANE || !fbUser) return; state.plan = p; save(); }; // el plan verificado viaja en tu cuenta a tus otros dispositivos
 var planSeen = '';
 window.CCT_planChanged = t => { if (t === planSeen) return; const first = !planSeen; planSeen = t; if (first) return; // al cambiar de plan se recalcula lo que depende de él (liquidaciones, indicadores Nova Nexus)
-  try { pineKey = ''; renderIndicators(); countIndicators(); if (candles.length) { calcExtra(); schedulePine(); } scheduleRender(); } catch {} };
+  try { pineKey = ''; renderIndicators(); countIndicators(); if (candles.length) { calcExtra(); schedulePine(); } scheduleRender(); loadProCode(); } catch {} };
 function planOk(f) { return !window.CCTPlans || CCTPlans.can(f); }
 function proSid(sid) { return typeof sid === 'string' && sid.startsWith('cat:') && (window.CCTCatalog || []).some(c => 'cat:' + c.id === sid && c.tier === 'pro'); }
 async function onUser(user) {
@@ -5401,9 +5419,9 @@ async function onUser(user) {
   if (!user) {
     try { localStorage.removeItem(LASTUID); } catch {}
     if (uid) { uid = null; stateUid = null; lastRemote = ''; scriptsRemote = ''; applyState(readLocal(STORE)); scripts = withCatalog(readScripts()); renderScripts(); } // vuelve al estado local sin sesión; los datos de la cuenta no se quedan visibles
-    syncStatus = ''; renderAccount(); showWelcome(); return;
+    proForget(); syncStatus = ''; renderAccount(); showWelcome(); return;
   }
-  uid = user.uid; try { localStorage.setItem(LASTUID, uid); } catch {}
+  uid = user.uid; try { localStorage.setItem(LASTUID, uid); } catch {} setTimeout(loadProCode, 0);
   if (stateUid !== uid && lsGet(storeKey())) { try { applyState(readLocal(storeKey())); } catch {} } // cambios de esta cuenta guardados aquí que aún no subieron (no el estado de «sin sesión»)
   stateUid = uid;
   const anonScripts = (readLocal(SCRIPTS_KEY).items || []).filter(x => x && typeof x.id === 'string'); // scripts guardados antes de iniciar sesión

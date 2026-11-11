@@ -240,8 +240,9 @@ test('strategy: sintaxis antigua con when= y dirección booleana, y position_siz
   assert.deepEqual(r.plots[0].values.map(v => v || 0), [0, 0, 0, 1, 1]);
 });
 
-test('catálogo Nova: Oscillator y Screener se interpretan sin avisos de no soportado', () => {
+test('catálogo Nova: Oscillator y Screener se interpretan sin avisos de no soportado', (t) => {
   const fs = require('fs'), cs = walkC(400);
+  if (!fs.existsSync(__dirname + '/../catalog/nova-signals.pine')) { t.skip('el código PRO ya no está en el repo (vive en Firestore)'); return; }
   for (const f of ['nova-oscillator.pine', 'nova-screener.pine', 'nova-signals.pine']) {
     const r = P.run(fs.readFileSync(__dirname + '/../catalog/' + f, 'utf8'), cs, {interval: '1h', symbol: 'BTCUSDT', timeLimitMs: 20000});
     assert.ok(r.ok, f + ' ' + JSON.stringify(r.error));
