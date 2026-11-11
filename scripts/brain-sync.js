@@ -244,7 +244,9 @@ async function run() {
       items = vortexItems({ state: vortexState(cct), scripts, botlab, botlabServer, claudioServer, journal });
       const bp = parseJSON(unpack(botlab && botlab.items)), bots = list(Array.isArray(bp) ? bp : bp && bp.bots), linkSt = {};
       for (const link of loadLinks()) { // crea el cerebro del bot si todavía no existe (no toca uno que ya tengas)
-        const bot = matchBot(link, bots); if (!bot) { linkSt[link.label || 'bot'] = 'no encontrado'; continue; }
+        const bot = matchBot(link, bots);
+        if (!bot) { linkSt[link.label || 'bot'] = 'no encontrado'; const hits = list(link.name).map(x => bots.filter(b => b && new RegExp(x, 'i').test(nrm(b.name))).length); console.log(`Vínculo de bot sin encontrar: ${bots.length} bots en la cuenta · coincidencias por parte del nombre: ${hits.join('/')} · bots en ${link.interval || '-'}: ${bots.filter(b => { const v = list(b && b.versions).find(x => x && x.v === b.mainV) || {}; return v.spec && v.spec.interval === link.interval; }).length}`); continue; }
+        console.log('Vínculo de bot encontrado.');
         const bref = uref.collection('brains').doc('bot-' + bot.id); linkSt[link.label || bot.name] = bot.name;
         if ((await bref.get()).exists) continue;
         await bref.set({ name: link.brain || 'Bot · ' + bot.name, kind: 'bot', bot: { id: bot.id, name: bot.name, auto: true }, icon: 'bot', color: link.color || '#9a7bff', desc: link.desc || `Cerebro del bot «${bot.name}» de Nova Bot Lab: aprende de cada experimento y lo mejora solo cada noche.`, sources: ['vortex'], toVortex: false, autoLearn: true, order: 0.5, owner: '', createdAt: now });
