@@ -257,6 +257,13 @@
   const NOVA8 = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LINKUSDT'];
   /* Nova Nexus + volumen ahora en ambos sentidos (antes solo compraba y casi todas las señales recientes eran de venta) */
   const novaVolBoth = sp => { sp = JSON.parse(JSON.stringify(sp)); sp.sides = 'both'; sp.entry.short = [{a: {k: 'novaSell'}, op: 'is'}, {a: {k: 'volRatio', n: 20}, op: 'gt', b: {k: 'num', v: 1}}]; sp.exit.short = [{a: {k: 'novaBuy'}, op: 'is'}]; return sp; };
+  function lucasSpec(name, itv, n, T, sl, tr) {
+    const s = defaultSpec(), up = {k: 'bbUp', n, d: 2.5}, lo = {k: 'bbLo', n, d: 2.5}, e = {k: 'ema', n: T};
+    Object.assign(s, {name, symbol: 'BTCUSDT', basket: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT'], interval: itv, sides: 'both'});
+    s.entry = {long: [{a: {k: 'close'}, op: 'crossUp', b: up}, {a: {k: 'close'}, op: 'gt', b: e}], short: [{a: {k: 'close'}, op: 'crossDown', b: lo}, {a: {k: 'close'}, op: 'lt', b: e}]};
+    s.risk = Object.assign(s.risk, {capital: 10000, riskPct: 1, maxLeverage: 3, atrLen: 14, sl: {type: 'atr', v: sl}, tp: {type: 'rr', v: 2}, trail: {type: 'atr', v: tr}, maxBars: 0, maxDailyLossPct: 0, maxDrawdownPct: 25});
+    s.costs = {feePct: 0.05, slipPct: 0.05}; return s;
+  }
   const PRESETS = {
     emaRsi: () => Object.assign(defaultSpec(), {name: 'EMA 20/50 + RSI', entry: {long: [{a: {k: 'ema', n: 20}, op: 'crossUp', b: {k: 'ema', n: 50}}, {a: {k: 'rsi', n: 14}, op: 'gt', b: {k: 'num', v: 50}}], short: []}, exit: {long: [{a: {k: 'ema', n: 20}, op: 'crossDown', b: {k: 'ema', n: 50}}], short: []}}),
     novaNexus: () => Object.assign(defaultSpec(), {name: 'Nova Nexus + volumen', entry: {long: [{a: {k: 'novaBuy'}, op: 'is'}, {a: {k: 'volRatio', n: 20}, op: 'gt', b: {k: 'num', v: 1}}], short: []}, exit: {long: [{a: {k: 'novaSell'}, op: 'is'}], short: []}}),
@@ -272,6 +279,11 @@
     nova27x1h: () => Object.assign(defaultSpec(), {name: 'Nova Nexus v2.7 · 1h cortos', symbol: 'BTCUSDT', basket: NOVA8.slice(), interval: '1h', sides: 'short',
       entry: {long: [], short: [{a: {k: 'novaSell'}, op: 'is'}, {a: {k: 'novaRange'}, op: 'lt', b: {k: 'num', v: 1}}]}, exit: {long: [], short: [{a: {k: 'novaBuy'}, op: 'is'}]},
       risk: {capital: 10000, riskPct: 2, sizePct: 10, maxLeverage: 5, atrLen: 14, sl: {type: 'atr', v: 4}, tp: {type: 'atr', v: 2.5}, trail: null, maxBars: 0, maxDailyLossPct: 6, maxDrawdownPct: 25}, costs: {feePct: 0.05, slipPct: 0.03}}),
+    /* LUCAS (nov 2026, auditado con Claude): ruptura de Bollinger a favor de la tendencia, compras y ventas, 8 monedas.
+       Elegido entre ~770 combinaciones (EMA, MACD, RSI, Bollinger, reversión a la media) con datos de Binance 2020-2026, validado fuera de muestra.
+       Histórico 1 % riesgo: 4H +43.9 % (DD 7.1 %, PF 1.28) · 1H +37.2 % (DD 10.6 %, PF 1.16). Últimos 12 meses negativos en ambos: NO es una garantía. */
+    lucas4h: () => lucasSpec('Lucas 4H', '4h', 40, 100, 2, 3.5),
+    lucas1h: () => lucasSpec('Lucas 1H', '1h', 120, 400, 3, 5),
     macdTrend: () => Object.assign(defaultSpec(), {name: 'Tendencia + MACD', entry: {long: [{a: {k: 'close'}, op: 'gt', b: {k: 'ema', n: 200}}, {a: {k: 'macd'}, op: 'crossUp', b: {k: 'macdSignal'}}], short: []}, exit: {long: [{a: {k: 'macd'}, op: 'crossDown', b: {k: 'macdSignal'}}], short: []}})
   };
 

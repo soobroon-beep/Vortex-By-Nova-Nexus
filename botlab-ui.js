@@ -36,7 +36,7 @@
   }
   async function pullCloud() {
     const c = H.cloud && H.cloud(); if (!c) return; let got = false; try { const str = await c.get(); got = true; if (str) { cloudStr = str; const m = merge(readLocal(), JSON.parse(str)); S = m; save(); } } catch {}
-    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) { seedSafe(); fixNov26(); } if (view === 'lib') render();
+    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) { seedSafe(); fixNov26(); seedLucas(); } if (view === 'lib') render();
   }
 
   /* ───────── Modelo de bot ───────── */
@@ -283,6 +283,17 @@
       if (S.bots.some(b => b.preset === k)) continue; newLook = {color, icon}; const b = newBot(B.PRESETS[k](), 'nova', desc); b.preset = k; S.bots.push(b); log(b, 'creación', 'Bot creado por Nova Bot Lab a partir de tu indicador Nova Nexus v2.7, optimizado con validación fuera de muestra.'); goLive(b);
     }
     save(); toast('Nova Bot Lab: tus bots ya operan en ambos sentidos y se crearon los bots Nova Nexus v2.7 (en vivo, simulado)');
+  }
+  function seedLucas() { // Lucas 1H y 4H (creados con Claude): una sola vez por cuenta, encendidos en paper trading; si los borras no vuelven
+    S.seeded = S.seeded || {}; if (S.seeded.lucas || !B.PRESETS.lucas4h || !PP()) return; S.seeded.lucas = Date.now();
+    for (const [k, color, icon] of [['lucas4h', '#548fff', 'astronauta'], ['lucas1h', '#20bf9f', 'cohete']]) {
+      if (S.bots.some(b => b.preset === k)) continue; newLook = {color, icon}; const sp = B.PRESETS[k]();
+      const b = newBot(sp, 'visual', `Ruptura de Bollinger (${sp.entry.long[0].b.n}, 2.5σ) a favor de la tendencia (EMA ${sp.entry.long[1].b.n}), compras y ventas en 8 monedas. SL ${sp.risk.sl.v}× ATR, TP 2R, trailing ${sp.risk.trail.v}× ATR. Riesgo 1 %, apalancamiento máx. 3×.`);
+      b.preset = k; S.bots.push(b);
+      log(b, 'creación', k === 'lucas4h' ? 'Lucas 4H creado con Claude. Histórico nov-2020→nov-2026: 1.964 operaciones, 38 % aciertos, PF 1.28, +43.9 %, DD máx. 7.1 %. Últimos 12 meses −3.6 %: veredicto no confirmado, se vigila en paper trading.' : 'Lucas 1H creado con Claude. Histórico nov-2020→nov-2026: 3.075 operaciones, 36 % aciertos, PF 1.16, +37.2 %, DD máx. 10.6 %. Últimos 12 meses −5.6 %: veredicto no confirmado, se vigila en paper trading.');
+      startLive(b, b.mainV, sp.risk.capital);
+    }
+    save(); toast('Nova Bot Lab: Lucas 1H y Lucas 4H ya están en vivo (simulado)');
   }
   function libView() {
     const act = S.bots.filter(b => b.status !== 'archived').sort((a, b) => (isLive(b) - isLive(a)) || (b.updatedAt - a.updatedAt)), arch = S.bots.filter(b => b.status === 'archived');
@@ -868,7 +879,7 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
 
   /* ----- Arranque ----- */
   function init() {
-    root = $('#botLabRoot'); if (!root) return; S = readLocal(); bind(); setTimeout(() => { if (!(H.cloud && H.cloud())) { seedSafe(); if (view === 'lib') render(); } }, 12000); if (window.CCTClaudioUI) window.CCTClaudioUI.onChange = () => { if (view === 'lib') render(); }; render();
+    root = $('#botLabRoot'); if (!root) return; S = readLocal(); bind(); setTimeout(() => { if (!(H.cloud && H.cloud())) { seedSafe(); seedLucas(); if (view === 'lib') render(); } }, 12000); if (window.CCTClaudioUI) window.CCTClaudioUI.onChange = () => { if (view === 'lib') render(); }; render();
     const open = () => { S = merge(S, readLocal()); setTimeout(() => { if (view === 'lib') render(); }, 30); pullCloud(); paperTick(); };
     const rb = $('#rrBotLab'); rb && rb.addEventListener('click', open);
     paperTick(); setInterval(() => { if (!document.hidden) paperTick(); }, 60000);
