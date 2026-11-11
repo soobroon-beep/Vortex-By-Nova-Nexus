@@ -1,5 +1,11 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.22', d: '11 nov 2026', t: 'Nombres de pestañas, menús de ver y borrar', items: [
+    'Clic derecho (o doble clic) en una pestaña para cambiarle el nombre o cerrarla.',
+    'En el celular, el menú del gráfico tiene Pestañas (cambiar, renombrar, cerrar o crear), Ver (ocultar o mostrar dibujos e indicadores) y Borrar.',
+    'La basura, también en escritorio, deja elegir si borras solo los dibujos o solo los indicadores; el ojo oculta dibujos, indicadores o todo.',
+    'La moneda abierta en el gráfico se resalta en Mi seguimiento con un tono morado sutil.'
+  ]},
   {v: '3.21', d: '11 nov 2026', t: 'Seguimiento de tus trades y botón «+» en el gráfico', items: [
     'Junto a la tarjeta de la moneda en el gráfico hay un botón «+» para agregarla a Mi seguimiento (más pequeño en el celular).',
     'Con tu exchange conectado y un trade abierto, VORTEX te va avisando cómo va: cada escalón de ganancia o pérdida, cerca de tu TP, SL o liquidación, si regresa a tu entrada y si cruza tus líneas horizontales.',

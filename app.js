@@ -243,7 +243,7 @@ function merge(s) {
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
-  o.tabs = Array.isArray(o.tabs) ? o.tabs.filter(t => t && typeof t.s === 'string' && /^[\w.:@\-/]{2,40}$/.test(t.s)).slice(0, 8).map((t, i) => Object.assign({id: /^[a-z0-9]{3,12}$/.test(t.id) ? t.id : 't' + i + Date.now().toString(36).slice(-4), s: t.s, i: INTERVALS.includes(t.i) ? t.i : '1h', c: CTYPES.some(x => x[0] === t.c) ? t.c : 'candles'}, tabCfgSan(t.cfg))) : [];
+  o.tabs = Array.isArray(o.tabs) ? o.tabs.filter(t => t && typeof t.s === 'string' && /^[\w.:@\-/]{2,40}$/.test(t.s)).slice(0, 8).map((t, i) => Object.assign({id: /^[a-z0-9]{3,12}$/.test(t.id) ? t.id : 't' + i + Date.now().toString(36).slice(-4), s: t.s, i: INTERVALS.includes(t.i) ? t.i : '1h', c: CTYPES.some(x => x[0] === t.c) ? t.c : 'candles'}, typeof t.n === 'string' && t.n.trim() ? {n: t.n.trim().slice(0, 24)} : {}, tabCfgSan(t.cfg))) : [];
   o.tab = typeof o.tab === 'string' ? o.tab.slice(0, 12) : ''; o.tabRev = Number.isFinite(+o.tabRev) ? +o.tabRev : 0;
   if (typeof o.symbol !== 'string') o.symbol = o.symbols[0];
   return o;
@@ -2072,7 +2072,7 @@ function renderTabs() {
   const bar = $('#chartTabs'); if (!bar) return;
   if (PANE) { bar.hidden = true; return; } bar.hidden = false; tabEnsure();
   const ct = c => (CTYPES.find(x => x[0] === c) || CTYPES[0]);
-  bar.innerHTML = state.tabs.map(t => `<div class="ctab${t.id === state.tab ? ' on' : ''}" role="tab" tabindex="0" aria-selected="${t.id === state.tab}" data-tab="${t.id}" title="${esc(base(t.s))} · ${t.i} · ${esc(ct(t.c)[1])}"><span class="ct-t">${esc(base(t.s).replace('/USDT', ''))}<small>${t.i}</small></span>${state.tabs.length > 1 ? `<button type="button" class="ct-x" data-tab-x="${t.id}" aria-label="Cerrar pestaña" tabindex="-1">&times;</button>` : ''}</div>`).join('')
+  bar.innerHTML = state.tabs.map(t => `<div class="ctab${t.id === state.tab ? ' on' : ''}" role="tab" tabindex="0" aria-selected="${t.id === state.tab}" data-tab="${t.id}" title="${t.n ? esc(t.n) + ' · ' : ''}${esc(base(t.s))} · ${t.i} · ${esc(ct(t.c)[1])} · clic derecho: cambiar nombre"><span class="ct-t">${t.n ? esc(t.n) : esc(base(t.s).replace('/USDT', ''))}<small>${t.n ? esc(base(t.s).replace('/USDT', '')) + ' · ' : ''}${t.i}</small></span>${state.tabs.length > 1 ? `<button type="button" class="ct-x" data-tab-x="${t.id}" aria-label="Cerrar pestaña" tabindex="-1">&times;</button>` : ''}</div>`).join('')
     + (state.tabs.length < MAX_TABS ? `<button type="button" class="ct-add" id="tabAdd" aria-label="Nueva pestaña" title="Nueva pestaña">${I('plus', 16)}</button>` : '');
   const on = bar.querySelector('.ctab.on'); if (on && bar.scrollWidth > bar.clientWidth) on.scrollIntoView({inline: 'nearest', block: 'nearest'});
 }
@@ -2119,8 +2119,108 @@ function showTabPrev(el) { // vista previa de la pestaña: moneda, temporalidad,
   bar.addEventListener('mouseout', () => { clearTimeout(hov); hideTabPrev(); });
   bar.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch') return; const t = e.target.closest('[data-tab]'); if (!t) return; clearTimeout(lp); lpFired = false; lp = setTimeout(() => { lpFired = true; showTabPrev(t); navigator.vibrate?.(8); }, 450); });
   ['pointerup', 'pointercancel', 'pointermove'].forEach(ev => bar.addEventListener(ev, e => { if (ev === 'pointermove' && Math.abs(e.movementX) + Math.abs(e.movementY) < 3) return; clearTimeout(lp); if (ev !== 'pointermove') setTimeout(hideTabPrev, 900); else hideTabPrev(); }));
-  bar.addEventListener('contextmenu', e => { if (e.target.closest('[data-tab]')) e.preventDefault(); });
+  bar.addEventListener('contextmenu', e => { // clic derecho en una pestaña: cambiar nombre o cerrar
+    const t = e.target.closest('[data-tab]'); if (!t) return; e.preventDefault(); clearTimeout(hov); hideTabPrev(); if (lpFired) return;
+    const id = t.dataset.tab, r = t.getBoundingClientRect();
+    openMx({left: e.clientX || r.left, top: r.top, bottom: r.bottom, right: e.clientX || r.right}, 'Pestaña',
+      `<button type="button" class="mx-it" data-mx="ren">${SVX('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>')}<span>Cambiar nombre</span></button>` + (state.tabs.length > 1 ? `<button type="button" class="mx-it danger" data-mx="close">${SVX('<path d="M6 6l12 12M18 6 6 18"/>')}<span>Cerrar pestaña</span></button>` : ''),
+      k => { closeMx(); if (k === 'ren') renameTab(id); else if (k === 'close') closeTab(id); });
+  });
 }
+/* Cambiar el nombre de una pestaña: se escribe ahí mismo (Enter guarda, Esc cancela; vacío = vuelve al nombre de la moneda) */
+function renameTab(id, done) {
+  const t = state.tabs.find(x => x.id === id); if (!t) return;
+  const el = !isDesktop() || done ? null : document.querySelector(`#chartTabs [data-tab="${id}"] .ct-t`);
+  const apply = v => { v = String(v || '').trim().slice(0, 24); if (v) t.n = v; else delete t.n; state.tabRev = Date.now(); save(); renderTabs(); if (done) done(); };
+  if (!el) { const v = prompt('Nombre de la pestaña (vacío = el de la moneda)', t.n || ''); if (v !== null) apply(v); return; }
+  const inp = document.createElement('input'); inp.className = 'ct-ren'; inp.value = t.n || ''; inp.placeholder = base(t.s).replace('/USDT', ''); inp.maxLength = 24; inp.setAttribute('aria-label', 'Nombre de la pestaña');
+  el.replaceWith(inp); inp.focus(); inp.select(); let fin = false;
+  const end = ok => { if (fin) return; fin = true; if (ok) apply(inp.value); else renderTabs(); };
+  inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); end(true); } else if (e.key === 'Escape') { e.preventDefault(); end(false); } });
+  inp.addEventListener('blur', () => end(true)); ['click', 'pointerdown', 'dblclick'].forEach(ev => inp.addEventListener(ev, e => e.stopPropagation()));
+}
+{ const bar = $('#chartTabs'); if (bar) bar.addEventListener('dblclick', e => { const t = e.target.closest('[data-tab]'); if (t && !e.target.closest('[data-tab-x]')) renameTab(t.dataset.tab); }); } // doble clic también cambia el nombre
+
+/* ───────── Menús flotantes (pestañas en el celular, ver/ocultar y borrar) con el liquid glass oscuro de la app ───────── */
+const SVX = (d, z = 16) => `<svg viewBox="0 0 24 24" width="${z}" height="${z}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+let mxPop = null, mxAC = null;
+function closeMx() { if (mxAC) { mxAC.abort(); mxAC = null; } if (mxPop) { const m = mxPop; mxPop = null; m.classList.add('out'); setTimeout(() => m.remove(), 160); } }
+function openMx(at, title, html, onPick) {
+  closeMx(); const m = document.createElement('div'); m.className = 'mx-pop'; m.setAttribute('role', 'menu');
+  m.innerHTML = `<div class="mx-h">${title}</div><div class="mx-b">${html}</div>`; document.body.appendChild(m); mxPop = m;
+  const place = () => { const w = m.offsetWidth, h = m.offsetHeight, below = at.bottom + 8 + h < innerHeight - 8;
+    m.style.left = Math.round(clamp(isDesktop() ? at.left : (innerWidth - w) / 2, 8, innerWidth - w - 8)) + 'px';
+    m.style.top = Math.round(below ? at.bottom + 8 : Math.max(8, at.top - h - 8)) + 'px'; m.classList.toggle('up', !below); };
+  place(); m.mxPlace = place;
+  m.addEventListener('click', e => { const b = e.target.closest('[data-mx]'); if (b) { e.stopPropagation(); onPick(b.dataset.mx, b, e); } });
+  mxAC = new AbortController(); const sig = {capture: true, signal: mxAC.signal};
+  setTimeout(() => { if (!mxAC) return; document.addEventListener('pointerdown', e => { if (!m.contains(e.target)) closeMx(); }, sig); document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMx(); }, sig); addEventListener('resize', closeMx, {signal: mxAC.signal}); });
+  return m;
+}
+const mxFill = (m, html) => { const b = m && m.querySelector('.mx-b'); if (b) { b.innerHTML = html; b.classList.add('quiet'); if (m.mxPlace) m.mxPlace(); } };
+/* Indicadores en el gráfico (los mismos que cuenta el botón Indicadores) */
+const chartInds = () => Object.keys(state.indicators).filter(k => state.indicators[k] && !k.startsWith('nn') && k !== 'derivs');
+const indAnyVisible = () => chartInds().some(k => !(state.stdHide && state.stdHide[k])) || state.pine.some(p => p.on && !p.hide);
+const IND_HIDE_KEY = 'cct_indhide_v1';
+function setIndsHidden(hide) { // ocultar/mostrar TODOS los indicadores a la vez (siguen activos; al mostrarlos vuelven los que estaban visibles)
+  state.stdHide = state.stdHide || {};
+  if (hide) {
+    const rec = {std: chartInds().filter(k => !state.stdHide[k]), pine: state.pine.filter(p => p.on && !p.hide).map(p => p.sid)};
+    rec.std.forEach(k => { state.stdHide[k] = true; }); state.pine.forEach(p => { if (rec.pine.includes(p.sid)) p.hide = true; });
+    try { localStorage.setItem(IND_HIDE_KEY, JSON.stringify(rec)); } catch {}
+  } else {
+    let rec = null; try { rec = JSON.parse(localStorage.getItem(IND_HIDE_KEY) || 'null'); } catch {}
+    const okS = k => !rec || !rec.std.length || rec.std.includes(k), okP = sid => !rec || !rec.pine.length || rec.pine.includes(sid);
+    let any = false; chartInds().forEach(k => { if (state.stdHide[k] && okS(k)) { delete state.stdHide[k]; any = true; } }); state.pine.forEach(p => { if (p.hide && okP(p.sid)) { delete p.hide; any = true; } });
+    if (!any) { state.stdHide = {}; state.pine.forEach(p => { delete p.hide; }); } // si lo guardado ya no aplica, se muestran todos
+    try { localStorage.removeItem(IND_HIDE_KEY); } catch {}
+  }
+  save(); legSig = ''; legStruct = ''; scheduleRender();
+}
+function clearAllInds() {
+  const n = chartInds().length + state.pine.length; if (!n) { toast('No hay indicadores en este gráfico'); return; }
+  if (!confirm(`¿Quitar los ${n} indicador${n > 1 ? 'es' : ''} de este gráfico? (tus scripts siguen guardados en Mis indicadores)`)) return;
+  chartInds().forEach(k => { if (isCopy(k)) removeCopy(k); else state.indicators[k] = false; }); state.stdHide = {};
+  state.pine.forEach(p => { delete pineRes[p.sid]; }); state.pine = [];
+  save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } legSig = ''; legStruct = ''; scheduleRender(); toast('Indicadores quitados del gráfico');
+}
+const EYE = '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', EYE_OFF = '<path d="M3 3l18 18"/><path d="M10.6 5.2A9.6 9.6 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.8C3.6 8.7 2 12 2 12s3.6 7 10 7a9.6 9.6 0 0 0 5.5-1.8"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>';
+const TRASH = '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>';
+function visHtml() {
+  const dOn = !DOPT.hide, iOn = indAnyVisible(), nd = getDrawings().length, ni = chartInds().length + state.pine.filter(p => p.on).length;
+  const row = (k, on, t, n) => `<button type="button" class="mx-it${on ? '' : ' off'}" data-mx="${k}" role="menuitemcheckbox" aria-checked="${on}">${SVX(on ? EYE : EYE_OFF)}<span>${t}</span><em>${on ? 'Visibles' : 'Ocultos'}${n ? ' · ' + n : ''}</em></button>`;
+  return row('draw', dOn, 'Dibujos', nd) + row('ind', iOn, 'Indicadores', ni) + `<button type="button" class="mx-it ghost" data-mx="all">${SVX(dOn || iOn ? EYE_OFF : EYE)}<span>${dOn || iOn ? 'Ocultar todo' : 'Mostrar todo'}</span></button>`;
+}
+function openVisMenu(at) {
+  const m = openMx(at, 'Ver u ocultar', visHtml(), k => {
+    if (k === 'draw') toggleOpt('hide');
+    else if (k === 'ind') setIndsHidden(indAnyVisible());
+    else if (k === 'all') { const hide = !DOPT.hide || indAnyVisible(); if (!!DOPT.hide !== hide) toggleOpt('hide'); if (indAnyVisible() === hide) setIndsHidden(hide); }
+    mxFill(m, visHtml());
+  });
+}
+function openClearMenu(at) {
+  const nd = getDrawings().length, ni = chartInds().length + state.pine.length;
+  openMx(at, 'Borrar', `<button type="button" class="mx-it danger" data-mx="draw"${nd ? '' : ' disabled'}>${SVX(TRASH)}<span>Solo los dibujos</span><em>${nd || 'ninguno'}</em></button><button type="button" class="mx-it danger" data-mx="ind"${ni ? '' : ' disabled'}>${SVX(TRASH)}<span>Solo los indicadores</span><em>${ni || 'ninguno'}</em></button>`,
+    k => { closeMx(); if (k === 'draw') clearAllDrawings(); else clearAllInds(); });
+}
+function tabsHtml() {
+  tabEnsure();
+  return state.tabs.map(t => `<div class="mx-tab${t.id === state.tab ? ' on' : ''}"><button type="button" class="mx-it" data-mx="go:${t.id}">${coinBadge(t.s)}<span>${esc(t.n || base(t.s).replace('/USDT', ''))}</span><em>${t.n ? esc(base(t.s).replace('/USDT', '')) + ' · ' : ''}${t.i}</em></button><button type="button" class="mx-ic" data-mx="ren:${t.id}" aria-label="Cambiar nombre" title="Cambiar nombre">${SVX('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>', 15)}</button>${state.tabs.length > 1 ? `<button type="button" class="mx-ic" data-mx="x:${t.id}" aria-label="Cerrar pestaña" title="Cerrar pestaña">${SVX('<path d="M6 6l12 12M18 6 6 18"/>', 15)}</button>` : ''}</div>`).join('')
+    + (state.tabs.length < MAX_TABS ? `<button type="button" class="mx-it ghost" data-mx="new">${SVX('<path d="M12 5v14M5 12h14"/>')}<span>Nueva pestaña</span></button>` : '');
+}
+function openTabsMenu(at) {
+  const m = openMx(at, 'Pestañas', tabsHtml(), k => {
+    const [a, id] = k.split(':');
+    if (a === 'go') { closeMx(); switchTab(id); }
+    else if (a === 'new') { closeMx(); newTab(); }
+    else if (a === 'x') { closeTab(id); mxFill(m, tabsHtml()); }
+    else if (a === 'ren') renameTab(id, () => mxFill(m, tabsHtml()));
+  });
+}
+{ const at = b => { const r = b.getBoundingClientRect(); return {left: r.left, right: r.right, top: r.top, bottom: r.bottom}; };
+  const wire = (id, fn) => { const b = $(id); if (b) b.addEventListener('click', e => { e.stopPropagation(); const r = at(b); const v = $('#chartView'); if (v) v.classList.remove('more-open', 'tf-open'); const mb = $('#moreBtn'); if (mb) mb.setAttribute('aria-expanded', 'false'); fn(r); }); };
+  wire('#tabsMBtn', openTabsMenu); wire('#visMBtn', openVisMenu); wire('#clearMBtn', openClearMenu); }
 
 /* ───────── Dibujos (anclados a tiempo y precio, guardados por activo) ───────── */
 const getDrawings = () => state.drawings[state.symbol] || [];
@@ -2522,7 +2622,7 @@ let railLast = {}; try { railLast = JSON.parse(lsGet(RAIL_KEY) || '{}') || {}; }
 const groupOf = k => TOOL_GROUPS.find(gr => gr.tools.some(t => t[0] === k));
 const toolOf = k => { for (const gr of TOOL_GROUPS) { const t = gr.tools.find(x => x[0] === k); if (t) return t; } return null; };
 const lastOf = gr => (railLast[gr.id] && gr.tools.some(t => t[0] === railLast[gr.id])) ? railLast[gr.id] : gr.tools[0][0];
-const RAIL_OPTS = [['magnet', 'Imán: ajusta a máximo, mínimo, apertura y cierre', IC.magnet], ['stay', 'Mantener la herramienta activa después de dibujar', IC.keep], ['lock', 'Bloquear dibujos (no se seleccionan ni se mueven)', IC.lock], ['hide', 'Ocultar dibujos', IC.eye], ['clear', 'Borrar todos los dibujos de este activo', IC.trash]];
+const RAIL_OPTS = [['magnet', 'Imán: ajusta a máximo, mínimo, apertura y cierre', IC.magnet], ['stay', 'Mantener la herramienta activa después de dibujar', IC.keep], ['lock', 'Bloquear dibujos (no se seleccionan ni se mueven)', IC.lock], ['hide', 'Ver u ocultar dibujos e indicadores', IC.eye], ['clear', 'Borrar dibujos o indicadores', IC.trash]];
 function buildRail() {
   const rail = $('#toolRail'); if (!rail) return;
   rail.innerHTML = `<button class="rail-btn grp" data-rail="cursor" title="Cursor (Esc)" aria-label="Cursor">${SV(CURSOR_IC[cstyle().cursor] || CURSOR_IC.Cruz)}<i class="caret" data-curfly="1" title="Elegir cursor: cruz, flecha o estrella"></i></button><div class="rail-sep"></div>`
@@ -2692,7 +2792,7 @@ function toggleOpt(k) {
     if (cav) { openFly(cav.dataset.fly, cav.closest('.rail-btn')); return; }
     closeFly();
     if (grp) { pickTool(grp.dataset.last); return; }
-    if (opt) { toggleOpt(opt.dataset.opt); return; }
+    if (opt) { const k = opt.dataset.opt; if (k === 'clear' || k === 'hide') { const r = opt.getBoundingClientRect(); (k === 'clear' ? openClearMenu : openVisMenu)({left: r.right + 10, right: r.right, top: r.bottom, bottom: r.top - 8}); return; } toggleOpt(k); return; } // ojo y basura: menú con dibujos / indicadores
     if (e.target.closest('[data-rail="cursor"]')) cancelTool();
   });
   rail.addEventListener('contextmenu', e => { if (e.target.closest('[data-rail="cursor"]')) { e.preventDefault(); openCurFly(e.target.closest('.rail-btn')); return; } const grp = e.target.closest('[data-group]'); if (!grp) return; e.preventDefault(); openFly(grp.dataset.group, grp); });
