@@ -35,7 +35,7 @@ jobs:
           cat > diag.mjs <<'JS'
           const AI = await import('./worker/ai.mjs');
           const B = await import('./worker/briefing.mjs');
-          const withOrigin = (u, i = {}) => { const t = Date.now(); i.headers = Object.assign({}, i.headers, {origin: 'https://soobroon-beep.github.io'}); return fetch(u, i).then(r => { console.log('  ', r.status, u.split('/')[2], (Date.now() - t) + 'ms'); return r; }); };
+          const withOrigin = (u, i = {}) => { const t = Date.now(); i.headers = Object.assign({}, i.headers, {origin: 'https://soobroon-beep.github.io'}); return fetch(u, i).then(async r => { console.log('  ', r.status, u.split('/')[2], (Date.now() - t) + 'ms'); if (u.includes('/ai')) { const tx = await r.clone().text(); console.log('   RESPUESTA', tx.length, tx.slice(0, 700), ' ... ', tx.slice(-500)); } return r; }); };
           for (const url of [AI.NH_URL, AI.VX_URL]) {
             try { const r = await withOrigin(url, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({model: 'openai', task: 'json', messages: [{role: 'system', content: 'Devuelve solo JSON {"ok":true}'}, {role: 'user', content: 'hola'}]})}); const j = await r.json(); console.log(url, j.model || '', JSON.stringify(j).slice(0, 160)); } catch (e) { console.log(url, 'ERROR', e.message); }
           }
