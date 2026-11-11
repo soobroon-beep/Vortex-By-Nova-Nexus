@@ -6,20 +6,16 @@
 //   3) le devuelve al servidor qué velas revisó y cuáles saltaron; el servidor manda la notificación (y Discord si lo elegiste).
 // La llave se deriva de FIREBASE_SERVICE_ACCOUNT (scripts/bot-push-key.js): no hay secretos nuevos.
 'use strict';
-const AE = require('../alert-eval.js');
+const AE = require('../alert-eval.js'), M = require('../markets.js');
 const {botPushKey} = require('./bot-push-key.js');
 let Pine = null; try { Pine = require('../pine.js'); } catch {}
 try { require('../nova-nexus.js'); } catch {}
 const PUSH_URL = process.env.PUSH_URL || 'https://vortex-push.soobroon.workers.dev';
-const BASES = ['https://data-api.binance.vision/api/v3', 'https://api.binance.com/api/v3'];
 const RUN_MS = Math.max(0, +(process.env.RUN_MINUTES || 4.5)) * 60000, EVERY_MS = 60000;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function klines(sym, itv, limit = 1000) { // velas cerradas (la que sigue abierta se quita)
-  for (const b of BASES) {
-    try { const r = await fetch(`${b}/klines?symbol=${encodeURIComponent(sym)}&interval=${itv}&limit=${limit}`); if (!r.ok) continue; const raw = await r.json(), now = Date.now(); return raw.filter(d => d[6] < now).map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})); } catch {}
-  }
-  throw new Error('Sin velas de ' + sym + ' ' + itv);
+async function klines(key, itv, limit = 1000) { // velas cerradas del exchange de la moneda (BTCUSDT, BTC-USDT@bingxf, SOLUSDT@bybit…); sin respuesta → mismo par en Binance Spot
+  const r = await M.klinesAny(key, itv, limit, {meta: true}); if (r.src !== M.srcOf(key)) console.log(`${key} ${itv}: ${M.EXCH[M.srcOf(key)] || ''} no respondió, se usó Binance Spot`); return r.cs;
 }
 async function post(path, body) {
   const r = await fetch(PUSH_URL + path, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body)});

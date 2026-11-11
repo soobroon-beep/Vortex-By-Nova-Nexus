@@ -26,7 +26,7 @@ const defaults = {
   groups: [], symGroup: {}, symColor: {}, listRev: 0, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], designs: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
 };
 function sanAlert(a) {
-  if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{2,20}(@[a-z]{2,12})?$/.test(a.symbol)) return null; // también monedas de otros exchanges (HYPEUSDT@binancef, BTCUSDT@bybit…): antes se borraban y nunca avisaban
+  if (!a || typeof a.id !== 'string' || !/^[A-Z0-9][A-Z0-9_-]{1,24}(@[a-z]{2,12})?$/.test(a.symbol)) return null; // también monedas de otros exchanges (HYPEUSDT@binancef, BTCUSDT@bybit…): antes se borraban y nunca avisaban
   const base0 = {id: a.id, symbol: a.symbol, on: a.on !== false, note: String(a.note || '').slice(0, 140), created: +a.created || 0, firedAt: +a.firedAt || 0};
   if (['app', 'discord', 'both'].includes(a.notify)) base0.notify = a.notify;
   if (a.kind === 'ind') {
@@ -889,6 +889,7 @@ function fireInd(a, info) {
   if (n.dc && window.CCTDiscord) CCTDiscord.alert('ind', {symbol: base(a.symbol), interval: a.interval, label: a.label, info, note: a.note, text: msg});
 }
 async function lastClosedBar(sym, itv) {
+  if (sym.includes('@')) { const cs = await CCTMarkets.klinesAny(sym, itv, 3); return cs.length ? cs[cs.length - 1].t : null; } // cualquier exchange (markets.js)
   const raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${itv}&limit=2`), now = Date.now(), cl = raw.filter(d => d[6] < now);
   return cl.length ? cl[cl.length - 1][0] : null;
 }
@@ -904,7 +905,7 @@ async function indAlertTick(force) {
       if (lc === null) continue;
       g.at = now; g.next = lc + 2 * IV_MS[itv] + 2000; alGroups.set(key, g);
       const due = list.filter(a => a.lastBar < lc); if (!due.length) continue;
-      const cs = await pineSecCandles(sym, itv), k = closedIdx(cs, lc); if (k < 1) continue;
+      const cs = sym.includes('@') ? await CCTMarkets.klinesAny(sym, itv, 1000).catch(() => []) : await pineSecCandles(sym, itv), k = closedIdx(cs, lc); if (k < 1) continue; // velas del exchange de la moneda
       const runs = new Map(); let nova = null;
       for (const a of due) {
         const from = Math.max(1, k - 4), bars = []; for (let i = from; i <= k; i++) if (cs[i].t > a.lastBar) bars.push(i);
@@ -2368,7 +2369,7 @@ function sbAlert() {
   if (!SB_ALERT.has(d.type)) { toast('Las alertas se ponen en líneas de precio (horizontal, tendencia, rayo…)'); return; }
   const price = +sbPrice(d).toPrecision(8), last = candles.length ? candles[candles.length - 1].c : NaN, sym = state.symbol;
   if (!(price > 0) || !Number.isFinite(last)) { toast('No se pudo calcular el precio de la línea'); return; }
-  if (!/^[A-Z0-9]{3,20}$/.test(sym)) { toast('Las alertas por precio solo funcionan con pares de Binance Spot'); return; }
+  if (!/^[A-Z0-9][A-Z0-9_-]{1,24}(@[a-z]{2,12})?$/.test(sym)) { toast('Este activo no admite alertas de precio'); return; }
   if (state.alerts.length >= 50) { toast('Máximo 50 alertas'); return; }
   if (price === last) { toast('El precio ya está en ese nivel'); return; }
   state.alerts.unshift({id: 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), symbol: sym, price, dir: price > last ? 'up' : 'down', on: true, note: ('Línea ' + (d.label || d.text || '')).trim().slice(0, 80), created: Date.now(), firedAt: 0, firedPrice: null});

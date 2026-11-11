@@ -244,8 +244,40 @@
     const out = tidy(await K[src](sym, TF[src][tf], limit)); if (!out.length) throw Error(`${EXCH[src]} sin datos`);
     return out.slice(-limit);
   }
+  /* Velas de CUALQUIER activo (la clave lleva el exchange: BTCUSDT, BTC-USDT@bingxf, SOLUSDT@bybit…). Las usan las alertas con indicador
+     en la app y en el servidor (scripts/ind-alerts.js). closedOnly quita la vela que sigue abierta. Si el exchange no responde
+     (por ejemplo, bloquea la región del servidor), se usa el mismo par de Binance Spot para no perder la alerta. */
+  const IVMS = {'1m': 6e4, '3m': 18e4, '5m': 3e5, '15m': 9e5, '30m': 18e5, '1h': 36e5, '2h': 72e5, '4h': 144e5, '6h': 216e5, '8h': 288e5, '12h': 432e5, '1d': 864e5, '3d': 2592e5, '1w': 6048e5, '1M': 2592e6};
+  const BN = browser ? ['https://api.binance.com/api/v3', 'https://data-api.binance.vision/api/v3'] : ['https://data-api.binance.vision/api/v3', 'https://api.binance.com/api/v3'];
+  const BYB = {'1m': '1', '3m': '3', '5m': '5', '15m': '15', '30m': '30', '1h': '60', '2h': '120', '4h': '240', '6h': '360', '12h': '720', '1d': 'D', '1w': 'W', '1M': 'M'};
+  const OKB = {'1m': '1m', '3m': '3m', '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1H', '2h': '2H', '4h': '4H', '6h': '6Hutc', '12h': '12Hutc', '1d': '1Dutc', '1w': '1Wutc', '1M': '1Mutc'};
+  const CBG = {'1m': 60, '5m': 300, '15m': 900, '1h': 3600, '6h': 21600, '1d': 86400};
+  const dashSym = s => { s = String(s).toUpperCase(); if (/[-_]/.test(s)) return s.replace('_', '-'); const p = splitQ(s); return p ? p[0] + '-' + p[1] : s; };
+  const bnRows = d => arr(d).map(x => ({t: +x[0], o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[5]}));
+  async function binanceSpot(sym, tf, n) { let e; for (const b of BN) { try { return bnRows(await raw(`${b}/klines?symbol=${norm(sym).replace(/USD$/, 'USDT')}&interval=${tf}&limit=${Math.min(1000, n)}`)); } catch (x) { e = x; } } throw e || Error('Binance sin datos'); }
+  async function primary(src, sym, tf, n) {
+    if (src === 'binance') return binanceSpot(sym, tf, n);
+    if (src === 'binancef') return bnRows(await get(`https://fapi.binance.com/fapi/v1/klines?symbol=${norm(sym)}&interval=${tf}&limit=${Math.min(1500, n)}`));
+    if (src === 'bybit') { if (!BYB[tf]) throw Error('Bybit no tiene esa temporalidad'); const j = await get(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${norm(sym)}&interval=${BYB[tf]}&limit=${Math.min(1000, n)}`); return arr(j && j.result && j.result.list).map(d => ({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})); }
+    if (src === 'okx') { if (!OKB[tf]) throw Error('OKX no tiene esa temporalidad'); const inst = dashSym(sym), out = []; let j = await get(`https://www.okx.com/api/v5/market/candles?instId=${inst}&bar=${OKB[tf]}&limit=300`); out.push(...arr(j && j.data));
+      for (let p = 0; p < 6 && out.length && out.length < n; p++) { j = await get(`https://www.okx.com/api/v5/market/history-candles?instId=${inst}&bar=${OKB[tf]}&limit=100&after=${out[out.length - 1][0]}`); const d = arr(j && j.data); if (!d.length) break; out.push(...d); }
+      return out.map(d => ({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})); }
+    if (src === 'coinbase') { const g = CBG[tf]; if (!g) throw Error('Coinbase no tiene esa temporalidad'); const prod = dashSym(sym), out = []; let end = Date.now();
+      for (let p = 0; p < Math.ceil(Math.min(n, 900) / 300); p++) { const st = end - 300 * g * 1000, rows = await get(`https://api.exchange.coinbase.com/products/${prod}/candles?granularity=${g}&start=${new Date(st).toISOString()}&end=${new Date(end).toISOString()}`); if (!arr(rows).length) break; out.push(...rows); end = st; }
+      return out.map(x => ({t: x[0] * 1000, l: +x[1], h: +x[2], o: +x[3], c: +x[4], v: +x[5]})); }
+    if (src === 'bingx') return klinesBingx(dashSym(sym), tf, n);
+    if (src === 'dom') return klinesDom(sym, tf, n);
+    return klines(src, src === 'bingxf' || src === 'okxf' ? dashSym(sym) : sym, tf, n);
+  }
+  async function klinesAny(key, tf, limit = 1000, opts = {}) {
+    const {sym, src} = parse(key); let cs = null, used = src;
+    try { cs = tidy(await primary(src, sym, tf, limit)); } catch (e) { if (src === 'binance' || src === 'dom' || opts.noFallback) throw e; }
+    if (!cs || cs.length < 3) { if (src === 'dom' || opts.noFallback) throw Error('Sin velas de ' + key); cs = tidy(await binanceSpot(sym, tf, limit)); used = 'binance'; }
+    if (opts.closedOnly !== false) { const ms = IVMS[tf], now = Date.now(); cs = ms && tf !== '1M' ? cs.filter(c => c.t + ms <= now) : cs.slice(0, -1); }
+    cs = cs.slice(-limit); if (opts.meta) return {cs, src: used}; return cs;
+  }
   const LIVE_WS = ['binance', 'binancef', 'bybit', 'bybitf', 'okx', 'okxf']; // el resto se actualiza consultando cada pocos segundos
 
-  root.CCTMarkets = {DOM_NAMES, PERP, isPerp, klines, tfOk, TF, LIVE_WS, PROXY, klinesDom, EXCH, SHORT, ORDER, parse, symOf, srcOf, mk, norm, N, universe, loaded, search, tickers, klinesBingx, BX_IV, setFetcher, splitQ};
+  root.CCTMarkets = {DOM_NAMES, PERP, isPerp, klines, klinesAny, IVMS, dashSym, tfOk, TF, LIVE_WS, PROXY, klinesDom, EXCH, SHORT, ORDER, parse, symOf, srcOf, mk, norm, N, universe, loaded, search, tickers, klinesBingx, BX_IV, setFetcher, splitQ};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTMarkets;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -45,3 +45,18 @@ test('Worker: /ind/report avisa una vez y la app se entera al sincronizar', asyn
   const d = JSON.parse(m.get('dev:' + ID)); assert.equal(d.ind[0].on, false); assert.equal(d.ind[0].lastBar, 2000);
   const back = await sync({id: ID, sub, move: {on: false}, ind, since: 1}); assert.equal(back.backInd[0].on, false); assert.equal(back.backInd[0].firedInfo, '71');
 });
+
+test('klinesAny: velas cerradas de cualquier exchange y Binance Spot si el exchange no responde', async () => {
+  const M = require('../markets.js'), real = globalThis.fetch, now = Date.now(), H = 3600e3, t0 = Math.floor(now / H) * H - 5 * H, seen = [];
+  globalThis.fetch = async url => { url = String(url); seen.push(url);
+    if (url.includes('open-api.bingx.com/openApi/swap')) return new Response(JSON.stringify({code: 0, data: Array.from({length: 6}, (_, i) => ({time: t0 + i * H, open: 1, high: 2, low: 0.5, close: 1 + i, volume: 3}))}));
+    if (url.includes('api.bybit.com')) return new Response('bloqueado', {status: 403});
+    if (url.includes('/klines?symbol=SOLUSDT')) return new Response(JSON.stringify(Array.from({length: 6}, (_, i) => [t0 + i * H, '1', '2', '0.5', String(10 + i), '3'])));
+    throw new Error('fetch ' + url); };
+  try {
+    const bx = await M.klinesAny('BTC-USDT@bingxf', '1h', 100, {meta: true});
+    assert.equal(bx.src, 'bingxf'); assert.equal(bx.cs.length, 5); assert.ok(bx.cs.every(c => c.t + H <= now)); // la vela abierta no cuenta
+    const by = await M.klinesAny('SOLUSDT@bybit', '1h', 100, {meta: true});
+    assert.equal(by.src, 'binance'); assert.equal(by.cs[by.cs.length - 1].c, 14);
+  } finally { globalThis.fetch = real; }
+});

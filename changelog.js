@@ -2,7 +2,8 @@
 window.CCT_CHANGELOG = [
   {v: '3.24', d: '11 nov 2026', t: 'Alertas con indicador con la app cerrada', items: [
     'Tus alertas con indicador (indicadores comunes, Nova Nexus y tus scripts Pine) ahora también te avisan con VORTEX y el celular cerrados: el servidor las revisa al cerrar cada vela.',
-    'La alerta salta igual que en la app (misma lógica) y, si la configuraste así, también llega a Discord. Cuando la app vuelve a abrir, la alerta ya aparece como disparada.'
+    'La alerta salta igual que en la app (misma lógica) y, si la configuraste así, también llega a Discord. Cuando la app vuelve a abrir, la alerta ya aparece como disparada.',
+    'Las alertas con indicador y de precio funcionan con monedas de cualquier exchange (BingX, Bybit, OKX, Coinbase, KuCoin…), con las velas de ese exchange.'
   ]},
   {v: '3.23', d: '11 nov 2026', t: 'Favoritos en la píldora del gráfico y dock de cristal', items: [
     'En el celular, deja presionado un botón del menú del gráfico (Indicadores, Liquidaciones, Operar…) para fijarlo junto a la estrella; la píldora crece con tus favoritos (hasta 5).',

@@ -47,7 +47,7 @@ export function fmt(p) { // mismo estilo que la app: más decimales en precios p
 
 /* ───────── limpieza de lo que manda la app ───────── */
 export function sanAlert(a) {
-  if (!a || typeof a.id !== 'string' || a.id.length > 40 || a.kind === 'ind' || !/^[A-Z0-9]{2,20}(@[a-z]{2,12})?$/.test(a.symbol)) return null; // BTCUSDT (Binance) o BTCUSDT@bybit, HYPEUSDT@binancef…
+  if (!a || typeof a.id !== 'string' || a.id.length > 40 || a.kind === 'ind' || !/^[A-Z0-9][A-Z0-9_-]{1,24}(@[a-z]{2,12})?$/.test(a.symbol)) return null; // BTCUSDT (Binance) o BTCUSDT@bybit, HYPEUSDT@binancef…
   if (!(+a.price > 0) || (a.dir !== 'up' && a.dir !== 'down')) return null;
   const o = {id: a.id, symbol: a.symbol, on: a.on !== false, price: +a.price, dir: a.dir, note: String(a.note || '').slice(0, 140), firedAt: +a.firedAt || 0, firedPrice: Number.isFinite(+a.firedPrice) && a.firedPrice !== null ? +a.firedPrice : null};
   if (a.cond === 'up' || a.cond === 'down') o.cond = a.cond;
@@ -61,7 +61,7 @@ export function sanAlert(a) {
 const IV_OK = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M']);
 const jsonOk = (o, max) => { try { return o && typeof o === 'object' && !Array.isArray(o) && JSON.stringify(o).length <= max; } catch { return false; } };
 export function sanInd(a) {
-  if (!a || typeof a.id !== 'string' || a.id.length > 40 || !/^[A-Z0-9]{2,20}$/.test(a.symbol) || !IV_OK.has(a.interval) || !['pine', 'std', 'nova'].includes(a.src) || !jsonOk(a.spec, 400)) return null;
+  if (!a || typeof a.id !== 'string' || a.id.length > 40 || !/^[A-Z0-9][A-Z0-9_-]{1,24}(@[a-z]{2,12})?$/.test(a.symbol) || !IV_OK.has(a.interval) || !['pine', 'std', 'nova'].includes(a.src) || !jsonOk(a.spec, 400)) return null;
   const o = {id: a.id, symbol: a.symbol, interval: a.interval, src: a.src, sid: typeof a.sid === 'string' ? a.sid.slice(0, 40) : '', spec: a.spec, label: String(a.label || '').slice(0, 120), note: String(a.note || '').slice(0, 140),
     on: a.on !== false, repeat: a.repeat === 'every' ? 'every' : 'once', lastBar: +a.lastBar || 0, firedAt: +a.firedAt || 0, firedInfo: String(a.firedInfo || '').slice(0, 200)};
   if (['app', 'discord', 'both'].includes(a.notify)) o.notify = a.notify;
