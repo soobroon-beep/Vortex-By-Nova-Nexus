@@ -1,0 +1,18 @@
+{
+  "_": "Bots de Nova Bot Lab que tienen su propio cerebro en Neural Brain. El conector (scripts/brain-sync.js) crea el cerebro si todavía no existe; después todo se ajusta desde Neural Brain. name = expresiones que deben aparecer en el nombre del bot (sin acentos), interval = temporalidad de su versión principal.",
+  "bots": [
+    {
+      "label": "Señales v2.7 · 1H",
+      "name": ["senal|signal", "2\\W?7"],
+      "interval": "1h",
+      "brain": "Bot · Señales v2.7 1H",
+      "color": "#9a7bff",
+      "desc": "Cerebro del bot de Nova Nexus Señales v2.7 en 1h: aprende de cada experimento y lo mejora solo cada noche.",
+      "notes": [
+        {"kind": "regla", "master": true, "text": "Riesgo máximo 2 % por operación y apalancamiento máximo 5x."},
+        {"kind": "regla", "master": true, "text": "Este bot opera en 1h: no cambiar la moneda ni la temporalidad sin mi aprobación."},
+        {"kind": "estrategia", "master": false, "text": "Está basado en mi indicador Nova Nexus - Señales v2.7: da buenas entradas long y short, pero no dice cuándo cerrar. Busco equilibrio entre aciertos y ganancia: mejorar sobre todo las salidas (stop loss, objetivo, trailing y tiempo máximo) sin perder las buenas entradas."}
+      ]
+    }
+  ]
+}

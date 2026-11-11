@@ -6,7 +6,7 @@
    · La app te muestra la propuesta (si hay) y tú decides.
    · Sin la variable FIREBASE_SERVICE_ACCOUNT no hace nada (sale sin error). Nunca imprime secretos ni datos de usuarios. */
 'use strict';
-const NT = require('../botlab-notify.js'), B = require('../botlab-engine.js'), O = require('../botlab-optimizer.js'), P = require('../botlab-paper.js'), RK = require('../botlab-risk.js');
+const BR = require('../botlab-brain.js'), NT = require('../botlab-notify.js'), B = require('../botlab-engine.js'), O = require('../botlab-optimizer.js'), P = require('../botlab-paper.js'), RK = require('../botlab-risk.js');
 try { require('../nova-nexus.js'); } catch {}
 let Pine = null; try { Pine = require('../pine.js'); } catch {}
 const BASES = ['https://data-api.binance.vision/api/v3', 'https://api.binance.com/api/v3']; // los runners de GitHub no siempre llegan a api.binance.com
@@ -31,7 +31,7 @@ function userSeries(spec, candles, scripts) { // ejecuta tus indicadores Pine so
   }
   return user;
 }
-async function retrainBot(bot, scripts, getCandles, now) {
+async function retrainBot(bot, scripts, getCandles, now, brainCtx) {
   const v = bot.versions.find(x => x.v === bot.mainV); if (!v) return {at: now, status: 'error', reason: 'Sin versión principal'};
   const spec = B.normalizeSpec(v.spec), cyc = bot.cycle || {}, bars = Math.min(8000, Math.max(1500, cyc.bars || 4000));
   try {
@@ -39,7 +39,10 @@ async function retrainBot(bot, scripts, getCandles, now) {
     const user = userSeries(spec, candles, scripts), ropts = {nova: globalThis.NovaNexus, user: Object.keys(user).length ? user : null};
     const res = B.backtest(candles, spec, {nova: ropts.nova, user: ropts.user || undefined}), m = res.metrics;
     const opt = await O.optimize(candles, spec, {seed: O.hash(bot.id + new Date(now).toISOString().slice(0, 10)), budget: cyc.budget || 60, ropts});
-    return {at: now, v: bot.mainV, status: 'ok', symbol: spec.symbol, interval: spec.interval, bars: candles.length, from: candles[0].t, to: candles[candles.length - 1].t,
+    let br = null; // bot conectado a un cerebro de Neural Brain: además prueba las ideas del cerebro y elige la mejor que gane fuera de muestra
+    if (brainCtx) { try { br = await BR.improve({candles, spec, ropts: {nova: ropts.nova, user: ropts.user || undefined}, base: res, opt, link: brainCtx.link, memory: brainCtx.memory, now}); brainCtx.out = br; } catch (e) { brainCtx.out = {brain: {at: now, error: String(e.message || e).slice(0, 200)}, memory: brainCtx.memory || []}; } }
+    if (br && br.candidate && opt.decision !== 'propuesta' || br && br.candidate && br.brain.best && br.brain.best.from !== 'optimizador') { opt.decision = 'propuesta'; opt.candidate = br.candidate; opt.changes = []; opt.oos = null; opt.holdout = null; opt.folds = []; opt.reasons = (opt.reasons || []).concat([br.note]); }
+    return {at: now, note: br && br.candidate ? br.note : undefined, brain: br ? br.brain : undefined, v: bot.mainV, status: 'ok', symbol: spec.symbol, interval: spec.interval, bars: candles.length, from: candles[0].t, to: candles[candles.length - 1].t,
       monitor: {n: m.n, net: m.net, retPct: m.retPct, maxDDPct: m.maxDDPct, winRate: m.winRate, val: res.segments.val.retPct, test: res.segments.test.retPct, buyHold: res.buyHold.retPct, verdict: res.verdict.level},
       decision: opt.decision, reasons: opt.reasons, changes: opt.changes, folds: opt.folds, oos: opt.oos, holdout: opt.holdout, candidate: opt.candidate, dims: opt.dims};
   } catch (e) { return {at: now, v: bot.mainV, status: 'error', reason: String(e.message || e).slice(0, 300)}; }
@@ -54,7 +57,7 @@ async function paperBot(bot, scripts, getCandles, now, gateF, notify) { // avanz
     const L = sess.ledger; for (let i = 0; i < L.length - 300; i++) { delete L[i].reasonIn; delete L[i].ctx; delete L[i].sl; delete L[i].tp; } out.push(sess);
   } return out;
 }
-const due = (bot, prev, now, force) => { const c = bot.cycle; if (!c || !c.enabled || bot.status === 'paused' || bot.status === 'archived') return false; if (force) return true; const every = Math.max(6, Math.min(24 * 14, c.everyHours || 24)) * 36e5; return !prev || now - (prev.at || 0) >= every - 30 * 6e4; };
+const due = (bot, prev, now, force, linked) => { const c = linked ? Object.assign({enabled: true, everyHours: 24}, bot.cycle, {enabled: true}) : bot.cycle; if (!c || !c.enabled || bot.status === 'paused' || bot.status === 'archived') return false; if (force) return true; const every = Math.max(6, Math.min(24 * 14, c.everyHours || 24)) * 36e5; return !prev || now - (prev.at || 0) >= every - 30 * 6e4; };
 
 async function main() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT; if (!raw) { console.log('FIREBASE_SERVICE_ACCOUNT no está configurado: no hay nada que hacer. (Ver INSTALL.md → Reentrenamiento programado)'); return; }
@@ -62,18 +65,19 @@ async function main() {
   let admin; try { admin = require('firebase-admin'); } catch { console.log('Falta firebase-admin (npm i --no-save firebase-admin)'); process.exit(1); }
   admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); const db = admin.firestore(), now = Date.now(), force = process.env.FORCE === '1', cache = new Map();
   const getCandles = async (s, i, n) => { const k = s + '|' + i + '|' + n; if (!cache.has(k)) cache.set(k, await history(s, i, n)); return cache.get(k); };
-  const users = await db.collection('users').listDocuments(); let nb = 0, nr = 0, np = 0, nps = 0;
+  const users = await db.collection('users').listDocuments(); let nb = 0, nr = 0, np = 0, nps = 0, nbr = 0;
   for (const u of users) {
     const bd = await u.collection('data').doc('botlab').get(); if (!bd.exists) continue; let S; try { S = JSON.parse(bd.data().items || '{}'); } catch { continue; }
-    const all = S.bots || [], cyc = MODE !== 'paper' ? all.filter(b => b && b.cycle && b.cycle.enabled) : [], pap = MODE !== 'retrain' ? all.filter(b => b && (b.paper || []).some(x => x.status === 'running')) : []; if (!cyc.length && !pap.length) continue;
-    const sd = await u.collection('data').doc('botlab_server').get(), prev = sd.exists ? sd.data() : {}, results = Object.assign({}, prev.results || {}), paper = Object.assign({}, prev.paper || {}); let scripts = null, changed = false;
+    let links = {}; try { const bb = await u.collection('data').doc('brain_bots').get(); links = (bb.exists && bb.data().bots) || {}; } catch {} const linked = b => links[b.id] && links[b.id].auto !== false;
+    const all = S.bots || [], cyc = MODE !== 'paper' ? all.filter(b => b && ((b.cycle && b.cycle.enabled) || linked(b))) : [], pap = MODE !== 'retrain' ? all.filter(b => b && (b.paper || []).some(x => x.status === 'running')) : []; if (!cyc.length && !pap.length) continue;
+    const sd = await u.collection('data').doc('botlab_server').get(), prev = sd.exists ? sd.data() : {}, results = Object.assign({}, prev.results || {}), paper = Object.assign({}, prev.paper || {}), brainMem = Object.assign({}, prev.brainMem || {}); let scripts = null, changed = false;
     const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(s.data().items || '[]') : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } };
-    for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force)) continue; await loadScripts(); const r = await retrainBot(b, scripts, getCandles, now); results[b.id] = r; changed = true; nr++; if (r.decision === 'propuesta') np++; }
+    for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force, linked(b))) continue; await loadScripts(); const bc = linked(b) ? {link: links[b.id], memory: brainMem[b.id] || []} : null; const r = await retrainBot(b, scripts, getCandles, now, bc); if (bc && bc.out) { brainMem[b.id] = JSON.parse(JSON.stringify(bc.out.memory || [])); nbr++; } results[b.id] = JSON.parse(JSON.stringify(r)); changed = true; nr++; if (r.decision === 'propuesta') np++; }
     const gateF = RK.gateFor(S.risk, all.flatMap(x => x.status === 'archived' ? [] : x.paper || []), now);
     for (const b of pap) { await loadScripts(); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.notify); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
-    if (changed) { for (const id of Object.keys(results)) if (!all.some(b => b.id === id)) delete results[id]; for (const id of Object.keys(paper)) if (!all.some(b => b.id === id)) delete paper[id]; await u.collection('data').doc('botlab_server').set({results, paper, updatedAt: admin.firestore.FieldValue.serverTimestamp()}); }
+    if (changed) { for (const id of Object.keys(results)) if (!all.some(b => b.id === id)) delete results[id]; for (const id of Object.keys(paper)) if (!all.some(b => b.id === id)) delete paper[id]; for (const id of Object.keys(brainMem)) if (!all.some(b => b.id === id)) delete brainMem[id]; await u.collection('data').doc('botlab_server').set({results, paper, brainMem, updatedAt: admin.firestore.FieldValue.serverTimestamp()}); }
   }
-  console.log(`Modo ${MODE} · ciclos: ${nb} · reentrenados: ${nr} · con propuesta: ${np} · sesiones paper avanzadas: ${nps}`);
+  console.log(`Modo ${MODE} · ciclos: ${nb} · reentrenados: ${nr} · con cerebro: ${nbr} · con propuesta: ${np} · sesiones paper avanzadas: ${nps}`);
 }
 if (require.main === module) main().catch(e => { console.error('Error:', String(e.message || e).slice(0, 200)); process.exit(1); });
 module.exports = {retrainBot, paperBot, due, history, userSeries};
