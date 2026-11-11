@@ -1733,3 +1733,40 @@ body:not(.light) :is(.cfg-dlg,.pc-dlg,.rk-dlg,.dz-box,.row-menu,.pop-menu,.tag-p
 .vw-alt{display:flex;justify-content:center;gap:6px;margin-top:10px;flex-wrap:wrap}
 .vw-alt button{border:0;background:none;color:rgba(225,230,245,.72);font-size:12.5px;padding:8px 10px;border-radius:9px}
 .vw-alt button:hover{background:rgba(255,255,255,.07);color:#fff}
+
+/* ───────── Botón «+» junto a la tarjeta de la moneda: agregar a Mi seguimiento (liquid glass minimalista y plano) ───────── */
+.wl-add-fab{position:absolute;z-index:6;left:0;top:0;width:34px;height:34px;padding:0;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:rgba(255,255,255,.9);
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);-webkit-backdrop-filter:blur(18px) saturate(170%);backdrop-filter:blur(18px) saturate(170%);
+  box-shadow:0 6px 18px rgba(0,0,0,.28);transition:transform .35s cubic-bezier(.3,1.4,.5,1),background .25s,border-color .25s,color .25s,opacity .25s;opacity:0}
+.wl-add-fab.ready{opacity:1}
+.wl-add-fab svg{grid-area:1/1;transition:transform .4s cubic-bezier(.3,1.4,.5,1),opacity .25s}
+.wl-add-fab .wa-ok{opacity:0;transform:scale(.4) rotate(-45deg)}
+.wl-add-fab.in .wa-plus{opacity:0;transform:scale(.4) rotate(90deg)}
+.wl-add-fab.in .wa-ok{opacity:1;transform:none}
+.wl-add-fab.in{color:var(--green);border-color:color-mix(in srgb,var(--green) 45%,transparent);background:color-mix(in srgb,var(--green) 12%,rgba(255,255,255,.04))}
+@media(hover:hover){.wl-add-fab:hover{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.28);transform:scale(1.08)}.wl-add-fab:hover .wa-plus{transform:rotate(90deg)}.wl-add-fab.in:hover{background:color-mix(in srgb,var(--green) 18%,rgba(255,255,255,.05))}}
+.wl-add-fab:active{transform:scale(.9)}
+.wl-add-fab.pop{animation:waPop .55s cubic-bezier(.3,1.4,.5,1)}
+@keyframes waPop{0%{transform:scale(.8)}45%{transform:scale(1.18);box-shadow:0 0 0 6px color-mix(in srgb,var(--green) 22%,transparent),0 6px 18px rgba(0,0,0,.28)}100%{transform:scale(1)}}
+.light .wl-add-fab{color:#1b2333;background:rgba(255,255,255,.55);border-color:rgba(20,30,50,.14);box-shadow:0 6px 16px rgba(20,30,50,.12)}
+body.pane .wl-add-fab{display:none}
+@media(max-width:760px){.wl-add-fab{width:26px;height:26px}.wl-add-fab svg{width:14px;height:14px}}
+@media (prefers-reduced-motion:reduce){.wl-add-fab,.wl-add-fab svg{transition:none}.wl-add-fab.pop{animation:none}}
+
+/* ───────── Mi seguimiento: monedas en las que tienes un trade abierto ───────── */
+.tr-ring{position:relative;display:inline-grid;place-items:center;flex-shrink:0;border-radius:50%;--trc:var(--green)}
+.tr-ring.short{--trc:var(--red)}
+.tr-ring::before{content:'';position:absolute;inset:-3px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 55%,var(--trc) 80%,transparent 100%);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1.5px));mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1.5px));animation:trSpin 2.4s linear infinite}
+.tr-ring::after{content:'';position:absolute;inset:-3px;border-radius:50%;box-shadow:0 0 0 1px color-mix(in srgb,var(--trc) 28%,transparent),0 0 12px color-mix(in srgb,var(--trc) 35%,transparent);animation:trPulse 2.4s ease-in-out infinite}
+@keyframes trSpin{to{transform:rotate(360deg)}}
+@keyframes trPulse{50%{opacity:.35}}
+.watch-row.in-trade{background:linear-gradient(90deg,color-mix(in srgb,var(--trc,var(--green)) 9%,transparent),transparent 70%)}
+.watch-row.in-trade.short{--trc:var(--red)}
+.tr-pill{font-style:normal;font-size:9px;font-weight:800;letter-spacing:0;padding:0 5px;flex-shrink:0;border-radius:999px;line-height:1.5;white-space:nowrap;color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent);border:1px solid color-mix(in srgb,var(--green) 32%,transparent)}
+.tr-pill.short{color:var(--red);background:color-mix(in srgb,var(--red) 14%,transparent);border-color:color-mix(in srgb,var(--red) 32%,transparent)}
+.tr-pill b{font-weight:800;margin-left:2px}
+.watch-row.in-trade .row-main small{overflow:visible}.tr-pill b.pos{color:var(--green)}.tr-pill b.neg{color:var(--red)}
+@media (prefers-reduced-motion:reduce){.tr-ring::before,.tr-ring::after{animation:none}}
+@media(min-width:1024px){.watch-row.in-trade .spark{flex-basis:38px!important;width:38px!important}}
+.watch-row.in-trade .row-main{overflow:visible}

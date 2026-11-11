@@ -9,6 +9,9 @@
 import * as SCR from './screener.mjs';
 import {radarInternal, loadState as radarState} from './radar-server.mjs';
 import DOM from '../dominance-core.js';
+import TWM from '../trade-watch.js';
+const TW = globalThis.CCTTradeWatch || TWM; // seguimiento de tus trades abiertos (misma lógica que la app)
+const TRADE_TTL = 72 * 3600e3; // si la app no manda tus posiciones en 3 días, se dejan de seguir (pudiste cerrarlas con la app cerrada)
 const DEFAULT_ORIGINS = 'https://soobroon-beep.github.io,https://vortex-nexus.pages.dev,https://dev.vortex-nexus.pages.dev';
 const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com', 'https://api1.binance.com'];
 const MOVE_TOP = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT'];
@@ -183,10 +186,17 @@ async function tick(env, now = Date.now()) {
   const ids = (await env.KV.get('devs', 'json')) || []; if (!ids.length) return {devices: 0};
   const devs = (await Promise.all(ids.map(id => env.KV.get('dev:' + id, 'json').then(d => d && d.sub ? [id, d] : null)))).filter(Boolean);
   if (!devs.length) return {devices: 0};
+  const liveTrades = d => (d.trades || []).filter(t => !(t.m && t.m.done)).length && now - (d.syncAt || 0) < TRADE_TTL ? d.trades.filter(t => !(t.m && t.m.done)) : [];
+  const tradeKeys = [...new Set(devs.flatMap(([, d]) => liveTrades(d).map(t => t.k)))];
   const needPrices = devs.some(([, d]) => (d.alerts || []).some(a => a.on)), needMoves = devs.some(([, d]) => d.move && d.move.on);
   const spot = [...new Set(devs.flatMap(([, d]) => (d.alerts || []).filter(a => a.on && !a.symbol.includes('@')).map(a => a.symbol)))];
   const prices = needPrices ? await spotPrices(spot).catch(() => ({})) : {};
   if (needPrices) { const other = [...new Set(devs.flatMap(([, d]) => (d.alerts || []).filter(a => a.on && a.symbol.includes('@')).map(a => a.symbol)))]; if (other.length) Object.assign(prices, await otherPrices(other).catch(() => ({}))); }
+  if (tradeKeys.length) { // precios de las monedas en las que tienes un trade abierto (del mismo exchange si se puede)
+    const sp = tradeKeys.filter(k => !k.includes('@') && !(k in prices)), ot = tradeKeys.filter(k => k.includes('@') && !(k in prices));
+    if (sp.length) Object.assign(prices, await spotPrices(sp).catch(() => ({})));
+    if (ot.length) Object.assign(prices, await otherPrices(ot).catch(() => ({})));
+  }
   const moves = {}; if (needMoves) await Promise.all(MOVE_TOP.map(s => closes1m(s).then(c => { moves[s] = c; }).catch(() => {})));
   let sent = 0, gone = [];
   { const hb = (await env.KV.get('hb', 'json')) || {}; if (now - (hb.at || 0) > 15 * 6e4) await env.KV.put('hb', JSON.stringify({at: now, devices: devs.length})); } // latido: la app puede ver que el servidor sí está revisando
@@ -194,6 +204,10 @@ async function tick(env, now = Date.now()) {
     const msgs = [], r = evalAlerts(d.alerts || [], prices, now, d.priceOn !== false); msgs.push(...r.fired); let changed = r.changed;
     if (r.dc.length && d.priceOn !== false) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of r.dc.slice(0, 5)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta de precio', description: m, color: 0x548fff}]})}); } catch (e) { console.warn('discord', e.message); } } }
     if (d.move && d.move.on) { d.moveLast = d.moveLast || {}; for (const s of MOVE_TOP) if (moves[s]) { const m = moveCheck(s, moves[s], d.move.pct, d.moveLast, now); if (m.length) { msgs.push(...m); changed = true; } } }
+    for (const t of liveTrades(d)) { // tus trades abiertos: escalones de ganancia/pérdida, cerca de TP/SL/liquidación, breakeven y tus niveles
+      t.m = t.m || {}; const r = TW.evalTrade(t, prices[t.k], t.m, now, {step: d.tradeStep, fmt, url: APP_URL});
+      if (r.changed) changed = true; msgs.push(...r.msgs);
+    }
     if (d.testAt) { msgs.push({title: 'VORTEX · Prueba con la app cerrada', body: 'Si ves esto con VORTEX cerrada, tus avisos funcionan ✅', tag: 'test2', url: APP_URL + '#alerts'}); delete d.testAt; changed = true; }
     if (msgs.length) { // el cifrado de cada aviso corre en su propia llamada interna
       let sts = []; try { sts = (await self(env, '/int/push', {id, msgs: msgs.slice(0, 8)})).sts || []; } catch (e) { sts = ['err: ' + String(e.message).slice(0, 60)]; }
@@ -376,7 +390,9 @@ export default {
       if (b.subOnly) { if (!cur.sub) return json({ok: false, error: 'Dispositivo sin registrar'}, 404); cur.sub = sub; cur.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(cur)); if (!ids.includes(id)) await env.KV.put('devs', JSON.stringify([...ids, id])); return json({ok: true}); } // el celular renovó su suscripción: se conservan alertas y ajustes
       const incoming = (Array.isArray(b.alerts) ? b.alerts : []).map(sanAlert).filter(Boolean).slice(0, MAX_ALERTS);
       const m = mergeAlerts(incoming, cur.alerts, b.since);
-      const d = {sub, lastPush: cur.lastPush, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now()};
+      const d = {sub, lastPush: cur.lastPush, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now(),
+        trades: TW.merge(b.trades, cur.trades), tradeStep: TW.STEPS.includes(+b.tradeStep) ? +b.tradeStep : TW.DEF_STEP, syncAt: cur.syncAt || 0};
+      if (d.trades.length && Date.now() - d.syncAt > 12 * 3600e3) d.syncAt = Date.now(); // la app sigue viendo esos trades abiertos (se renueva cada 12 h para no gastar escrituras)
       const same = JSON.stringify({...d, updated: 0}) === JSON.stringify({...cur, updated: 0});
       if (!same) { d.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(d)); } // sin cambios no se escribe (el plan gratis permite 1000 escrituras al día)
       if (!ids.includes(id)) { if (ids.length >= MAX_DEVICES) return json({error: 'Demasiados dispositivos'}, 429); await env.KV.put('devs', JSON.stringify([...ids, id])); }
