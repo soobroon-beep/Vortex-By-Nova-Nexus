@@ -2,14 +2,12 @@ name: Publicar VORTEX en Cloudflare Pages (vortex-nexus.pages.dev)
 # Publica la app en https://vortex-nexus.pages.dev (rama main = la página oficial).
 # La rama «dev» se publica aparte en https://dev.vortex-nexus.pages.dev para probar cambios antes de pasarlos a la oficial.
 # Usa el mismo secreto CLOUDFLARE_API_TOKEN de los Workers (necesita también el permiso «Cloudflare Pages: Edit»).
-# Se publica con cada cambio en main y cuando se actualizan noticias, dominancia o el Screener (esos cambios los sube un robot y no disparan el «push»).
+# Se publica con cada cambio de código. Noticias, calendario y dominancia NO necesitan publicar: la app los lee directo del repositorio (data-src.js).
+# (Cloudflare Pages gratis permite 500 publicaciones al mes.)
 on:
   push:
     branches: [main, dev]
     paths-ignore: ['worker/**', 'tests/**', 'scripts/**', 'docs/**', '**.md']
-  workflow_run:
-    workflows: ['Actualizar noticias', 'Actualizar dominancia', 'Screener a Discord']
-    types: [completed]
   workflow_dispatch:
 permissions:
   contents: read

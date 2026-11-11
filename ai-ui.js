@@ -34,7 +34,7 @@
 
   async function loadCalendar() {
     if (st.calendar && Date.now() - st.calAt < 600e3) return st.calendar;
-    try { const r = await fetch('calendar-data.json?_=' + Math.floor(Date.now() / 6e4), {cache: 'no-store'}); if (r.ok) { const j = await r.json(); st.calendar = j.events || []; st.calAt = Date.now(); st.calUpdated = j.at || 0; } } catch {}
+    try { const r = await fetch((window.CCT_DATA ? CCT_DATA('calendar-data.json') : 'calendar-data.json') + '?_=' + Math.floor(Date.now() / 6e4), {cache: 'no-store'}); if (r.ok) { const j = await r.json(); st.calendar = j.events || []; st.calAt = Date.now(); st.calUpdated = j.at || 0; } } catch {}
     return st.calendar;
   }
   async function gather(withMarket, nMarket, noCtx) {

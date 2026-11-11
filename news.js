@@ -229,7 +229,7 @@
        Solo si no había nada que mostrar se pinta lo primero que llegue; al terminar se pinta una sola vez, mezclado con lo anterior. */
     const partial = () => { st.per = Object.assign({}, st.per, lists); if (!hadItems && !st.items.length) { st.items = mergeItems(Object.values(st.per), Date.now()); renderAll(); } };
     // 1) Archivo generado por el servidor (mismo origen, sin CORS) → casi siempre funciona.
-    const stat = (async () => { try { const r = await fetchWithTimeout('news-data.json?_=' + Math.floor(Date.now() / 6e4), FETCH_TIMEOUT), j = await r.json(), n = Date.now();
+    const stat = (async () => { try { const r = await fetchWithTimeout((window.CCT_DATA ? CCT_DATA('news-data.json') : 'news-data.json') + '?_=' + Math.floor(Date.now() / 6e4), FETCH_TIMEOUT), j = await r.json(), n = Date.now();
       const its = (j.items || []).filter(i => i && i.title && Number.isFinite(i.t) && n - i.t <= MAX_AGE_MS && looksSpanish(i.title)); if (its.length) { lists.static = its; st.ok++; st.staticAt = j.at || 0; partial(); } } catch {} })();
     await Promise.all([stat, ...SOURCES.map(async src => {
       const raw = await loadSource(src); done++;

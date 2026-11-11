@@ -144,7 +144,7 @@
   function hide() { if (pop) { pop.remove(); pop = null; const b = $('#stEcon'); if (b) b.setAttribute('aria-expanded', 'false'); } }
   async function load() {
     if (busy || !deskMQ.matches) return; busy = true;
-    try { const r = await fetch('calendar-data.json?_=' + Math.floor(Date.now() / 6e4), {cache: 'no-store'}); if (r.ok) { const j = await r.json(); if (Array.isArray(j.events)) { events = j.events; loadedAt = Date.now(); } } } catch {}
+    try { const r = await fetch((window.CCT_DATA ? CCT_DATA('calendar-data.json') : 'calendar-data.json') + '?_=' + Math.floor(Date.now() / 6e4), {cache: 'no-store'}); if (r.ok) { const j = await r.json(); if (Array.isArray(j.events)) { events = j.events; loadedAt = Date.now(); } } } catch {}
     busy = false; paint(true);
   }
   function wantFresh(now) { // tras un evento importante sin dato, se vuelve a pedir cada minuto (el resultado aparece cuando el flujo lo publica)

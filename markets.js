@@ -143,7 +143,7 @@
 
   // ── Dominancia (USDT.D, BTC.D): muestras que guarda .github/workflows/dominance.yml en dominance-data.json ──
   const DOM_NAMES = {'USDT.D': 'Tether Dominance', 'BTC.D': 'Bitcoin Dominance'};
-  const DOM_URLS = ['dominance-data.json', 'https://raw.githubusercontent.com/soobroon-beep/Vortex-By-Nova-Nexus/main/dominance-data.json'];
+  const DOM_URLS = typeof location !== 'undefined' && /\.pages\.dev$/.test(location.hostname) ? ['https://raw.githubusercontent.com/soobroon-beep/Vortex-By-Nova-Nexus/main/dominance-data.json', 'dominance-data.json'] : ['dominance-data.json', 'https://raw.githubusercontent.com/soobroon-beep/Vortex-By-Nova-Nexus/main/dominance-data.json'];
   const DOM_SRV = 'https://vortex-push.soobroon.workers.dev/dom', DOM_METHOD = 'cryptocap-top125-v1'; // muestras puntuales de cada 15 min que toma el servidor (GitHub actualiza el archivo cada varias horas)
   let domCache = null;
   async function domServerMerge(d) {
