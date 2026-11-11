@@ -5800,7 +5800,8 @@ window.CCT_pixel = {
 window.CCT_getAIContext = function () {
   const n = candles.length; if (n < 30) return null;
   const lastV = a => { if (!a) return null; for (let i = a.length - 1; i >= 0; i--) if (a[i] != null && Number.isFinite(a[i])) return a[i]; return null; };
-  const active = Object.keys(state.indicators).filter(k => state.indicators[k]), values = {};
+  const active = Object.keys(state.indicators).filter(k => state.indicators[k] && !(state.stdHide && state.stdHide[k]) && !(PLUS_IND.includes(k) && !planOk('proInd'))), values = {}; // solo lo que se VE en el gráfico (lo oculto con el ojito no cuenta)
+  const RN = x => x == null || !Number.isFinite(+x) ? null : +(+x).toPrecision(Math.abs(+x) >= 1000 ? 6 : 4); // números cortos para la IA (sin 73.43352000000003)
   if (ind.vwap) values.vwap = lastV(ind.vwap);
   if (ind.stDir) { const d = lastV(ind.stDir); if (d != null) values.supertrend = -d; } // en Supertrend, -1 = alcista
   if (ind.trail && ind.trail.trend) { const t = ind.trail.trend[n - 1]; if (t) values.trailTrend = t; }
@@ -5810,16 +5811,16 @@ window.CCT_getAIContext = function () {
   if (ind.sr && ind.sr.boxes) for (const b of ind.sr.boxes) { if (b.deleted) continue; (b.kind === 'sup' ? zones.sup : zones.res).push({top: Math.max(b.top, b.bot), bot: Math.min(b.top, b.bot)}); }
   zones.sup = zones.sup.slice(-3); zones.res = zones.res.slice(-3);
   const vp = ind.vp ? {poc: ind.vp.pocPrice, lo: ind.vp.lo, hi: ind.vp.hi} : null;
-  const pine = activePine().map(p => { const r = pineRes[p.sid], sc = scripts.find(x => x.id === p.sid); if (!r || !r.ok) return null;
-    const plots = (r.plots || []).slice(0, 8).map(pl => ({title: String(pl.title || '').slice(0, 30), value: lastV(pl.values)}));
+  const pine = activePine().filter(p => !p.hide).map(p => { const r = pineRes[p.sid], sc = scripts.find(x => x.id === p.sid); if (!r || !r.ok) return null;
+    const plots = (r.plots || []).slice(0, 8).map(pl => ({title: String(pl.title || '').slice(0, 30), value: RN(lastV(pl.values))}));
     const table = []; for (const t of (r.tables || []).slice(0, 3)) { const rows = {}; for (const c of t.cells || []) { if (c.text == null || String(c.text).trim() === '') continue; (rows[c.r] = rows[c.r] || []).push(String(c.text).replace(/\s+/g, ' ').trim().slice(0, 40)); } Object.keys(rows).sort((a, b) => a - b).slice(0, 14).forEach(k => table.push(rows[k].join(': '))); }
     return {name: String((sc && sc.name) || (r.meta && r.meta.title) || 'Script').slice(0, 40), plots, table};
   }).filter(Boolean).slice(0, 6);
   let nova = null; // lectura de Nova Nexus (nube EMA, oscilador, flujo, ADX, señal IA, SMC) calculada siempre, aunque los módulos no estén encendidos
   try {
-    if (window.NovaNexus && n >= 60) {
+    if (window.NovaNexus && n >= 60 && activePine().some(p => !p.hide && /^cat:nova-(nexus|sig)$/.test(p.sid))) { // solo si tienes Nova Nexus visible en el gráfico
       const NP = novaP, r = NovaNexus.compute(candles, {smc: true, emaLen: NP('emaLen'), emaMult: NP('emaMult'), minScore: NP('minScore'), cooldown: NP('cooldown'), cdBoth: NP('cdBoth'), slMult: NP('slMult'), tp1Mult: NP('tp1'), tp2Mult: NP('tp2'), tp3Mult: NP('tp3'), tpBars: NP('tpBars'), smcOpts: {mslen: NP('smcLen'), window: NP('smcWindow'), swingLimit: NP('smcSwing'), sweep: NP('smcSweep'), oblast: NP('obLast'), obmiti: NP('obMiti')}}), i = n - 1, sg = r.last;
-      nova = {base: lastV(r.emaBase), top: lastV(r.emaTop), bot: lastV(r.emaBot), osc: lastV(r.osc), sig: null, flux: lastV(r.flux), adx: lastV(r.adx), ema200: lastV(r.ema200), smcTrend: r.smc ? r.smc.trend : 0,
+      nova = {base: RN(lastV(r.emaBase)), top: RN(lastV(r.emaTop)), bot: RN(lastV(r.emaBot)), osc: RN(lastV(r.osc)), sig: null, flux: RN(lastV(r.flux)), adx: RN(lastV(r.adx)), ema200: RN(lastV(r.ema200)), smcTrend: r.smc ? r.smc.trend : 0,
         last: sg ? {side: sg.side, score: sg.score, div: !!sg.div, ago: i - sg.i, price: sg.price, sl: sg.sl, tp1: sg.tp1, tp2: sg.tp2, tp3: sg.tp3} : null};
       if (r.osc && n >= 4) { const a = r.osc.slice(-3).filter(Number.isFinite); if (a.length === 3) nova.sig = a[0] / 3 + a[1] / 3 + a[2] / 3; } // media de 3 del oscilador = línea de señal
     }
@@ -5828,7 +5829,7 @@ window.CCT_getAIContext = function () {
      cada uno con su valor, pendiente, posición del precio y último cruce (antes solo recibía unos cuantos y no veía la EMA, por ejemplo). */
   const lecturas = {}; let visible = null, dibujos = [];
   try {
-    const px = candles[n - 1].c, R = x => x == null || !Number.isFinite(x) ? null : +(+x).toPrecision(6);
+    const px = candles[n - 1].c, R = RN;
     const at = (a, k) => { const i = a.length - 1 - k; return i >= 0 ? a[i] : null; };
     const lastCross = (a, b, look = 60) => { for (let i = a.length - 1, m = Math.max(1, a.length - look); i >= m; i--) { const x0 = a[i - 1], y0 = typeof b === 'function' ? b(i - 1) : b[i - 1], x1 = a[i], y1 = typeof b === 'function' ? b(i) : b[i]; if ([x0, y0, x1, y1].every(Number.isFinite) && Math.sign(x0 - y0) !== Math.sign(x1 - y1)) return {hace_velas: a.length - 1 - i, tipo: x1 > y1 ? 'cruzó hacia ARRIBA' : 'cruzó hacia ABAJO'}; } return null; };
     const serie = a => { if (!Array.isArray(a) || !a.length || !a.some(Number.isFinite)) return null; const v = at(a, 0); if (!Number.isFinite(v)) return null; const v5 = at(a, 5), vis = a.slice(-120).filter(Number.isFinite);
