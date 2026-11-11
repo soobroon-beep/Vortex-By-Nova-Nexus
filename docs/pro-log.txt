@@ -1,0 +1,6 @@
+Fecha: Wed Nov 11 10:09:06 UTC 2026
+nova-nexus: subido (3628 líneas)
+nova-osc: subido (834 líneas)
+nova-sig: subido (295 líneas)
+nova-scr: subido (701 líneas)
+Subidos: 4 · en Firestore: 4 indicadores (nova-nexus, nova-osc, nova-scr, nova-sig) · cuenta del creador marcada Infinity: 1
