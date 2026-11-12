@@ -1,5 +1,9 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.26', d: '11 nov 2026', t: 'Abre en el gráfico', items: [
+    'Con tu sesión iniciada, VORTEX abre directo en el gráfico (en el celular). Sin sesión sigue saliendo la ventana para iniciar sesión.',
+    'En la barra de abajo del celular, «Seguimiento» ya cabe dentro de la burbuja.'
+  ]},
   {v: '3.25', d: '11 nov 2026', t: 'Controles modernos en toda la app', items: [
     'Listas desplegables de cristal con animación (ya no salen en blanco), casillas, deslizadores, colores y campos con el mismo estilo en todas las ventanas.',
     'El botón principal de cada ventana (Aceptar, Guardar, Crear) se ve en azul; antes quedaba oscuro.',

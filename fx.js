@@ -11,9 +11,9 @@
   }, {passive: true});
   // Píldora de cristal que se desliza bajo el botón activo de la barra inferior
   const nav = document.querySelector('.bottom-nav');
-  function movePill() {
+  function movePill() { // la burbuja se ensancha si la palabra del botón (p. ej. «Seguimiento») no cabe
     if (!nav) return; const act = nav.querySelector('button.active'); if (!act || !act.offsetWidth) return;
-    const x = act.offsetLeft + 'px', w = act.offsetWidth + 'px'; if (nav.style.getPropertyValue('--pill-x') !== x) nav.style.setProperty('--pill-x', x); if (nav.style.getPropertyValue('--pill-w') !== w) nav.style.setProperty('--pill-w', w); if (!nav.classList.contains('has-pill')) nav.classList.add('has-pill');
+    const lab = act.querySelector('small'), need = Math.ceil(lab ? lab.scrollWidth + 14 : 0), bw = Math.max(act.offsetWidth, need), x0 = act.offsetLeft + (act.offsetWidth - bw) / 2, x = Math.round(Math.max(3, Math.min(nav.clientWidth - bw - 3, x0))) + 'px', w = bw + 'px'; if (nav.style.getPropertyValue('--pill-x') !== x) nav.style.setProperty('--pill-x', x); if (nav.style.getPropertyValue('--pill-w') !== w) nav.style.setProperty('--pill-w', w); if (!nav.classList.contains('has-pill')) nav.classList.add('has-pill');
   }
   if (nav) { new MutationObserver(recs => { if (recs.some(r => r.target !== nav)) movePill(); }).observe(nav, {subtree: true, attributes: true, attributeFilter: ['class']}); window.addEventListener('resize', movePill); setTimeout(movePill, 50); setTimeout(movePill, 400); }
   // Marca la barra superior cuando hay desplazamiento (cristal más marcado)
