@@ -5,6 +5,7 @@ const ago = t => t ? ((Date.now() - t) / 36e5).toFixed(1) + ' h' : '—';
 (async () => {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT; if (!raw) { console.log('Sin FIREBASE_SERVICE_ACCOUNT'); return; }
   const admin = require('firebase-admin'); admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); const db = admin.firestore();
+  try { const pro = await db.collection('pro').get(); console.log('Scripts PRO en el servidor: ' + pro.docs.map(d => d.id + (d.data().code ? '' : ' (vacío)')).join(', ')); } catch (e) { console.log('Scripts PRO: ' + e.message); }
   const users = await db.collection('users').listDocuments(); let n = 0;
   for (const u of users) {
     const bd = await u.collection('data').doc('botlab').get(); if (!bd.exists) continue; let S; try { S = JSON.parse(bd.data().items || '{}'); } catch (e) { console.log('botlab ilegible:', e.message); continue; }
