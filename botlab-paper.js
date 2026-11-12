@@ -11,6 +11,8 @@
   const clone = o => JSON.parse(JSON.stringify(o)), WARM = 420, CAP = 6000;
   const fnv = s => { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16).padStart(8, '0'); };
   const core = t => `${t.side}|${t.entryT}|${t.exitT}|${t.entry}|${t.exit}|${Math.round(t.net * 1e6)}`;
+  /* Velas de calentamiento: al menos 420, o 1.5× el periodo más largo que use el bot (p. ej. EMA 800) para que sus indicadores existan */
+  const warmOf = spec => { let mx = 0; JSON.stringify(spec, (k, v) => { if (k === 'n' && typeof v === 'number' && v > mx) mx = v; return v; }); return Math.min(CAP - 600, Math.max(WARM, Math.ceil(mx * 1.5) + 50)); };
   function newSession(o) {
     const spec = B.normalizeSpec(o.spec); return {id: o.id, v: o.v, spec: clone(spec), capital: o.capital, cash: o.capital, peak: o.capital, startT: o.startT, anchorT: o.startT, status: 'running', ledger: [], curve: [[o.startT, o.capital]], open: null, last: null, halted: false, gaps: [], notes: [], pausedAt: null};
   }
@@ -19,10 +21,10 @@
   /* Avanza la sesión hasta la última vela cerrada. getCandles(symbol, interval, count) → velas cerradas (orden ascendente). ropts: {nova, user(series alineadas a las velas devueltas)} */
   async function step(s, getCandles, ropts, now) {
     if (s.status !== 'running') return {changed: false, newTrades: 0};
-    now = now || Date.now(); const spec = s.spec, iv = B.IV_MS[spec.interval], need = Math.ceil((now - s.anchorT) / iv) + WARM, count = Math.min(CAP, Math.max(WARM + 5, need));
+    now = now || Date.now(); const spec = s.spec, iv = B.IV_MS[spec.interval], warm = warmOf(spec), need = Math.ceil((now - s.anchorT) / iv) + warm, count = Math.min(CAP, Math.max(warm + 5, need));
     const C = await getCandles(spec.symbol, spec.interval, count, s); if (!C || C.length < 80) throw new Error('Pocas velas disponibles para ' + spec.symbol);
     let ai = C.findIndex(c => c.t >= s.anchorT); if (ai < 0) return {changed: false, newTrades: 0}; // aún no cerró ninguna vela después del inicio
-    if (ai < 300 && need > CAP) { const na = C[Math.min(C.length - 1, 300)].t; s.gaps.push({from: s.anchorT, to: na, why: 'Hueco de datos: la app estuvo cerrada más tiempo del que se puede recalcular'}); s.open = null; s.anchorT = na; ai = C.findIndex(c => c.t >= na); }
+    if (ai < warm && need > CAP) { const na = C[Math.min(C.length - 1, warm)].t; s.gaps.push({from: s.anchorT, to: na, why: 'Hueco de datos: la app estuvo cerrada más tiempo del que se puede recalcular'}); s.open = null; s.anchorT = na; ai = C.findIndex(c => c.t >= na); }
     const ropts2 = ropts && ropts.user ? ropts.user : null, sp = clone(spec); sp.risk.capital = s.cash;
     /* Nada se decide dos veces: las velas que ya se revisaron en una actualización anterior no pueden abrir operaciones nuevas
        (antes, al recalcular con otra ventana de velas, aparecían o desaparecían entradas viejas: avisos de compras que luego no estaban). */

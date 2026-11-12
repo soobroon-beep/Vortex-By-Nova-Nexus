@@ -295,16 +295,20 @@
     lucas4h: () => lucasSpec('Lucas 4H', '4h', 40, 100, 2, 3.5),
     lucas1h: () => lucasSpec('Lucas 1H', '1h', 120, 400, 3, 5),
     /* PACHITA (nov 2026, con Claude): Nova Nexus · iA Signals v2.7 en 15 minutos, compras y ventas, 8 monedas.
-       Entra solo con la señal del indicador EN TENDENCIA (ADX ≥ 25: ahí la señal ya exige estar del lado correcto de la EMA 200, flujo de dinero a favor y puntaje ≥ 4)
-       y del mismo lado de la nube EMA de Nova Nexus. Zonas: stop 1.5× ATR (más allá del SL de 1× ATR del indicador, para que el ruido de 15 m no la saque),
-       objetivo 2.5× ATR (el TP2 del indicador), trailing 2× ATR que asegura ganancia cuando avanza, y cierre por la señal contraria solo después de 4 velas (1 h).
-       Máx. 48 velas (12 h) por operación. No opera con el mercado muerto (ATR < 0.12 %) ni en latigazos (ATR > 2.5 %). Riesgo 2 %, apalancamiento máx. 5×. */
-    pachita: () => Object.assign(defaultSpec(), {name: 'Pachita', symbol: 'BTCUSDT', basket: NOVA8.slice(), interval: '15m', sides: 'both',
-      entry: {long: [{a: {k: 'novaBuy'}, op: 'is'}, {a: {k: 'novaRange'}, op: 'lt', b: {k: 'num', v: 1}}, {a: {k: 'novaBull'}, op: 'gte', b: {k: 'num', v: 1}}],
-        short: [{a: {k: 'novaSell'}, op: 'is'}, {a: {k: 'novaRange'}, op: 'lt', b: {k: 'num', v: 1}}, {a: {k: 'novaBull'}, op: 'lt', b: {k: 'num', v: 1}}]},
-      exit: {long: [{a: {k: 'novaSell'}, op: 'is'}], short: [{a: {k: 'novaBuy'}, op: 'is'}]},
-      filters: {minVolRatio: 0, minAtrPct: 0.12, maxAtrPct: 2.5, hoursUtc: null},
-      risk: {capital: 10000, riskPct: 2, sizePct: 10, maxLeverage: 5, atrLen: 14, sl: {type: 'atr', v: 1.5}, tp: {type: 'atr', v: 2.5}, trail: {type: 'atr', v: 2}, maxBars: 48, minBars: 4, maxDailyLossPct: 6, maxDrawdownPct: 25}, costs: {feePct: 0.05, slipPct: 0.03}}),
+       Elegida con datos reales de Binance (abr→nov 2026, ~20 000 velas por moneda) entre 5 900 combinaciones (scripts/pachita-opt.js):
+       · Entra con la señal del indicador solo EN TENDENCIA (ADX ≥ 25), del lado correcto de la nube EMA y a favor de la tendencia mayor
+         (EMA 200 sobre/bajo la EMA 800 de 15 m ≈ tendencia de 1 h y 4 h, y el precio del mismo lado de la EMA 800).
+       · Zonas: stop 3× ATR, objetivo 3× ATR, máx. 96 velas (24 h). No cierra por la señal contraria (en 15 m la sacaba antes de tiempo).
+       · Riesgo 1 % (dentro de tu máximo de 2 %): con 2 % la caída histórica llegaba al 25 % y el freno detenía el bot. Apalancamiento máx. 5×.
+       Resultado honesto: 359 operaciones, 54 % aciertos, PF 0.96; pierde en entrenamiento y gana en validación y prueba (los últimos meses).
+       En 15 m ninguna combinación de la señal quedó confirmada: es un experimento que se vigila en paper trading y se mejora solo cada noche. */
+    pachita: () => { const up = (a, b) => ({a, op: 'gt', b}), dn = (a, b) => ({a, op: 'lt', b}), C = {k: 'close'}, e2 = {k: 'ema', n: 200}, e8 = {k: 'ema', n: 800};
+      return Object.assign(defaultSpec(), {name: 'Pachita', symbol: 'BTCUSDT', basket: NOVA8.slice(), interval: '15m', sides: 'both',
+        entry: {long: [{a: {k: 'novaBuy'}, op: 'is'}, {a: {k: 'novaRange'}, op: 'lt', b: {k: 'num', v: 1}}, {a: {k: 'novaBull'}, op: 'gte', b: {k: 'num', v: 1}}, up(e2, e8), up(C, e8)],
+          short: [{a: {k: 'novaSell'}, op: 'is'}, {a: {k: 'novaRange'}, op: 'lt', b: {k: 'num', v: 1}}, {a: {k: 'novaBull'}, op: 'lt', b: {k: 'num', v: 1}}, dn(e2, e8), dn(C, e8)]},
+        exit: {long: [], short: []},
+        filters: {minVolRatio: 0, minAtrPct: 0, maxAtrPct: 2.5, hoursUtc: null},
+        risk: {capital: 10000, riskPct: 1, sizePct: 10, maxLeverage: 5, atrLen: 14, sl: {type: 'atr', v: 3}, tp: {type: 'atr', v: 3}, trail: null, maxBars: 96, minBars: 4, maxDailyLossPct: 6, maxDrawdownPct: 25}, costs: {feePct: 0.05, slipPct: 0.03}}); },
     macdTrend: () => Object.assign(defaultSpec(), {name: 'Tendencia + MACD', entry: {long: [{a: {k: 'close'}, op: 'gt', b: {k: 'ema', n: 200}}, {a: {k: 'macd'}, op: 'crossUp', b: {k: 'macdSignal'}}], short: []}, exit: {long: [{a: {k: 'macd'}, op: 'crossDown', b: {k: 'macdSignal'}}], short: []}})
   };
 

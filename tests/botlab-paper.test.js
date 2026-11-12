@@ -55,3 +55,7 @@ test('reanudar la posición da el mismo resultado que calcular todo de una vez (
   await P.step(b, feed(C), null, T(2400)); for (let k = 1010; k <= 2400; k += 37) await P.step(a, feed(C.slice(0, k)), null, T(k)); await P.step(a, feed(C), null, T(2400));
   const core = x => x.ledger.map(t => [t.entryT, t.exitT, Math.round(t.net * 1e4)]); assert.deepEqual(core(a), core(b));
 });
+test('bots con indicadores largos (EMA 800, como Pachita) piden velas suficientes para calentarlos', async () => {
+  const C = walk(3000, 21), s = P.newSession({id: 'a', v: 1, spec: (() => { const x = spec(); x.entry.long = [{a: {k: 'close'}, op: 'crossUp', b: {k: 'ema', n: 800}}]; x.exit.long = []; return x; })(), capital: 10000, startT: T(2900)}); let asked = 0;
+  await P.step(s, async (sym, itv, n) => { asked = n; return C.slice(-n); }, null, T(3000)); assert.ok(asked >= 1250, 'pidió ' + asked);
+});

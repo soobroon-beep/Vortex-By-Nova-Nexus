@@ -314,9 +314,9 @@
   function seedPachita() {
     S.seeded = S.seeded || {}; if (S.seeded.pachita || !B.PRESETS.pachita || !PP()) return; S.seeded.pachita = Date.now();
     if (S.bots.some(b => b.preset === 'pachita')) return save(); newLook = {color: '#f472b6', icon: 'estrella'}; const sp = B.PRESETS.pachita();
-    const b = newBot(sp, 'nova', 'Señales de Nova Nexus · iA Signals v2.7 en 15 minutos, compras y ventas en 8 monedas, solo en tendencia (ADX ≥ 25) y del lado correcto de la nube EMA. SL 1.5× ATR, TP 2.5× ATR, trailing 2× ATR; la señal contraria cierra después de 1 h; máx. 12 h por operación. Riesgo 2 %, apalancamiento máx. 5×.');
+    const b = newBot(sp, 'nova', 'Señales de Nova Nexus · iA Signals v2.7 en 15 minutos, compras y ventas en 8 monedas, solo en tendencia, del lado correcto de la nube EMA y a favor de la tendencia mayor (EMA 200 vs EMA 800). SL 3× ATR, TP 3× ATR, máx. 24 h por operación. Riesgo 1 %, apalancamiento máx. 5×.');
     b.preset = 'pachita'; S.bots.push(b); const c = cyc(b); c.enabled = true; c.auto = true; c.enabledAt = Date.now();
-    log(b, 'creación', 'Pachita creada con Claude a partir de tu indicador Nova Nexus · iA Signals v2.7 (15 m). Aún sin backtest con datos reales: pruébala en «Probar» y vigílala en paper trading. Aprendizaje automático activado.');
+    log(b, 'creación', 'Pachita creada con Claude a partir de tu indicador Nova Nexus · iA Signals v2.7 (15 m). Probada con datos reales abr→nov 2026 en 8 monedas: 359 operaciones, 54 % aciertos, PF 0.96; gana en los últimos meses pero no en los primeros. En 15 m la señal no quedó confirmada: experimento en paper trading con mejora automática.');
     startLive(b, b.mainV, sp.risk.capital); save(); toast('Nova Bot Lab: Pachita (15 m) ya está en vivo (simulado)');
   }
   /* Ajuste único (nov 2026): bots que abrían y cerraban enseguida (objetivo pegado, trailing muy corto o cierre por la señal contraria a la vela siguiente).
