@@ -3,7 +3,7 @@ name: Claudio · agente de trading (cada hora)
 # candidatos y avanza su sesión con capital virtual. NO envía órdenes reales. Requiere FIREBASE_SERVICE_ACCOUNT; JEV_API_KEY es opcional
 # (sin ella usa el evaluador local con el mismo esquema). Sin Firebase termina sin hacer nada.
 on:
-  schedule: [{cron: '2 * * * *'}]
+  # Lo corre cada hora el Motor del servidor (motor.yml); aquí queda para lanzarlo a mano.
   workflow_dispatch:
 permissions:
   contents: read

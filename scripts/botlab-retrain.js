@@ -67,6 +67,17 @@ async function paperBot(bot, scripts, getCandles, now, gateF, notify, pushOut) {
 }
 const due = (bot, prev, now, force, linked) => { const c = linked ? Object.assign({enabled: true, everyHours: 24}, bot.cycle, {enabled: true}) : bot.cycle; if (!c || !c.enabled || bot.status === 'paused' || bot.status === 'archived') return false; if (force) return true; const every = Math.max(6, Math.min(24 * 14, c.everyHours || 24)) * 36e5; return !prev || now - (prev.at || 0) >= every - 30 * 6e4; };
 
+/* La app comprime tus scripts cuando son grandes («gz1:» + base64 gzip): sin esto el servidor no los encontraba («ya no existe en tu cuenta») */
+function unpackStr(v) { return typeof v === 'string' && v.startsWith('gz1:') ? require('zlib').gunzipSync(Buffer.from(v.slice(4), 'base64')).toString('utf8') : v; }
+/* Si el servidor ya había avanzado una sesión más que la copia de la app (la app estuvo cerrada), se sigue desde la del servidor:
+   así no se repiten operaciones ni avisos. Solo si es el MISMO libro (cadena de hashes), igual que hace la app al juntar. */
+function adoptServer(b, srvPaper) {
+  for (const lo of b.paper || []) {
+    if (lo.status !== 'running') continue; const sv = (srvPaper || []).find(x => x.id === lo.id); if (!sv || !Array.isArray(sv.ledger) || !Array.isArray(lo.ledger)) continue;
+    const n = Math.min(lo.ledger.length, sv.ledger.length); let same = true; for (let i = 0; i < n; i++) if (lo.ledger[i].h !== sv.ledger[i].h) { same = false; break; } if (!same) continue;
+    if (sv.ledger.length > lo.ledger.length || (sv.last && (!lo.last || sv.last.t > lo.last.t)) || (sv.nN != null && lo.nN == null)) for (const k of ['ledger', 'cash', 'peak', 'anchorT', 'curve', 'open', 'last', 'gaps', 'notes', 'halted', 'err', 'checkedAt', 'nN', 'oN', 'by']) if (k in sv) lo[k] = sv[k];
+  }
+}
 async function main() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT; if (!raw) { console.log('FIREBASE_SERVICE_ACCOUNT no está configurado: no hay nada que hacer. (Ver INSTALL.md → Reentrenamiento programado)'); return; }
   const MODE = process.env.MODE || 'all'; // retrain | paper | all
@@ -79,11 +90,11 @@ async function main() {
     let links = {}; try { const bb = await u.collection('data').doc('brain_bots').get(); links = (bb.exists && bb.data().bots) || {}; } catch {} const linked = b => links[b.id] && links[b.id].auto !== false;
     const all = S.bots || [], cyc = MODE !== 'paper' ? all.filter(b => b && ((b.cycle && b.cycle.enabled) || linked(b))) : [], pap = MODE !== 'retrain' ? all.filter(b => b && (b.paper || []).some(x => x.status === 'running')) : []; if (!cyc.length && !pap.length) continue;
     const sd = await u.collection('data').doc('botlab_server').get(), prev = sd.exists ? sd.data() : {}, results = Object.assign({}, prev.results || {}), paper = Object.assign({}, prev.paper || {}), brainMem = Object.assign({}, prev.brainMem || {}); let scripts = null, changed = false;
-    const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(s.data().items || '[]') : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } scripts = scripts.concat(catalogScripts().filter(c => c.code && !scripts.some(x => x.id === c.id))); try { const pro = await db.collection('pro').get(); for (const d of pro.docs) if (!scripts.some(x => x.id === 'cat:' + d.id)) scripts.push({id: 'cat:' + d.id, name: d.id, code: d.data().code, builtin: true}); } catch {} }; // los Nova Nexus PRO ya no están en el repo: se leen de Firestore
+    const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(unpackStr(s.data().items || '[]')) : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } scripts = scripts.concat(catalogScripts().filter(c => c.code && !scripts.some(x => x.id === c.id))); try { const pro = await db.collection('pro').get(); for (const d of pro.docs) if (!scripts.some(x => x.id === 'cat:' + d.id)) scripts.push({id: 'cat:' + d.id, name: d.id, code: d.data().code, builtin: true}); } catch {} }; // los Nova Nexus PRO ya no están en el repo: se leen de Firestore
     for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force, linked(b))) continue; await loadScripts(); const bc = linked(b) ? {link: links[b.id], memory: brainMem[b.id] || []} : null; const r = await retrainBot(b, scripts, getCandles, now, bc); if (bc && bc.out) { brainMem[b.id] = JSON.parse(JSON.stringify(bc.out.memory || [])); nbr++; } results[b.id] = JSON.parse(JSON.stringify(r)); changed = true; nr++; console.log(`· bot ${nr}${bc ? ' (con cerebro)' : ''}: ${r.status}${r.status === 'error' ? ' · ' + String(r.reason || '').slice(0, 120) : ' · ' + r.decision + (r.brain ? ` · ideas probadas: ${(r.brain.tried || []).length}` : '')}`); if (r.decision === 'propuesta') np++; }
     const gateF = RK.gateFor(S.risk, all.flatMap(x => x.status === 'archived' ? [] : x.paper || []), now);
     const pushOut = [];
-    for (const b of pap) { await loadScripts(); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.notify, pushOut); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
+    for (const b of pap) { await loadScripts(); adoptServer(b, (prev.paper || {})[b.id]); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.notify, pushOut); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
     if (pushOut.length) await botPush(u.id, pushOut);
     if (changed) { for (const id of Object.keys(results)) if (!all.some(b => b.id === id)) delete results[id]; for (const id of Object.keys(paper)) if (!all.some(b => b.id === id)) delete paper[id]; for (const id of Object.keys(brainMem)) if (!all.some(b => b.id === id)) delete brainMem[id]; await u.collection('data').doc('botlab_server').set({results, paper, brainMem, updatedAt: admin.firestore.FieldValue.serverTimestamp()}); }
   }

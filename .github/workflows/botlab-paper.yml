@@ -2,7 +2,7 @@ name: Paper trading de bots (Nova Bot Lab)
 # Cada hora avanza las sesiones de paper trading activas (simulación con capital virtual; NO envía órdenes reales) para que sigan
 # registrándose aunque no tengas la app abierta. Requiere el secreto FIREBASE_SERVICE_ACCOUNT; sin él termina sin hacer nada.
 on:
-  schedule: [{cron: '7 * * * *'}]
+  # Lo corre cada hora el Motor del servidor (motor.yml); aquí queda para lanzarlo a mano.
   workflow_dispatch:
 permissions:
   contents: read

@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.27', d: '11 nov 2026', t: 'Tus bots aprenden solos', items: [
+    'Todos los bots (también los nuevos) tienen reentrenamiento diario y mejora automática: si una versión nueva gana en datos que no vio, pasa a ser la principal, la simulación sigue con ella y te avisa. La anterior queda en Versiones para regresar.',
+    'El servidor ya encuentra tus scripts grandes (como Señales iA 2.7) y no repite avisos de los bots.',
+    'Nuevo motor del servidor: las alertas con indicador se revisan cada minuto y el paper trading de tus bots y Claudio corren cada hora de verdad.'
+  ]},
   {v: '3.26', d: '11 nov 2026', t: 'Abre en el gráfico', items: [
     'Con tu sesión iniciada, VORTEX abre directo en el gráfico (en el celular). Sin sesión sigue saliendo la ventana para iniciar sesión.',
     'En la barra de abajo del celular, «Seguimiento» ya cabe dentro de la burbuja.'

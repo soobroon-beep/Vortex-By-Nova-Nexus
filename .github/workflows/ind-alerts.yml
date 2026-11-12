@@ -3,7 +3,7 @@ name: Alertas con indicador (app cerrada)
 # por el servidor de avisos aunque VORTEX y el celular estén cerrados. Cada ejecución revisa cada minuto durante ~5 min
 # y se vuelve a lanzar cada 5 min. Usa el secreto FIREBASE_SERVICE_ACCOUNT que ya tienes; sin él termina sin hacer nada.
 on:
-  schedule: [{cron: '*/5 * * * *'}]
+  # Lo corre cada minuto el Motor del servidor (motor.yml); aquí queda para lanzarlo a mano.
   workflow_dispatch:
 permissions:
   contents: read

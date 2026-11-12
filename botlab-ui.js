@@ -45,7 +45,7 @@
   }
   async function pullCloud() {
     const c = H.cloud && H.cloud(); if (!c) return; let got = false; try { const str = await c.get(); got = true; if (str) { cloudStr = str; const m = merge(readLocal(), JSON.parse(str)); S = m; save(); } } catch {}
-    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) { seedSafe(); fixNov26(); seedLucas(); } if (view === 'lib') render();
+    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) { seedSafe(); fixNov26(); seedLucas(); learnOn(); } if (view === 'lib') render();
   }
 
   /* ───────── Modelo de bot ───────── */
@@ -292,6 +292,11 @@
       if (S.bots.some(b => b.preset === k)) continue; newLook = {color, icon}; const b = newBot(B.PRESETS[k](), 'nova', desc); b.preset = k; S.bots.push(b); log(b, 'creación', 'Bot creado por Nova Bot Lab a partir de tu indicador Nova Nexus v2.7, optimizado con validación fuera de muestra.'); goLive(b);
     }
     save(); toast('Nova Bot Lab: tus bots ya operan en ambos sentidos y se crearon los bots Nova Nexus v2.7 (en vivo, simulado)');
+  }
+  function learnOn() { // una sola vez por cuenta: todos tus bots con reentrenamiento diario y mejora automática (luego puedes apagarlo en cada bot)
+    S.seeded = S.seeded || {}; if (S.seeded.learn) return; S.seeded.learn = Date.now();
+    for (const b of S.bots) { if (b.status === 'archived') continue; const c = cyc(b); if (!c.enabled) c.enabledAt = Date.now(); c.enabled = true; c.auto = true; log(b, 'ciclo', 'Aprendizaje activado: reentrenamiento diario y mejora automática.'); }
+    save();
   }
   function seedLucas() { // Lucas 1H y 4H (creados con Claude): una sola vez por cuenta, encendidos en paper trading; si los borras no vuelven
     S.seeded = S.seeded || {}; if (S.seeded.lucas || !B.PRESETS.lucas4h || !PP()) return; S.seeded.lucas = Date.now();
@@ -695,7 +700,7 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
       <div class="bl-box"><h4>Registro de eventos de riesgo</h4>${r.log.length ? `<ul class="bl-log">${r.log.slice().reverse().slice(0, 25).map(x => `<li><small>${dt(x.t)}</small><br>${esc(x.text)}</li>`).join('')}</ul>` : note('Sin eventos todavía.')}</div>`;
   }
   /* ----- Reentrenamiento: ciclo automático (servidor) + optimizar ahora (navegador) ----- */
-  const CYC = {enabled: false, everyHours: 24, bars: 4000};
+  const CYC = {enabled: true, everyHours: 24, bars: 4000, auto: true}; // todos los bots: reentrenamiento diario y mejora automática (se puede apagar por bot)
   const cyc = b => b.cycle || (b.cycle = Object.assign({}, CYC));
   function pathLabel(spec, path) {
     const fx = {'risk.sl.v': 'Stop loss', 'risk.tp.v': 'Take profit', 'risk.trail.v': 'Trailing stop', 'risk.maxBars': 'Tiempo máximo (velas)', 'filters.minVolRatio': 'Volumen mínimo', 'filters.minAtrPct': 'Volatilidad mínima', 'filters.maxAtrPct': 'Volatilidad máxima'}; if (fx[path]) return fx[path];
@@ -718,17 +723,29 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
   }
   function tabCic(b) {
     const c = cyc(b), sv = b.server, lc = b.local, waiting = c.enabled && !sv && c.enabledAt && Date.now() - c.enabledAt > 48 * 36e5;
-    $('#blTab').innerHTML = (Array.isArray(mainSpec(b).basket) && mainSpec(b).basket.length ? note('Este bot opera una cesta de monedas: el reentrenamiento ajusta los parámetros usando solo ' + mainSpec(b).symbol + ' (la primera de la cesta).', 'warn') : '') + `<div class="bl-box"><h4>Ciclo de reentrenamiento automático</h4>${note('Cada día, un trabajo programado en GitHub Actions (no depende de que tengas la app abierta) descarga velas recientes, re-evalúa la versión principal y busca mejoras con validación walk-forward: ajusta solo con datos de entrenamiento y mide en tramos que no vio. Si no hay mejora comprobada, no propone nada. Nunca cambia la versión principal por sí solo.')}
+    $('#blTab').innerHTML = (Array.isArray(mainSpec(b).basket) && mainSpec(b).basket.length ? note('Este bot opera una cesta de monedas: el reentrenamiento ajusta los parámetros usando solo ' + mainSpec(b).symbol + ' (la primera de la cesta).', 'warn') : '') + `<div class="bl-box"><h4>Ciclo de reentrenamiento automático</h4>${note('Cada día, un trabajo programado en GitHub Actions (no depende de que tengas la app abierta) descarga velas recientes, re-evalúa la versión principal y busca mejoras con validación walk-forward: ajusta solo con datos de entrenamiento y mide en tramos que no vio. Si no hay mejora comprobada, no cambia nada. Con la mejora automática, la versión que gana pasa a ser la principal sola, la simulación sigue con ella y te avisa; la anterior queda en Versiones para regresar.')}
       <label class="bl-chk"><input type="checkbox" id="cycOn" ${c.enabled ? 'checked' : ''}> Activar el ciclo automático para este bot</label>
+      <label class="bl-chk"><input type="checkbox" id="cycAuto" ${c.auto !== false ? 'checked' : ''} ${c.enabled ? '' : 'disabled'}> Mejora automática (la versión que gana se vuelve la principal sola)</label>
       <div class="bl-grid" style="margin-top:8px">${fld('Frecuencia', `<select id="cycEvery">${[[24, 'Cada día'], [72, 'Cada 3 días'], [168, 'Cada semana']].map(([v, l]) => `<option value="${v}" ${c.everyHours === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}${fld('Historial', `<select id="cycBars">${[[2500, '2.500 velas'], [4000, '4.000 velas'], [6000, '6.000 velas']].map(([v, l]) => `<option value="${v}" ${c.bars === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}</div>
       ${c.enabled ? (sv ? note(`Servidor: último resultado ${dt(sv.at)}.`) : waiting ? note('⚠ Aún no hay resultados del servidor. Revisa que el flujo «Reentrenar bots» esté activo en GitHub y que el secreto FIREBASE_SERVICE_ACCOUNT esté configurado (INSTALL.md → Reentrenamiento programado).', 'warn') : note('Esperando al primer ciclo del servidor (corre a diario; también se puede lanzar a mano en GitHub → Actions).')) : ''}
       ${!(H.cloud && H.cloud()) ? note('Inicia sesión para que el servidor pueda leer tus bots: sin cuenta solo funciona «Optimizar ahora».', 'warn') : ''}</div>
       <div class="bl-box"><h4>Optimizar ahora (en este navegador)</h4>${note('Misma lógica que el servidor, ejecutada aquí con las velas actuales. Ajusta stop loss, take profit, trailing, tiempo máximo, filtros de mercado, periodos de los indicadores, bandas de Bollinger y umbrales de RSI/ADX/volumen. NO toca el tamaño de la posición ni los parámetros de tus indicadores propios (su ajuste exigiría ejecutar tu script cientos de veces y multiplica el riesgo de sobreajuste). Tarda unos segundos.')}<div class="bl-actions"><button class="bl-btn" data-a="optNow" ${busyMsg ? 'disabled' : ''}>Optimizar ahora</button></div></div>` + resultCard(b, sv, 'servidor') + resultCard(b, lc, 'este navegador') +
       ((b.optHistory || []).length ? `<div class="bl-box"><h4>Historial de experimentos</h4><ul class="bl-log">${b.optHistory.slice().reverse().map(h => `<li><small>${dt(h.at)} · ${esc(h.who)}</small><br>${esc((decText[h.decision] || [h.decision])[0])}${h.oos != null ? ` · fuera de muestra: candidata ${money(h.oos)} vs actual ${money(h.base)}` : ''}</li>`).join('')}</ul></div>` : '');
   }
-  function addCandidate(b, r, who) { // la propuesta entra como versión CANDIDATA: nunca reemplaza a la principal
+  function addCandidate(b, r, who) { // la propuesta entra como versión CANDIDATA; con la mejora automática encendida pasa a ser la principal
     if (!r || r.decision !== 'propuesta' || !r.candidate) return false; const nv = Math.max(...b.versions.map(x => x.v)) + 1, sp = B.normalizeSpec(r.candidate); if (!B.validateSpec(sp).ok) return false;
+    setTimeout(() => autoPromote(b, nv, r, who), 0);
     b.versions.push({v: nv, spec: sp, at: Date.now(), note: r.note ? String(r.note).slice(0, 200) : 'Reentrenamiento: ' + (r.changes || []).map(c => `${pathLabel(mainSpec(b), c.path)} ${num(c.from, 2)}→${num(c.to, 2)}`).join('; ').slice(0, 200), origin: who + (r.note ? ' (cerebro)' : ' (reentrenamiento)'), state: 'candidata'}); log(b, 'reentrenamiento', `El ${who} propuso la v${nv} (candidata, pendiente de tu aprobación).`); return nv;
+  }
+  /* Mejora automática: la candidata ya ganó en datos que no usó para ajustarse (walk-forward) y pasó la prueba final → se vuelve la principal,
+     la simulación en vivo sigue con ella y te avisa. La anterior queda en Versiones («anterior») para regresar con un clic. */
+  function autoPromote(b, nv, r, who) {
+    const c = cyc(b), v = ver(b, nv); if (c.auto === false || !v || v.state !== 'candidata' || b.status === 'archived') return;
+    const prev = b.mainV; b.versions.forEach(x => { if (x.v === prev) x.state = 'anterior'; }); v.state = 'principal'; v.auto = true; b.mainV = nv;
+    const why = r.oos ? ` En los tramos que no vio, la nueva ganó ${money(r.oos.cand.net)} contra ${money(r.oos.base.net)} de la anterior.` : '';
+    log(b, 'versión', `Mejora automática: la v${nv} (propuesta por el ${who}) pasó a ser la principal en lugar de la v${prev}.${why} Si no te convence, en Versiones puedes regresar a la v${prev}.`);
+    relive(b); touch(b);
+    if (window.CCT_botNotify) window.CCT_botNotify(`VORTEX · ${b.name} aprendió`, `La v${nv} es ahora la principal (mejor que la v${prev} en datos que no vio).${why}`, 'bot-learn-' + b.id + '-' + nv);
   }
   function noteHistory(b, r, who) { (b.optHistory = b.optHistory || []).push({at: r.at, who, decision: r.status === 'error' ? 'error' : r.decision, oos: r.oos ? r.oos.cand.net : null, base: r.oos ? r.oos.base.net : null}); if (b.optHistory.length > 12) b.optHistory.shift(); }
   function mergeServer(res) { // resultados del trabajo programado → bots (sin tocar versiones principales)
@@ -742,7 +759,7 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
       const n = Math.min(lo.ledger.length, sv.ledger.length); let same = true; for (let i = 0; i < n; i++) if (lo.ledger[i].h !== sv.ledger[i].h) { same = false; break; }
       if (!same) { if (!lo.notes.some(x => /no coincide/.test(x.text))) lo.notes.push({t: Date.now(), text: 'El libro del servidor no coincide con el de este dispositivo: se conserva el de este dispositivo.'}); ch = true; continue; }
       if (sv.ledger.length > lo.ledger.length || (sv.ledger.length === lo.ledger.length && sv.last && (!lo.last || sv.last.t > lo.last.t))) {
-        const news = sv.ledger.slice(lo.ledger.length); for (const k of ['ledger', 'cash', 'peak', 'anchorT', 'curve', 'open', 'last', 'gaps', 'notes', 'halted', 'err', 'checkedAt']) lo[k] = sv[k]; lo.by = 'servidor';
+        const news = sv.ledger.slice(lo.ledger.length); for (const k of ['ledger', 'cash', 'peak', 'anchorT', 'curve', 'open', 'last', 'gaps', 'notes', 'halted', 'err', 'checkedAt', 'nN', 'oN']) if (k in sv) lo[k] = sv[k]; lo.by = 'servidor';
         for (const t of news) log(b, 'paper', `Paper v${lo.v} (servidor): ${t.side === 'long' ? 'compra' : 'venta'} cerrada ${t.net >= 0 ? '+' : '−'}$${num(Math.abs(t.net), 2)} · ${t.why || ''}`); ch = true;
       }
     }
@@ -884,6 +901,7 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
       const el = e.target; if (el.id === 'blArch') { showArch = el.checked; return render(); } if (el.dataset.sel) { el.checked ? sel.add(el.dataset.sel) : sel.delete(el.dataset.sel); return render(); }
       if (el.id === 'rpSpd') { replay.speed = +el.value; if (replay.on) { clearInterval(replay.timer); replay.timer = setInterval(rpTick, 1100 / replay.speed); } return; } if (el.id === 'rpSeg') { replay.seg = el.value; replay.t = null; pushMarks(); return render(); } if (el.id === 'rpVer') { replay.ver = +el.value; replay.t = null; pushMarks(); return render(); } if (el.dataset.sh) { replay.show[el.dataset.sh] = el.checked; return pushMarks(); }
       if (el.dataset.rk2) { const r = S.risk = RK().norm(S.risk); r.log = r.log.slice(); r[el.dataset.rk2] = Math.max(0, +el.value || 0); r.updatedAt = Date.now(); save(); riskTick(); return render(); } if (el.id === 'rkKill') { const r = S.risk = RK().norm(S.risk); r.kill = el.checked; r.updatedAt = Date.now(); save(); riskTick(); return render(); }
+      if (el.id === 'cycAuto') { const b = bot(), c = cyc(b); c.auto = el.checked; log(b, 'ciclo', el.checked ? 'Mejora automática ACTIVADA.' : 'Mejora automática desactivada: las mejoras quedan como candidatas para que las revises.'); touch(b); return; }
       if (el.id === 'cycOn') { const b = bot(), c = cyc(b); c.enabled = el.checked; if (el.checked) c.enabledAt = Date.now(); log(b, 'ciclo', el.checked ? 'Ciclo automático de reentrenamiento ACTIVADO.' : 'Ciclo automático desactivado.'); touch(b); return render(); } if (el.id === 'cycEvery') { cyc(bot()).everyHours = +el.value; return touch(bot()); } if (el.id === 'cycBars') { cyc(bot()).bars = +el.value; return touch(bot()); }
       if (el.id === 'indSid') { ind.sid = el.value; ind.res = null; ind.err = ''; return indView(); } if (el.id === 'indSym') { ind.sym = el.value.toUpperCase(); ind.res = null; return; } if (el.id === 'indItv') { ind.itv = el.value; ind.res = null; return; } if (el.id === 'indBuy') { ind.buy = el.value; return indView(); } if (el.id === 'indSell') { ind.sell = el.value; return; } if (el.id === 'indShort') { ind.short = el.checked; return; }
       onField(el);

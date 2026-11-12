@@ -33,7 +33,7 @@ function makeScripts(db) {
       return pro.get(id) ? {code: pro.get(id), name: (c && c.name) || id} : null;
     }
     if (!db || !uid) return null;
-    if (!byUid.has(uid)) { let list = []; try { const sn = await db.doc(`users/${uid}/data/scripts`).get(); if (sn.exists) { const v = JSON.parse(sn.data().items || '[]'); list = Array.isArray(v) ? v : (v.items || []); } } catch {} byUid.set(uid, list); }
+    if (!byUid.has(uid)) { let list = []; try { const sn = await db.doc(`users/${uid}/data/scripts`).get(); if (sn.exists) { let it = sn.data().items || '[]'; if (typeof it === 'string' && it.startsWith('gz1:')) it = require('zlib').gunzipSync(Buffer.from(it.slice(4), 'base64')).toString('utf8'); const v = JSON.parse(it); list = Array.isArray(v) ? v : (v.items || []); } } catch {} byUid.set(uid, list); }
     const s = byUid.get(uid).find(x => x && x.id === sid); return s && s.code ? {code: s.code, name: s.name} : null;
   };
 }
@@ -77,11 +77,14 @@ async function round(key, getScript) {
 }
 function fmt(v) { const a = Math.abs(v); return (+v).toLocaleString('en-US', {maximumFractionDigits: a >= 1000 ? 2 : a >= 1 ? 4 : 8}); }
 
+function setup() { // llave + lector de scripts (lo usa también scripts/motor.js)
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT, key = botPushKey(raw); if (!key) return null;
+  let db = null; try { const admin = require('firebase-admin'); if (!admin.apps.length) admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); db = admin.firestore(); } catch (e) { console.log('Sin Firestore (solo indicadores comunes y Nova Nexus):', e.message); }
+  return {key, getScript: makeScripts(db)};
+}
 async function main() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT, key = botPushKey(raw);
-  if (!key) { console.log('FIREBASE_SERVICE_ACCOUNT no está configurado: no hay nada que hacer.'); return; }
-  let db = null; try { const admin = require('firebase-admin'); admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); db = admin.firestore(); } catch (e) { console.log('Sin Firestore (solo indicadores comunes y Nova Nexus):', e.message); }
-  const getScript = makeScripts(db), end = Date.now() + RUN_MS;
+  const st = setup(); if (!st) { console.log('FIREBASE_SERVICE_ACCOUNT no está configurado: no hay nada que hacer.'); return; }
+  const {key, getScript} = st, end = Date.now() + RUN_MS;
   do {
     const t0 = Date.now();
     try { await round(key, getScript); } catch (e) { console.log('vuelta:', String(e.message || e).slice(0, 200)); }
@@ -89,4 +92,4 @@ async function main() {
   } while (Date.now() < end);
 }
 if (require.main === module) main().then(() => process.exit(0)).catch(e => { console.error('Error:', String(e.message || e).slice(0, 200)); process.exit(1); });
-module.exports = {round, klines, makeScripts};
+module.exports = {round, klines, makeScripts, setup};
