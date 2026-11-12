@@ -3,15 +3,57 @@
   "bots": [
     {
       "label": "Señales v2.7 · 1H",
-      "name": ["senal|signal", "2\\W?7"],
+      "name": [
+        "senal|signal",
+        "2\\W?7"
+      ],
       "interval": "1h",
       "brain": "Bot · Señales v2.7 1H",
       "color": "#9a7bff",
       "desc": "Cerebro del bot de Nova Nexus Señales v2.7 en 1h: aprende de cada experimento y lo mejora solo cada noche.",
       "notes": [
-        {"kind": "regla", "master": true, "text": "Riesgo máximo 2 % por operación y apalancamiento máximo 5x."},
-        {"kind": "regla", "master": true, "text": "Este bot opera en 1h: no cambiar la moneda ni la temporalidad sin mi aprobación."},
-        {"kind": "estrategia", "master": false, "text": "Está basado en mi indicador Nova Nexus - Señales v2.7: da buenas entradas long y short, pero no dice cuándo cerrar. Busco equilibrio entre aciertos y ganancia: mejorar sobre todo las salidas (stop loss, objetivo, trailing y tiempo máximo) sin perder las buenas entradas."}
+        {
+          "kind": "regla",
+          "master": true,
+          "text": "Riesgo máximo 2 % por operación y apalancamiento máximo 5x."
+        },
+        {
+          "kind": "regla",
+          "master": true,
+          "text": "Este bot opera en 1h: no cambiar la moneda ni la temporalidad sin mi aprobación."
+        },
+        {
+          "kind": "estrategia",
+          "master": false,
+          "text": "Está basado en mi indicador Nova Nexus - Señales v2.7: da buenas entradas long y short, pero no dice cuándo cerrar. Busco equilibrio entre aciertos y ganancia: mejorar sobre todo las salidas (stop loss, objetivo, trailing y tiempo máximo) sin perder las buenas entradas."
+        }
+      ]
+    },
+    {
+      "label": "Pachita · 15m",
+      "name": [
+        "pachita"
+      ],
+      "interval": "15m",
+      "brain": "Bot · Pachita 15m",
+      "color": "#f472b6",
+      "desc": "Cerebro de Pachita, el bot de Nova Nexus · iA Signals v2.7 en 15 minutos: aprende de cada experimento y lo mejora solo cada noche.",
+      "notes": [
+        {
+          "kind": "regla",
+          "master": true,
+          "text": "Riesgo máximo 2 % por operación y apalancamiento máximo 5x."
+        },
+        {
+          "kind": "regla",
+          "master": true,
+          "text": "Pachita opera en 15m: no cambiar la moneda ni la temporalidad sin mi aprobación."
+        },
+        {
+          "kind": "estrategia",
+          "master": false,
+          "text": "Pachita se basa en mi indicador Nova Nexus · iA Signals v2.7: compra con la señal de compra y vende (short) con la de venta, solo en tendencia y del lado correcto de la nube EMA. Siempre con stop loss y take profit; no quiero que abra y cierre enseguida. Mejorar sobre todo las salidas sin perder las buenas entradas."
+        }
       ]
     }
   ]

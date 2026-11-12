@@ -45,7 +45,7 @@
   }
   async function pullCloud() {
     const c = H.cloud && H.cloud(); if (!c) return; let got = false; try { const str = await c.get(); got = true; if (str) { cloudStr = str; const m = merge(readLocal(), JSON.parse(str)); S = m; save(); } } catch {}
-    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) { seedSafe(); fixNov26(); seedLucas(); learnOn(); } if (view === 'lib') render();
+    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) { seedSafe(); fixNov26(); seedLucas(); learnOn(); fixQuick(); seedPachita(); } if (view === 'lib') render();
   }
 
   /* ───────── Modelo de bot ───────── */
@@ -288,7 +288,7 @@
       const sp = mainSpec(b), usesNova = JSON.stringify(sp.entry || {}).includes('"novaBuy"');
       if (usesNova && sp.sides === 'long' && !b.preset) { const n = B.novaVolBoth(sp); bump(b, n, 'Ahora también vende con la señal de VENTA de Nova Nexus: antes solo compraba y casi todas las señales recientes eran de venta'); goLive(b); }
     }
-    for (const [k, color, icon, desc] of [['nova27x4h', '#a78bfa', 'vortice', 'Señales de Nova Nexus · iA Signals v2.7 en 4h, compras y ventas con puntaje ≥ 4, en 8 monedas. Cierra solo: take profit a 1× ATR y stop loss a 4× ATR. Riesgo 2 % por operación, apalancamiento máx. 5×.'], ['nova27x1h', '#f06b79', 'cometa', 'Señales de VENTA de Nova Nexus v2.7 en 1h, solo en tendencia (ADX ≥ 25), en 8 monedas. Cierra en la señal de compra contraria o en SL 4× ATR / TP 2.5× ATR. Riesgo 2 %, apalancamiento máx. 5×.']]) {
+    for (const [k, color, icon, desc] of [['nova27x4h', '#a78bfa', 'vortice', 'Señales de Nova Nexus · iA Signals v2.7 en 4h, compras y ventas con puntaje ≥ 4, en 8 monedas. Cierra solo: take profit a 1.5× ATR y stop loss a 4× ATR. Riesgo 2 % por operación, apalancamiento máx. 5×.'], ['nova27x1h', '#f06b79', 'cometa', 'Señales de VENTA de Nova Nexus v2.7 en 1h, solo en tendencia (ADX ≥ 25), en 8 monedas. Cierra en la señal de compra contraria o en SL 4× ATR / TP 2.5× ATR. Riesgo 2 %, apalancamiento máx. 5×.']]) {
       if (S.bots.some(b => b.preset === k)) continue; newLook = {color, icon}; const b = newBot(B.PRESETS[k](), 'nova', desc); b.preset = k; S.bots.push(b); log(b, 'creación', 'Bot creado por Nova Bot Lab a partir de tu indicador Nova Nexus v2.7, optimizado con validación fuera de muestra.'); goLive(b);
     }
     save(); toast('Nova Bot Lab: tus bots ya operan en ambos sentidos y se crearon los bots Nova Nexus v2.7 (en vivo, simulado)');
@@ -309,6 +309,28 @@
     }
     save(); toast('Nova Bot Lab: Lucas 1H y Lucas 4H ya están en vivo (simulado)');
   }
+  /* Pachita (nov 2026, creada con Claude): Nova Nexus · iA Signals v2.7 en 15 m. Una sola vez por cuenta, encendida en paper trading,
+     con reentrenamiento diario y mejora automática como los demás; su cerebro en Neural Brain lo crea el conector (brain-links.json). */
+  function seedPachita() {
+    S.seeded = S.seeded || {}; if (S.seeded.pachita || !B.PRESETS.pachita || !PP()) return; S.seeded.pachita = Date.now();
+    if (S.bots.some(b => b.preset === 'pachita')) return save(); newLook = {color: '#f472b6', icon: 'estrella'}; const sp = B.PRESETS.pachita();
+    const b = newBot(sp, 'nova', 'Señales de Nova Nexus · iA Signals v2.7 en 15 minutos, compras y ventas en 8 monedas, solo en tendencia (ADX ≥ 25) y del lado correcto de la nube EMA. SL 1.5× ATR, TP 2.5× ATR, trailing 2× ATR; la señal contraria cierra después de 1 h; máx. 12 h por operación. Riesgo 2 %, apalancamiento máx. 5×.');
+    b.preset = 'pachita'; S.bots.push(b); const c = cyc(b); c.enabled = true; c.auto = true; c.enabledAt = Date.now();
+    log(b, 'creación', 'Pachita creada con Claude a partir de tu indicador Nova Nexus · iA Signals v2.7 (15 m). Aún sin backtest con datos reales: pruébala en «Probar» y vigílala en paper trading. Aprendizaje automático activado.');
+    startLive(b, b.mainV, sp.risk.capital); save(); toast('Nova Bot Lab: Pachita (15 m) ya está en vivo (simulado)');
+  }
+  /* Ajuste único (nov 2026): bots que abrían y cerraban enseguida (objetivo pegado, trailing muy corto o cierre por la señal contraria a la vela siguiente).
+     Nueva versión principal con la corrección (la anterior queda en Versiones) y, si estaba en vivo, la simulación sigue con la nueva. */
+  function fixQuick() {
+    S.seeded = S.seeded || {}; if (S.seeded.quick || !B.fixQuickClose || !PP()) return; S.seeded.quick = Date.now(); let n = 0;
+    for (const b of S.bots) {
+      if (b.status === 'archived') continue; const f = B.fixQuickClose(mainSpec(b)); if (!f) continue; n++;
+      const nv = Math.max(...b.versions.map(x => x.v)) + 1, note = 'Corrección para que no abra y cierre enseguida: ' + f.changes.join('; ');
+      b.versions.forEach(x => { if (x.v === b.mainV) x.state = 'anterior'; }); b.versions.push({v: nv, spec: f.spec, at: Date.now(), note, origin: 'Nova Bot Lab', state: 'principal'}); b.mainV = nv; log(b, 'versión', note + ` (v${nv}).`);
+      const run = (b.paper || []).filter(x => x.status === 'running'); if (run.length) { for (const x of run) { x.status = 'stopped'; x.pausedAt = Date.now(); } startLive(b, nv, run.reduce((a, x) => a + x.capital, 0) || f.spec.risk.capital); }
+    }
+    save(); if (n) toast(`Nova Bot Lab: ${n} bot${n === 1 ? '' : 's'} corregido${n === 1 ? '' : 's'} para que no cierren enseguida`);
+  }
   function libView() {
     const act = S.bots.filter(b => b.status !== 'archived').sort((a, b) => (isLive(b) - isLive(a)) || (b.updatedAt - a.updatedAt)), arch = S.bots.filter(b => b.status === 'archived');
     const list = showArch ? act.concat(arch) : act;
@@ -326,7 +348,7 @@
   const NL_SYS = `Eres un asistente que convierte estrategias de trading escritas en español en una ESPECIFICACIÓN JSON ejecutable. Responde SOLO con un objeto JSON (sin texto extra) de UNA de estas dos formas:
 1) Si falta información importante o hay ambigüedad (no inventes reglas): {"questions":["pregunta 1","pregunta 2"]} con máximo 4 preguntas cortas.
 2) Si está claro: {"spec":{...}} con este esquema:
-{"name":"...","symbol":"BTCUSDT","interval":"15m","sides":"long|short|both","entry":{"long":[COND],"short":[COND]},"exit":{"long":[COND],"short":[COND]},"filters":{"minVolRatio":0,"minAtrPct":0,"maxAtrPct":0,"hoursUtc":null},"risk":{"capital":10000,"riskPct":1,"sizePct":10,"maxLeverage":1,"atrLen":14,"sl":{"type":"atr|pct","v":2}|null,"tp":{"type":"rr|atr|pct","v":2}|null,"trail":{"type":"atr|pct","v":2}|null,"maxBars":0,"maxDailyLossPct":0,"maxDrawdownPct":0},"costs":{"feePct":0.1,"slipPct":0.05}}
+{"name":"...","symbol":"BTCUSDT","interval":"15m","sides":"long|short|both","entry":{"long":[COND],"short":[COND]},"exit":{"long":[COND],"short":[COND]},"filters":{"minVolRatio":0,"minAtrPct":0,"maxAtrPct":0,"hoursUtc":null},"risk":{"capital":10000,"riskPct":1,"sizePct":10,"maxLeverage":1,"atrLen":14,"sl":{"type":"atr|pct","v":2}|null,"tp":{"type":"rr|atr|pct","v":2}|null,"trail":{"type":"atr|pct","v":2}|null,"maxBars":0,"minBars":0,"maxDailyLossPct":0,"maxDrawdownPct":0},"costs":{"feePct":0.1,"slipPct":0.05}}
 COND = {"a":OPERANDO,"op":"gt|lt|gte|lte|crossUp|crossDown|is","b":OPERANDO}  (con "is" no hay "b"; sirve para señales 1/0). Las condiciones de una lista se cumplen TODAS (AND) en entrada y basta UNA (OR) en salida.
 OPERANDO = {"k":"close|open|high|low|volume|ema|sma|rsi|atr|adx|macd|macdSignal|macdHist|bbUp|bbMid|bbLo|volRatio|hh|ll|num|novaBuy|novaSell|novaOsc|novaFlux|novaAdx|novaBull", ...parámetros}. Parámetros: ema/sma/rsi/atr/adx/volRatio/hh/ll → "n"; macd* → "f","s","g"; bb* → "n","d"; num → "v".
 Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15m,30m,1h,2h,4h,6h,8h,12h,1d,3d,1w. Si el usuario no da stop loss o take profit, pregunta. Usa "sides":"long" salvo que pida ventas/cortos. Pon en "name" un nombre corto.`;
@@ -417,7 +439,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
       (d.sides !== 'short' ? listBlock('Entrada en COMPRA (se deben cumplir TODAS)', 'entry.long', 'Se evalúa al cierre de la vela; la orden simulada entra en la apertura de la siguiente.') + listBlock('Salida de la compra (basta UNA)', 'exit.long') : '') +
       (d.sides !== 'long' ? listBlock('Entrada en VENTA en corto (TODAS)', 'entry.short', 'El corto se simula sin tasas de financiación.') + listBlock('Salida del corto (basta UNA)', 'exit.short') : '') +
       `<div class="bl-box"><h4>Filtros de mercado</h4><div class="bl-grid">${fld('Volumen mínimo (× su media)', nin('filters.minVolRatio', 'min="0"'))}${fld('Volatilidad mínima (ATR % del precio)', nin('filters.minAtrPct', 'min="0"'))}${fld('Volatilidad máxima (ATR %)', nin('filters.maxAtrPct', 'min="0"'))}${fld('Horario UTC (opcional)', `<span class="bl-two"><input type="number" min="0" max="23" data-hr="0" value="${hrs ? hrs[0] : ''}" placeholder="desde"><input type="number" min="0" max="23" data-hr="1" value="${hrs ? hrs[1] : ''}" placeholder="hasta"></span>`)}</div><p class="bl-dim">0 = sin filtro.</p></div>` +
-      `<div class="bl-box"><h4>Riesgo y capital</h4><div class="bl-grid">${fld('Capital inicial ($)', nin('risk.capital', 'min="10"'))}${fld('Riesgo por operación (% del capital)', nin('risk.riskPct', 'min="0.01" max="100"'))}${fld('Tamaño máximo (% del capital)', nin('risk.sizePct', 'min="1" max="100"'))}${lvl('sl', 'Stop loss')}${lvl('tp', 'Take profit')}${lvl('trail', 'Trailing stop')}${fld('Tiempo máximo (velas, 0 = sin límite)', nin('risk.maxBars', 'min="0"'))}${fld('Pérdida diaria máxima (%, 0 = sin límite)', nin('risk.maxDailyLossPct', 'min="0"'))}${fld('Drawdown máximo antes de parar (%, 0 = sin límite)', nin('risk.maxDrawdownPct', 'min="0"'))}</div></div>` +
+      `<div class="bl-box"><h4>Riesgo y capital</h4><div class="bl-grid">${fld('Capital inicial ($)', nin('risk.capital', 'min="10"'))}${fld('Riesgo por operación (% del capital)', nin('risk.riskPct', 'min="0.01" max="100"'))}${fld('Tamaño máximo (% del capital)', nin('risk.sizePct', 'min="1" max="100"'))}${lvl('sl', 'Stop loss')}${lvl('tp', 'Take profit')}${lvl('trail', 'Trailing stop')}${fld('Tiempo máximo (velas, 0 = sin límite)', nin('risk.maxBars', 'min="0"'))}${fld('Velas mínimas antes de cerrar por señal contraria (0 = sin espera)', nin('risk.minBars', 'min="0" max="500"'))}${fld('Pérdida diaria máxima (%, 0 = sin límite)', nin('risk.maxDailyLossPct', 'min="0"'))}${fld('Drawdown máximo antes de parar (%, 0 = sin límite)', nin('risk.maxDrawdownPct', 'min="0"'))}</div></div>` +
       `<div class="bl-box"><h4>Costes simulados</h4><div class="bl-grid">${fld('Comisión por lado (%)', nin('costs.feePct', 'min="0" step="0.01"'))}${fld('Deslizamiento (%)', nin('costs.slipPct', 'min="0" step="0.01"'))}</div><p class="bl-dim">Sin apalancamiento. Los resultados incluyen estos costes.</p></div>
       <div id="blErr" class="bl-err" hidden></div><div class="bl-actions"><button class="bl-btn" data-a="saveDraft">${draftMeta.id ? 'Guardar como versión candidata y probar' : 'Crear bot y probar'}</button><button class="bl-btn ghost" data-a="showDesc">Ver reglas en texto</button></div><div id="blDesc"></div>`;
   }
@@ -911,7 +933,7 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
 
   /* ----- Arranque ----- */
   function init() {
-    root = $('#botLabRoot'); if (!root) return; S = dedupe(Object.assign({deleted: {}}, readLocal())); bind(); setTimeout(() => { if (!(H.cloud && H.cloud())) { seedSafe(); seedLucas(); if (view === 'lib') render(); } }, 12000); if (window.CCTClaudioUI) window.CCTClaudioUI.onChange = () => { if (view === 'lib') render(); }; render();
+    root = $('#botLabRoot'); if (!root) return; S = dedupe(Object.assign({deleted: {}}, readLocal())); bind(); setTimeout(() => { if (!(H.cloud && H.cloud())) { seedSafe(); seedLucas(); fixQuick(); seedPachita(); if (view === 'lib') render(); } }, 12000); if (window.CCTClaudioUI) window.CCTClaudioUI.onChange = () => { if (view === 'lib') render(); }; render();
     const open = () => { S = merge(S, readLocal()); setTimeout(() => { if (view === 'lib') render(); }, 30); pullCloud(); paperTick(); };
     const rb = $('#rrBotLab'); rb && rb.addEventListener('click', open);
     paperTick(); setInterval(() => { if (!document.hidden) paperTick(); }, 60000);

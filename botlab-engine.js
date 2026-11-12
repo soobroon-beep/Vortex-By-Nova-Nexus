@@ -76,7 +76,7 @@
   function defaultSpec() {
     return {v: 1, name: 'Mi bot', symbol: 'BTCUSDT', interval: '1h', sides: 'long', entry: {long: [], short: []}, exit: {long: [], short: []},
       filters: {minVolRatio: 0, minAtrPct: 0, maxAtrPct: 0, hoursUtc: null},
-      risk: {capital: 10000, riskPct: 1, sizePct: 10, maxLeverage: 1, atrLen: 14, sl: {type: 'atr', v: 2}, tp: {type: 'rr', v: 2}, trail: null, maxBars: 0, maxDailyLossPct: 0, maxDrawdownPct: 0},
+      risk: {capital: 10000, riskPct: 1, sizePct: 10, maxLeverage: 1, atrLen: 14, sl: {type: 'atr', v: 2}, tp: {type: 'rr', v: 2}, trail: null, maxBars: 0, minBars: 0, maxDailyLossPct: 0, maxDrawdownPct: 0},
       costs: {feePct: 0.1, slipPct: 0.05}};
   }
   function normalizeSpec(s) { const d = defaultSpec(), o = Object.assign({}, d, s || {}); o.filters = Object.assign({}, d.filters, o.filters); o.risk = Object.assign({}, d.risk, o.risk); o.costs = Object.assign({}, d.costs, o.costs); o.entry = Object.assign({long: [], short: []}, o.entry); o.exit = Object.assign({long: [], short: []}, o.exit); return o; }
@@ -90,7 +90,7 @@
     chk(s.entry.long, 'Entrada larga'); chk(s.entry.short, 'Entrada corta'); chk(s.exit.long, 'Salida larga'); chk(s.exit.short, 'Salida corta');
     const r = s.risk; if (!(r.capital >= 10)) er.push('Capital inicial inválido'); if (!(r.riskPct > 0 && r.riskPct <= 20)) er.push('Riesgo por operación debe estar entre 0 y 20 %'); if (!(r.maxLeverage >= 1 && r.maxLeverage <= 10)) er.push('Apalancamiento máximo entre 1 y 10');
     if (!r.sl && !(r.sizePct > 0 && r.sizePct <= 100)) er.push('Sin stop loss hace falta un tamaño de posición (% del capital)');
-    if (r.sl && !(r.sl.v > 0)) er.push('Stop loss inválido'); if (r.tp && !(r.tp.v > 0)) er.push('Take profit inválido'); if (r.trail && !(r.trail.v > 0)) er.push('Trailing stop inválido');
+    if (r.sl && !(r.sl.v > 0)) er.push('Stop loss inválido'); if (r.tp && !(r.tp.v > 0)) er.push('Take profit inválido'); if (r.trail && !(r.trail.v > 0)) er.push('Trailing stop inválido'); if (r.minBars != null && !(r.minBars >= 0 && r.minBars <= 500)) er.push('Velas mínimas antes de cerrar por señal: entre 0 y 500');
     if (!(s.costs.feePct >= 0 && s.costs.feePct <= 2) || !(s.costs.slipPct >= 0 && s.costs.slipPct <= 5)) er.push('Comisión o slippage fuera de rango');
     return {ok: !er.length, errors: er};
   }
@@ -101,7 +101,7 @@
     if (s.sides !== 'long') { L.push(`**Vende (corto)** cuando se cumplan TODAS: ${list(s.entry.short, ' Y ')}.`); L.push(`**Cierra el corto** cuando se cumpla ALGUNA: ${s.exit.short.length ? list(s.exit.short, ' O ') : 'solo por stop loss / take profit / trailing' + (r.maxBars ? ' / tiempo máximo' : '')}.`); }
     const f = s.filters, ev = []; if (f.minVolRatio) ev.push(`volumen < ${f.minVolRatio}× su media`); if (f.minAtrPct) ev.push(`volatilidad (ATR) < ${f.minAtrPct} % del precio`); if (f.maxAtrPct) ev.push(`volatilidad (ATR) > ${f.maxAtrPct} % del precio`); if (f.hoursUtc) ev.push(`fuera del horario ${f.hoursUtc[0]}:00–${f.hoursUtc[1]}:00 UTC`);
     L.push(`**Evita operar** cuando: ${ev.length ? ev.join('; ') : 'no hay filtros (opera siempre que se cumplan las condiciones)'}.`);
-    L.push(`**Riesgo:** capital inicial ${r.capital} USDT · ${r.sl ? `arriesga ${r.riskPct} % por operación` : `usa ${r.sizePct} % del capital por operación`} · stop loss ${r.sl ? (r.sl.type === 'atr' ? `${r.sl.v}× ATR(${r.atrLen})` : `${r.sl.v} %`) : 'ninguno'} · take profit ${r.tp ? (r.tp.type === 'rr' ? `${r.tp.v}× el riesgo` : r.tp.type === 'atr' ? `${r.tp.v}× ATR` : `${r.tp.v} %`) : 'ninguno'} · trailing ${r.trail ? (r.trail.type === 'atr' ? `${r.trail.v}× ATR` : `${r.trail.v} %`) : 'no'}${r.maxBars ? ` · máx. ${r.maxBars} velas por operación` : ''}${r.maxDailyLossPct ? ` · pausa el día si pierde ${r.maxDailyLossPct} %` : ''}${r.maxDrawdownPct ? ` · se detiene si el drawdown llega a ${r.maxDrawdownPct} %` : ''}.`);
+    L.push(`**Riesgo:** capital inicial ${r.capital} USDT · ${r.sl ? `arriesga ${r.riskPct} % por operación` : `usa ${r.sizePct} % del capital por operación`} · stop loss ${r.sl ? (r.sl.type === 'atr' ? `${r.sl.v}× ATR(${r.atrLen})` : `${r.sl.v} %`) : 'ninguno'} · take profit ${r.tp ? (r.tp.type === 'rr' ? `${r.tp.v}× el riesgo` : r.tp.type === 'atr' ? `${r.tp.v}× ATR` : `${r.tp.v} %`) : 'ninguno'} · trailing ${r.trail ? (r.trail.type === 'atr' ? `${r.trail.v}× ATR` : `${r.trail.v} %`) : 'no'}${r.maxBars ? ` · máx. ${r.maxBars} velas por operación` : ''}${r.minBars ? ` · la señal contraria solo cierra después de ${r.minBars} velas (el stop y el objetivo siempre están activos)` : ''}${r.maxDailyLossPct ? ` · pausa el día si pierde ${r.maxDailyLossPct} %` : ''}${r.maxDrawdownPct ? ` · se detiene si el drawdown llega a ${r.maxDrawdownPct} %` : ''}.`);
     L.push(`**Costos simulados:** comisión ${s.costs.feePct} % por lado y slippage ${s.costs.slipPct} %. Las señales usan velas cerradas y se ejecutan en la apertura de la siguiente.`);
     return L.join('\n');
   }
@@ -114,12 +114,17 @@
     if (N < 60) throw new Error('Hacen falta al menos 60 velas para evaluar una estrategia');
     const atrS = series(C, {k: 'atr', n: r.atrLen}, ctx), ema200 = series(C, {k: 'ema', n: 200}, ctx), volR = series(C, {k: 'volRatio', n: 20}, ctx);
     const trades = [], avoid = [], eq = new Array(N).fill(0), warnings = []; let cash = r.capital, pos = null, pend = null, peak = opts.peak || r.capital, halted = false, tradeFrom = opts.tradeFrom | 0, dayKey = -1, dayStartCash = cash, dayBlocked = false, start = -1;
+    /* carry (paper trading): posición que YA estaba abierta al terminar la actualización anterior. Se reanuda EXACTAMENTE como quedó en la vela
+       carry.lastT (sin volver a decidir su entrada): así una operación avisada no «desaparece» aunque el indicador dé otro resultado al recalcular. */
+    const carry = opts.carry && isNum(opts.carry.entry) && isNum(opts.carry.qty) ? opts.carry : null, carryAt = carry ? C.findIndex(x => x.t === carry.lastT) : -1;
+    if (carry && carryAt >= 0) tradeFrom = Math.max(tradeFrom, carryAt);
     const wouldEnter = i => (spec.sides !== 'short' && spec.entry.long.length && spec.entry.long.every(cd => condOk(cd, i, C, ctx))) ? 'long' : (spec.sides !== 'long' && spec.entry.short.length && spec.entry.short.every(cd => condOk(cd, i, C, ctx))) ? 'short' : null; // para marcar señales que se DESCARTARON
     const entryReason = side => (side === 'long' ? spec.entry.long : spec.entry.short).map(condText).join(' Y ');
     const close = (px, i, why, flagOpen) => { // cierra la posición con costos
       const dir = pos.side === 'long' ? 1 : -1, exitFee = px * pos.qty * fee, gross = (px - pos.entry) * pos.qty * dir; cash += gross - exitFee;
       const net = gross - pos.fee - exitFee, risk = pos.risk;
-      trades.push({id: trades.length + 1, side: pos.side, entryBar: pos.bar, exitBar: i, entryT: C[pos.bar].t, exitT: C[i].t, entry: pos.entry, exit: px, qty: pos.qty, sl: pos.sl0, tp: pos.tp, gross, fees: pos.fee + exitFee, net, r: risk ? net / risk : null, retPct: net / (pos.entry * pos.qty) * 100, bars: i - pos.bar, why, reasonIn: pos.reason, open: !!flagOpen, ctx: pos.ctx});
+      trades.push({id: trades.length + 1, side: pos.side, entryBar: pos.bar, exitBar: i, entryT: pos.entryT != null ? pos.entryT : C[pos.bar].t, exitT: C[i].t, entry: pos.entry, exit: px, qty: pos.qty, sl: pos.sl0, tp: pos.tp, gross, fees: pos.fee + exitFee, net, r: risk ? net / risk : null, retPct: net / (pos.entry * pos.qty) * 100, bars: i - pos.bar, why, reasonIn: pos.reason, open: !!flagOpen, ctx: pos.ctx,
+        st: flagOpen ? {sl: pos.sl, hi: pos.hi, lo: pos.lo, fee: pos.fee, risk: pos.risk} : undefined}); // st: estado exacto de la posición abierta (paper trading la reanuda tal cual)
       pos = null;
     };
     for (let i = 1; i < N; i++) {
@@ -146,6 +151,11 @@
         else if (isNum(pos.tp) && (long ? c.h >= pos.tp : c.l <= pos.tp)) close(long ? Math.max(pos.tp, Math.min(c.o, c.h)) : Math.min(pos.tp, Math.max(c.o, c.l)), i, 'Take profit');
         else if (r.maxBars && i - pos.bar >= r.maxBars) { /* se cierra en la apertura de i+1 vía señal de tiempo */ }
       }
+      if (i === carryAt && !pos) { // reanuda la posición abierta (su SL/TP de esta vela ya se revisó en la actualización anterior)
+        const st = carry.st || {}, eb = C.findIndex(x => x.t === carry.entryT), f = isNum(st.fee) ? st.fee : carry.entry * carry.qty * fee; cash -= f;
+        pos = {side: carry.side, entry: carry.entry, qty: carry.qty, sl: isNum(st.sl) ? st.sl : (isNum(carry.sl) ? carry.sl : NA), sl0: isNum(carry.sl) ? carry.sl : NA, tp: isNum(carry.tp) ? carry.tp : NA, bar: eb >= 0 ? eb : i, entryT: carry.entryT, fee: f,
+          risk: isNum(st.risk) ? st.risk : (isNum(carry.sl) ? Math.abs(carry.entry - carry.sl) * carry.qty : null), reason: carry.reasonIn, hi: isNum(st.hi) ? st.hi : c.h, lo: isNum(st.lo) ? st.lo : c.l, ctx: carry.ctx}; if (start < 0) start = i;
+      }
       // 3) valor de la cuenta al cierre de la vela
       let unreal = 0; if (pos) unreal = (c.c - pos.entry) * pos.qty * (pos.side === 'long' ? 1 : -1);
       if (i === N - 1 && pos) { close(c.c, i, 'Fin de los datos (posición aún abierta)', true); unreal = 0; }
@@ -161,7 +171,7 @@
       // 5) señales con la vela cerrada i → orden para la apertura de i+1
       if (i < N - 1 && !pend && i >= tradeFrom) { // tradeFrom: paper trading (no se decide nada antes del inicio de la sesión)
         if (pos) {
-          const ex = pos.side === 'long' ? spec.exit.long : spec.exit.short, hit = ex.find(cd => condOk(cd, i, C, ctx));
+          const ex = pos.side === 'long' ? spec.exit.long : spec.exit.short, hit = r.minBars && i + 1 - pos.bar < r.minBars ? null : ex.find(cd => condOk(cd, i, C, ctx)); // minBars: evita abrir y cerrar enseguida por una señal contraria
           if (hit) pend = {type: 'exit', why: 'Regla de salida: ' + condText(hit)}; else if (r.maxBars && i + 1 - pos.bar >= r.maxBars) pend = {type: 'exit', why: `Tiempo máximo (${r.maxBars} velas)`};
         } else if (!halted && !dayBlocked) {
           const f = spec.filters, hr = new Date(c.t).getUTCHours(), ap = atrS[i] ? atrS[i] / c.c * 100 : null;
@@ -284,10 +294,39 @@
        Histórico 1 % riesgo: 4H +43.9 % (DD 7.1 %, PF 1.28) · 1H +37.2 % (DD 10.6 %, PF 1.16). Últimos 12 meses negativos en ambos: NO es una garantía. */
     lucas4h: () => lucasSpec('Lucas 4H', '4h', 40, 100, 2, 3.5),
     lucas1h: () => lucasSpec('Lucas 1H', '1h', 120, 400, 3, 5),
+    /* PACHITA (nov 2026, con Claude): Nova Nexus · iA Signals v2.7 en 15 minutos, compras y ventas, 8 monedas.
+       Entra solo con la señal del indicador EN TENDENCIA (ADX ≥ 25: ahí la señal ya exige estar del lado correcto de la EMA 200, flujo de dinero a favor y puntaje ≥ 4)
+       y del mismo lado de la nube EMA de Nova Nexus. Zonas: stop 1.5× ATR (más allá del SL de 1× ATR del indicador, para que el ruido de 15 m no la saque),
+       objetivo 2.5× ATR (el TP2 del indicador), trailing 2× ATR que asegura ganancia cuando avanza, y cierre por la señal contraria solo después de 4 velas (1 h).
+       Máx. 48 velas (12 h) por operación. No opera con el mercado muerto (ATR < 0.12 %) ni en latigazos (ATR > 2.5 %). Riesgo 2 %, apalancamiento máx. 5×. */
+    pachita: () => Object.assign(defaultSpec(), {name: 'Pachita', symbol: 'BTCUSDT', basket: NOVA8.slice(), interval: '15m', sides: 'both',
+      entry: {long: [{a: {k: 'novaBuy'}, op: 'is'}, {a: {k: 'novaRange'}, op: 'lt', b: {k: 'num', v: 1}}, {a: {k: 'novaBull'}, op: 'gte', b: {k: 'num', v: 1}}],
+        short: [{a: {k: 'novaSell'}, op: 'is'}, {a: {k: 'novaRange'}, op: 'lt', b: {k: 'num', v: 1}}, {a: {k: 'novaBull'}, op: 'lt', b: {k: 'num', v: 1}}]},
+      exit: {long: [{a: {k: 'novaSell'}, op: 'is'}], short: [{a: {k: 'novaBuy'}, op: 'is'}]},
+      filters: {minVolRatio: 0, minAtrPct: 0.12, maxAtrPct: 2.5, hoursUtc: null},
+      risk: {capital: 10000, riskPct: 2, sizePct: 10, maxLeverage: 5, atrLen: 14, sl: {type: 'atr', v: 1.5}, tp: {type: 'atr', v: 2.5}, trail: {type: 'atr', v: 2}, maxBars: 48, minBars: 4, maxDailyLossPct: 6, maxDrawdownPct: 25}, costs: {feePct: 0.05, slipPct: 0.03}}),
     macdTrend: () => Object.assign(defaultSpec(), {name: 'Tendencia + MACD', entry: {long: [{a: {k: 'close'}, op: 'gt', b: {k: 'ema', n: 200}}, {a: {k: 'macd'}, op: 'crossUp', b: {k: 'macdSignal'}}], short: []}, exit: {long: [{a: {k: 'macd'}, op: 'crossDown', b: {k: 'macdSignal'}}], short: []}})
   };
 
-  const api = {novaVolBoth, NOVA8, IV_MS, OPERANDS, OPS, ema, sma, rsi, atr, macd, bb, adx, backtest, backtestBasket, verdict, tradeStats, defaultSpec, normalizeSpec, validateSpec, describeSpec, condText, opText, PRESETS, series, maxDD};
+  /* ¿La configuración hace que el bot abra y cierre enseguida? (objetivo pegado, trailing muy corto o salida por señal sin espera mínima)
+     Devuelve la especificación corregida y la lista de cambios, o null si está bien. Lo usa la app una sola vez por cuenta. */
+  function fixQuickClose(specIn) {
+    const sp = JSON.parse(JSON.stringify(normalizeSpec(specIn))), r = sp.risk, ch = [];
+    if (r.tp && r.tp.type === 'atr' && r.tp.v < 1.5) { ch.push(`objetivo ${r.tp.v}× ATR → 1.5× ATR`); r.tp.v = 1.5; }
+    if (r.tp && r.tp.type === 'rr' && r.tp.v < 1) { ch.push(`objetivo ${r.tp.v}R → 1R`); r.tp.v = 1; }
+    if (r.tp && r.tp.type === 'pct' && r.tp.v < 0.5) { ch.push(`objetivo ${r.tp.v} % → 0.5 %`); r.tp.v = 0.5; }
+    if (r.sl && r.sl.type === 'atr' && r.sl.v < 1) { ch.push(`stop ${r.sl.v}× ATR → 1× ATR`); r.sl.v = 1; }
+    if (r.sl && r.sl.type === 'pct' && r.sl.v < 0.3) { ch.push(`stop ${r.sl.v} % → 0.3 %`); r.sl.v = 0.3; }
+    if (r.trail && r.trail.type === 'atr' && r.trail.v < 1.5) { ch.push(`trailing ${r.trail.v}× ATR → 1.5× ATR`); r.trail.v = 1.5; }
+    if (r.trail && r.trail.type === 'pct' && r.trail.v < 0.5) { ch.push(`trailing ${r.trail.v} % → 0.5 %`); r.trail.v = 0.5; }
+    if (r.maxBars && r.maxBars < 3) { ch.push(`tiempo máximo ${r.maxBars} → 3 velas`); r.maxBars = 3; }
+    if ((sp.exit.long.length || sp.exit.short.length) && !r.minBars) { r.minBars = /^(1m|3m|5m|15m)$/.test(sp.interval) ? 4 : 2; ch.push(`la señal contraria cierra solo después de ${r.minBars} velas`); }
+    return ch.length ? {spec: sp, changes: ch} : null;
+  }
+
+  for (const k of Object.keys(PRESETS)) { const f0 = PRESETS[k]; PRESETS[k] = () => { const sp = f0(), f = fixQuickClose(sp); return f ? Object.assign(f.spec, {name: sp.name}) : sp; }; } // ninguna plantilla abre y cierra enseguida
+
+  const api = {fixQuickClose, novaVolBoth, NOVA8, IV_MS, OPERANDS, OPS, ema, sma, rsi, atr, macd, bb, adx, backtest, backtestBasket, verdict, tradeStats, defaultSpec, normalizeSpec, validateSpec, describeSpec, condText, opText, PRESETS, series, maxDD};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTBotLab = api;
 })(typeof self !== 'undefined' ? self : this);

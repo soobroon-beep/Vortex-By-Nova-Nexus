@@ -24,13 +24,18 @@
     let ai = C.findIndex(c => c.t >= s.anchorT); if (ai < 0) return {changed: false, newTrades: 0}; // aún no cerró ninguna vela después del inicio
     if (ai < 300 && need > CAP) { const na = C[Math.min(C.length - 1, 300)].t; s.gaps.push({from: s.anchorT, to: na, why: 'Hueco de datos: la app estuvo cerrada más tiempo del que se puede recalcular'}); s.open = null; s.anchorT = na; ai = C.findIndex(c => c.t >= na); }
     const ropts2 = ropts && ropts.user ? ropts.user : null, sp = clone(spec); sp.risk.capital = s.cash;
-    const res = B.backtest(C, sp, {nova: ropts && ropts.nova, user: ropts2 || undefined, tradeFrom: s.halted ? C.length : ai, peak: s.peak, gate: ropts && ropts.gate});
+    /* Nada se decide dos veces: las velas que ya se revisaron en una actualización anterior no pueden abrir operaciones nuevas
+       (antes, al recalcular con otra ventana de velas, aparecían o desaparecían entradas viejas: avisos de compras que luego no estaban). */
+    const seen = s.last ? C.findIndex(c => c.t === s.last.t) : -1, carry = s.open && s.last ? Object.assign({}, s.open, {lastT: s.last.t}) : null;
+    if (carry && seen < 0) { s.notes.push({t: now, text: 'No se encontró la última vela revisada: la posición abierta se recalculó desde su entrada'}); }
+    const from = s.halted ? C.length : Math.max(ai, seen >= 0 ? seen : 0);
+    const res = B.backtest(C, sp, {nova: ropts && ropts.nova, user: ropts2 || undefined, tradeFrom: from, peak: s.peak, gate: ropts && ropts.gate, carry: carry && seen >= 0 ? carry : null});
     const oldAnchor = s.anchorT, closed = res.trades.filter(t => !t.open), openT = res.trades.find(t => t.open); let h = s.ledger.length ? s.ledger[s.ledger.length - 1].h : '0';
     for (const t of closed) { h = fnv(h + core(t)); s.ledger.push({n: s.ledger.length + 1, side: t.side, entryT: t.entryT, exitT: t.exitT, entry: t.entry, exit: t.exit, qty: t.qty, sl: t.sl, tp: t.tp, net: t.net, fees: t.fees, r: t.r, bars: t.bars, why: t.why, reasonIn: t.reasonIn, ctx: t.ctx, h}); s.cash += t.net; }
     if (closed.length) { const lastX = closed[closed.length - 1].exitT; for (const p of res.equity) if (p.t <= lastX && p.e > s.peak) s.peak = p.e; s.anchorT = lastX; }
     if (res.halted && !s.halted) { s.halted = true; s.notes.push({t: now, text: 'El módulo de riesgo detuvo las entradas: ' + (typeof res.halted === 'string' ? res.halted : 'límite de drawdown alcanzado')}); }
     const lastC = C[C.length - 1]; s.last = {t: lastC.t, c: lastC.c};
-    s.open = openT ? {side: openT.side, entryT: openT.entryT, entry: openT.entry, qty: openT.qty, sl: openT.sl, tp: openT.tp, reasonIn: openT.reasonIn, unreal: openT.net} : null;
+    s.open = openT ? {side: openT.side, entryT: openT.entryT, entry: openT.entry, qty: openT.qty, sl: openT.sl, tp: openT.tp, reasonIn: openT.reasonIn, unreal: openT.net, ctx: openT.ctx, st: openT.st} : null;
     s.curve = s.curve.filter(p => p[0] <= oldAnchor); for (const p of res.equity) if (p.t > oldAnchor && p.t >= s.startT) s.curve.push([p.t, Math.round(p.e * 100) / 100]); s.curve = thin(s.curve, 400);
     return {changed: true, newTrades: closed.length};
   }

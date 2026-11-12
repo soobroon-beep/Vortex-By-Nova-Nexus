@@ -1,6 +1,6 @@
 name: Motor del servidor (alertas, bots y Claudio)
 # Corre ~5 h 40 min y se vuelve a lanzar solo al terminar: alertas con indicador cada minuto, paper trading de tus bots
-# y Claudio cada hora. El horario de abajo solo lo revive si algún día se detiene. Usa FIREBASE_SERVICE_ACCOUNT (y JEV_API_KEY para Claudio).
+# cada 15 min (para los de 15 m como Pachita) y Claudio cada hora. El horario de abajo solo lo revive si algún día se detiene. Usa FIREBASE_SERVICE_ACCOUNT (y JEV_API_KEY para Claudio).
 on:
   schedule: [{cron: '*/30 * * * *'}]
   workflow_dispatch:

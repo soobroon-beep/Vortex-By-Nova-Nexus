@@ -26,7 +26,7 @@ function limitsFrom(text) {
 function cleanPatch(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null; const o = {};
   for (const k of ['entry', 'exit', 'filters', 'sides']) if (p[k] != null) o[k] = p[k];
-  if (p.risk && typeof p.risk === 'object') { const r = {}; for (const k of ['sl', 'tp', 'trail', 'maxBars', 'atrLen', 'maxDailyLossPct', 'maxDrawdownPct']) if (p.risk[k] !== undefined) r[k] = p.risk[k]; if (Object.keys(r).length) o.risk = r; }
+  if (p.risk && typeof p.risk === 'object') { const r = {}; for (const k of ['sl', 'tp', 'trail', 'maxBars', 'minBars', 'atrLen', 'maxDailyLossPct', 'maxDrawdownPct']) if (p.risk[k] !== undefined) r[k] = p.risk[k]; if (Object.keys(r).length) o.risk = r; }
   return Object.keys(o).length ? o : null;
 }
 function withinLimits(base, sp, lim) {
