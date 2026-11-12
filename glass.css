@@ -1847,3 +1847,5 @@ body.pane .wl-add-fab{display:none}
   #chartView .more-group .mg-hint{display:none}
   #chartView.more-open .more-group .mg-hint{display:block}
 }
+/* Dock del celular: «Seguimiento» es la palabra más larga, su botón es un poco más ancho para que quepa dentro de la burbuja */
+@media(max-width:1023px){.bottom-nav{grid-template-columns:1.22fr repeat(5,1fr)!important}.bottom-nav button small{white-space:nowrap}}

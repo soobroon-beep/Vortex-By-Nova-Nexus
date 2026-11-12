@@ -5623,7 +5623,8 @@ async function onUser(user) {
     if (uid) { uid = null; stateUid = null; lastRemote = ''; scriptsRemote = ''; applyState(readLocal(STORE)); scripts = withCatalog(readScripts()); renderScripts(); } // vuelve al estado local sin sesión; los datos de la cuenta no se quedan visibles
     proForget(); syncStatus = ''; renderAccount(); showWelcome(); return;
   }
-  uid = user.uid; try { localStorage.setItem(LASTUID, uid); } catch {} setTimeout(loadProCode, 0);
+  const firstLogin = !uid; uid = user.uid; try { localStorage.setItem(LASTUID, uid); } catch {} setTimeout(loadProCode, 0);
+  if (firstLogin && !isDesktop() && !PANE) switchView('chartView'); // recién iniciaste sesión: directo al gráfico
   if (stateUid !== uid && lsGet(storeKey())) { try { applyState(readLocal(storeKey())); } catch {} } // cambios de esta cuenta guardados aquí que aún no subieron (no el estado de «sin sesión»)
   stateUid = uid;
   const anonScripts = (readLocal(SCRIPTS_KEY).items || []).filter(x => x && typeof x.id === 'string'); // scripts guardados antes de iniciar sesión
@@ -6092,6 +6093,7 @@ if (PANE) {
   window.addEventListener('message', e => { if (e.origin !== location.origin || !e.data || e.data.cct !== 'light') return; state.light = !!e.data.light; theme(); });
   switchView('chartView');
 } else {
+  if (uid && !isDesktop()) switchView('chartView'); // con la sesión iniciada, la app siempre abre en el gráfico (sin sesión sale la ventana para iniciar sesión)
   $('#layoutBtn').onclick = e => {
     e.stopPropagation(); const old = $('#layoutMenu'); if (old) { old.remove(); return; }
     const m = document.createElement('div'); m.id = 'layoutMenu'; m.className = 'pop-menu';

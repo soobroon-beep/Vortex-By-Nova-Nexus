@@ -1,0 +1,29 @@
+name: Motor del servidor (alertas, bots y Claudio)
+# Corre ~5 h 40 min y se vuelve a lanzar solo al terminar: alertas con indicador cada minuto, paper trading de tus bots
+# y Claudio cada hora. El horario de abajo solo lo revive si algún día se detiene. Usa FIREBASE_SERVICE_ACCOUNT (y JEV_API_KEY para Claudio).
+on:
+  schedule: [{cron: '*/30 * * * *'}]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency: {group: motor, cancel-in-progress: false}
+jobs:
+  motor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12
+      - run: node scripts/motor.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+          RUN_MINUTES: '340'
+      - name: Volver a lanzarse
+        if: always()
+        run: gh workflow run motor.yml --ref "${GITHUB_REF_NAME}" || echo "no se pudo relanzar (el horario lo revive)"
+        env:
+          GH_TOKEN: ${{ github.token }}
