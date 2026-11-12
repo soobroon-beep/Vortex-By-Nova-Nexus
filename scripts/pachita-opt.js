@@ -47,6 +47,7 @@ function mk(o) {
   console.log('\n══ Las 15 mejores SOLO por entrenamiento (así se eligen) ══'); cand.slice(0, 15).forEach(r => console.log(line(r)));
   const ok = cand.slice(0, 60).filter(r => r.tr > 0 && r.va > 0 && r.te > 0);
   console.log('\n══ De las 60 mejores en entrenamiento, las que TAMBIÉN ganan en validación y prueba ══'); ok.slice(0, 15).forEach(r => console.log(line(r)));
+  if (process.env.SHOW) { const [k, v] = process.env.SHOW.split('='); console.log(`\n══ Todas con ${k}=${v} ══`); rows.filter(r => String(r.o[k]) === v && !r.o.hrs && !r.o.vol).sort((a, b) => b.pfT - a.pfT).slice(0, 40).forEach(r => console.log(line(r))); }
   const best = ok[0]; console.log('\nELEGIDA: ' + (best ? JSON.stringify(best.o) : 'ninguna pasó la validación'));
   const cur = rows.find(r => r.o.entry === 'tendNube' && r.o.sides === 'both' && r.o.opp && r.o.sl === 1.5 && r.o.tp === 2 && r.o.tr === 0 && r.o.mb === 96 && r.o.minAtr === 0.12); if (cur) console.log('\nReferencia (parecida a la actual):\n' + line(cur));
 })().catch(e => { console.error(e); process.exit(1); });
