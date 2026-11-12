@@ -270,6 +270,12 @@
     return klines(src, src === 'bingxf' || src === 'okxf' ? dashSym(sym) : sym, tf, n);
   }
   async function klinesAny(key, tf, limit = 1000, opts = {}) {
+    const xm = /^x(\d+)$/.exec(tf); if (xm) { // temporalidad sin velas propias (3 h, 2 D, 45 min…): se juntan velas de la mayor que la divide
+      const M = +xm[1], b = [[10080, '1w'], [1440, '1d'], [720, '12h'], [360, '6h'], [240, '4h'], [120, '2h'], [60, '1h'], [30, '30m'], [15, '15m'], [5, '5m'], [1, '1m']].find(([q]) => q <= M && M % q === 0);
+      const r = await klinesAny(key, b[1], Math.min(1000, limit * M / b[0]), Object.assign({}, opts, {meta: true, closedOnly: false})), span = M * 6e4, out = [];
+      for (const c of r.cs) { const t = Math.floor(c.t / span) * span, l = out[out.length - 1]; if (l && l.t === t) { l.h = Math.max(l.h, c.h); l.l = Math.min(l.l, c.l); l.c = c.c; l.v += c.v; } else out.push({t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v}); }
+      let cs = out; if (opts.closedOnly !== false) cs = cs.filter(c => c.t + span <= Date.now()); cs = cs.slice(-limit); return opts.meta ? {cs, src: r.src} : cs;
+    }
     const {sym, src} = parse(key); let cs = null, used = src;
     try { cs = tidy(await primary(src, sym, tf, limit)); } catch (e) { if (src === 'binance' || src === 'dom' || opts.noFallback) throw e; }
     if (!cs || cs.length < 3) { if (src === 'dom' || opts.noFallback) throw Error('Sin velas de ' + key); cs = tidy(await binanceSpot(sym, tf, limit)); used = 'binance'; }

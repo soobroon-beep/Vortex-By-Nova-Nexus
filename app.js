@@ -151,6 +151,7 @@ function sanUi(u) {
   if (typeof q.icon === 'string' && /^[a-z][a-z0-9]{2,11}$/.test(q.icon)) o.icon = q.icon;
   if (q.prefs && typeof q.prefs === 'object') o.prefs = CCTPrefs.sanitize(q.prefs);
   if (q.favBar && typeof q.favBar === 'object') { const f = q.favBar, c01 = v => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null; o.favBar = {show: f.show !== false, x: c01(f.x), y: c01(f.y), mx: c01(f.mx), my: c01(f.my)}; }
+  if (Array.isArray(q.pillFavs)) o.pillFavs = q.pillFavs.filter(x => typeof x === 'string' && /^[A-Za-z0-9-]{2,40}$/.test(x)).slice(0, 5); // favoritos de la píldora del celular (se sincronizan con tu cuenta)
   if (Array.isArray(q.favs)) o.favs = q.favs.filter(x => typeof x === 'string' && /^[a-zA-Z0-9]{2,24}$/.test(x)).slice(0, 24);
   return o;
 }
@@ -1116,20 +1117,22 @@ function renderFrames() {
   /* Celular: deja presionado un botón del menú (Indicadores, Liquidaciones, Dibujar, Plantillas, Operar…) para fijarlo como favorito.
      Los favoritos salen junto a la estrella de la píldora: la píldora crece y ya no tienes que abrir el menú. Se guardan en este celular. */
   const grp = $('#moreGroup'), pf = $('#pillFavs'), PFK = 'cct_pill_favs_v1', PF_MAX = 5;
-  let favs = (() => { try { const a = JSON.parse(localStorage.getItem(PFK) || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string').slice(0, PF_MAX) : []; } catch { return []; } })();
+  let favs = (() => { const u = (state.ui || {}).pillFavs; if (Array.isArray(u)) return u.slice(0, PF_MAX); try { const a = JSON.parse(localStorage.getItem(PFK) || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string').slice(0, PF_MAX) : []; } catch { return []; } })(); // de tu cuenta (o de este celular, la primera vez)
   const keyOf = b => b.id || (b.dataset.panel ? 'panel-' + b.dataset.panel : '');
   const btnOf = k => k.startsWith('panel-') ? document.querySelector(`#chartView [data-panel="${k.slice(6)}"]:not(.pf-btn)`) : document.getElementById(k);
   const labelOf = b => { const t = (b.textContent || '').replace(/ƒx/g, '').replace(/\(\d+\)/g, '').replace(/\s+/g, ' ').trim(); return t || (b.getAttribute('title') || '').split(' · ')[0].split(':')[0]; };
   const iconOf = b => { const s = b.querySelector('svg'); return s ? s.outerHTML : `<b class="pf-fx">${(b.textContent.trim().split(/\s+/)[0] || '•').slice(0, 2)}</b>`; };
   const syncOne = (p, b) => { const on = b.classList.contains('on') || b.getAttribute('aria-pressed') === 'true'; p.classList.toggle('on', on); p.hidden = !!b.hidden; };
   function renderPF() {
-    if (!pf) return; favs = favs.filter(k => btnOf(k));
-    pf.innerHTML = favs.map(k => { const b = btnOf(k); return `<button type="button" class="pf-btn" data-pf="${esc(k)}" title="${esc(labelOf(b))}" aria-label="${esc(labelOf(b))}">${iconOf(b)}</button>`; }).join('');
+    if (!pf) return; const show = favs.filter(k => btnOf(k)); // solo se muestran los que existen (no se borran de tu lista)
+    pf.innerHTML = show.map(k => { const b = btnOf(k); return `<button type="button" class="pf-btn" data-pf="${esc(k)}" title="${esc(labelOf(b))}" aria-label="${esc(labelOf(b))}">${iconOf(b)}</button>`; }).join('');
     pf.querySelectorAll('[data-pf]').forEach(p => syncOne(p, btnOf(p.dataset.pf)));
     if (grp) grp.querySelectorAll('button').forEach(b => b.classList.toggle('is-fav', favs.includes(keyOf(b))));
     pillPos();
   }
-  const saveFavs = () => { try { localStorage.setItem(PFK, JSON.stringify(favs)); } catch {} };
+  const saveFavs = () => { try { localStorage.setItem(PFK, JSON.stringify(favs)); } catch {} try { syncUi(); } catch {} }; // también a tu cuenta (los ves en tus otros celulares)
+  window.CCT_pillFavs = () => favs.slice();
+  window.CCT_setPillFavs = a => { const n = a.filter(x => typeof x === 'string').slice(0, PF_MAX); if (JSON.stringify(n) === JSON.stringify(favs)) return; favs = n; try { localStorage.setItem(PFK, JSON.stringify(favs)); } catch {} renderPF(); };
   if (pf) pf.addEventListener('click', e => {
     const p = e.target.closest('[data-pf]'); if (!p) return; e.stopPropagation(); close();
     const b = btnOf(p.dataset.pf); if (!b) return;
@@ -3067,7 +3070,7 @@ let paneScale = paneScale0();
 const devClass = () => (window.matchMedia && matchMedia('(min-width: 1024px)').matches ? 'pc' : 'movil');
 function syncUi() { // vuelca las preferencias de interfaz al estado (que se guarda en el dispositivo y en la cuenta)
   const panes = Object.assign({}, (state.ui || {}).panes); panes[devClass()] = {paneH, paneScale, order: paneOrder, man: paneManKeep()}; // cada tipo de dispositivo guarda su propio tamaño
-  state.ui = sanUi({panes, dopt: DOPT, favBar: FB, favs: FAVS, prefs: PR, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
+  state.ui = sanUi({panes, dopt: DOPT, favBar: FB, favs: FAVS, pillFavs: window.CCT_pillFavs ? window.CCT_pillFavs() : (state.ui || {}).pillFavs, prefs: PR, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
 }
 function applyUi() { // al recibir el estado de la cuenta: aplica sus preferencias de interfaz en este dispositivo
   const u = state.ui || {};
@@ -3076,6 +3079,7 @@ function applyUi() { // al recibir el estado de la cuenta: aplica sus preferenci
   if (pn.man) { paneManSaved = {...pn.man}; try { localStorage.setItem('cct_paneMan_v1', JSON.stringify(paneManSaved)); } catch {} }
   if (Array.isArray(pn.order)) { paneOrder = pn.order.slice(0, 64); try { localStorage.setItem('cct_paneOrder_v1', JSON.stringify(paneOrder)); } catch {} }
   if (pn.paneScale) { paneScale = pn.paneScale; try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} }
+  if (Array.isArray(u.pillFavs) && window.CCT_setPillFavs) window.CCT_setPillFavs(u.pillFavs);
   if (u.dopt) { Object.assign(DOPT, u.dopt); try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} }
   if (u.icon && window.CCTAppIcons && window.CCTAppIcons.selected !== u.icon) window.CCTAppIcons.apply(u.icon);
   if (Array.isArray(u.favs)) { FAVS = u.favs.slice(0, 24); try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch {} if (typeof buildRail === 'function') buildRail(); }
@@ -5025,6 +5029,9 @@ function pineDispatch() {
   }
 }
 function pineRunRaw(code, opts) { // Workers aislados (un grupo pequeño: un script pesado no bloquea a los demás), con tiempo límite por script
+  opts = Object.assign({}, opts); // exchange del activo: syminfo.tickerid y request.security sin prefijo usan el mismo exchange del gráfico
+  if (String(opts.symbol || '').includes('@')) { opts.symKey = opts.symbol; opts.exch = srcOf(opts.symbol); opts.symbol = symOf(opts.symbol); }
+  else if (!opts.exch && opts.symbol && opts.symbol === symOf(state.symbol)) { opts.symKey = state.symbol; opts.exch = srcOf(state.symbol); }
   if (typeof Worker === 'undefined' || pineNoWorker) return Promise.resolve(pineInline(code, opts));
   return new Promise(ok => { pineQueue.push({code, opts, ok}); pineDispatch(); });
 }
@@ -5033,6 +5040,7 @@ const pineSecCache = new Map();
 async function pineSecCandles(sym, itv) {
   const key = sym + '|' + itv, hit = pineSecCache.get(key); if (hit && Date.now() - hit.at < 30000) return hit.data;
   let data = [];
+  if (sym.includes('@')) { try { data = await CCTMarkets.klinesAny(sym, itv, 1000, {closedOnly: false}); } catch {} pineSecCache.set(key, {at: Date.now(), data}); return data; } // otro exchange (BINGX:…, BYBIT:…): sus propias velas
   try {
     if (/^x\d+$/.test(itv)) { // temporalidad sin velas propias en Binance (3 h, 2 D, 45 min…): se juntan velas de la mayor temporalidad que la divide
       const M = +itv.slice(1), base = [[10080, '1w'], [4320, '3d'], [1440, '1d'], [720, '12h'], [480, '8h'], [360, '6h'], [240, '4h'], [120, '2h'], [60, '1h'], [30, '30m'], [15, '15m'], [5, '5m'], [3, '3m'], [1, '1m']].find(([b]) => b <= M && M % b === 0);

@@ -2,7 +2,9 @@
 window.CCT_CHANGELOG = [
   {v: '3.25', d: '11 nov 2026', t: 'Controles modernos en toda la app', items: [
     'Listas desplegables de cristal con animación (ya no salen en blanco), casillas, deslizadores, colores y campos con el mismo estilo en todas las ventanas.',
-    'El botón principal de cada ventana (Aceptar, Guardar, Crear) se ve en azul; antes quedaba oscuro.'
+    'El botón principal de cada ventana (Aceptar, Guardar, Crear) se ve en azul; antes quedaba oscuro.',
+    'Tus scripts Pine pueden pedir datos de otros exchanges con request.security, como en TradingView: «BINGX:BTCUSDT.P», «BYBIT:SOLUSDT», «OKX:ETHUSDT.P», «COINBASE:BTCUSD»… Sin prefijo usan el exchange del gráfico.',
+    'Los favoritos de la píldora del celular se guardan en tu cuenta y aparecen en tus otros celulares.'
   ]},
   {v: '3.24', d: '11 nov 2026', t: 'Alertas con indicador con la app cerrada', items: [
     'Tus alertas con indicador (indicadores comunes, Nova Nexus y tus scripts Pine) ahora también te avisan con VORTEX y el celular cerrados: el servidor las revisa al cerrar cada vela.',

@@ -398,8 +398,8 @@ const CONSTS = Object.assign(Object.create(null), {
   'timeframe.period': c => tfPeriod(c.interval), 'timeframe.multiplier': c => { const m = TF_MIN[c.interval] || 60; return m >= 43200 ? 1 : m >= 10080 ? m / 10080 : m >= 1440 ? m / 1440 : m; },
   'timeframe.isintraday': c => (TF_MIN[c.interval] || 60) < 1440, 'timeframe.isdaily': c => c.interval === '1d' || c.interval === '3d', 'timeframe.isweekly': c => c.interval === '1w', 'timeframe.ismonthly': c => c.interval === '1M',
   'timeframe.isdwm': c => (TF_MIN[c.interval] || 60) >= 1440, 'timeframe.isseconds': false, 'timeframe.isminutes': c => (TF_MIN[c.interval] || 60) < 1440,
-  'syminfo.ticker': c => c.symbol, 'syminfo.tickerid': c => 'BINANCE:' + c.symbol, 'syminfo.prefix': 'BINANCE', 'syminfo.currency': c => /USDT$/.test(c.symbol) ? 'USDT' : 'USD',
-  'syminfo.basecurrency': c => c.symbol.replace(/USDT$|USD$/, ''), 'syminfo.root': c => c.symbol.replace(/USDT$|USDC$|USD$|BUSD$/, ''), 'syminfo.prefix': 'BINANCE', 'syminfo.ticker': c => c.symbol, 'syminfo.type': 'crypto', 'syminfo.mintick': c => c.mintick, 'syminfo.pointvalue': 1, 'syminfo.session': '24x7', 'syminfo.timezone': 'Etc/UTC',
+  'syminfo.ticker': c => c.symbol, 'syminfo.tickerid': c => (SEC_NAME[c.exch] || 'BINANCE') + ':' + String(c.symbol).replace(/[-_]/g, '') + (SEC_PERP[String(c.exch).replace(/f$/, '')] === c.exch ? '.P' : ''), 'syminfo.prefix': c => SEC_NAME[c.exch] || 'BINANCE', 'syminfo.currency': c => /USDT$/.test(c.symbol) ? 'USDT' : 'USD',
+  'syminfo.basecurrency': c => String(c.symbol).replace(/[-_]/g, '').replace(/USDT$|USD$/, ''), 'syminfo.root': c => String(c.symbol).replace(/[-_]/g, '').replace(/USDT$|USDC$|USD$|BUSD$/, ''), 'syminfo.ticker': c => c.symbol, 'syminfo.type': 'crypto', 'syminfo.mintick': c => c.mintick, 'syminfo.pointvalue': 1, 'syminfo.session': '24x7', 'syminfo.timezone': 'Etc/UTC',
   'chart.fg_color': hexCol('D1D4DC'), 'chart.bg_color': hexCol('131722'), 'chart.is_standard': true, 'chart.is_heikinashi': false, 'chart.is_renko': false,
   'display.none': 0, 'display.pane': 1, 'display.data_window': 2, 'display.price_scale': 4, 'display.status_line': 8, 'display.all': 15, 'display.pine_screener': 16,
   'dayofweek.sunday': 1, 'dayofweek.monday': 2, 'dayofweek.tuesday': 3, 'dayofweek.wednesday': 4, 'dayofweek.thursday': 5, 'dayofweek.friday': 6, 'dayofweek.saturday': 7,
@@ -1612,16 +1612,32 @@ function tfKey(tf, ctx) {
   return null;
 }
 function toHA(cs) { const out = []; let po = null, pc = null; for (const k of cs) { const c = (k.o + k.h + k.l + k.c) / 4, o = po === null ? (k.o + k.c) / 2 : (po + pc) / 2; out.push({t: k.t, o, h: Math.max(k.h, o, c), l: Math.min(k.l, o, c), c, v: k.v}); po = o; pc = c; } return out; }
+/* Símbolos de otros exchanges en request.security, como en TradingView: «BINANCE:BTCUSDT», «BYBIT:SOLUSDT.P», «BINGX:BTCUSDT.P», «OKX:ETHUSDT.P»,
+   «COINBASE:BTCUSD», «KUCOIN:…», «GATEIO:…», «MEXC:…», «BITGET:…», «HTX:…», «KRAKEN:…». Sin prefijo = el exchange del gráfico.
+   Se convierten a la clave de VORTEX (BTCUSDT, SOLUSDT@bybitf, BTC-USDT@bingxf…) y la app descarga esas velas (markets.js · klinesAny). */
+const SEC_PFX = {BINANCE: 'binance', BINANCEUS: 'binance', BYBIT: 'bybit', OKX: 'okx', OKEX: 'okx', BINGX: 'bingx', COINBASE: 'coinbase', GDAX: 'coinbase', KUCOIN: 'kucoin', GATEIO: 'gate', GATE: 'gate', MEXC: 'mexc', BITGET: 'bitget', HTX: 'htx', HUOBI: 'htx', KRAKEN: 'kraken'};
+const SEC_PERP = {binance: 'binancef', bybit: 'bybitf', okx: 'okxf', bingx: 'bingxf'}, SEC_NAME = {binance: 'BINANCE', binancef: 'BINANCE', bybit: 'BYBIT', bybitf: 'BYBIT', okx: 'OKX', okxf: 'OKX', bingx: 'BINGX', bingxf: 'BINGX', coinbase: 'COINBASE', kucoin: 'KUCOIN', gate: 'GATEIO', mexc: 'MEXC', bitget: 'BITGET', htx: 'HTX', kraken: 'KRAKEN'};
+const SEC_DASH = new Set(['okx', 'okxf', 'bingx', 'bingxf', 'kucoin', 'coinbase', 'kraken']);
+function secSplit(s) { for (const q of ['USDT', 'USDC', 'FDUSD', 'USD', 'BTC', 'EUR']) if (s.length > q.length && s.endsWith(q)) return [s.slice(0, -q.length), q]; return null; }
+function secKey(raw, exch) { // → {key, sym, src} o null
+  let s = String(raw).trim().toUpperCase(), src = exch || 'binance';
+  const m = /^([A-Z0-9_]+):(.+)$/.exec(s); if (m) { const p = SEC_PFX[m[1]]; if (!p) return null; src = p; s = m[2]; }
+  let perp = /\.P$|PERP$/.test(s); s = s.replace(/\.P$|PERP$/, '');
+  if (m && perp && SEC_PERP[src]) src = SEC_PERP[src]; else if (!m && perp && SEC_PERP[src]) src = SEC_PERP[src];
+  const glued = s.replace(/[-_/]/g, ''); if (!/^[A-Z0-9]{3,24}$/.test(glued)) return null;
+  const sp = secSplit(glued), sym = sp && SEC_DASH.has(src) ? sp[0] + '-' + sp[1] : sp && src === 'gate' ? sp[0] + '_' + sp[1] : glued;
+  return {key: src === 'binance' ? sym : sym + '@' + src, sym, src};
+}
 function evSecurity(n, env) {
   const ctx = env.ctx, A = {}, names = ['symbol', 'timeframe', 'expression', 'gaps', 'lookahead', 'ignore_invalid_symbol', 'currency', 'calc_bars_count']; let pos = 0;
   for (const a of n.args) A[a.name || names[pos++]] = a;
   if (!A.symbol || !A.timeframe || !A.expression) throw new PineError('request.security() necesita símbolo, temporalidad y expresión', n.line);
   let sym = ev(A.symbol.e, env); const tf = ev(A.timeframe.e, env), look = A.lookahead ? ev(A.lookahead.e, env) : 'lookahead_off';
   let ha = false; if (typeof sym === 'string' && sym.startsWith('HA:')) { ha = true; sym = sym.slice(3); }
-  sym = isna(sym) || sym === '' ? ctx.symbol : String(sym).replace(/^[A-Za-z0-9_]+:/, '').toUpperCase();
+  const sk = isna(sym) || sym === '' ? {key: ctx.symKey || ctx.symbol, sym: ctx.symbol, src: ctx.exch || 'binance'} : secKey(sym, ctx.exch);
   const tfk = tfKey(tf, ctx);
-  if (!/^[A-Z0-9]{3,20}$/.test(sym) || !tfk) { if (!ctx.secondary) { warn(ctx, n.line, `request.security(${isna(sym) ? 'na' : sym}, ${tf}) no soportado: solo hay símbolos de Binance Spot y temporalidades de 1m a 12M`, 'sec:' + sym + tf, 'unsupported'); ctx.incomplete = true; } return null; }
-  const key = sym + '|' + tfk, same = sym === ctx.symbol && tfk === ctx.interval;
+  if (!sk || !tfk) { if (!ctx.secondary) { warn(ctx, n.line, `request.security(${isna(sym) ? 'na' : sym}, ${tf}) no soportado: usa un símbolo como BTCUSDT o EXCHANGE:BTCUSDT (Binance, Bybit, OKX, BingX, Coinbase, KuCoin, Gate, MEXC, Bitget, HTX, Kraken; «.P» = perpetuo) y temporalidades de 1m a 12M`, 'sec:' + sym + tf, 'unsupported'); ctx.incomplete = true; } return null; }
+  sym = sk.key; const key = sym + '|' + tfk, same = (sym === (ctx.symKey || ctx.symbol) || (sk.src === (ctx.exch || 'binance') && sk.sym.replace(/[-_]/g, '') === String(ctx.symbol).replace(/[-_]/g, ''))) && tfk === ctx.interval;
   if (same && (!ha || ctx.secondary)) { const v = ev(A.expression.e, env); if (ctx.secondary) { let r = ctx.rec.get(n); if (!r) ctx.rec.set(n, r = []); r[ctx.bar] = v; } return v; }
   if (ctx.secondary) return null;
   let data = same ? ctx.candles : ctx.opts.sec && ctx.opts.sec[key];
@@ -1657,7 +1673,7 @@ function sliceForSecurity(ast) {
 }
 function runSecondary(parent, sym, tfk, key, data) {
   const c2 = {candles: data, n: data.length, bar: 0, steps: 0, deadline: parent.deadline, warnings: [], wkeys: new Set(), fns: parent.fns, types: parent.types, enums: parent.enums, methods: parent.methods, frames: new Map(), frameList: [], depth: 0, ctrl: null,
-    legacy: parent.legacy, incomplete: false, interval: tfk, symbol: sym, mintick: parent.mintick, ms: tfms(tfk), opts: {inputs: parent.opts.inputs}, pal: new Map(), out: freshOut(), secondary: true, rec: new Map(), secRuns: new Map(), ast: parent.ast};
+    legacy: parent.legacy, incomplete: false, interval: tfk, symbol: String(sym).split('@')[0], exch: String(sym).split('@')[1] || 'binance', symKey: sym, mintick: parent.mintick, ms: tfms(tfk), opts: {inputs: parent.opts.inputs}, pal: new Map(), out: freshOut(), secondary: true, rec: new Map(), secRuns: new Map(), ast: parent.ast};
   loopProgram(sliceForSecurity(parent.ast), c2);
   const j = new Int32Array(parent.n); let k = -1;
   for (let i = 0; i < parent.n; i++) { const t = parent.candles[i].t; while (k + 1 < data.length && data[k + 1].t <= t) k++; j[i] = k; }
@@ -1673,7 +1689,7 @@ function run(code, candles, opts) {
   const n = candles.length, vm = /\/\/\s*@version\s*=\s*(\d+)/.exec(code), version = vm ? +vm[1] : 5;
   const iv = opts.interval || '1h', ms = (TF_MIN[iv] || (n > 1 ? (candles[n - 1].t - candles[0].t) / (n - 1) / 60000 : 60)) * 60000;
   const ctx = {candles, n, bar: 0, steps: 0, deadline: t0 + (opts.timeLimitMs || 8000), warnings: [], wkeys: new Set(), fns: new Map(), types: new Map(), methods: new Map(), frames: new Map(), frameList: [], depth: 0, ctrl: null,
-    legacy: version < 5, incomplete: false, interval: iv, symbol: opts.symbol || 'BTCUSDT', mintick: opts.mintick || 0.01, ms, opts, pal: new Map(),
+    legacy: version < 5, incomplete: false, interval: iv, symbol: opts.symbol || 'BTCUSDT', exch: opts.exch || 'binance', symKey: opts.symKey || '', mintick: opts.mintick || 0.01, ms, opts, pal: new Map(),
     out: {meta: {kind: 'indicator', title: opts.name || 'Script', overlay: false}, plots: [], hlines: [], fills: [], bgcolors: [], barcolors: [], shapes: [], labels: [], lines: [], boxes: [], inputs: [], palette: [], _p: {}}};
   ctx.out.labels.__n = 'l'; ctx.out.lines.__n = 'n'; ctx.out.boxes.__n = 'b'; ctx.out.polylines = Object.assign([], {__n: 'p'}); ctx.out.tables = []; ctx.out.candles = []; ctx.out.linefills = [];
   for (const f of san.fixes) ctx.warnings.push({line: f.line, level: 'fix', msg: 'Reparado automáticamente: ' + f.msg});

@@ -64,7 +64,7 @@ async function round(key, getScript) {
       } else if (a.src === 'pine') {
         if (!Pine) continue; const sc = await getScript(dv.uid, a.sid); if (!sc) { console.log('script no encontrado', a.sid); continue; }
         const rk = [dv.uid, a.sid, a.symbol, a.interval, JSON.stringify(a.inputs || {})].join('|');
-        if (!runs.has(rk)) runs.set(rk, await pineRun(sc.code, cs, {inputs: a.inputs || {}, interval: a.interval, symbol: a.symbol, name: sc.name}, getK));
+        if (!runs.has(rk)) runs.set(rk, await pineRun(sc.code, cs, {inputs: a.inputs || {}, interval: a.interval, symbol: M.symOf(a.symbol), exch: M.srcOf(a.symbol), symKey: a.symbol, name: sc.name}, getK));
         const res = runs.get(rk); if (!res || !res.ok) { console.log('Pine falló', a.sid, res && res.error && res.error.msg); continue; }
         for (const i of bars) { const r = AE.pineHit(res, a.spec, cs, i); if (r.hit) info = r.msg || ''; }
       }
