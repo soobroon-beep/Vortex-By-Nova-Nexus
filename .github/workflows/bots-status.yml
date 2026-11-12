@@ -1,0 +1,15 @@
+name: Estado de bots (Nova Bot Lab)
+# Se corre a mano: muestra si tus bots están encendidos, si el servidor los avanza y si se reentrenan (sin montos ni datos de la cuenta).
+on: {workflow_dispatch: {}}
+permissions: {contents: read}
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12
+      - run: node scripts/bots-status.js
+        env: {FIREBASE_SERVICE_ACCOUNT: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'}
