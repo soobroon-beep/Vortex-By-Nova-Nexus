@@ -1,5 +1,9 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.25', d: '11 nov 2026', t: 'Controles modernos en toda la app', items: [
+    'Listas desplegables de cristal con animación (ya no salen en blanco), casillas, deslizadores, colores y campos con el mismo estilo en todas las ventanas.',
+    'El botón principal de cada ventana (Aceptar, Guardar, Crear) se ve en azul; antes quedaba oscuro.'
+  ]},
   {v: '3.24', d: '11 nov 2026', t: 'Alertas con indicador con la app cerrada', items: [
     'Tus alertas con indicador (indicadores comunes, Nova Nexus y tus scripts Pine) ahora también te avisan con VORTEX y el celular cerrados: el servidor las revisa al cerrar cada vela.',
     'La alerta salta igual que en la app (misma lógica) y, si la configuraste así, también llega a Discord. Cuando la app vuelve a abrir, la alerta ya aparece como disparada.',

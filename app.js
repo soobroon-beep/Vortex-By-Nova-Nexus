@@ -760,7 +760,7 @@ async function openAlertDialog(o) {
       <div class="al-r"><span>Vencimiento</span><div class="al-c"><select id="adExp">${AL_EXP.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select><input id="adDate" type="datetime-local" hidden></div></div>
       <div class="al-r"><span>Mensaje</span><input id="adNote" maxlength="140" placeholder="Opcional · por defecto: el aviso del cruce"></div>
       <div class="al-r"><span>Notificaciones</span><select id="adNot"><option value="app">Solo en la app</option><option value="discord">Solo en Discord</option><option value="both">App y Discord</option></select></div>
-      <p class="cfg-note">Se revisa mientras la app está abierta. «Todo el tiempo» vuelve a avisar cada vez que el precio cruce otra vez el nivel. No ejecuta órdenes.</p>
+      <p class="cfg-note">Te avisa aunque la app esté cerrada (con «Activar notificaciones» encendido). «Todo el tiempo» vuelve a avisar cada vez que el precio cruce otra vez el nivel. No ejecuta órdenes.</p>
     </div></div>
     <div class="cfg-foot"><span class="cfg-sp"></span><button class="cfg-btn" data-act="cancel">Cancelar</button><button class="cfg-btn cfg-ok" data-act="ok">${ed ? 'Guardar' : 'Crear'}</button></div></div>`;
   document.body.appendChild(el);
