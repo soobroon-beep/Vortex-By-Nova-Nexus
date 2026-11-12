@@ -9,6 +9,7 @@ const ago = t => t ? ((Date.now() - t) / 36e5).toFixed(1) + ' h' : '—';
   for (const u of users) {
     const bd = await u.collection('data').doc('botlab').get(); if (!bd.exists) continue; let S; try { S = JSON.parse(bd.data().items || '{}'); } catch (e) { console.log('botlab ilegible:', e.message); continue; }
     const sd = await u.collection('data').doc('botlab_server').get(), srv = sd.exists ? sd.data() : {};
+    { const sc = await u.collection('data').doc('scripts').get(); let it = sc.exists ? sc.data().items || '' : '', gz = typeof it === 'string' && it.startsWith('gz1:'); try { if (gz) it = require('zlib').gunzipSync(Buffer.from(it.slice(4), 'base64')).toString('utf8'); const v = JSON.parse(it || '[]'), l = Array.isArray(v) ? v : v.items || []; console.log(`Mis indicadores: ${l.length} scripts${gz ? ' (guardados comprimidos)' : ''}`); } catch (e) { console.log('Mis indicadores: ilegibles · ' + e.message); } }
     const upd = bd.data().updatedAt && bd.data().updatedAt.toMillis ? bd.data().updatedAt.toMillis() : 0, kb = Math.round(JSON.stringify(bd.data()).length / 1024);
     console.log(`\n=== Cuenta ${++n}: ${(S.bots || []).length} bots · documento ${kb} KB · guardado por la app hace ${ago(upd)} · servidor: ${Object.keys(srv.results || {}).length} reentrenos, ${Object.keys(srv.paper || {}).length} con paper`);
     for (const b of S.bots || []) {
