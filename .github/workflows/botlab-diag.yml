@@ -3,16 +3,16 @@ name: Diagnóstico de bots (Nova Bot Lab)
 on:
   workflow_dispatch:
     inputs:
-      detail: {description: '1 = solo 1h/4h con detalle por dirección · 2 = prueba de los bots tal como quedan (Pachita, Lucas, Nova v2.7, Seguro)', default: '0'}
+      detail: {description: '1 = solo 1h/4h con detalle por dirección · 2 = prueba de los bots tal como quedan · pachita = buscar la mejor configuración de Pachita', default: '0'}
       coins: {description: 'Monedas (coma)', default: 'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT,AVAXUSDT,LINKUSDT,SUIUSDT'}
 permissions: {contents: read}
 jobs:
   diag:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: 20}
-      - run: node scripts/botlab-diag.js
+      - run: if [ "$DETAIL" = "pachita" ]; then node scripts/pachita-opt.js; else node scripts/botlab-diag.js; fi
         env: {COINS: '${{ inputs.coins }}', DETAIL: '${{ inputs.detail }}'}

@@ -1,5 +1,5 @@
 /* Búsqueda honesta de la configuración de Pachita (Nova Nexus · iA Signals v2.7 en 15 m) con datos reales de Binance.
-   Se corre en GitHub Actions (.github/workflows/pachita-opt.yml). Cada configuración se elige SOLO por su tramo de entrenamiento (60 %)
+   Se corre en GitHub Actions («Diagnóstico de bots» con detail = pachita). Cada configuración se elige SOLO por su tramo de entrenamiento (60 %)
    y luego se revisa en validación (20 %) y prueba (20 %), que no se usaron para elegir. Reglas fijas: riesgo 2 %, apalancamiento máx. 5×,
    objetivo ≥ 1.5× ATR y la señal contraria no cierra antes de 4 velas (que no abra y cierre enseguida). */
 'use strict';
