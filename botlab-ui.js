@@ -813,6 +813,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
         ${pend.length ? `<div class="tt-q">${pend.map(x => `<div class="tt-qi ${x.st}"><span class="bl-spin"></span><b>${esc(x.title)}</b><small>${x.st === 'probando' ? esc(x.msg || 'Probando con velas reales…') : 'En fila para probar'}</small></div>`).join('')}</div>` : ''}
         ${done.length ? `<div class="tt-list">${done.filter(x => !x[1].auto).map(res).join('')}${done.some(x => x[1].auto) ? `<small class="tt-sub">Probados que no mejoraron (se quedó la versión actual)</small>${done.filter(x => x[1].auto).map(res).join('')}` : ''}</div>` : ''}
         ${ap.length ? `<div class="bl-tapp"><small>Consejos aplicados</small><div>${ap.map(v => `<span class="bl-tapp-c ${v.state === 'descartada' ? 'off' : 'on'}" title="${esc(dt(v.at))}"><i></i>v${v.v} · ${esc(String(v.note || '').replace(/^Consejo: /, ''))}</span>`).join('')}</div></div>` : ''}
+        ${b.server && b.server.analysis && b.server.analysis.text ? `<details class="bl-anal"><summary><b>Dónde opera mejor</b><small>análisis del servidor · ${esc(dt(b.server.analysis.at))} · también va a Neural Brain</small></summary>${b.server.analysis.text.split('\n').map(l => `<p>${esc(l)}</p>`).join('')}</details>` : ''}
         ${sm ? `<div class="bl-sum l-${sm.level}"><b>${esc(sm.title)}</b>${sm.lines.map(l => `<p>${esc(l)}</p>`).join('')}</div>` : ''}
         ${ai && ai.text ? `<div class="bl-aisum"><small>Lo que vio la IA</small>${mdLite(ai.text)}</div>` : ''}
         ${checking ? `<div class="tt-q"><div class="tt-qi probando"><span class="bl-spin"></span><b>Revisando qué consejos sí le sirven a este bot</b><small>Probando ${checking} con sus velas reales…</small></div></div>` : ''}
@@ -893,8 +894,12 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const x = (b.tipTests || {})[key]; if (!x || !ver(b, x.v)) return; const old = b.mainV, m = runOf(b), r = runOf(b, x.v);
     b.versions.forEach(z => { if (z.v === b.mainV) z.state = 'anterior'; }); ver(b, x.v).state = 'principal'; b.mainV = x.v; log(b, 'versión', `La v${x.v} («${x.title}») pasó a ser la principal.`); relive(b);
     const k = z => z && {ret: z.metrics.retPct, win: z.metrics.winRate, dd: z.metrics.maxDDPct}; b.lastApply = {title: x.title, v: x.v, prev: old, promoted: true, before: k(m), after: k(r), at: Date.now()}; freshV = {id: b.id, v: x.v};
-    delete b.tipTests[key]; for (const [k2, y] of Object.entries(b.tipTests)) if (y.base !== b.mainV) { const vv = ver(b, y.v); if (vv && vv.state === 'candidata') vv.state = 'descartada'; delete b.tipTests[k2]; } // las otras pruebas se compararon contra la versión anterior
-    touch(b); render(); toast(`Aplicado: v${x.v} es la principal.`);
+    delete b.tipTests[key];
+    /* Las otras pruebas se habían comparado contra la versión anterior. Antes se BORRABAN (por eso el segundo consejo «no se aplicaba»):
+       ahora los que habían mejorado se vuelven a probar solos ENCIMA de la versión nueva, para que puedas aplicar dos (o más) seguidos. */
+    const again = []; for (const [k2, y] of Object.entries(b.tipTests)) if (y.base !== b.mainV) { const vv = ver(b, y.v); if (vv && vv.state === 'candidata') vv.state = 'descartada'; if (y.lvl === 'mejora' && y.tip) again.push(y.tip); delete b.tipTests[k2]; }
+    touch(b); render(); toast(`Aplicado: v${x.v} es la principal.${again.length ? ` Vuelvo a probar ${again.length === 1 ? 'el otro consejo' : 'los otros ' + again.length + ' consejos'} encima de esta versión…` : ''}`);
+    for (const t of again) testTip(b, t);
   }
   /* Consejo aplicado: versión nueva → backtest → principal solo si no empeora fuera de muestra (si empeora, lo decides tú) */
   async function applyTip(b, t, force) {

@@ -35,6 +35,50 @@ function userSeries(spec, candles, scripts) { // ejecuta tus indicadores Pine so
   }
   return user;
 }
+/* ───────── Análisis del bot: dónde opera mejor y dónde no (va a Neural Brain cada noche) ─────────
+   Prueba la versión principal en cada moneda (las suyas o las 8 principales) y en 15m, 1h y 4h, y junta qué horario, tendencia,
+   volatilidad y lado le funcionan. Es información para aprender, no cambia el bot por sí sola. */
+const AN_IVS = ['15m', '1h', '4h'], pct1 = x => (x >= 0 ? '+' : '') + (Math.round(x * 10) / 10) + ' %', base = s => String(s).replace(/USDT$/, '');
+async function analyzeBot(bot, spec, scripts, getCandles, now) {
+  const syms = learnSyms(spec), ivs = [...new Set([spec.interval, ...AN_IVS])].slice(0, 4), rows = [], agg = {hour: {}, trend: {}, vol: {}, side: {}};
+  for (const iv of ivs) for (const sym of syms) {
+    try {
+      const C = await getCandles(sym, iv, 2000); if (C.length < 400) continue;
+      const sp = JSON.parse(JSON.stringify(spec)); sp.symbol = sym; sp.interval = iv; delete sp.basket; delete sp.intervals;
+      const u = userSeries(sp, C, scripts), r = B.backtest(C, sp, {nova: globalThis.NovaNexus, user: Object.keys(u).length ? u : undefined}), m = r.metrics;
+      rows.push({sym, iv, n: m.n, ret: m.retPct, win: m.winRate, dd: m.maxDDPct, pf: m.pfInf ? 99 : m.profitFactor, oos: (r.segments.val.retPct || 0) + (r.segments.test.retPct || 0)});
+      if (iv === spec.interval) for (const k of Object.keys(agg)) for (const [kk, v] of Object.entries((r.breakdown || {})[k] || {})) { const a = agg[k][kk] || (agg[k][kk] = {n: 0, net: 0, wins: 0}); a.n += v.n; a.net += v.net; a.wins += v.wins; }
+    } catch {}
+  }
+  if (!rows.length) return null;
+  const ok = rows.filter(r => r.n >= 5), score = r => r.oos + r.ret * .5 - r.dd * .3, sorted = ok.slice().sort((a, b) => score(b) - score(a));
+  const byIv = ivs.map(iv => { const x = rows.filter(r => r.iv === iv); return {iv, n: x.reduce((a, r) => a + r.n, 0), ret: x.length ? x.reduce((a, r) => a + r.ret, 0) / x.length : 0, pos: x.filter(r => r.ret > 0).length, of: x.length}; });
+  const bySym = syms.map(sym => { const x = rows.filter(r => r.sym === sym && r.iv === spec.interval)[0]; return x ? {sym, ret: x.ret, n: x.n, win: x.win} : null; }).filter(Boolean).sort((a, b) => b.ret - a.ret);
+  const nice = {hour: k => `${k}:00–${(+k + 4) % 24}:00 UTC`, trend: k => ({up: 'tendencia alcista', down: 'tendencia bajista', flat: 'mercado lateral'}[k] || k), vol: k => ({low: 'volatilidad baja', mid: 'volatilidad media', high: 'volatilidad alta'}[k] || k), side: k => ({long: 'compras (long)', short: 'ventas (short)'}[k] || k)};
+  const best = [], worst = []; for (const k of Object.keys(agg)) { const e = Object.entries(agg[k]).filter(([, v]) => v.n >= 5); if (e.length < 2) continue; e.sort((a, b) => b[1].net - a[1].net); best.push(`${nice[k](e[0][0])} (${e[0][1].n} op., ${Math.round(e[0][1].wins / e[0][1].n * 100)} % aciertos)`); const w = e[e.length - 1]; if (w[1].net < 0) worst.push(`${nice[k](w[0])} (${w[1].n} op., pierde)`); }
+  const fmt = r => `${base(r.sym)} ${r.iv}: ${pct1(r.ret)} · ${r.n} op. · ${r.win == null ? '—' : Math.round(r.win) + ' %'} aciertos · caída ${Math.round(r.dd * 10) / 10} %`;
+  const lines = [`Análisis de «${bot.name}» (v${bot.mainV}) · ${new Date(now).toISOString().slice(0, 10)} · probado en ${syms.length} monedas y ${ivs.length} temporalidades (~2000 velas cada una).`,
+    sorted[0] ? `Mejor combinación: ${fmt(sorted[0])}.` : 'Ninguna combinación tuvo operaciones suficientes.',
+    sorted.length > 1 ? `Le va bien en: ${sorted.slice(0, 4).filter(r => r.ret > 0).map(fmt).join(' | ') || '—'}.` : '',
+    `Le va mal en: ${sorted.slice().reverse().filter(r => r.ret < 0).slice(0, 4).map(fmt).join(' | ') || 'ninguna pierde claramente'}.`,
+    `Por temporalidad: ${byIv.map(x => `${x.iv} ${pct1(x.ret)} en promedio (${x.pos}/${x.of} monedas ganan, ${x.n} op.)`).join(' · ')}.`,
+    bySym.length ? `Por moneda en ${spec.interval}: ${bySym.map(x => `${base(x.sym)} ${pct1(x.ret)}`).join(', ')}.` : '',
+    best.length ? `Opera mejor con: ${best.join('; ')}.` : '', worst.length ? `Evitar: ${worst.join('; ')}.` : '',
+    `Su configuración actual: ${Array.isArray(spec.basket) && spec.basket.length ? spec.basket.map(base).join(', ') : base(spec.symbol)} en ${spec.interval}.`].filter(Boolean);
+  return {at: now, v: bot.mainV, text: lines.join('\n'), best: sorted.slice(0, 5), worst: sorted.slice(-5).reverse(), byIv, bySym};
+}
+/* Enfocar la cesta: elige las monedas que ganaron ANTES del tramo reservado (sin mirar al futuro) y comprueba en ese tramo final que el bot
+   enfocado gana más que con todas. Así el bot se va moviendo hacia la combinación que le funciona, dentro de lo que tú le pediste. */
+function focusBasket(spec, series, ropts) {
+  if (!(Array.isArray(spec.basket) && spec.basket.length >= 4)) return null;
+  const cap = spec.risk.capital, H0 = .85, inB = series.filter(x => spec.basket.includes(x.sym)); if (inB.length < 4) return null;
+  const pre = inB.map(x => ({sym: x.sym, net: B.tradeStats(O.runS([x], spec, 0, H0, 0, ropts, cap / inB.length), cap).net})).sort((a, b) => b.net - a.net);
+  let keep = pre.filter(x => x.net > 0).map(x => x.sym); if (keep.length < 3) keep = pre.slice(0, 3).map(x => x.sym); if (keep.length === inB.length) return null;
+  const cand = JSON.parse(JSON.stringify(spec)); cand.basket = keep; if (!keep.includes(cand.symbol)) cand.symbol = keep[0];
+  const hb = B.tradeStats(O.runS(inB, spec, .55, 1, H0, ropts, cap), cap), hc = B.tradeStats(O.runS(inB.filter(x => keep.includes(x.sym)), cand, .55, 1, H0, ropts, cap), cap);
+  const ok = hc.n >= 5 && hc.net > 0 && hc.net > hb.net + cap * .01 && hc.maxDDPct <= hb.maxDDPct * 1.25 + 1;
+  return {ok, candidate: B.normalizeSpec(cand), keep, dropped: inB.map(x => x.sym).filter(s => !keep.includes(s)), hold: {cand: hc, base: hb}};
+}
 async function retrainBot(bot, scripts, getCandles, now, brainCtx) {
   const v = bot.versions.find(x => x.v === bot.mainV); if (!v) return {at: now, status: 'error', reason: 'Sin versión principal'};
   const spec = B.normalizeSpec(v.spec), cyc = cycOf(bot), bars = Math.min(8000, Math.max(1500, cyc.bars || 4000));
@@ -46,10 +90,12 @@ async function retrainBot(bot, scripts, getCandles, now, brainCtx) {
     const syms = learnSyms(spec), series = [{sym: spec.symbol, C: candles, user: ropts.user}];
     for (const sym of syms.slice(1)) { try { const C = await getCandles(sym, spec.interval, bars); if (C.length >= 1200) { const u = userSeries(Object.assign({}, spec, {symbol: sym}), C, scripts); series.push({sym, C, user: Object.keys(u).length ? u : null}); } } catch {} }
     const opt = await O.optimize(candles, spec, {seed: O.hash(bot.id + new Date(now).toISOString().slice(0, 10)), budget: cyc.budget || 60, ropts, series});
+    let focus = null; if (opt.decision !== 'propuesta') { try { focus = focusBasket(spec, series, ropts); } catch {} }
+    if (focus && focus.ok) { opt.decision = 'propuesta'; opt.candidate = focus.candidate; opt.changes = [{path: 'monedas', from: spec.basket.map(base).join(', '), to: focus.keep.map(base).join(', ')}]; opt.oos = {folds: 1, winsVsBase: 1, cand: {n: focus.hold.cand.n, net: focus.hold.cand.net}, base: {n: focus.hold.base.n, net: focus.hold.base.net}}; opt.reasons = [`Se enfoca en ${focus.keep.map(base).join(', ')}: ${focus.dropped.map(base).join(', ')} le restaban.`]; opt.focus = true; }
     let br = null; // bot conectado a un cerebro de Neural Brain: además prueba las ideas del cerebro y elige la mejor que gane fuera de muestra
     if (brainCtx) { try { br = await BR.improve({candles, spec, ropts: {nova: ropts.nova, user: ropts.user || undefined}, base: res, opt, link: brainCtx.link, memory: brainCtx.memory, now}); brainCtx.out = br; } catch (e) { brainCtx.out = {brain: {at: now, error: String(e.message || e).slice(0, 200)}, memory: brainCtx.memory || []}; } }
     if (br && br.candidate && opt.decision !== 'propuesta' || br && br.candidate && br.brain.best && br.brain.best.from !== 'optimizador') { opt.decision = 'propuesta'; opt.candidate = br.candidate; opt.changes = []; opt.oos = null; opt.holdout = null; opt.folds = []; opt.reasons = (opt.reasons || []).concat([br.note]); }
-    return {at: now, note: br && br.candidate ? br.note : undefined, brain: br ? br.brain : undefined, v: bot.mainV, status: 'ok', symbol: spec.symbol, interval: spec.interval, bars: candles.length, from: candles[0].t, to: candles[candles.length - 1].t,
+    return {at: now, note: br && br.candidate ? br.note : opt.focus ? opt.reasons[0] : undefined, brain: br ? br.brain : undefined, v: bot.mainV, status: 'ok', symbol: spec.symbol, interval: spec.interval, bars: candles.length, from: candles[0].t, to: candles[candles.length - 1].t,
       monitor: {n: m.n, net: m.net, retPct: m.retPct, maxDDPct: m.maxDDPct, winRate: m.winRate, val: res.segments.val.retPct, test: res.segments.test.retPct, buyHold: res.buyHold.retPct, verdict: res.verdict.level},
       decision: opt.decision, coins: opt.coins || 1, reasons: opt.reasons, changes: opt.changes, folds: opt.folds, oos: opt.oos, holdout: opt.holdout, candidate: opt.candidate, dims: opt.dims};
   } catch (e) { return {at: now, v: bot.mainV, status: 'error', reason: String(e.message || e).slice(0, 300)}; }
@@ -93,7 +139,8 @@ function promote(bot, r, now, manual) {
   if (run.length) { // la simulación en vivo continúa con la versión nueva, en las mismas monedas y temporalidades
     const cap = run.reduce((a, x) => a + (+x.capital || 0), 0) || sp.risk.capital, grp = now.toString(36) + 'g';
     for (const x of run) { x.status = 'stopped'; x.pausedAt = now; }
-    const targets = manual && Array.isArray(sp.basket) && sp.basket.length ? [...new Set(run.map(x => x.spec.interval))].flatMap(iv => sp.basket.map(sym => ({spec: {symbol: sym, interval: iv}}))) : run;
+    const oldB = JSON.stringify(((bot.versions.find(x => x.v === prev) || {}).spec || {}).basket || []), newB = JSON.stringify(sp.basket || []);
+    const targets = (manual || oldB !== newB) && Array.isArray(sp.basket) && sp.basket.length ? [...new Set(run.map(x => x.spec.interval))].flatMap(iv => sp.basket.map(sym => ({spec: {symbol: sym, interval: iv}}))) : run;
     for (const x of targets) { const s2 = JSON.parse(JSON.stringify(sp)); s2.symbol = x.spec.symbol; s2.interval = x.spec.interval; delete s2.basket; delete s2.intervals; const ns = P.newSession({id: now.toString(36) + Math.random().toString(36).slice(2, 6), v: nv, spec: s2, capital: cap / targets.length, startT: now}); ns.grp = grp; bot.paper.push(ns); }
     j.push({t: now, kind: 'paper', text: `La simulación en vivo se reinició con la v${nv}.`});
   }
@@ -136,7 +183,8 @@ async function main() {
     const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(unpackStr(s.data().items || '[]')) : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } scripts = scripts.concat(catalogScripts().filter(c => c.code && !scripts.some(x => x.id === c.id))); try { const pro = await db.collection('pro').get(); for (const d of pro.docs) if (!scripts.some(x => x.id === 'cat:' + d.id)) scripts.push({id: 'cat:' + d.id, name: d.id, code: d.data().code, builtin: true}); } catch {} }; // los Nova Nexus PRO ya no están en el repo: se leen de Firestore
     for (const b of all) if (b && b.id && widen(b, now)) { botsChanged = true; console.log('· el bot de Señales 2.7 ahora opera en 8 monedas'); }
     const improved = [];
-    for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force, linked(b))) continue; await loadScripts(); const bc = linked(b) ? {link: links[b.id], memory: brainMem[b.id] || []} : null; const r = await retrainBot(b, scripts, getCandles, now, bc); if (bc && bc.out) { brainMem[b.id] = JSON.parse(JSON.stringify(bc.out.memory || [])); nbr++; } const nv = promote(b, r, now); if (nv) { r.applied = {v: nv, at: now}; botsChanged = true; improved.push({b, nv, r}); } results[b.id] = JSON.parse(JSON.stringify(r)); changed = true; nr++; console.log(`· bot ${nr}${bc ? ' (con cerebro)' : ''}: ${r.status}${r.status === 'error' ? ' · ' + String(r.reason || '').slice(0, 120) : ' · ' + r.decision + (r.brain ? ` · ideas probadas: ${(r.brain.tried || []).length}` : '')}`); if (r.decision === 'propuesta') np++; }
+    for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force, linked(b))) continue; await loadScripts(); const bc = linked(b) ? {link: links[b.id], memory: brainMem[b.id] || []} : null; const r = await retrainBot(b, scripts, getCandles, now, bc); if (bc && bc.out) { brainMem[b.id] = JSON.parse(JSON.stringify(bc.out.memory || [])); nbr++; } const nv = promote(b, r, now); if (nv) { r.applied = {v: nv, at: now}; botsChanged = true; improved.push({b, nv, r}); }
+      if (r.status === 'ok') { const pa = (results[b.id] || {}).analysis; if (force || !pa || now - (pa.at || 0) > 20 * 36e5 || pa.v !== b.mainV) { try { const mv = b.versions.find(x => x.v === b.mainV); r.analysis = await analyzeBot(b, B.normalizeSpec(mv.spec), scripts, getCandles, now); if (r.analysis) console.log(`  análisis: ${r.analysis.best[0] ? 'mejor ' + r.analysis.best[0].sym + ' ' + r.analysis.best[0].iv : 'sin datos'}`); } catch (e) { console.log('  análisis: ' + String(e.message || e).slice(0, 100)); } } else r.analysis = pa; } results[b.id] = JSON.parse(JSON.stringify(r)); changed = true; nr++; console.log(`· bot ${nr}${bc ? ' (con cerebro)' : ''}: ${r.status}${r.status === 'error' ? ' · ' + String(r.reason || '').slice(0, 120) : ' · ' + r.decision + (r.brain ? ` · ideas probadas: ${(r.brain.tried || []).length}` : '')}`); if (r.decision === 'propuesta') np++; }
     if (botsChanged) { // la versión nueva también queda en tus bots (tu cuenta) aunque no abras la app
       const str = JSON.stringify(S);
       if (str.length < 990000) { try { await u.collection('data').doc('botlab').set({items: str, updatedAt: admin.firestore.FieldValue.serverTimestamp()}); console.log('· mejora aplicada sola en tus bots'); } catch (e) { console.log('· no se pudo guardar la mejora en tus bots (la app la aplica al abrir): ' + String(e.message || e).slice(0, 100)); } }

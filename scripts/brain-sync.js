@@ -171,6 +171,7 @@ function vortexItems(x) {
 
 /* Commits de la app = «actualizaciones». Necesita el repo con historial (fetch-depth en el workflow). */
 function commitsSince(last, appName) {
+  if (process.env.BRAIN_NO_COMMITS) return { events: [], head: last || '' }; // desde el Motor (clon corto): los cambios de la app los manda el flujo normal
   let raw = '';
   try { raw = execSync(`git log -n 400 --format=%H%x1f%ct%x1f%s`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return { events: [], head: last || '' }; }
   const all = raw.split('\n').filter(Boolean).map(l => { const [h, t, s] = l.split('\x1f'); return { h, at: +t * 1000, s }; });
@@ -261,6 +262,21 @@ async function run() {
         for (const [i, n] of list(link.notes).entries()) await bref.collection('notes').doc('seed' + i).set({ id: 'seed' + i, text: n.text, kind: n.kind || 'regla', master: !!n.master, author: '', tags: ['bot'], createdAt: now, updatedAt: now });
       }
       if (Object.keys(linkSt).length) await uref.collection('settings').doc('status').set({ botLinks: linkSt }, { merge: true });
+      /* Cada bot manda su análisis a Neural Brain (dónde opera mejor y peor: monedas, temporalidades, horario, tendencia, volatilidad y lado).
+         Si el bot todavía no tiene cerebro, se le crea uno. La nota «Análisis del bot» se reemplaza con la versión más reciente cada vez. */
+      const res = (botlabServer && botlabServer.results) || {};
+      for (const b of bots) {
+        const an = b && b.id && b.status !== 'archived' && res[b.id] && res[b.id].analysis; if (!an || !an.text) continue;
+        const bref = uref.collection('brains').doc('bot-' + b.id), snap = await bref.get();
+        if (!snap.exists) await bref.set({ name: 'Bot · ' + b.name, kind: 'bot', bot: { id: b.id, name: b.name, auto: true }, icon: 'bot', color: '#9a7bff', desc: `Cerebro del bot «${b.name}» de Nova Bot Lab: recibe su análisis cada noche y aprende dónde opera mejor.`, sources: ['vortex'], toVortex: false, autoLearn: true, order: 0.6, owner: '', createdAt: now });
+        const nref = bref.collection('notes').doc('analisis'), old = (await nref.get()).data();
+        if (old && old.at === an.at) continue;
+        await nref.set({ id: 'analisis', text: clip(an.text, 4000), kind: 'estrategia', master: false, author: '', tags: ['bot', 'análisis', 'automático'], at: an.at, createdAt: (old && old.createdAt) || now, updatedAt: now });
+        // historial corto: cada análisis también queda como nota con fecha (máx. 7), para que el cerebro vea cómo va cambiando
+        const day = new Date(an.at).toISOString().slice(0, 10); await bref.collection('notes').doc('analisis-' + day).set({ id: 'analisis-' + day, text: clip(an.text, 4000), kind: 'estrategia', master: false, author: '', tags: ['bot', 'análisis', day], at: an.at, createdAt: now, updatedAt: now });
+        const hist = (await bref.collection('notes').get()).docs.filter(d => /^analisis-\d{4}/.test(d.id)).map(d => d.id).sort(); for (const id of hist.slice(0, Math.max(0, hist.length - 7))) await bref.collection('notes').doc(id).delete();
+        console.log('Análisis del bot enviado a su cerebro.');
+      }
     }
     const sref = uref.collection('sync').doc(APP), prevDoc = (await sref.get()).data() || null;
     const first = !prevDoc;

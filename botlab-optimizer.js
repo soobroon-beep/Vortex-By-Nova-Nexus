@@ -132,5 +132,5 @@
     if (!why.length) { out.decision = 'propuesta'; out.candidate = apply(spec, f.assign); } else out.decision = 'sin_mejora';
     if (opts.onProgress) opts.onProgress(total, total, 'Listo'); return out;
   }
-  return {optimize, space, apply, extractSources, pickSource, hash, validAssign};
+  return {runS, optimize, space, apply, extractSources, pickSource, hash, validAssign};
 });
