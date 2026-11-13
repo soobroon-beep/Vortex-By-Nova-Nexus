@@ -295,7 +295,7 @@ function updateStatus(ok, msg) { $('#connection').textContent = '● ' + msg; $(
 async function getJSON(url, signal) { const r = await fetch(url, {signal}); if (!r.ok) throw Error('Binance HTTP ' + r.status); return r.json(); }
 
 /* ───────── Variables de ejecución ───────── */
-let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null, botMarks = null; // botMarks: operaciones de Nova Bot Lab dibujadas sobre el gráfico
+let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null, botMarks = null, botSigs = []; // botMarks: operaciones de Nova Bot Lab dibujadas sobre el gráfico
 let currentView = 'watchView', sheetMode = 'select', editMode = false;
 let pineLastMs = 0, pineRes = {}, pineBusy = {}, pineDirty = {}, pineLast = 0, pineTimer = 0, pineKey = '', pineDraft = {name: '', code: ''}, pineSetSid = null, pineWorker = null, pineNoWorker = false, pineSeq = 0;
 const PINE_MAX = 6;
@@ -3545,6 +3545,26 @@ function renderCore() {
     if (M.avoid && shw.avoid !== false) { g.globalAlpha = .08; g.fillStyle = '#ffb020'; for (const z of M.avoid) { const x1 = X(idxOfTime(z[0])), x2 = X(idxOfTime(z[1])); if (z[0] <= lim) g.fillRect(x1, plotTop, Math.max(2, x2 - x1), plotH); } g.globalAlpha = 1; }
     g.restore();
   }
+  // Nova Bot Lab · «Convertir bot a señales» de bots con indicadores Nova o tuyos: cajitas COMPRA / VENTA (como IA Signals), entrada, SL y TP
+  if (window.CCTBotSig && window.CCTBotSig.has()) window.CCTBotSig.need(symOf(state.symbol), state.interval);
+  for (const L of botSigs) { if (L.symbol !== symOf(state.symbol) || L.interval !== state.interval || !L.trades || !L.trades.length) continue;
+    g.save(); g.beginPath(); g.rect(left, plotTop, plotW, plotH); g.clip(); const small = geo.step < 5;
+    for (const t of L.trades) {
+      const ii = Math.round(idxOfTime(t.entryT)), xi = X(ii), ie = t.open ? n - 1 : Math.round(idxOfTime(t.exitT)), xe = t.open ? w - right : X(ie); if (xe < left - 60 || xi > w - right + 60 || ii < 0 || ii > n - 1) continue;
+      const buy = t.side === 'long', c = candles[ii];
+      g.lineWidth = 1; // niveles mientras la operación estuvo abierta
+      for (const [p, col, dash, lab] of [[t.entry, 'rgba(154,161,173,.7)', [4, 3], ''], [t.sl, '#f06b79', [], 'SL'], [t.tp, '#20bf9f', [], 'TP']]) { if (p == null || !isFinite(p)) continue; const yy = Y(p); g.strokeStyle = col; g.setLineDash(dash); g.globalAlpha = t.open ? 1 : .55; g.beginPath(); g.moveTo(xi, yy); g.lineTo(xe, yy); g.stroke();
+        if (lab && t.open) { g.setLineDash([]); g.globalAlpha = 1; g.font = 'bold 9px system-ui'; const tw = 22; g.fillStyle = col; roundRect(xe - tw - 2, yy - 7, tw, 14, 3); g.fill(); g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(lab, xe - tw / 2 - 2, yy + .5); g.textBaseline = 'alphabetic'; } }
+      g.setLineDash([]); g.globalAlpha = 1;
+      const txt = buy ? 'COMPRA' : 'VENTA'; g.font = `bold ${small ? 8 : 9}px system-ui`; g.textAlign = 'center'; const tw = g.measureText(txt).width + 10, th = 15, ar = 5, col = buy ? '#20bf9f' : '#f06b79';
+      let y = buy ? Y(c.l) + 6 : Y(c.h) - 6 - th; g.fillStyle = col; roundRect(xi - tw / 2, buy ? y + ar : y, tw, th, 4); g.fill(); g.beginPath();
+      if (buy) { g.moveTo(xi - 4, y + ar); g.lineTo(xi + 4, y + ar); g.lineTo(xi, y); } else { g.moveTo(xi - 4, y + th); g.lineTo(xi + 4, y + th); g.lineTo(xi, y + th + ar); } g.fill();
+      g.fillStyle = '#fff'; g.textBaseline = 'middle'; g.fillText(txt, xi, (buy ? y + ar : y) + th / 2 + .5); g.textBaseline = 'alphabetic';
+      if (!t.open && ie >= 0 && ie <= n - 1) { const ce = candles[ie], why = /take/i.test(t.why || '') ? 'TP' : /stop/i.test(t.why || '') ? 'SL' : 'Cierre', ec = why === 'TP' ? '#20bf9f' : why === 'SL' ? '#f06b79' : '#6f7b8f'; g.font = 'bold 8px system-ui'; const ew = g.measureText(why).width + 8, ey = buy ? Y(ce.h) - 18 : Y(ce.l) + 4;
+        g.globalAlpha = .85; g.fillStyle = ec; roundRect(xe - ew / 2, ey, ew, 13, 3); g.fill(); g.globalAlpha = 1; g.fillStyle = '#fff'; g.textBaseline = 'middle'; g.fillText(why, xe, ey + 7); g.textBaseline = 'alphabetic'; }
+      g.textAlign = 'left';
+    }
+    g.restore(); }
   // alertas de precio activas: línea casi invisible en su nivel (aspecto en «Aspecto del gráfico»); seleccionada se resalta y se puede arrastrar
   { const CS = cstyle(), acol = CS.alertCol || text, dsh = {Puntos: [2, 5], Guiones: [7, 5], 'Sólida': []}[CS.alertS] || [2, 5], A = CS.alertA / 100, lastP = candles[n - 1].c;
     g.save();
@@ -5970,6 +5990,7 @@ window.CCT_bot = {
     return out.filter(c => c.ct < Date.now()).slice(-want).map(({ct, ...c}) => c); // se descarta la vela en formación
   },
   marks(m) { botMarks = m; scheduleRender(); },
+  sigs(list) { botSigs = list || []; scheduleRender(); }, // señales de bots (cajitas COMPRA / VENTA con SL y TP)
   open(sym, itv, t) { // muestra el gráfico del bot (y centra la operación si está en las velas cargadas)
     const go = () => { if (t && candles.length) { const i = idxOfTime(t); pan = Math.max(0, Math.round(candles.length - 1 - i - visible / 2)); } scheduleRender(); };
     if (symOf(state.symbol) !== sym || state.interval !== itv) { if (INTERVALS.includes(itv)) state.interval = itv; renderFrames(); selectSymbol(sym); setTimeout(go, 1800); setTimeout(go, 3500); } else { switchView('chartView'); setTimeout(go, 150); }

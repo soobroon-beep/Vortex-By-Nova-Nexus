@@ -19,6 +19,10 @@ window.CCT_CHANGELOG = [
     'Versiones: cuál ha sido la mejor (con botón para restaurarla), qué cambió respecto a la anterior y qué hace cada una.',
     'Operaciones: «Cerradas» en lugar de «Cerradas en vivo» y cada moneda muestra cuántas operaciones hizo (las que no tienen, solo el nombre).',
     '«Convertir bot a señales»: el indicador que se crea marca cajitas COMPRA / VENTA como IA Signals y, mientras la operación sigue abierta, su entrada, SL y TP; al cerrar marca TP, SL o Cierre.',
+    'Los bots con indicadores Nova o tuyos también se convierten a señales: sus cajitas COMPRA / VENTA con entrada, SL y TP salen en el gráfico que tengas abierto (el mismo botón las quita).',
+    'Consejos: si la prueba muestra que sí mejora, queda listo para aplicar; si no mejora, se queda la versión actual sola (lo ves en «Probados que no mejoraron»). Para contar como mejora tiene que ganar en las dos partes de los datos que no vio.',
+    'Cuando la máquina está detenida porque se trabó en vivo, el botón «Arreglarlo» lo corrige solo: una señal de tu indicador que no salió en esas velas ya no detiene al bot y una línea que cambió de nombre se encuentra sola.',
+    '«Icono y color» se movió al menú ⋯ del bot.',
     'Operaciones: en lugar de las velas, una línea de precio simple con cada compra y venta marcada (verde si ganó, rojo si perdió) y tarjetas de las últimas operaciones. Las velas siguen en «Ver con velas».',
     'Consejos: nuevo botón «Ignorar consejo» junto a «Aplicar este consejo»; el consejo se quita y deja lugar a otros.',
     'En vivo: más visual y con menos texto: resultado grande, la posición abierta en una barra (stop · entrada · ahora · objetivo), números clave como fichas y lo que prometió vs. lo que está haciendo en barras.'

@@ -29,7 +29,7 @@ function userSeries(spec, candles, scripts) { // ejecuta tus indicadores Pine so
     const sc = scripts.find(x => x.id === sid); if (!sc || !sc.code) throw new Error('El indicador «' + (uo.find(x => x.sid === sid).sname || sid) + '» ya no existe en tu cuenta');
     const res = Pine.run(sc.code, candles, {interval: spec.interval, symbol: spec.symbol, name: sc.name, timeLimitMs: 90000, alertCap: 30000, logLabels: true}); if (!res.ok) throw new Error('Tu indicador falló en el servidor: ' + ((res.error && res.error.msg) || ''));
     const src = O.extractSources(res, candles.length);
-    for (const x of uo.filter(y => y.sid === sid)) { const f = src.find(q => q.src === x.src); if (!f) throw new Error('El indicador «' + (x.sname || sid) + '» ya no produce la señal «' + (x.sl || x.src) + '»'); user[sid + '|' + x.src] = f.series; }
+    for (const x of uo.filter(y => y.sid === sid)) { const f = O.pickSource(src, x, candles.length); if (!f) throw new Error('El indicador «' + (x.sname || sid) + '» ya no tiene la línea «' + (x.sl || x.src) + '»'); user[sid + '|' + x.src] = f.series; }
   }
   return user;
 }

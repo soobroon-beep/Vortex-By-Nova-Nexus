@@ -89,7 +89,7 @@
     const sp = B.normalizeSpec(spec);
     if (Array.isArray(sp.basket) && sp.basket.length) { if (userOps(sp).length) throw new Error('Una cesta de monedas no puede usar tus indicadores propios (aún)'); const by = {}; for (const sym of sp.basket) by[sym] = await candlesFor(sym, sp.interval, bars); await new Promise(r => setTimeout(r, 20)); return B.backtestBasket(by, sp, Object.assign({nova: window.NovaNexus}, extra || {})); }
     const candles = await candlesFor(sp.symbol, sp.interval, bars); if (candles.length < 60) throw new Error(`Binance devolvió solo ${candles.length} velas de ${sp.symbol} ${sp.interval}`);
-    const uo = userOps(sp), user = {}, uw = []; for (const sid of [...new Set(uo.map(x => x.sid))]) { const r = await userSources(sid, sp.symbol, sp.interval, bars); for (const x of uo.filter(y => y.sid === sid)) { const f = r.sources.find(q => q.src === x.src); if (!f) throw new Error(`Tu indicador «${x.sname || sid}» ya no produce la señal «${x.sl || x.src}» en ${sp.symbol} ${sp.interval}`); user[sid + '|' + x.src] = f.series; } if (!r.complete) uw.push(`Tu indicador «${(uo.find(y => y.sid === sid) || {}).sname || sid}» no se pudo ejecutar por completo (funciones no soportadas): sus señales pueden faltar.`); }
+    const uo = userOps(sp), user = {}, uw = []; for (const sid of [...new Set(uo.map(x => x.sid))]) { const r = await userSources(sid, sp.symbol, sp.interval, bars); for (const x of uo.filter(y => y.sid === sid)) { const f = window.CCTBotOpt.pickSource(r.sources, x, r.n); if (!f) throw new Error(`Tu indicador «${x.sname || sid}» ya no tiene la línea «${x.sl || x.src}» en ${sp.symbol} ${sp.interval}`); if (f.none) uw.push(`La señal «${x.sl || x.src}» de tu indicador no apareció en estas velas.`); user[sid + '|' + x.src] = f.series; } if (!r.complete) uw.push(`Tu indicador «${(uo.find(y => y.sid === sid) || {}).sname || sid}» no se pudo ejecutar por completo (funciones no soportadas): sus señales pueden faltar.`); }
     await new Promise(r => setTimeout(r, 20)); const res = B.backtest(candles, sp, Object.assign({nova: window.NovaNexus, user}, extra || {})); if (uo.length) res.warnings.push(...uw, `Este bot usa tu indicador «${uo[0].sname || uo[0].sid}». Cada señal se toma en la vela donde nace, sin mirar al futuro, pero el laboratorio no puede comprobar que tu script no repinte ni que no use datos futuros (por ejemplo con request.security). Confírmalo en paper trading antes de fiarte del resultado.`); const t0 = res.equity[0].t, cs = candles.filter(c => c.t >= t0); if (cs.length) res.bhCurve = compact(cs.map(c => [c.t, sp.risk.capital * c.c / cs[0].o]), 240); return res;
   }
   async function runBot(bot, v, bars) {
@@ -474,11 +474,11 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
   function botView() {
     const b = bot(); if (!b) { view = 'lib'; return render(); } const sp = mainSpec(b), run = runOf(b), live = isLive(b);
     if (!TABS.some(t => t[0] === tab)) { const g = Object.keys(SUBS).find(k => SUBS[k].some(x => x[0] === tab)); if (g) { sub[g] = tab; tab = g; } else tab = 'sum'; }
-    const more = `<details class="bl-more"><summary aria-label="Más opciones">⋯</summary><div><button class="bl-mini" data-a="dup" data-id="${b.id}">Duplicar</button><button class="bl-mini" data-a="pause" data-id="${b.id}">${b.status === 'paused' ? 'Reanudar' : 'Pausar'}</button><button class="bl-mini" data-a="arch" data-id="${b.id}">${b.status === 'archived' ? 'Restaurar' : 'Archivar'}</button><button class="bl-mini" data-a="exp" data-id="${b.id}">Exportar</button><button class="bl-mini danger" data-a="del" data-id="${b.id}">Eliminar</button></div></details>`;
+    const more = `<details class="bl-more"><summary aria-label="Más opciones">⋯</summary><div>${LK ? `<button class="bl-mini" data-a="lookOpen">Icono y color</button>` : ''}<button class="bl-mini" data-a="dup" data-id="${b.id}">Duplicar</button><button class="bl-mini" data-a="pause" data-id="${b.id}">${b.status === 'paused' ? 'Reanudar' : 'Pausar'}</button><button class="bl-mini" data-a="arch" data-id="${b.id}">${b.status === 'archived' ? 'Restaurar' : 'Archivar'}</button><button class="bl-mini" data-a="exp" data-id="${b.id}">Exportar</button><button class="bl-mini danger" data-a="del" data-id="${b.id}">Eliminar</button></div></details>`;
     const ntips = tipsOf(b).length;
     root.innerHTML = head(b.name, `${Array.isArray(sp.basket) && sp.basket.length ? sp.basket.map(x => x.replace('USDT', '')).join(' ') : sp.symbol} · ${ivsOf(sp).join(' · ')} · v${b.mainV}${live ? ' · en vivo' : (b.status === 'paused' ? ' · pausado' : '')}`, 'lib', more, avOf(b, 36)) +
       `<div class="bl-qa"><button class="bl-qbtn" data-a="quickRun" ${busyMsg ? 'disabled' : ''}><svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5l12 7-12 7z" fill="currentColor"/></svg>${run ? 'Volver a probar' : 'Probar'}</button><button class="bl-qbtn" data-a="goImprove"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.2 4.6 5 .7-3.6 3.5.9 5L12 14.5 7.5 16.8l.9-5L4.8 8.3l5-.7z"/></svg>Mejorar</button><button class="bl-qbtn ${live ? 'on' : ''}" data-a="quickSim"><span class="bl-dot d-${live ? 'live' : 'draft'}"></span>${live ? 'En vivo' : 'Simular en vivo'}</button><button class="bl-qbtn ${marksOn ? 'on' : ''}" data-a="chartToggle"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M7 15l4-4 3 3 5-6"/></svg>${marksOn ? 'Ocultar del gráfico' : 'Ver en el gráfico'}</button></div>` +
-      `<div class="bl-qa2"><button class="bl-qbtn sm" data-a="toChart" title="Crea un indicador con las señales de este bot y lo pone en tu gráfico"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19h16M6 15l3-4 3 2 4-6"/><path d="M17 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1z" fill="currentColor"/></svg>Convertir bot a señales</button><button class="bl-qbtn sm dc ${b.notify !== false ? 'on' : ''}" data-a="bell" title="Avisos de este bot a tu Discord"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>Avisos a Discord: ${b.notify !== false ? (b.dcDest === 'own' && HOOK_RE.test(b.dcHook || '') ? 'su canal' : 'sí') : 'no'}</button></div>` + (dcPanel === b.id ? dcBox(b) : '') +
+      `<div class="bl-qa2"><button class="bl-qbtn sm" data-a="toChart" title="Crea un indicador con las señales de este bot y lo pone en tu gráfico"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19h16M6 15l3-4 3 2 4-6"/><path d="M17 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1z" fill="currentColor"/></svg>${b.sigOn ? 'Quitar señales del gráfico' : 'Convertir bot a señales'}</button><button class="bl-qbtn sm dc ${b.notify !== false ? 'on' : ''}" data-a="bell" title="Avisos de este bot a tu Discord"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>Avisos a Discord: ${b.notify !== false ? (b.dcDest === 'own' && HOOK_RE.test(b.dcHook || '') ? 'su canal' : 'sí') : 'no'}</button></div>` + (dcPanel === b.id ? dcBox(b) : '') + (lookPanel === b.id && LK ? `<div class="bl-box bl-lookbox open"><div class="bl-dc-h"><b>Icono y color de ${esc(b.name)}</b><button class="bl-mini" data-a="lookOpen">Listo</button></div>${LK.picker(lookOf(b))}</div>` : '') +
       (freshV && freshV.id === b.id && b.lastApply && b.lastApply.promoted ? `<div class="bl-newv"><span class="bl-ck">${CHECK}</span><div><b>Nueva versión aplicada: v${b.lastApply.v}</b><small>${esc(b.lastApply.title)}</small></div></div>` : '') +
       (busyMsg ? `<div class="bl-busy"><span class="bl-spin"></span>${esc(busyMsg)}</div>` : '') + (marksOn ? replayBar() : '') +
       `<div class="bl-tabs bl-tabs5" role="tablist">${TABS.map(([k, l]) => `<button role="tab" class="${tab === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}${k === 'est' && ntips ? '<i class="bl-tabdot"></i>' : ''}</button>`).join('')}</div>` +
@@ -497,21 +497,30 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
       : /stop|tamaño|riesgo|apalanc|capital|take profit|trailing/i.test(e) ? ['En Editar › Riesgo pon un stop loss (o un % del capital por operación) con valores válidos.', 'vedit'] : /símbolo|moneda|basket|canasta/i.test(e) ? ['Elige una moneda válida en Editar (por ejemplo BTCUSDT).', 'vedit'] : ['Ábrelo en Editar y corrige ese dato.', 'vedit'];
     for (const e of v.errors.slice(0, 5)) { const [fix, a] = fixOf(e); out.push({lvl: 'err', t: e, fix, a}); }
     for (const x of (b.paper || []).filter(x => x.status === 'running')) {
-      if (x.err) out.push({lvl: 'err', t: `En vivo (${x.spec.symbol.replace('USDT', '')} ${x.spec.interval}) se trabó: ${String(x.err).slice(0, 140)}`, fix: /indicador/i.test(x.err) ? 'Vuelve a agregar ese indicador a tu gráfico o cambia la regla que lo usa; luego toca «Actualizar ahora» en En vivo.' : 'Toca «Actualizar ahora» en En vivo; si sigue, revisa tu conexión o las reglas.', a: 'pap'});
+      if (x.err) out.push({lvl: 'err', t: `En vivo (${x.spec.symbol.replace('USDT', '')} ${x.spec.interval}) se trabó: ${String(x.err).slice(0, 140)}`, fix: 'Toca «Arreglarlo»: lo vuelvo a intentar y corrijo solo lo que se pueda (por ejemplo, una señal que no salió en estas velas ya no detiene al bot).', a: 'pap'});
       if (x.halted) out.push({lvl: 'warn', t: 'El control de riesgo detuvo sus entradas.', fix: 'Revisa el riesgo de tu cartera; cuando baje, vuelve a operar solo.', a: 'pap'});
     }
     if (v.ok && !runOf(b)) out.push({lvl: 'warn', t: 'Todavía no lo has probado.', fix: 'Toca «Probar» para ver cómo le habría ido con velas reales.', a: 'quickRun'});
     return out;
   }
+  /* «Arreglarlo»: vuelve a intentar lo que se trabó con la corrección automática (una señal que no salió en estas velas ya no es error;
+     una línea que cambió de nombre se busca sola). Si no se puede solo, dice exactamente qué hacer. */
+  async function fixBot(b) {
+    const ss = (b.paper || []).filter(x => x.status === 'running' && x.err); busyMsg = 'Arreglando…'; render(); let left = [];
+    for (const x of ss) { x.err = null; try { await paperUpdate(b, x, true); } catch {} if (x.err) left.push(x.err); }
+    if (!ss.length) { const v = B.validateSpec(mainSpec(b)); if (!v.ok) left = v.errors; }
+    busyMsg = ''; touch(b); render();
+    toast(!left.length ? 'Listo: ya funciona otra vez.' : /ya no existe|No encuentro ese indicador/i.test(left[0]) ? 'Ese indicador ya no está en tu cuenta: vuelve a agregarlo o cambia esa regla en Mejorar › Reglas.' : 'Todavía falla: ' + String(left[0]).slice(0, 160));
+  }
   function healthBox(b, H) {
-    if (!H.length) return ''; const bad = H.some(x => x.lvl === 'err'), btn = a => a === 'vedit' ? `<button class="bl-mini" data-a="vedit" data-v="${b.mainV}">Componerlo</button>` : a === 'quickRun' ? `<button class="bl-mini" data-a="quickRun">Probar</button>` : `<button class="bl-mini" data-a="tab" data-k="${a}">Ver</button>`;
+    if (!H.length) return ''; const bad = H.some(x => x.lvl === 'err'), btn = a => a === 'vedit' ? `<button class="bl-mini pri" data-a="vedit" data-v="${b.mainV}">Componerlo</button>` : a === 'quickRun' ? `<button class="bl-mini" data-a="quickRun">Probar</button>` : a === 'pap' ? `<button class="bl-mini pri" data-a="fixBot" ${busyMsg ? 'disabled' : ''}>Arreglarlo</button>` : `<button class="bl-mini" data-a="tab" data-k="${a}">Ver</button>`;
     return `<div class="bh ${bad ? 'err' : 'warn'}"><div class="bh-h"><span class="bh-ic">${bad ? '!' : 'i'}</span><div><b>${bad ? 'La máquina está detenida' : 'Le falta algo'}</b><small>${bad ? 'Arregla esto y vuelve a arrancar sola.' : 'Funciona, pero conviene revisarlo.'}</small></div></div>
       <ul>${H.map(x => `<li class="${x.lvl}"><div><b>${esc(x.t)}</b><small>Cómo componerlo: ${esc(x.fix)}</small></div>${btn(x.a)}</li>`).join('')}</ul></div>`;
   }
   function factory(b, run) {
     const live = isLive(b), lv = liveOf(b), m = run && run.metrics, ops = lv ? lv.nClosed : m ? m.n : 0, open = lv ? lv.open.length : 0;
     const res = lv ? lv.retPct : m ? m.retPct : null, wr = lv ? lv.winRate : m ? m.winRate : null, nV = b.versions.length;
-    const prev = b.versions.filter(v => v.v !== b.mainV && runOf(b, v.v)).slice(-1)[0], rPrev = prev && runOf(b, prev.v), imp = m && rPrev ? m.retPct - rPrev.metrics.retPct : null;
+    const prev = b.versions.filter(v => v.v !== b.mainV && v.v < b.mainV && v.state !== 'descartada' && v.state !== 'prueba' && runOf(b, v.v)).slice(-1)[0], rPrev = prev && runOf(b, prev.v), imp = m && rPrev ? m.retPct - rPrev.metrics.retPct : null;
     const HL = health(b), broken = HL.some(x => x.lvl === 'err'), st = broken ? 'broken' : live ? 'on' : b.status === 'paused' ? 'pause' : 'off', col = colOf(b.id), pc = c => c == null ? '' : c >= 0 ? 'up' : 'dn';
     const lv2 = b.versions.filter(v => v.v > 1).slice(-1)[0], oh = (b.optHistory || []).slice(-1)[0], lesson = (oh && (!lv2 || oh.at > lv2.at)) ? (decText[oh.decision] || [oh.decision])[0] : lv2 ? `v${lv2.v}: ${String(lv2.note || 'nueva versión').replace(/^Consejo: /, '')}${lv2.state === 'descartada' ? ' (no mejoró, la descartó)' : ''}` : '';
     const gear = (r, cx, cy, cls) => { let d = ''; const n = 8, ro = r, ri = r * .74; for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * Math.PI * 2, rr = i % 2 ? ri : ro, a2 = (i + 1) / (n * 2) * Math.PI * 2; d += `${i ? 'L' : 'M'}${(cx + rr * Math.cos(a)).toFixed(1)} ${(cy + rr * Math.sin(a)).toFixed(1)}L${(cx + rr * Math.cos(a2)).toFixed(1)} ${(cy + rr * Math.sin(a2)).toFixed(1)}`; } return `<g class="bf-gear ${cls}" style="transform-origin:${cx}px ${cy}px"><path d="${d}Z"/><circle cx="${cx}" cy="${cy}" r="${(r * .32).toFixed(1)}" class="bf-hole"/></g>`; };
@@ -743,7 +752,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
   function tabRules(b) {
     const sp = mainSpec(b), T = $('#blTab');
     T.innerHTML = `<details class="bl-box bl-rules"><summary><span class="bl-rules-ic"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><div><b>Reglas del bot</b><small>v${b.mainV} · toca para verlas o editarlas</small></div><i class="bl-rules-ch"></i></summary><div class="bl-rules-b">${mdLite(B.describeSpec(sp))}<div class="bl-actions"><button class="bl-btn ghost" data-a="vedit" data-v="${b.mainV}">Editar a mano (crea versión candidata)</button></div></div></details>
-      ${LK ? `<details class="bl-box bl-lookbox"><summary><b>Icono y color</b>${avOf(b, 26)}</summary>${LK.picker(lookOf(b))}</details>` : ''}${note('Los indicadores Nova se usan en solo lectura: el bot nunca los modifica.')}`;
+      ${note('Los indicadores Nova se usan en solo lectura: el bot nunca los modifica.')}`;
   }
   /* Mejorar › Consejos y mejoras: cada consejo (o cambio tuyo) se PRUEBA primero con velas reales contra la versión actual en los mismos datos;
      ves el veredicto y tú decides si aplicarlo. Se pueden mandar varios a probar: van en fila, uno tras otro. */
@@ -756,13 +765,13 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     T._tips = tips.concat(aiTips).filter(t => !inTest(t));
     const pend = [...TQ.values()].filter(x => x.bid === b.id), done = Object.entries(tested).sort((x, z) => (z[1].at || 0) - (x[1].at || 0));
     const L = {mejora: ['Sí mejora', 'up'], igual: ['Casi igual', 'eq'], empeora: ['Empeora', 'dn'], malo: ['No sirve así', 'dn']};
-    const res = ([k, x]) => `<div class="tt ${(L[x.lvl] || L.igual)[1]}"><div class="tt-h"><span class="tt-v">${(L[x.lvl] || L.igual)[0]}</span><b>${esc(x.title)}</b><small>v${x.v} · probado ${dt(x.at)}</small></div>
+    const res = ([k, x]) => x.auto ? `<details class="tt tt-auto ${(L[x.lvl] || L.igual)[1]}"><summary><span class="tt-v">${(L[x.lvl] || L.igual)[0]}</span><b>${esc(x.title)}</b><small>se quedó la v${x.base}</small></summary><p class="tt-say">${esc(x.say || '')}</p><ul class="tt-why">${(x.why || []).map(w => `<li><span>${esc(w[0])}</span><b class="${w[3] || ''}">${esc(w[1])} → ${esc(w[2])}</b></li>`).join('')}</ul><div class="bl-card-b"><button class="bl-mini" data-a="tipApply" data-k="${esc(k)}">Aplicar de todos modos</button><button class="bl-mini" data-a="tipDrop" data-k="${esc(k)}">Quitar de la lista</button></div></details>` : `<div class="tt ${(L[x.lvl] || L.igual)[1]}"><div class="tt-h"><span class="tt-v">${(L[x.lvl] || L.igual)[0]}</span><b>${esc(x.title)}</b><small>v${x.v} · probado ${dt(x.at)}</small></div>
       <p class="tt-say">${esc(x.say || '')}</p><ul class="tt-why">${(x.why || []).map(w => `<li><span>${esc(w[0])}</span><b class="${w[3] || ''}">${esc(w[1])} → ${esc(w[2])}</b></li>`).join('')}</ul>
       <div class="bl-card-b"><button class="bl-mini ${x.lvl === 'mejora' ? 'pri' : ''}" data-a="tipApply" data-k="${esc(k)}">${x.lvl === 'mejora' ? `Aplicar (v${x.v} pasa a principal)` : 'Aplicar de todos modos'}</button><button class="bl-mini" data-a="tipDrop" data-k="${esc(k)}">Descartar</button></div></div>`;
-    const ap = b.versions.filter(v => v.v > 1 && isTip(v) && v.state !== 'prueba' && v.state !== 'candidata').slice(-6).reverse();
-    T.innerHTML = `<div class="bl-box bl-coach"><div class="bl-coach-h"><span class="bl-coach-ic">${IC.robot}</span><div><h4>Consejos y mejoras</h4><small class="bl-dim">Cada consejo se prueba primero con velas reales contra la versión actual, en los mismos datos. Te digo si de verdad mejora en los datos que no vio, y tú decides si se aplica.</small></div></div>
+    const ap = b.versions.filter(v => v.v > 1 && isTip(v) && v.state !== 'prueba' && v.state !== 'candidata' && !(v.base != null && v.state === 'descartada')).slice(-6).reverse();
+    T.innerHTML = `<div class="bl-box bl-coach"><div class="bl-coach-h"><span class="bl-coach-ic">${IC.robot}</span><div><h4>Consejos y mejoras</h4><small class="bl-dim">Cada consejo se prueba primero con velas reales contra la versión actual, en los mismos datos. Si de verdad mejora en los datos que no vio, queda listo para que lo apliques; si no, se queda la versión actual.</small></div></div>
         ${pend.length ? `<div class="tt-q">${pend.map(x => `<div class="tt-qi ${x.st}"><span class="bl-spin"></span><b>${esc(x.title)}</b><small>${x.st === 'probando' ? esc(x.msg || 'Probando con velas reales…') : 'En fila para probar'}</small></div>`).join('')}</div>` : ''}
-        ${done.length ? `<div class="tt-list">${done.map(res).join('')}</div>` : ''}
+        ${done.length ? `<div class="tt-list">${done.filter(x => !x[1].auto).map(res).join('')}${done.some(x => x[1].auto) ? `<small class="tt-sub">Probados que no mejoraron (se quedó la versión actual)</small>${done.filter(x => x[1].auto).map(res).join('')}` : ''}</div>` : ''}
         ${ap.length ? `<div class="bl-tapp"><small>Consejos aplicados</small><div>${ap.map(v => `<span class="bl-tapp-c ${v.state === 'descartada' ? 'off' : 'on'}" title="${esc(dt(v.at))}"><i></i>v${v.v} · ${esc(String(v.note || '').replace(/^Consejo: /, ''))}</span>`).join('')}</div></div>` : ''}
         ${sm ? `<div class="bl-sum l-${sm.level}"><b>${esc(sm.title)}</b>${sm.lines.map(l => `<p>${esc(l)}</p>`).join('')}</div>` : ''}
         ${ai && ai.text ? `<div class="bl-aisum"><small>Lo que vio la IA</small>${mdLite(ai.text)}</div>` : ''}
@@ -777,6 +786,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
      La variante queda como «candidata»: solo pasa a principal si tú la aplicas. */
   const TQ = new Map(); let tipChain = Promise.resolve();
   const oosOf = r => ((r.segments && r.segments.val && r.segments.val.retPct) || 0) + ((r.segments && r.segments.test && r.segments.test.retPct) || 0);
+  const seg = (x, k) => (x.segments && x.segments[k] && x.segments[k].retPct) || 0;
   function judge(r, m) {
     const rm = r.metrics, mm = m.metrics, dO = oosOf(r) - oosOf(m), dAll = rm.retPct - mm.retPct, dDD = rm.maxDDPct - mm.maxDDPct, pfx = x => x.profitFactor == null ? (x.pfInf ? '∞' : '—') : num(x.profitFactor, 2);
     const c = (d, inv) => Math.abs(d) < .05 ? '' : (inv ? d < 0 : d > 0) ? 'pos' : 'neg';
@@ -785,8 +795,9 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const ddTol = Math.max(1.5, mm.maxDDPct * .3);
     let lvl, say;
     if (rm.n < Math.max(5, mm.n * .25)) { lvl = 'malo'; say = `Casi deja de operar (${rm.n} operaciones contra ${mm.n}): el resultado no es confiable.`; }
-    else if (dO >= .5 && dDD <= ddTol && dAll > -2) { lvl = 'mejora'; say = `Gana ${num(dO, 1)} puntos más en los datos que no vio${dAll > 0 ? ` y ${num(dAll, 1)} más en todo el periodo` : ''}, sin subir mucho la caída máxima.`; }
+    else if (dO >= .5 && dDD <= ddTol && dAll > -2 && seg(r, 'val') - seg(m, 'val') > -1 && seg(r, 'test') - seg(m, 'test') > -1) { lvl = 'mejora'; say = `Gana ${num(dO, 1)} puntos más en los datos que no vio${dAll > 0 ? ` y ${num(dAll, 1)} más en todo el periodo` : ''}, sin subir mucho la caída máxima.`; }
     else if (dO <= -.5 || dDD > ddTol * 1.5) { lvl = 'empeora'; say = dO <= -.5 ? `Pierde ${num(-dO, 1)} puntos en los datos que no vio${dAll > 0 ? ' (aunque en el periodo completo se vea mejor: eso suele ser sobreajuste)' : ''}.` : `La caída máxima sube ${num(dDD, 1)} puntos: más riesgo.`; }
+    else if (dO >= .5) { lvl = 'igual'; say = 'Gana más en total, pero no en las dos partes de los datos que no vio (validación y prueba): parece suerte de un tramo, no una mejora real.'; }
     else { lvl = 'igual'; say = `La diferencia es muy chica (${dO >= 0 ? '+' : '−'}${num(Math.abs(dO), 1, 1)} puntos en lo que no vio): no vale la pena el cambio salvo que te guste por otra razón.`; }
     return {lvl, say, why};
   }
@@ -801,9 +812,11 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
         let m = m0; if (!m || Date.now() - (m.t || 0) > iv) { job.msg = 'Actualizando la versión actual con las velas de hoy…'; if (view === 'bot' && cur === b.id) render(); m = await runBot(b, b.mainV, bars); }
         const nv = Math.max(...b.versions.map(x => x.v)) + 1; b.versions.push({v: nv, spec: sp, at: Date.now(), note: t.manual ? t.title : 'Consejo: ' + t.title, origin: t.manual ? 'edición tuya' : 'consejo de la IA', state: 'prueba', base: b.mainV});
         job.msg = 'Probando el cambio con velas reales…'; if (view === 'bot' && cur === b.id) render();
-        const r = await runBot(b, nv, bars), J = judge(r, m); ver(b, nv).state = 'candidata';
+        const r = await runBot(b, nv, bars), J = judge(r, m), good = J.lvl === 'mejora'; ver(b, nv).state = good ? 'candidata' : 'descartada'; J.auto = !good;
+        if (!good && !t.manual) { const k2 = tipKey(t), rr = runOf(b); b.ignoredTips = (b.ignoredTips || []).filter(z => (typeof z === 'string' ? z : z.k) !== k2); b.ignoredTips.push({k: k2, at: Date.now(), run: rr && rr.id, n: liveClosed(b)}); }
         (b.tipTests = b.tipTests || {})[key] = Object.assign({v: nv, base: b.mainV, title: t.title, at: Date.now(), tip: t.manual ? null : t}, J);
-        log(b, t.manual ? 'edición' : 'consejo', `Probado «${t.title}» (v${nv}): ${({mejora: 'sí mejora', igual: 'casi igual', empeora: 'empeora', malo: 'no sirve así'})[J.lvl]}.`); touch(b);
+        log(b, t.manual ? 'edición' : 'consejo', `Probado «${t.title}» (v${nv}): ${({mejora: 'sí mejora, listo para aplicar', igual: 'casi igual, se queda la versión actual', empeora: 'empeora, se queda la versión actual', malo: 'no sirve así, se queda la versión actual'})[J.lvl]}.`);
+        const ks = Object.entries(b.tipTests).filter(([, y]) => y.auto).sort((a2, z) => (z[1].at || 0) - (a2[1].at || 0)); for (const [k3] of ks.slice(5)) delete b.tipTests[k3]; touch(b);
       } catch (e) { b.versions.forEach(z => { if (z.state === 'prueba') z.state = 'descartada'; }); touch(b); toast('No se pudo probar «' + t.title + '»: ' + (e.message || e)); }
       TQ.delete(qk); if (view === 'bot' && cur === b.id) render();
     });
@@ -847,7 +860,7 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
   function trimLedger(sess) { const L = sess.ledger; for (let i = 0; i < L.length - 300; i++) { delete L[i].reasonIn; delete L[i].ctx; delete L[i].sl; delete L[i].tp; } }
   async function paperStep(b, sess) {
     const uo = userOps(sess.spec), ropts = {nova: window.NovaNexus, user: null, gate: window.CCTBotRisk ? window.CCTBotRisk.gateFor(S.risk, allSessions(), Date.now())(sess) : null};
-    const getC = async (sym, itv, count) => { const C = await H.history(sym, itv, count); if (uo.length) { const user = {}; for (const sid of [...new Set(uo.map(x => x.sid))]) { const res = await H.runPine(sid, sym, itv, C); if (!res || !res.ok) throw new Error('Tu indicador falló: ' + ((res && res.error && res.error.msg) || '')); const src = window.CCTBotOpt.extractSources(res, C.length); for (const x of uo.filter(y => y.sid === sid)) { const f = src.find(q => q.src === x.src); if (!f) throw new Error('Tu indicador ya no produce la señal «' + (x.sl || x.src) + '»'); user[sid + '|' + x.src] = f.series; } } ropts.user = user; } return C; };
+    const getC = async (sym, itv, count) => { const C = await H.history(sym, itv, count); if (uo.length) { const user = {}; for (const sid of [...new Set(uo.map(x => x.sid))]) { const res = await H.runPine(sid, sym, itv, C); if (!res || !res.ok) throw new Error('Tu indicador falló: ' + ((res && res.error && res.error.msg) || '')); const src = window.CCTBotOpt.extractSources(res, C.length); for (const x of uo.filter(y => y.sid === sid)) { const f = window.CCTBotOpt.pickSource(src, x, C.length); if (!f) throw new Error('Tu indicador «' + (x.sname || sid) + '» ya no tiene la línea «' + (x.sl || x.src) + '»'); user[sid + '|' + x.src] = f.series; } } ropts.user = user; } return C; };
     const before = sess.ledger.length, r = await PP().step(sess, getC, ropts); notify(b, sess); if (r.changed) { trimLedger(sess); for (const t of sess.ledger.slice(before)) log(b, 'paper', `Paper v${sess.v}: ${t.side === 'long' ? 'compra' : 'venta'} cerrada ${t.net >= 0 ? '+' : '−'}$${num(Math.abs(t.net), 2)} · ${t.why || ''}`); } sess.checkedAt = Date.now(); touch(b); return r;
   }
   const paperBusy = new Set();
@@ -890,13 +903,31 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
     host.innerHTML = `<svg class="oc" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${zone(o.entry, o.tp, 'tp')}${zone(o.entry, o.sl, 'sl')}<path class="oc-p" d="${line}"/>${lv(o.sl, 'sl', 'SL')}${lv(o.tp, 'tp', 'TP')}${lv(o.entry, 'en', lg ? 'Compra' : 'Venta')}
       <path class="oc-in ${lg ? 'lg' : 'sh'}" d="${lg ? `M${xe.toFixed(1)} ${(Y(o.entry) + 4).toFixed(1)}l-6 9h12z` : `M${xe.toFixed(1)} ${(Y(o.entry) - 4).toFixed(1)}l-6 -9h12z`}"/><circle class="oc-now" cx="${X(tB).toFixed(1)}" cy="${Y(now).toFixed(1)}" r="4"/></svg>`;
   }
+  /* ───────── Señales de bots en el gráfico (también los que usan indicadores Nova o tuyos, que no se pueden pasar a script) ─────────
+     El bot se corre sobre la moneda y temporalidad que tengas abierta y el gráfico dibuja sus cajitas COMPRA / VENTA con entrada, SL y TP. */
+  const sigCache = new Map(); let sigBusy = false, sigWant = null;
+  const sigLayers = () => S.bots.filter(b => b.sigOn && b.status !== 'archived');
+  function sigPush() { if (!H.sigs) return; const out = []; for (const b of sigLayers()) for (const [k, v] of sigCache) if (k.startsWith(b.id + '|') && v.trades) out.push({id: b.id, name: b.name, col: colOf(b.id), symbol: v.symbol, interval: v.interval, trades: v.trades}); H.sigs(out); }
+  async function sigNeed(sym, iv) {
+    const L = sigLayers(); if (!L.length) { if (sigCache.size) { sigCache.clear(); sigPush(); } return; } sigWant = [sym, iv]; if (sigBusy) return; sigBusy = true;
+    try { for (const b of L) { const [sy, it] = sigWant, k = `${b.id}|${sy}|${it}|v${b.mainV}`, c = sigCache.get(k), ivm = B.IV_MS[it] || 36e5; if (c && Date.now() - c.at < Math.min(ivm / 3, 15 * 6e4)) continue;
+        try { const sp = Object.assign(JSON.parse(JSON.stringify(mainSpec(b))), {symbol: sy, interval: it}); delete sp.basket; delete sp.intervals;
+          const C = await candlesFor(sy, it, 700), uo = userOps(sp), user = {};
+          for (const sid of [...new Set(uo.map(x => x.sid))]) { const r = await userSources(sid, sy, it, 700); for (const x of uo.filter(y => y.sid === sid)) { const f = window.CCTBotOpt.pickSource(r.sources, x, r.n); if (f) user[sid + '|' + x.src] = f.series; else throw new Error('falta la línea ' + (x.sl || x.src)); } }
+          const res = B.backtest(C, B.normalizeSpec(sp), {nova: window.NovaNexus, user}); for (const kk of [...sigCache.keys()]) if (kk.startsWith(b.id + '|') && kk !== k) sigCache.delete(kk);
+          sigCache.set(k, {at: Date.now(), symbol: sy, interval: it, trades: res.trades.slice(-150).map(t => ({side: t.side, entryT: t.entryT, exitT: t.exitT, entry: t.entry, exit: t.exit, sl: t.sl, tp: t.tp, net: t.net, why: t.why, open: !!t.open}))});
+        } catch (e) { sigCache.set(k, {at: Date.now(), symbol: sy, interval: it, trades: [], err: String(e.message || e)}); } }
+      sigPush();
+    } finally { sigBusy = false; }
+  }
+  window.CCTBotSig = {need: (sym, iv) => { sigNeed(sym, iv); }, has: () => sigLayers().length > 0};
   const miniOpen = new Set(), pvRank = s => s.status === 'running' ? (s.open ? 2 : 1) : 0;
   /* Avisos a Discord de cada bot: encender/apagar y elegir el canal (tu canal de VORTEX o uno solo para este bot, con su webhook) */
   const HOOK_RE = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/;
-  let dcPanel = null;
+  let dcPanel = null, lookPanel = null;
   function dcBox(b) {
     const on = b.notify !== false, own = b.dcDest === 'own', has = HOOK_RE.test(b.dcHook || ''), main = discordOk();
-    return `<div class="bl-dc"><div class="bl-dc-h"><b>Avisos a Discord de ${esc(b.name)}</b><button type="button" class="bl-sw ${on ? 'on' : ''}" data-a="dcOn" aria-pressed="${on}"><i></i></button></div>
+    return `<div class="bl-dc"><div class="bl-dc-h"><b>Avisos a Discord de ${esc(b.name)}</b><button type="button" class="bl-tg ${on ? 'on' : ''}" data-a="dcOn" aria-pressed="${on}"><i></i></button></div>
       <p class="bl-dim">Cuando compra, vende o cierra una operación en vivo.</p>
       <div class="bl-dc-opts ${on ? '' : 'off'}">
         <button type="button" class="bl-dc-o ${!own ? 'on' : ''}" data-a="dcDest" data-k="main"><span class="bl-dc-r"></span><div><b>Mi canal de VORTEX</b><small>${main ? 'conectado · el mismo de tus otros avisos' : 'todavía sin configurar'}</small></div></button>
@@ -1111,7 +1142,12 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
   /* ----- Eventos ----- */
   const ACT = {
     claudio() { view = 'claudio'; render(); }, tcSym(el) { tcSym = el.dataset.k; render(); }, tourn() { view = 'tourn'; render(); },
-    toChart() { const b = bot(); if (!window.CCTBotPine || !window.CCT_ai || !window.CCT_ai.saveConverted) return toast('El gráfico aún no está listo'); try { const sp = mainSpec(b), {code, name} = window.CCTBotPine.toPine(sp); const sid = window.CCT_ai.saveConverted(code, name, null, true); if (sid) { log(b, 'gráfico', `Convertido en indicador del gráfico («${name}»).`); touch(b); toast('Listo: «' + name + '» está en el gráfico y en Mis indicadores' + (sp.basket ? ' (aplícalo en cualquiera de sus monedas)' : '')); } } catch (e) { toast(e.message || String(e)); } },
+    toChart() { const b = bot(); if (!b) return; const on = !!b.sigOn;
+      if (on) { b.sigOn = false; for (const k of [...sigCache.keys()]) if (k.startsWith(b.id + '|')) sigCache.delete(k); sigPush(); touch(b); render(); return toast('Se quitaron las señales de «' + b.name + '» del gráfico.'); }
+      let pine = null; try { if (window.CCTBotPine) pine = window.CCTBotPine.toPine(mainSpec(b)); } catch (e) { pine = null; }
+      if (pine && window.CCT_ai && window.CCT_ai.saveConverted) { const sid = window.CCT_ai.saveConverted(pine.code, pine.name, null, true); if (sid) { log(b, 'gráfico', `Convertido en señales del gráfico («${pine.name}»).`); touch(b); toast('Listo: «' + pine.name + '» está en el gráfico (cajitas COMPRA / VENTA con SL y TP) y en Mis indicadores.'); } return; }
+      b.sigOn = true; log(b, 'gráfico', 'Sus señales se ven en el gráfico como cajitas COMPRA / VENTA (con sus indicadores Nova o tuyos).'); touch(b); render(); const c = H.chart ? H.chart() : null; if (c) sigNeed(c.symbol, c.interval);
+      toast('Listo: las señales de «' + b.name + '» salen en el gráfico (en la moneda y temporalidad que tengas abierta). Toca el botón otra vez para quitarlas.'); },
     bell() { const b = bot(); dcPanel = dcPanel === b.id ? null : b.id; render(); },
     dcOn() { const b = bot(); b.notify = b.notify === false; log(b, 'avisos', b.notify ? 'Avisos a Discord activados para este bot.' : 'Avisos a Discord desactivados para este bot.'); touch(b); render(); },
     dcDest(el) { const b = bot(); b.dcDest = el.dataset.k; if (b.dcDest === 'main') log(b, 'avisos', 'Los avisos de este bot van a tu canal de VORTEX.'); touch(b); render(); },
@@ -1125,6 +1161,8 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
       if (run.length) { for (const x of run) { x.status = 'paused'; x.pausedAt = now; } log(b, 'paper', 'Simulación en vivo pausada desde la lista.'); touch(b); return render(); }
       void paused; startLive(b, b.mainV, mainSpec(b).risk.capital); },
     lk(el) { const b = view === 'bot' || (view === 'edit' && draftMeta && draftMeta.id) ? getBot(view === 'edit' ? draftMeta.id : cur) : null, L = b ? (b.look = lookOf(b)) : (newLook = newLook || lookOf({id: uidOf()})); L[el.dataset.t] = el.dataset.v; if (b) { touch(b); if (view === 'edit') { const box = root.querySelector('.bl-edlook'); if (box) box.innerHTML = LK.picker(lookOf(b)); } else { render(); const d = root.querySelector('.bl-lookbox'); if (d) d.open = true; } } else if (view === 'edit') { const box = root.querySelector('.bl-edlook'); if (box) box.innerHTML = LK.picker(newLook); } else render(); },
+    lookOpen() { const b = bot(); lookPanel = lookPanel === b.id ? null : b.id; const m = root.querySelector('.bl-more'); if (m) m.open = false; render(); },
+    async fixBot() { const b = bot(); if (b) await fixBot(b); },
     goImprove() { tab = 'est'; if (!sub.est) sub.est = 'est'; render(); },
     tip(el) { const b = bot(), t = ($('#blTab')._tips || [])[+el.dataset.k]; if (b && t) testTip(b, t); },
     tipApply(el) { const b = bot(); if (b) applyTested(b, el.dataset.k); },
