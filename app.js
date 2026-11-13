@@ -1102,7 +1102,7 @@ function renderFrames() {
   function pillPos() {
     if (isDesktop()) { tb.style.left = tb.style.top = ''; return; }
     const W = view.clientWidth, Hh = view.clientHeight, w = tb.offsetWidth || 150, h = tb.offsetHeight || 40; if (!W || !Hh) return;
-    const x = PP ? PP.x * Math.max(0, W - w) : 10, y = PP ? PP.y * Math.max(0, Hh - h) : Hh - h - 34;
+    const x = PP ? PP.x * Math.max(0, W - w) : (FAV_STACK ? 48 : 10), y = PP ? PP.y * Math.max(0, Hh - h) : Hh - h - 34;
     tb.style.left = clamp(x, 0, Math.max(0, W - w)) + 'px'; tb.style.top = clamp(y, 0, Math.max(0, Hh - h)) + 'px';
   }
   const grip = $('#pillGrip');
@@ -2730,8 +2730,16 @@ function placeFavBar() {
   bar.style.left = clamp(FB.x * Math.max(0, aw - bw), 0, Math.max(0, aw - bw)) + 'px'; bar.style.top = clamp(FB.y * Math.max(0, ah - bh), 0, Math.max(0, ah - bh)) + 'px';
 }
 const FAB = 44, FAB_GAP = 8;
+var FAV_STACK = true; // (declarada con var: la usa también la píldora antes de llegar aquí)
+// celular (prueba): favoritos como estrella fija arriba del logo VORTEX que se despliega hacia arriba · false = vuelve a la estrella de la píldora
 function placeFab() { // coloca el botón estrella (fracciones mx,my) y abre la barra al lado donde cabe
   const bar = $('#favBar'), fab = $('#favFab'), ar = $('#chartArea'); if (!bar || !ar) return;
+  if (fab && fab.classList.contains('fav-stack')) { // celular (prueba): estrella fija arriba del logo VORTEX; la barra se despliega hacia arriba, en columna
+    const bw = bar.offsetWidth || 46, bh = bar.offsetHeight || 46, fx = fab.offsetLeft, fy = fab.offsetTop, fw = fab.offsetWidth || 36;
+    bar.style.left = clamp(fx + fw / 2 - bw / 2, 4, Math.max(4, ar.clientWidth - bw - 4)) + 'px'; bar.style.bottom = 'auto';
+    bar.style.top = Math.max(8, fy - bh - 8) + 'px'; bar.style.maxHeight = Math.max(80, fy - 16) + 'px';
+    bar.style.transformOrigin = 'center bottom'; bar.style.setProperty('--fb-from', '0px'); return;
+  }
   if (!fab) { // celular: la barra sale justo arriba de la píldora
     const pb = $('#favPillBtn'), ab = ar.getBoundingClientRect(), r = pb ? pb.getBoundingClientRect() : null, bw = bar.offsetWidth, bh = bar.offsetHeight || 44;
     const cx = r ? r.left + r.width / 2 - ab.left : 20, up = !r || (r.top - ab.top) > ar.clientHeight / 2;
@@ -2770,23 +2778,27 @@ function wireFab(fab) { // mantener presionado = el botón se "agarra" y se pued
 }
 function renderFavBar() {
   const ar = $('#chartArea'); if (!ar) return; let bar = $('#favBar'), fab = $('#favFab');
-  const on = !PANE && FB.show, mob = !deskMQ.matches;
+  const mob = !deskMQ.matches, on = !PANE && (FB.show || (mob && FAV_STACK));
   if (!on) { if (bar) bar.remove(); if (fab) fab.remove(); return; }
   if (!bar) { bar = document.createElement('div'); bar.id = 'favBar'; bar.className = 'favbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Herramientas favoritas'); ar.appendChild(bar); }
-  if (fab && mob) { fab.remove(); fab = null; } // celular: la estrella vive en la píldora de abajo (#favPillBtn)
+  if (fab && mob && !FAV_STACK) { fab.remove(); fab = null; } // celular: la estrella vive en la píldora de abajo (#favPillBtn)
+  { const pb = $('#favPillBtn'); if (pb) pb.hidden = mob && FAV_STACK; } // con la estrella arriba del logo, la de la píldora sobra
+  if (mob && FAV_STACK && !fab) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab fav-stack'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 18); ar.appendChild(fab);
+    fab.addEventListener('click', e => { e.stopPropagation(); setFbOpen(!fbOpen); placeFab(); }); fab.addEventListener('contextmenu', e => e.preventDefault()); }
   if (false) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 22); ar.appendChild(fab); wireFab(fab); }
   if (!mob && fab) { fab.remove(); fab = null; }
-  bar.classList.toggle('fb-mobile', mob);
+  bar.classList.toggle('fb-mobile', mob); bar.classList.toggle('fb-stack', mob && FAV_STACK);
   const tools = favTools();
   bar.innerHTML = (mob ? '' : '<span class="fb-grip" title="Arrastra para mover · clic derecho: ocultar" aria-label="Mover barra"><svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></g></svg></span>')
-    + (tools.length ? tools.map(t => `<button type="button" class="fb-btn${drawTool === t[0] ? ' on' : ''}" data-fav-tool="${t[0]}" title="${esc(t[1])}" aria-label="${esc(t[1])}">${SV(t[3], 22)}</button>`).join('') : '<span class="fb-empty">Marca ★ en las herramientas para tenerlas aquí</span>');
+    + (tools.length ? tools.map(t => `<button type="button" class="fb-btn${drawTool === t[0] ? ' on' : ''}" data-fav-tool="${t[0]}" title="${esc(t[1])}" aria-label="${esc(t[1])}">${SV(t[3], 22)}</button>`).join('') : '<span class="fb-empty">Marca ★ en las herramientas para tenerlas aquí</span>')
+    + (mob && FAV_STACK ? `<span class="fb-sep" aria-hidden="true"></span><button type="button" class="fb-btn fb-x" data-fav-x="undo" title="Deshacer" aria-label="Deshacer">${SV('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', 20)}</button><button type="button" class="fb-btn fb-x" data-fav-x="tools" title="Todas las herramientas" aria-label="Todas las herramientas">${SV('<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>', 20)}</button>` : '');
   if (mob) { setFbOpen(fbOpen); if (fab) fab.classList.toggle('active', !!drawTool); const pb = $('#favPillBtn'); if (pb) pb.classList.toggle('active', !!drawTool); placeFab(); } else { bar.classList.remove('open'); bar.inert = false; }
   placeFavBar();
 }
 function setFavBar(show) { FB.show = !!show; syncUi(); renderFavBar(); toast(FB.show ? 'Barra de favoritos visible' : 'Barra de favoritos oculta · clic derecho sobre el gráfico para mostrarla'); }
 {
   const ar = $('#chartArea');
-  ar.addEventListener('click', e => { const b = e.target.closest('[data-fav-tool]'); if (!b) return; const k = b.dataset.favTool; if (!deskMQ.matches) setFbOpen(false); if (drawTool === k) cancelTool(); else pickTool(k); });
+  ar.addEventListener('click', e => { const x = e.target.closest('[data-fav-x]'); if (x) { setFbOpen(false); const t = x.dataset.favX === 'undo' ? $('#undoDraw') : document.querySelector('.chart-toolbar [data-panel="tools"]'); if (t) t.click(); return; } const b = e.target.closest('[data-fav-tool]'); if (!b) return; const k = b.dataset.favTool; if (!deskMQ.matches) setFbOpen(false); if (drawTool === k) cancelTool(); else pickTool(k); });
   ar.addEventListener('pointerdown', e => { if (fbOpen && !deskMQ.matches && !e.target.closest('#favBar, #favFab')) setFbOpen(false); }, true); // tocar el gráfico pliega la barra
   ar.addEventListener('pointerdown', e => {
     if (e.button !== 0) return; const gr = e.target.closest('.fb-grip'); if (!gr) return; const bar = $('#favBar'); if (!bar) return; e.preventDefault();
