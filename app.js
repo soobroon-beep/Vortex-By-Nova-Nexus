@@ -22,7 +22,7 @@ const MULTI = {
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {derivs:true, oi:false, funding:false, lsr:false, taker:false, ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, dchan:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnFib:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
+  indicators: {derivs:true, oi:false, funding:false, lsr:false, taker:false, ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, dchan:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
   groups: [], symGroup: {}, symColor: {}, listRev: 0, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], designs: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
 };
 function sanAlert(a) {
@@ -1503,7 +1503,6 @@ const indicatorMeta = [
   ['nnLiqBars','Nova Nexus · Liquidaciones: velas lima','Opcional: colorea todas las velas de lima, como el barcolor del Pine al activar Liquidaciones (requiere Liquidaciones)','#00e676'],
   ['nnPiv','Nova Nexus · Pivots','Zigzag de pivotes (50), pivotes perdidos y niveles fantasma','#26a69a'],
   ['nnSR','Nova Nexus · Soporte y Resistencia','Cajas de soporte/resistencia con Break y Retest (pivotes de 20 velas)','#ff5252'],
-  ['nnFib','Nova Nexus · Fibonacci automático','Niveles de Fibonacci del último máximo y mínimo, punteados y pegados al lado derecho del gráfico (sin tapar las velas)','#f5c568'],
   ['nnRules','Nova Nexus · Reglas','Panel de reglas de trading sobre el gráfico','#4361cf']
 ];
 function ema(xs, n) {
@@ -1567,13 +1566,6 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   const NP = novaP;
   ind.trail = I.nnTrail ? T.smoothTrail(candles, NP('trailLen'), NP('trailAtr'), NP('trailMult'), NP('trailSmooth')) : null;
   ind.rev = I.nnRev ? T.reversalBands(candles, NP('revLen')) : null;
-  ind.nfib = I.nnFib ? (() => { // Fibonacci automático: del último mínimo al máximo (o al revés) de las velas revisadas
-    const n = candles.length, a = Math.max(0, n - NP('fibLook')); let hi = -Infinity, lo = Infinity, hiI = a, loI = a;
-    for (let i = a; i < n; i++) { if (candles[i].h > hi) { hi = candles[i].h; hiI = i; } if (candles[i].l < lo) { lo = candles[i].l; loI = i; } }
-    if (!(hi > lo)) return null; const up = loI < hiI; // subió: los retrocesos se miden desde el máximo hacia abajo
-    const L = [0, .236, .382, .5, .618, .786, 1].concat(NP('fibExt') ? [1.272, 1.618] : []);
-    return {hi, lo, up, lv: L.map(f => ({f, p: up ? hi - (hi - lo) * f : lo + (hi - lo) * f}))};
-  })() : null;
   ind.sr = I.nnSR ? T.supportResistance(candles, {lookback: NP('srLookback'), retSince: NP('srSince'), retValid: NP('srLimit')}) : null;
   ind.piv = I.nnPiv ? T.pivots(candles, NP('pivLen')) : null;
   { const lk = `${state.symbol}|${state.interval}|${candles.length}|${candles[0].t}|${sp('liqmap', 'rows')}|${Math.floor(Date.now() / 20000)}`; if (!I.liqmap || !planOk('liq')) ind.lm = null; else if (!ind.lm || ind.lm._k !== lk) { ind.lm = T.liquidationHeatmap(candles, {rows: sp('liqmap', 'rows')}); if (ind.lm) ind.lm._k = lk; } }
@@ -1603,13 +1595,6 @@ const NOVA_SCHEMA = [
   {key: 'vpLookback', title: 'Lookback Length', type: 'int', def: 200, min: 10, max: 1000, group: 'Volume Profile'},
   {key: 'vpHi', title: 'High Traded Nodes Threshold %', type: 'float', def: 53, min: 0, max: 100, group: 'Volume Profile'},
   {key: 'vpLo', title: 'Low Traded Nodes Threshold %', type: 'float', def: 37, min: 0, max: 100, group: 'Volume Profile'},
-  {key: 'fibLook', title: 'Velas a revisar', type: 'int', def: 150, min: 20, max: 1000, group: 'FIBONACCI AUTOMÁTICO', tooltip: 'Busca el máximo y el mínimo de estas últimas velas y mide el Fibonacci entre ellos.'},
-  {key: 'fibMode', title: 'Colores', type: 'string', def: 'Monocromático', options: ['Monocromático', 'Un color por nivel'], group: 'FIBONACCI AUTOMÁTICO'},
-  {key: 'fibCol', title: 'Color (monocromático)', type: 'color', def: '#f5c568', group: 'FIBONACCI AUTOMÁTICO'},
-  {key: 'fibExt', title: 'Extensiones (1.272 y 1.618)', type: 'bool', def: false, group: 'FIBONACCI AUTOMÁTICO'},
-  {key: 'fibLen', title: 'Largo de las líneas (px)', type: 'int', def: 160, min: 40, max: 600, group: 'FIBONACCI AUTOMÁTICO'},
-  {key: 'fibGap', title: 'Separación de las velas (px)', type: 'int', def: 28, min: 0, max: 200, group: 'FIBONACCI AUTOMÁTICO', tooltip: 'Espacio entre la última vela y donde empiezan las líneas.'},
-  {key: 'fibLbl', title: 'Mostrar nivel y precio', type: 'bool', def: true, group: 'FIBONACCI AUTOMÁTICO'},
   {key: 'liqLookback', title: 'Lookback Period', type: 'int', def: 40, min: 5, max: 500, group: 'LIQUIDATIONS'},
   {key: 'srLookback', title: 'Lookback Range', type: 'int', def: 20, min: 2, max: 200, group: 'Support and Resistance'},
   {key: 'srSince', title: 'Bars Since Breakout', type: 'int', def: 2, min: 1, max: 50, group: 'Support and Resistance'},
@@ -3445,7 +3430,6 @@ function renderCore() {
   if (state.indicators.nnLiq && ind.liq) drawNovaLiq(ind.liq, lo, hi, fg);
   if (vpOn) drawNovaVPZone(ind.vp);
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailFill(ind.trail, lo, hi);
-  if (state.indicators.nnFib && ind.nfib) drawNovaFib(ind.nfib);
   { // zonas anchas de Pine (POC, área de valor, sentimiento) DETRÁS de las velas; antes se dibujaban encima y las tapaban al acercarse al perfil
     const none = {plots: [], shapes: [], lines: [], labels: [], polylines: [], hlines: [], fills: [], bgcolors: [], barcolors: [], candles: [], linefills: [], tables: [], strategy: null};
     for (const {r} of pOver) CCTPineDraw.draw(g, Object.assign({}, r, none), {X, Y, lo, hi, left, right: left + plotW + (vpOn ? 0 : pineG), top: plotTop, bottom: plotTop + plotH, step, candles, overlay: true, pass: 'back'});
@@ -3815,22 +3799,6 @@ function fillBetween(top, bot, lo, hi, color, alpha) { // relleno entre dos seri
     i = j + 1;
   }
   g.globalAlpha = 1;
-}
-/* Nova Nexus · Fibonacci automático: líneas punteadas que salen del lado derecho y se detienen antes de las velas */
-const NFIB_PAL = {0: '#9aa1ad', .236: '#f23645', .382: '#ff9800', .5: '#4caf50', .618: '#089981', .786: '#00bcd4', 1: '#9aa1ad', 1.272: '#2962ff', 1.618: '#9c27b0'};
-function drawNovaFib(F) {
-  const xr = geo.left + geo.plotW - 4, lastX = X(candles.length - 1) + geo.step / 2 + novaP('fibGap');
-  const xl = Math.max(geo.left + 4, Math.max(lastX, xr - novaP('fibLen'))), x0 = xr - xl < 40 ? xr - 40 : xl; // si no hay espacio a la derecha, mínimo 40 px
-  const mono = novaP('fibMode') !== 'Un color por nivel', mc = novaP('fibCol') || '#f5c568', lbl = novaP('fibLbl');
-  g.save(); g.setLineDash([5, 4]); g.font = '10px system-ui'; g.textAlign = 'right';
-  for (const {f, p} of F.lv) {
-    const y = Y(p); if (!(y > geo.plotTop - 2 && y < geo.plotTop + geo.plotH + 2)) continue;
-    const key = f === .5 || f === .618 || f === .786, c = mono ? mc : NFIB_PAL[f] || mc;
-    g.strokeStyle = c; g.globalAlpha = key ? 1 : .6; g.lineWidth = f === .618 ? 1.8 : key ? 1.4 : 1;
-    g.beginPath(); g.moveTo(x0, y); g.lineTo(xr, y); g.stroke();
-    if (lbl) { const t = `${f} · ${fmt(p)}`, tw = g.measureText(t).width; if (tw + 8 > xr - x0) { g.globalAlpha = 1; g.fillStyle = 'rgba(8,11,18,.78)'; roundRect(xr - tw - 6, y - 15, tw + 6, 13, 4); g.fill(); } g.fillStyle = c; g.globalAlpha = key ? 1 : .75; g.fillText(t, xr - 3, y - 5); } // si el texto pasa sobre las velas, lleva un fondito oscuro
-  }
-  g.restore(); g.textAlign = 'left';
 }
 function drawNovaRev(r, lo, hi) { // bandas 6-7 (suave) y 7-8 (fuerte), como los fill del Pine
   const ro = novaP('revOp') / 100;
@@ -5027,7 +4995,7 @@ $('#scriptList').addEventListener('click', e => {
 const NOVA_GROUPS = [
   ['Señales', ['nnIa', 'nnTp', 'nnRules']],
   ['Tendencia y bandas', ['nnEma', 'nnTrail', 'nnRev']],
-  ['Estructura y niveles', ['nnSmc', 'nnOb', 'nnPiv', 'nnSR', 'nnFib']],
+  ['Estructura y niveles', ['nnSmc', 'nnOb', 'nnPiv', 'nnSR']],
   ['Liquidez y volumen', ['nnLiq', 'nnLiqBars', 'nnVP']]
 ], NOVA_DEFAULT = ['nnIa', 'nnEma', 'nnTp'];
 const novaTitle = k => (indicatorMeta.find(m => m[0] === k) || [])[1].replace('Nova Nexus · ', '');
