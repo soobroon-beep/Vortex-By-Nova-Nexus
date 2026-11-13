@@ -2163,3 +2163,28 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 .oc-tag rect{fill:#0b0f18;stroke-width:1}.oc-tag.tp rect{stroke:#20bf9f}.oc-tag.sl rect{stroke:#f06b79}.oc-tag.en rect{stroke:#8796ab}
 .oc-tag text{font:600 10px system-ui}.oc-tag.tp text{fill:#7fe3cc}.oc-tag.sl text{fill:#ffb3bc}.oc-tag.en text{fill:#c8d2e1}
 .oc-in.lg{fill:#20bf9f}.oc-in.sh{fill:#f06b79}.oc-now{fill:#f0b90b;stroke:#0b0f18;stroke-width:1.5;animation:bfPulse 1.4s infinite}
+/* Mejorar › Consejos y mejoras: pruebas antes de aplicar */
+.tt-q{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.tt-qi{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;background:rgba(76,141,255,.08);border:1px solid rgba(76,141,255,.25);font-size:12.5px}.tt-qi small{margin-left:auto;color:var(--muted);font-size:11.5px}.tt-qi.cola .bl-spin{opacity:.35;animation-play-state:paused}
+.tt-list{display:flex;flex-direction:column;gap:8px;margin:8px 0 10px}
+.tt{padding:12px;border-radius:14px;background:rgba(10,14,22,.55);border:1px solid rgba(255,255,255,.08);border-left:3px solid #8796ab}.tt.up{border-left-color:#20bf9f}.tt.dn{border-left-color:#f06b79}
+.tt-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.tt-h b{font-size:13px}.tt-h small{margin-left:auto;font-size:11px;color:var(--muted)}
+.tt-v{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.08)}.tt.up .tt-v{background:rgba(32,191,159,.16);color:#7fe3cc}.tt.dn .tt-v{background:rgba(240,107,121,.16);color:#ffb3bc}
+.tt-say{margin:6px 0 8px;font-size:12.5px;color:#c8d2e1}
+.tt-why{list-style:none;margin:0 0 8px;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px}
+.tt-why li{display:flex;flex-direction:column;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.04)}.tt-why span{font-size:10.5px;color:var(--muted)}.tt-why b{font-size:12.5px;font-weight:600}
+.bl-mini.pri{background:#20bf9f;border-color:#20bf9f;color:#06110e;font-weight:700}
+/* Mejorar › Versiones */
+.vb-best{display:flex;align-items:center;gap:12px}.vb-best b{display:block;font-size:13.5px}.vb-best small{font-size:11.5px;color:var(--muted)}.vb-best>div{flex:1}
+.vb-crown{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:rgba(240,185,11,.14)}.vb-crown svg{width:18px;height:18px;fill:#f0b90b}
+.vb{border-left:3px solid rgba(255,255,255,.12)}.vb.main{border-left-color:#4c8dff}.vb.best{border-left-color:#f0b90b}.vb.s-descartada{opacity:.7}
+.vb-h{display:flex;align-items:center;gap:8px}.vb-v{font-size:16px}.vb-h small{margin-left:auto;font-size:11px;color:var(--muted)}
+.vb-st{font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.07);color:#c8d2e1}.vb.main .vb-st{background:rgba(76,141,255,.18);color:#a9c5ff}
+.vb-badge{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(240,185,11,.16);color:#ffd36b}
+.vb-note{margin:6px 0 8px;font-size:12.5px}.vb-note span{color:var(--muted);font-size:11.5px}
+.vb-ks{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}.vb-ks span{padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.04)}.vb-ks small{display:block;font-size:10.5px;color:var(--muted)}.vb-ks b{font-size:13px}
+.vb-cmp{margin:8px 0 0;font-size:12px;color:var(--muted)}.vb-cmp.pos{color:#7fe3cc}.vb-cmp.neg{color:#ffb3bc}
+.vb-diff{margin:10px 0 4px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03)}.vb-diff small{display:block;font-size:10.5px;color:var(--muted);margin-bottom:4px}.vb-diff p{margin:2px 0;font-size:12px}.vb-diff .add{color:#7fe3cc}.vb-diff .del{color:#ffb3bc;text-decoration:line-through;text-decoration-color:rgba(255,179,188,.4)}
+.vb-rules{font-size:12.5px}
+/* Operaciones: monedas con cuántas operaciones */
+.tc-syms button.none{opacity:.55}.tc-n{display:inline-block;margin-left:6px;min-width:16px;padding:0 5px;border-radius:999px;background:rgba(32,191,159,.18);color:#7fe3cc;font-style:normal;font-size:10.5px;font-weight:700;line-height:16px;text-align:center}

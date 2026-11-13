@@ -14,6 +14,11 @@ window.CCT_CHANGELOG = [
     'Si al bot le falta algo (una regla de entrada, un stop válido, un indicador que ya no está) o se traba en vivo, la máquina se ve apagada y te dice qué falla y cómo componerlo, con un botón directo.',
     'Operaciones ahora es el historial: lo ya cerrado en vivo o en el backtest, con el gráfico de dónde compró y vendió y una barra por operación (ganó/perdió) con lo acumulado.',
     'En vivo: cada operación abierta trae su gráfico con la entrada, el stop (rojo), el objetivo (verde) y dónde va el precio ahora.',
+    'El botón «Editar» ahora es «Mejorar», con tres partes: Reglas (plegadas), Consejos y mejoras, y Versiones.',
+    'Consejos y cambios a las reglas se PRUEBAN primero con velas reales contra la versión actual en los mismos datos; ves si de verdad mejora en lo que no vio (sí mejora, casi igual o empeora) y tú decides si aplicarlo. Puedes mandar varios a probar: van en fila sin trabarse.',
+    'Versiones: cuál ha sido la mejor (con botón para restaurarla), qué cambió respecto a la anterior y qué hace cada una.',
+    'Operaciones: «Cerradas» en lugar de «Cerradas en vivo» y cada moneda muestra cuántas operaciones hizo (las que no tienen, solo el nombre).',
+    '«Convertir bot a señales»: el indicador que se crea marca cajitas COMPRA / VENTA como IA Signals y, mientras la operación sigue abierta, su entrada, SL y TP; al cerrar marca TP, SL o Cierre.',
     'Operaciones: en lugar de las velas, una línea de precio simple con cada compra y venta marcada (verde si ganó, rojo si perdió) y tarjetas de las últimas operaciones. Las velas siguen en «Ver con velas».',
     'Consejos: nuevo botón «Ignorar consejo» junto a «Aplicar este consejo»; el consejo se quita y deja lugar a otros.',
     'En vivo: más visual y con menos texto: resultado grande, la posición abierta en una barra (stop · entrada · ahora · objetivo), números clave como fichas y lo que prometió vs. lo que está haciendo en barras.'
