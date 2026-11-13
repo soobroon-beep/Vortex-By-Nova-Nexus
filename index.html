@@ -286,9 +286,10 @@
       <div class="sg-label dev-label">Desarrollador <em>solo tú</em></div>
       <div class="sg">
         <button class="sg-row dev-glow" id="setVigia" hidden aria-label="Vigía de VORTEX" type="button"><span class="sg-ic" style="--c:#20bf9f"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="sg-t"><b>Vigía de VORTEX</b><small>Solo para el creador · revisión diaria de la app</small></span><span class="vg-count" hidden>0</span></button>
+        <button class="sg-row dev-glow" id="setBrain" hidden aria-label="Conexión con Neural Brain" type="button"><span class="sg-ic" style="--c:#40c4ff"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 3.5a3 3 0 0 0-3 3 3 3 0 0 0-2.5 4.7A3.5 3.5 0 0 0 6 17.5a3 3 0 0 0 3.5 3V3.5z"/><path d="M14.5 3.5a3 3 0 0 1 3 3 3 3 0 0 1 2.5 4.7 3.5 3.5 0 0 1-2 6.3 3 3 0 0 1-3.5 3V3.5z"/></svg></span><span class="sg-t"><b>Conexión con Neural Brain</b><small id="brSub">Revisa que tus datos lleguen bien a tu cerebro</small></span><span class="br-dot" id="brDot"></span></button>
       </div>
       <div class="pv-box dev-glow"><b class="pv-t">Vista de membresía</b><small>Mira la app como la ve cada plan (Gratis, Plus o Infinity). Solo cambia lo que ves tú en este dispositivo.</small><div class="seg pv-seg" role="group" aria-label="Ver la app como">
-        <button type="button" data-pv="" aria-pressed="true">Mi plan</button><button type="button" data-pv="free" aria-pressed="false">Gratis</button><button type="button" data-pv="plus" aria-pressed="false">Plus</button><button type="button" data-pv="infinity" aria-pressed="false">Infinity</button>
+        <button type="button" data-pv="" aria-pressed="true" class="pv-dev"><span>Desarrollador</span></button><button type="button" data-pv="free" aria-pressed="false">Gratis</button><button type="button" data-pv="plus" aria-pressed="false">Plus</button><button type="button" data-pv="infinity" aria-pressed="false">Infinity</button>
       </div></div>
       </div>
       <div class="sg-label">Datos</div>
@@ -362,6 +363,7 @@
 <script src="ai.js"></script>
 <script src="llm.js"></script>
 <script src="own-ai.js"></script>
+<script src="brain-panel.js"></script>
 <script src="ai-ui.js"></script>
 <script src="botlab-engine.js"></script>
 <script src="botlab-optimizer.js"></script>

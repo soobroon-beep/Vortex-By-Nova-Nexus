@@ -3560,8 +3560,8 @@ function renderCore() {
       let y = buy ? Y(c.l) + 6 : Y(c.h) - 6 - th; g.fillStyle = col; roundRect(xi - tw / 2, buy ? y + ar : y, tw, th, 4); g.fill(); g.beginPath();
       if (buy) { g.moveTo(xi - 4, y + ar); g.lineTo(xi + 4, y + ar); g.lineTo(xi, y); } else { g.moveTo(xi - 4, y + th); g.lineTo(xi + 4, y + th); g.lineTo(xi, y + th + ar); } g.fill();
       g.fillStyle = '#fff'; g.textBaseline = 'middle'; g.fillText(txt, xi, (buy ? y + ar : y) + th / 2 + .5); g.textBaseline = 'alphabetic';
-      if (!t.open && ie >= 0 && ie <= n - 1) { const ce = candles[ie], why = /take/i.test(t.why || '') ? 'TP' : /stop/i.test(t.why || '') ? 'SL' : 'Cierre', ec = why === 'TP' ? '#20bf9f' : why === 'SL' ? '#f06b79' : '#6f7b8f'; g.font = 'bold 8px system-ui'; const ew = g.measureText(why).width + 8, ey = buy ? Y(ce.h) - 18 : Y(ce.l) + 4;
-        g.globalAlpha = .85; g.fillStyle = ec; roundRect(xe - ew / 2, ey, ew, 13, 3); g.fill(); g.globalAlpha = 1; g.fillStyle = '#fff'; g.textBaseline = 'middle'; g.fillText(why, xe, ey + 7); g.textBaseline = 'alphabetic'; }
+      if (!t.open && ie >= 0 && ie <= n - 1) { const ce = candles[ie], why = /take/i.test(t.why || '') ? 'TP' : /stop/i.test(t.why || '') ? 'SL' : 'Cierre', ec = why === 'TP' ? '#20bf9f' : why === 'SL' ? '#f06b79' : (t.net > 0 ? '#1a9e84' : '#6f7b8f'), rp = (t.exit / t.entry - 1) * 100 * (buy ? 1 : -1), lab = why + ' ' + (rp >= 0 ? '+' : '') + rp.toFixed(1) + '%'; g.font = 'bold 8px system-ui'; const ew = g.measureText(lab).width + 8, ey = buy ? Y(ce.h) - 18 : Y(ce.l) + 4;
+        g.globalAlpha = .85; g.fillStyle = ec; roundRect(xe - ew / 2, ey, ew, 13, 3); g.fill(); g.globalAlpha = 1; g.fillStyle = '#fff'; g.textBaseline = 'middle'; g.fillText(lab, xe, ey + 7); g.textBaseline = 'alphabetic'; }
       g.textAlign = 'left';
     }
     g.restore(); }

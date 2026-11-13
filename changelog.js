@@ -1,5 +1,12 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.34', d: '13 nov 2026', t: 'Señales de bots, consejos de qué hacer y tu IA', items: [
+    'Nova Bot Lab: se quitó «Ver en el gráfico»; «Convertir bot a señales» ocupa su lugar y marca las cajitas COMPRA / VENTA con entrada, SL y TP, y al cerrar dice TP, SL o Cierre con el % que ganó o perdió.',
+    'Consejos y mejoras: arriba te dice qué hacer ahora con el bot: dejarlo correr, probarlo más, hacer solo cambios mínimos o cambiarlo (y te avisa si le has hecho demasiados cambios seguidos).',
+    'Se arreglaron los interruptores de encendido de los bots en la lista (se veían verdes sólidos).',
+    'Noticias, Alertas, Screener y Nova Bot Lab muestran su icono grande junto al nombre, sin marco.',
+    'Tu IA: textos más claros para conectar tu propia IA.'
+  ]},
   {v: '3.33', d: '13 nov 2026', t: 'Nova Bot Lab renovado y tu propia IA', items: [
     'Nova Bot Lab: cada bot se ve como una línea de producción: el motor arranca, opera, muestra resultados y se mejora, unidos por hilos animados. Toca cada estación para ver su detalle.',
     'Nova Bot Lab: nuevo «Cómo aprende»: el ciclo del bot (opera, recuerda, analiza, prueba variantes y se queda con la mejor) con una luz que lo recorre, cuánto mejoró desde su v1 y lo último que aprendió.',

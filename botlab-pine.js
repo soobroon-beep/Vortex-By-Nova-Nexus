@@ -41,7 +41,7 @@
       `exitNow = false`, `why = ""`,
       `if pos != 0`, `    bars += 1`, `    hitSL = not na(sl) and (pos == 1 ? low <= sl : high >= sl)`, `    hitTP = not na(tp) and (pos == 1 ? high >= tp : low <= tp)`, `    hitT = ${r.maxBars ? `bars >= ${r.maxBars}` : 'false'}`,
       `    line.set_x2(lE, bar_index)`, `    line.set_x2(lS, bar_index)`, `    line.set_x2(lT, bar_index)`, `    label.set_x(tS, bar_index)`, `    label.set_x(tT, bar_index)`,
-      `    if hitSL or hitTP or hitT or (pos == 1 and longOut) or (pos == -1 and shortOut)`, `        exitNow := true`, `        why := hitSL ? "SL" : hitTP ? "TP" : "Cierre"`,
+      `    if hitSL or hitTP or hitT or (pos == 1 and longOut) or (pos == -1 and shortOut)`, `        exitNow := true`, `        px = hitSL ? sl : hitTP ? tp : close`, `        rp = (px / ent - 1) * 100 * pos`, `        why := (hitSL ? "SL" : hitTP ? "TP" : "Cierre") + " " + (rp >= 0 ? "+" : "") + str.tostring(rp, "#.#") + "%"`,
       `        label.new(bar_index, pos == 1 ? high : low, why, yloc = pos == 1 ? yloc.abovebar : yloc.belowbar, style = pos == 1 ? label.style_label_down : label.style_label_up, color = color.new(hitTP ? #20bf9f : hitSL ? #f06b79 : #6f7b8f, 25), textcolor = color.white, size = size.tiny)`,
       `        pos := 0`,
       `if pos == 0 and not exitNow and okFilters and (longIn or shortIn)`, `    dir = longIn ? 1 : -1`, `    pos := dir`, `    bars := 0`, `    ent := close`,
