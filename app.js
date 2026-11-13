@@ -150,7 +150,7 @@ function sanUi(u) {
   if (q.dopt && typeof q.dopt === 'object' && !Array.isArray(q.dopt)) { const d = {}; for (const k of ['magnet', 'stay', 'lock', 'hide']) if (typeof q.dopt[k] === 'boolean') d[k] = q.dopt[k]; o.dopt = d; }
   if (typeof q.icon === 'string' && /^[a-z][a-z0-9]{2,11}$/.test(q.icon)) o.icon = q.icon;
   if (q.prefs && typeof q.prefs === 'object') o.prefs = CCTPrefs.sanitize(q.prefs);
-  if (q.favBar && typeof q.favBar === 'object') { const f = q.favBar, c01 = v => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null; o.favBar = {show: f.show !== false, x: c01(f.x), y: c01(f.y), mx: c01(f.mx), my: c01(f.my)}; }
+  if (q.favBar && typeof q.favBar === 'object') { const f = q.favBar, c01 = v => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null; o.favBar = {show: f.show !== false, x: c01(f.x), y: c01(f.y), mx: c01(f.mx), my: c01(f.my), mode: f.mode === 'flotante' ? 'flotante' : 'fija'}; }
   if (Array.isArray(q.pillFavs)) o.pillFavs = q.pillFavs.filter(x => typeof x === 'string' && /^[A-Za-z0-9-]{2,40}$/.test(x)).slice(0, 5); // favoritos de la píldora del celular (se sincronizan con tu cuenta)
   if (Array.isArray(q.favs)) o.favs = q.favs.filter(x => typeof x === 'string' && /^[a-zA-Z0-9]{2,24}$/.test(x)).slice(0, 24);
   if (Array.isArray(q.myColors)) o.myColors = [...new Set(q.myColors.filter(x => typeof x === 'string' && /^#[0-9a-f]{6}$/i.test(x)).map(x => x.toLowerCase()))].slice(0, 20); // «Mis colores» de la paleta (se comparten en toda la app y en tu cuenta)
@@ -1102,7 +1102,7 @@ function renderFrames() {
   function pillPos() {
     if (isDesktop()) { tb.style.left = tb.style.top = ''; return; }
     const W = view.clientWidth, Hh = view.clientHeight, w = tb.offsetWidth || 150, h = tb.offsetHeight || 40; if (!W || !Hh) return;
-    const x = PP ? PP.x * Math.max(0, W - w) : (FAV_STACK ? 48 : 10), y = PP ? PP.y * Math.max(0, Hh - h) : Hh - h - 34;
+    const x = PP ? PP.x * Math.max(0, W - w) : (window.__favStack !== false ? 48 : 10), y = PP ? PP.y * Math.max(0, Hh - h) : Hh - h - 34;
     tb.style.left = clamp(x, 0, Math.max(0, W - w)) + 'px'; tb.style.top = clamp(y, 0, Math.max(0, Hh - h)) + 'px';
   }
   const grip = $('#pillGrip');
@@ -1905,7 +1905,7 @@ const TOOL_GROUPS = [
 /* Favoritos: la estrella de cada herramienta la sube a la sección «Favoritos» (arriba de la barra y de la hoja del celular) */
 const FAV_KEY = 'cct_favtools_v1';
 let FAVS = ['brush']; try { const f = JSON.parse(lsGet(FAV_KEY) || 'null'); if (Array.isArray(f)) FAVS = f.filter(x => typeof x === 'string').slice(0, 24); } catch {}
-let FB = Object.assign({show: true, x: null, y: null, mx: null, my: null}, (state.ui && state.ui.favBar) || {}); // (mx,my: posición del botón estrella en celular) barra flotante de favoritos: visible y posición (fracciones del gráfico)
+let FB = Object.assign({show: true, x: null, y: null, mx: null, my: null, mode: 'fija'}, (state.ui && state.ui.favBar) || {}); // (mx,my: posición del botón estrella en celular) barra flotante de favoritos: visible y posición (fracciones del gráfico)
 if (state.ui && Array.isArray(state.ui.favs)) FAVS = state.ui.favs.slice(0, 24);
 let MYCOL = state.ui && Array.isArray(state.ui.myColors) ? state.ui.myColors.slice(0, 20) : []; // tus colores guardados (máx. 20)
 window.CCTColors = {pal: () => SB_PAL, get: () => MYCOL.slice(), has: c => MYCOL.includes(String(c).toLowerCase()), add(c) { c = String(c || '').toLowerCase(); if (!/^#[0-9a-f]{6}$/.test(c)) return false; if (MYCOL.includes(c)) return true; if (MYCOL.length >= 20) return 'full'; MYCOL = [...MYCOL, c]; syncUi(); return true; }, remove(c) { c = String(c || '').toLowerCase(); MYCOL = MYCOL.filter(x => x !== c); syncUi(); }};
@@ -2730,8 +2730,9 @@ function placeFavBar() {
   bar.style.left = clamp(FB.x * Math.max(0, aw - bw), 0, Math.max(0, aw - bw)) + 'px'; bar.style.top = clamp(FB.y * Math.max(0, ah - bh), 0, Math.max(0, ah - bh)) + 'px';
 }
 const FAB = 44, FAB_GAP = 8;
-var FAV_STACK = true; // (declarada con var: la usa también la píldora antes de llegar aquí)
-// celular (prueba): favoritos como estrella fija arriba del logo VORTEX que se despliega hacia arriba · false = vuelve a la estrella de la píldora
+// Celular: «fija» = estrella arriba del logo VORTEX que se despliega hacia arriba · «flotante» = la estrella va en la píldora que mueves a donde quieras.
+// Se elige en Configuración › Personalización › Barra de herramientas favoritas (se guarda en tu cuenta).
+const favStack = () => FB.mode !== 'flotante'; // celular (prueba): favoritos como estrella fija arriba del logo VORTEX que se despliega hacia arriba · false = vuelve a la estrella de la píldora
 function placeFab() { // coloca el botón estrella (fracciones mx,my) y abre la barra al lado donde cabe
   const bar = $('#favBar'), fab = $('#favFab'), ar = $('#chartArea'); if (!bar || !ar) return;
   if (fab && fab.classList.contains('fav-stack')) { // celular (prueba): estrella fija arriba del logo VORTEX; la barra se despliega hacia arriba, en columna
@@ -2778,20 +2779,20 @@ function wireFab(fab) { // mantener presionado = el botón se "agarra" y se pued
 }
 function renderFavBar() {
   const ar = $('#chartArea'); if (!ar) return; let bar = $('#favBar'), fab = $('#favFab');
-  const mob = !deskMQ.matches, on = !PANE && (FB.show || (mob && FAV_STACK));
+  const mob = !deskMQ.matches, on = !PANE && (FB.show || (mob && favStack()));
+  { const pb = $('#favPillBtn'); if (pb) pb.hidden = mob && favStack(); window.__favStack = favStack(); } // con la estrella arriba del logo, la de la píldora sobra
   if (!on) { if (bar) bar.remove(); if (fab) fab.remove(); return; }
   if (!bar) { bar = document.createElement('div'); bar.id = 'favBar'; bar.className = 'favbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Herramientas favoritas'); ar.appendChild(bar); }
-  if (fab && mob && !FAV_STACK) { fab.remove(); fab = null; } // celular: la estrella vive en la píldora de abajo (#favPillBtn)
-  { const pb = $('#favPillBtn'); if (pb) pb.hidden = mob && FAV_STACK; } // con la estrella arriba del logo, la de la píldora sobra
-  if (mob && FAV_STACK && !fab) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab fav-stack'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 18); ar.appendChild(fab);
+  if (fab && (!mob || !favStack()) && fab.classList.contains('fav-stack')) { fab.remove(); fab = null; } // celular: la estrella vive en la píldora de abajo (#favPillBtn)
+  if (mob && favStack() && !fab) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab fav-stack'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 18); ar.appendChild(fab);
     fab.addEventListener('click', e => { e.stopPropagation(); setFbOpen(!fbOpen); placeFab(); }); fab.addEventListener('contextmenu', e => e.preventDefault()); }
   if (false) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 22); ar.appendChild(fab); wireFab(fab); }
   if (!mob && fab) { fab.remove(); fab = null; }
-  bar.classList.toggle('fb-mobile', mob); bar.classList.toggle('fb-stack', mob && FAV_STACK);
+  bar.classList.toggle('fb-mobile', mob); bar.classList.toggle('fb-stack', mob && favStack()); if (!(mob && favStack())) bar.style.maxHeight = '';
   const tools = favTools();
   bar.innerHTML = (mob ? '' : '<span class="fb-grip" title="Arrastra para mover · clic derecho: ocultar" aria-label="Mover barra"><svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></g></svg></span>')
     + (tools.length ? tools.map(t => `<button type="button" class="fb-btn${drawTool === t[0] ? ' on' : ''}" data-fav-tool="${t[0]}" title="${esc(t[1])}" aria-label="${esc(t[1])}">${SV(t[3], 22)}</button>`).join('') : '<span class="fb-empty">Marca ★ en las herramientas para tenerlas aquí</span>')
-    + (mob && FAV_STACK ? `<span class="fb-sep" aria-hidden="true"></span><button type="button" class="fb-btn fb-x" data-fav-x="undo" title="Deshacer" aria-label="Deshacer">${SV('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', 20)}</button><button type="button" class="fb-btn fb-x" data-fav-x="tools" title="Todas las herramientas" aria-label="Todas las herramientas">${SV('<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>', 20)}</button>` : '');
+    + (mob && favStack() ? `<span class="fb-sep" aria-hidden="true"></span><button type="button" class="fb-btn fb-x" data-fav-x="undo" title="Deshacer" aria-label="Deshacer">${SV('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', 20)}</button><button type="button" class="fb-btn fb-x" data-fav-x="tools" title="Todas las herramientas" aria-label="Todas las herramientas">${SV('<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>', 20)}</button>` : '');
   if (mob) { setFbOpen(fbOpen); if (fab) fab.classList.toggle('active', !!drawTool); const pb = $('#favPillBtn'); if (pb) pb.classList.toggle('active', !!drawTool); placeFab(); } else { bar.classList.remove('open'); bar.inert = false; }
   placeFavBar();
 }
@@ -3114,7 +3115,7 @@ function applyUi() { // al recibir el estado de la cuenta: aplica sus preferenci
   if (u.icon && window.CCTAppIcons && window.CCTAppIcons.selected !== u.icon) window.CCTAppIcons.apply(u.icon);
   if (Array.isArray(u.favs)) { FAVS = u.favs.slice(0, 24); try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch {} if (typeof buildRail === 'function') buildRail(); }
   if (u.prefs) { PR = CCTPrefs.sanitize(u.prefs); if (typeof renderPrefs === 'function') renderPrefs(); }
-  if (u.favBar) FB = Object.assign({show: true, x: null, y: null, mx: null, my: null}, u.favBar);
+  if (u.favBar) FB = Object.assign({show: true, x: null, y: null, mx: null, my: null, mode: 'fija'}, u.favBar);
   if (typeof renderFavBar === 'function') renderFavBar();
 }
 window.addEventListener('cct-theme', () => { const id = window.CCTAppIcons && window.CCTAppIcons.selected; if (id && (state.ui || {}).icon !== id && typeof save === 'function') syncUi(); });
@@ -4873,7 +4874,8 @@ function renderCustom() {
   box.innerHTML = ``
     + `<div class="pref-row">${ic('#f5a623', state.light ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>' : '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>')}<div class="pref-l"><b>Tema claro</b><small>${state.light ? 'Activo · apágalo para el tema oscuro' : 'Ahora usas el tema oscuro'}</small></div><div class="pref-c"><button type="button" class="toggle${state.light ? ' on' : ''}" data-cu="theme" role="switch" aria-checked="${!!state.light}" aria-label="Tema claro"></button></div></div>`
     + `<button type="button" class="pref-row pref-link" data-cu="style">${ic('#548fff', '<path d="M6 20V10M12 20V4M18 20v-7"/>')}<div class="pref-l"><b>Aspecto del gráfico</b><small>Colores de velas, fondo, cuadrícula, cursor y línea de alertas</small></div><div class="pref-c">${chev}</div></button>`
-    + `<div class="pref-row">${ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>')}<div class="pref-l"><b>Barra de herramientas favoritas</b><small>Tus herramientas de dibujo con estrella, siempre a la mano</small></div><div class="pref-c"><button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button></div></div>`;
+    + `<div class="pref-row">${ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>')}<div class="pref-l"><b>Barra de herramientas favoritas</b><small>Tus herramientas de dibujo con estrella, siempre a la mano</small></div><div class="pref-c"><button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button></div></div>`
+    + `<div class="pref-row fb-mode-row"><span class="sg-ic" style="--c:transparent"></span><div class="pref-l"><b>En el celular</b><small>${FB.mode === 'flotante' ? 'Flotante: la estrella va en la barra que mueves a donde quieras' : 'Fija: arriba del logo VORTEX y se despliega hacia arriba'}</small></div><div class="pref-c"><div class="seg-mini" role="radiogroup" aria-label="Estilo de la barra de favoritos en el celular">${[['fija', 'Fija'], ['flotante', 'Flotante']].map(([v, n]) => `<button type="button" role="radio" aria-checked="${(FB.mode || 'fija') === v}" class="${(FB.mode || 'fija') === v ? 'on' : ''}" data-cu="favmode" data-v="${v}">${n}</button>`).join('')}</div></div></div>`;
 }
 {
   const cv = $('#customView');
@@ -4882,6 +4884,7 @@ function renderCustom() {
     if (k === 'theme') { state.light = !state.light; save(); theme(); renderCustom(); }
     else if (k === 'style') openChartStyle();
     else if (k === 'fav') { setFavBar(!FB.show); renderCustom(); }
+    else if (k === 'favmode') { const v = b.dataset.v === 'flotante' ? 'flotante' : 'fija'; if (FB.mode !== v) { FB.mode = v; if (v === 'fija') FB.show = true; setFbOpen(false); syncUi(); renderFavBar(); if (window.CCT_pillPos) CCT_pillPos(); toast(v === 'fija' ? 'Barra fija: la estrella queda arriba del logo VORTEX' : 'Barra flotante: la estrella va en la barra que mueves a donde quieras'); } renderCustom(); }
   });
 }
 /* ───────── Sesiones de las bolsas: barra de estado abajo a la derecha del gráfico; al pasar el cursor (o tocar) sale la ventana con Nueva York, Londres, Tokio… ───────── */

@@ -2297,3 +2297,8 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 @keyframes fbUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .light #chartArea .fav-fab.fav-stack,.light #chartArea .favbar.fb-mobile.fb-stack{background:rgba(255,255,255,.55);border-color:rgba(0,0,0,.1);color:#182234}
 @media (prefers-reduced-motion:reduce){#chartArea .favbar.fb-stack.open .fb-btn{animation:none}}
+/* Configuración › Personalización: elegir barra de favoritos fija o flotante (celular) */
+.seg-mini{display:inline-flex;padding:3px;gap:2px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+.seg-mini button{border:0;background:none;color:var(--muted);font:inherit;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:9px;cursor:pointer}
+.seg-mini button.on{background:rgba(84,143,255,.24);color:#cfe0ff}
+.light .seg-mini{background:rgba(0,0,0,.05);border-color:rgba(0,0,0,.08)}.light .seg-mini button.on{background:rgba(84,143,255,.18);color:#1d4ed8}
