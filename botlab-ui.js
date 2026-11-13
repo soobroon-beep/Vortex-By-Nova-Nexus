@@ -1074,7 +1074,7 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
   }
   function noteHistory(b, r, who) { (b.optHistory = b.optHistory || []).push({at: r.at, who, decision: r.status === 'error' ? 'error' : r.decision, oos: r.oos ? r.oos.cand.net : null, base: r.oos ? r.oos.base.net : null}); if (b.optHistory.length > 12) b.optHistory.shift(); }
   function mergeServer(res) { // resultados del trabajo programado → bots (sin tocar versiones principales)
-    let ch = false; for (const b of S.bots) { const r = res && res[b.id]; if (!r || (b.server && b.server.at === r.at)) continue; b.server = r; log(b, 'reentrenamiento', r.status === 'error' ? 'El servidor no pudo reentrenar: ' + r.reason : `Reentrenamiento del servidor: ${(decText[r.decision] || [r.decision])[0]}.`); noteHistory(b, r, 'servidor'); addCandidate(b, r, 'servidor'); ch = true; }
+    let ch = false; for (const b of S.bots) { const r = res && res[b.id]; if (!r || (b.server && b.server.at === r.at)) continue; b.server = r; log(b, 'reentrenamiento', r.status === 'error' ? 'El servidor no pudo reentrenar: ' + r.reason : `Reentrenamiento del servidor: ${(decText[r.decision] || [r.decision])[0]}.`); noteHistory(b, r, 'servidor'); if (!(r.applied && b.versions.some(x => x.v === r.applied.v))) addCandidate(b, r, 'servidor'); ch = true; } // si el servidor ya la aplicó (y tu cuenta ya la trae), no se duplica
     if (ch) save(); return ch;
   }
   function mergePaper(paper) { // sesiones de paper trading avanzadas por el servidor: solo se adopta si continúa EXACTAMENTE el mismo libro (cadena de hashes) y avanzó

@@ -75,27 +75,51 @@
   }
   const diff = (spec, assign) => Object.entries(assign).filter(([p, v]) => getP(spec, p) !== v).map(([path, to]) => ({path, from: getP(spec, path), to}));
 
+  /* ───────── Walk-forward en VARIAS monedas a la vez (la cesta del bot) ─────────
+     Antes solo se reentrenaba con la moneda principal: con pocas operaciones (1-15 fuera de muestra) nunca se podía comprobar una mejora
+     y los bots no aprendían. Ahora los mismos tramos de tiempo se aplican a cada moneda de la cesta y las operaciones se suman
+     (capital repartido como en el bot real): más muestra, misma regla estricta (sin mirar al futuro, tramo final reservado). */
+  function runS(S, spec, fa, fb, fromF, ropts, cap) { // operaciones de [fa, fb) en todas las monedas, contando solo las que entran desde fromF
+    const out = [], n = S.length;
+    for (const x of S) {
+      const N = x.C.length, a = Math.floor(fa * N), b = Math.min(N, Math.floor(fb * N)), from = Math.floor(fromF * N) - a; if (b - a < 80) continue;
+      const sp = clone(spec); sp.symbol = x.sym || sp.symbol; delete sp.basket; delete sp.intervals; sp.risk.capital = cap / n;
+      let user = null; if (x.user) { user = {}; for (const k of Object.keys(x.user)) user[k] = x.user[k].slice(a, b); }
+      let r = null; try { r = B.backtest(x.C.slice(a, b), sp, {nova: ropts && ropts.nova, user}); } catch { r = null; }
+      if (r) for (const t of r.trades) if (t.entryBar >= from) out.push(t);
+    }
+    return out.sort((p, q) => (p.entryT || 0) - (q.entryT || 0));
+  }
+  async function fitS(S, spec, fa, fb, dims, o, cap) {
+    const R = rng(o.seed), evalA = assign => { const s = apply(spec, assign); if (!validAssign(s)) return -1e9; return scoreOf(B.tradeStats(runS(S, s, fa, fb, fa, o.ropts, cap), cap)); };
+    const base = {}, tried = new Map(), keyOf = x => JSON.stringify(x); let best = {assign: base, score: evalA(base)}; tried.set(keyOf(base), best.score); let n = 0;
+    const cands = []; for (const d of dims) for (const v of d.values) if (v !== d.base) cands.push({[d.path]: v});
+    while (cands.length < o.budget && dims.length) { const x = {}; for (const d of dims) if (R() < .6) x[d.path] = d.values[Math.floor(R() * d.values.length)]; if (Object.keys(x).length) cands.push(x); else break; if (cands.length > 400) break; }
+    for (const c of cands.slice(0, o.budget)) { const k = keyOf(c); if (tried.has(k)) continue; const sc = evalA(c); tried.set(k, sc); if (sc > best.score + 1e-9) best = {assign: c, score: sc}; if (++n % 8 === 0 && o.yield) await o.yield(); }
+    return Object.assign(best, {evaluated: tried.size});
+  }
   /* ───────── Walk-forward ───────── */
   async function optimize(candles, spec, opts) {
-    opts = Object.assign({budget: 60, seed: 1, trainFrac: .5, testFrac: .1, holdFrac: .15, minOosTrades: 30, onProgress: null, yield: null, ropts: {}}, opts || {});
-    const N = candles.length, cap = spec.risk.capital, out = {tuned: null, at: Date.now(), bars: N, from: N ? candles[0].t : null, to: N ? candles[N - 1].t : null, folds: [], oos: null, holdout: null, candidate: null, changes: [], decision: 'sin_mejora', reasons: [], dims: 0};
+    opts = Object.assign({budget: 60, seed: 1, trainFrac: .5, testFrac: .1, holdFrac: .15, minOosTrades: 30, onProgress: null, yield: null, ropts: {}, series: null}, opts || {});
+    const S = Array.isArray(opts.series) && opts.series.length ? opts.series.filter(x => x && x.C && x.C.length) : [{sym: spec.symbol, C: candles, user: opts.ropts && opts.ropts.user}];
+    const C0 = S[0].C, N = Math.min(...S.map(x => x.C.length)), cap = spec.risk.capital, out = {tuned: null, at: Date.now(), bars: N, coins: S.length, from: C0.length ? C0[0].t : null, to: C0.length ? C0[C0.length - 1].t : null, folds: [], oos: null, holdout: null, candidate: null, changes: [], decision: 'sin_mejora', reasons: [], dims: 0};
     const dims = space(spec); out.dims = dims.length; if (!dims.length) { out.decision = 'no_aplica'; out.reasons.push('La estrategia no tiene parámetros numéricos ajustables (periodos, stop loss o take profit).'); return out; }
     if (N < 1200) { out.decision = 'no_aplica'; out.reasons.push(`Solo hay ${N} velas: se necesitan al menos 1.200 para validar sin mirar al futuro.`); return out; }
     const budget = Math.max(opts.budget, Math.min(140, dims.length * 7)), tuneMargin = .02 * (1 + Math.max(0, dims.length - 4) / 8); // cuantos más parámetros se ajustan, más ventaja se exige (más riesgo de sobreajuste)
-    const trainLen = Math.floor(N * opts.trainFrac), testLen = Math.floor(N * opts.testFrac), H0 = Math.floor(N * (1 - opts.holdFrac)), stepLen = testLen, ropts = opts.ropts;
-    const o2 = {seed: opts.seed, budget, ropts, yield: opts.yield}, foldsN = Math.max(0, Math.floor((H0 - trainLen - testLen) / stepLen) + 1);
+    const TR = opts.trainFrac, TE = opts.testFrac, H0 = 1 - opts.holdFrac, ropts = opts.ropts, tAt = f => C0[Math.min(C0.length - 1, Math.floor(f * C0.length))].t;
+    const o2 = {seed: opts.seed, budget, ropts, yield: opts.yield}, foldsN = Math.max(0, Math.floor((H0 - TR - TE) / TE + 1e-9) + 1), st = tr => B.tradeStats(tr, cap);
     let oosCand = [], oosBase = [], wins = 0, valid = 0; const total = foldsN + 1;
     for (let k = 0; k < foldsN; k++) {
-      const s = k * stepLen, te = s + trainLen, ee = te + testLen; if (ee > H0) break; if (opts.onProgress) opts.onProgress(k, total, `Tramo ${k + 1}/${foldsN}`);
-      const f = await fit(candles, spec, s, te, dims, o2), cs = apply(spec, f.assign), cr = stats(runWin(candles, cs, s, ee, ropts), trainLen, cap), br = stats(runWin(candles, spec, s, ee, ropts), trainLen, cap);
-      out.folds.push({trainFrom: candles[s].t, trainTo: candles[te - 1].t, testFrom: candles[te].t, testTo: candles[ee - 1].t, params: diff(spec, f.assign), trainScore: f.score > -1e8 ? Math.round(f.score * 100) / 100 : null, evaluated: f.evaluated, cand: {n: cr.n, net: cr.net, retPct: cr.retPct, maxDDPct: cr.maxDDPct}, base: {n: br.n, net: br.net, retPct: br.retPct, maxDDPct: br.maxDDPct}});
+      const s = k * TE, te = s + TR, ee = te + TE; if (ee > H0 + 1e-9) break; if (opts.onProgress) opts.onProgress(k, total, `Tramo ${k + 1}/${foldsN}`);
+      const f = await fitS(S, spec, s, te, dims, o2, cap), cs = apply(spec, f.assign), cr = st(runS(S, cs, s, ee, te, ropts, cap)), br = st(runS(S, spec, s, ee, te, ropts, cap));
+      out.folds.push({trainFrom: tAt(s), trainTo: tAt(te) - 1, testFrom: tAt(te), testTo: tAt(ee) - 1, params: diff(spec, f.assign), trainScore: f.score > -1e8 ? Math.round(f.score * 100) / 100 : null, evaluated: f.evaluated, cand: {n: cr.n, net: cr.net, retPct: cr.retPct, maxDDPct: cr.maxDDPct}, base: {n: br.n, net: br.net, retPct: br.retPct, maxDDPct: br.maxDDPct}});
       oosCand.push(cr); oosBase.push(br); valid++; if (cr.net > br.net) wins++;
     }
     const sum = (arr, k) => arr.reduce((a, x) => a + (x[k] || 0), 0); out.oos = {folds: valid, winsVsBase: wins, cand: {n: sum(oosCand, 'n'), net: sum(oosCand, 'net')}, base: {n: sum(oosBase, 'n'), net: sum(oosBase, 'net')}};
     // candidata final: ajustada con las velas ANTERIORES al tramo reservado
     if (opts.onProgress) opts.onProgress(foldsN, total, 'Candidata final');
-    const fs = Math.max(0, H0 - trainLen), f = await fit(candles, spec, fs, H0, dims, o2), cs = apply(spec, f.assign), hc = stats(runWin(candles, cs, fs, N, ropts), H0 - fs, cap), hb = stats(runWin(candles, spec, fs, N, ropts), H0 - fs, cap);
-    out.holdout = {from: candles[H0].t, to: candles[N - 1].t, cand: {n: hc.n, net: hc.net, retPct: hc.retPct, maxDDPct: hc.maxDDPct, pf: hc.pfInf ? 99 : hc.profitFactor}, base: {n: hb.n, net: hb.net, retPct: hb.retPct, maxDDPct: hb.maxDDPct, pf: hb.pfInf ? 99 : hb.profitFactor}};
+    const fs = Math.max(0, H0 - TR), f = await fitS(S, spec, fs, H0, dims, o2, cap), cs = apply(spec, f.assign), hc = st(runS(S, cs, fs, 1, H0, ropts, cap)), hb = st(runS(S, spec, fs, 1, H0, ropts, cap));
+    out.holdout = {from: tAt(H0), to: C0[C0.length - 1].t, cand: {n: hc.n, net: hc.net, retPct: hc.retPct, maxDDPct: hc.maxDDPct, pf: hc.pfInf ? 99 : hc.profitFactor}, base: {n: hb.n, net: hb.net, retPct: hb.retPct, maxDDPct: hb.maxDDPct, pf: hb.pfInf ? 99 : hb.profitFactor}};
     out.changes = diff(spec, f.assign); out.tuned = dims.map(d => d.path); const why = out.reasons;
     if (!out.changes.length) why.push('El ajuste con datos recientes no encontró nada mejor que los parámetros actuales.');
     if (valid < 3) why.push(`Solo ${valid} tramos de validación (se necesitan 3 o más).`);
@@ -105,7 +129,7 @@
     if (valid && wins / valid < .6) why.push(`Solo mejoró a la versión actual en ${wins} de ${valid} tramos (se exige al menos el 60 %).`);
     if (!(hc.n >= 5 && hc.net > hb.net && hc.net > 0)) why.push('En el tramo reservado más reciente la candidata no supera a la versión actual.');
     if (hc.maxDDPct > hb.maxDDPct * 1.25 + 1) why.push('La candidata aumenta el drawdown más de lo aceptable en el tramo reservado.');
-    if (!why.length) { out.decision = 'propuesta'; out.candidate = apply(spec, f.assign); } else out.decision = out.changes.length ? 'sin_mejora' : 'sin_mejora';
+    if (!why.length) { out.decision = 'propuesta'; out.candidate = apply(spec, f.assign); } else out.decision = 'sin_mejora';
     if (opts.onProgress) opts.onProgress(total, total, 'Listo'); return out;
   }
   return {optimize, space, apply, extractSources, pickSource, hash, validAssign};

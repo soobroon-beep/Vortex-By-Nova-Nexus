@@ -23,4 +23,5 @@ jobs:
         env:
           MODE: retrain
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GROQ_KEY: ${{ secrets.GROQ_KEY }}
           FORCE: ${{ github.event.inputs.force && '1' || '' }}

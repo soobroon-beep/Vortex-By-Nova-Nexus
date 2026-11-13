@@ -42,13 +42,16 @@ async function retrainBot(bot, scripts, getCandles, now, brainCtx) {
     const candles = await getCandles(spec.symbol, spec.interval, bars); if (candles.length < 300) throw new Error('Pocas velas disponibles (' + candles.length + ')');
     const user = userSeries(spec, candles, scripts), ropts = {nova: globalThis.NovaNexus, user: Object.keys(user).length ? user : null};
     const res = B.backtest(candles, spec, {nova: ropts.nova, user: ropts.user || undefined}), m = res.metrics;
-    const opt = await O.optimize(candles, spec, {seed: O.hash(bot.id + new Date(now).toISOString().slice(0, 10)), budget: cyc.budget || 60, ropts});
+    // aprende con TODAS las monedas que opera el bot (su cesta), no solo con la principal: así junta suficientes operaciones para comprobar una mejora
+    const syms = Array.isArray(spec.basket) && spec.basket.length ? [...new Set([spec.symbol, ...spec.basket])].slice(0, 8) : [spec.symbol], series = [{sym: spec.symbol, C: candles, user: ropts.user}];
+    for (const sym of syms.slice(1)) { try { const C = await getCandles(sym, spec.interval, bars); if (C.length >= 1200) { const u = userSeries(Object.assign({}, spec, {symbol: sym}), C, scripts); series.push({sym, C, user: Object.keys(u).length ? u : null}); } } catch {} }
+    const opt = await O.optimize(candles, spec, {seed: O.hash(bot.id + new Date(now).toISOString().slice(0, 10)), budget: cyc.budget || 60, ropts, series});
     let br = null; // bot conectado a un cerebro de Neural Brain: además prueba las ideas del cerebro y elige la mejor que gane fuera de muestra
     if (brainCtx) { try { br = await BR.improve({candles, spec, ropts: {nova: ropts.nova, user: ropts.user || undefined}, base: res, opt, link: brainCtx.link, memory: brainCtx.memory, now}); brainCtx.out = br; } catch (e) { brainCtx.out = {brain: {at: now, error: String(e.message || e).slice(0, 200)}, memory: brainCtx.memory || []}; } }
     if (br && br.candidate && opt.decision !== 'propuesta' || br && br.candidate && br.brain.best && br.brain.best.from !== 'optimizador') { opt.decision = 'propuesta'; opt.candidate = br.candidate; opt.changes = []; opt.oos = null; opt.holdout = null; opt.folds = []; opt.reasons = (opt.reasons || []).concat([br.note]); }
     return {at: now, note: br && br.candidate ? br.note : undefined, brain: br ? br.brain : undefined, v: bot.mainV, status: 'ok', symbol: spec.symbol, interval: spec.interval, bars: candles.length, from: candles[0].t, to: candles[candles.length - 1].t,
       monitor: {n: m.n, net: m.net, retPct: m.retPct, maxDDPct: m.maxDDPct, winRate: m.winRate, val: res.segments.val.retPct, test: res.segments.test.retPct, buyHold: res.buyHold.retPct, verdict: res.verdict.level},
-      decision: opt.decision, reasons: opt.reasons, changes: opt.changes, folds: opt.folds, oos: opt.oos, holdout: opt.holdout, candidate: opt.candidate, dims: opt.dims};
+      decision: opt.decision, coins: opt.coins || 1, reasons: opt.reasons, changes: opt.changes, folds: opt.folds, oos: opt.oos, holdout: opt.holdout, candidate: opt.candidate, dims: opt.dims};
   } catch (e) { return {at: now, v: bot.mainV, status: 'error', reason: String(e.message || e).slice(0, 300)}; }
 }
 const PUSH_URL = process.env.PUSH_URL || 'https://vortex-push.soobroon.workers.dev';
@@ -68,6 +71,27 @@ async function paperBot(bot, scripts, getCandles, now, gateF, notify, pushOut) {
     if (evs.length && dUrl && bot.notify !== false) await postDiscord(dUrl, evs.slice(-6).map(e => NT.embed(bot, sess, e)));
     const L = sess.ledger; for (let i = 0; i < L.length - 300; i++) { delete L[i].reasonIn; delete L[i].ctx; delete L[i].sl; delete L[i].tp; } out.push(sess);
   } return out;
+}
+/* Mejora automática en el servidor: si la candidata ganó fuera de muestra y el bot tiene la mejora automática, pasa a ser la principal
+   SIN esperar a que abras la app (antes solo se aplicaba al abrir Nova Bot Lab). La simulación en vivo sigue con la versión nueva.
+   La anterior queda en Versiones («anterior») para regresar con un clic. Devuelve el número de la versión nueva o 0. */
+function promote(bot, r, now) {
+  if (!r || r.decision !== 'propuesta' || !r.candidate || (bot.cycle && bot.cycle.auto === false) || bot.status === 'archived') return 0;
+  const sp = B.normalizeSpec(r.candidate); if (!B.validateSpec(sp).ok) return 0;
+  const vs = bot.versions || (bot.versions = []), nv = Math.max(0, ...vs.map(x => x.v || 0)) + 1, prev = bot.mainV, chg = (r.changes || []).map(c => `${c.path} ${c.from}→${c.to}`).join('; ');
+  vs.forEach(x => { if (x.v === prev) x.state = 'anterior'; });
+  vs.push({v: nv, spec: sp, at: now, note: String(r.note || ('Reentrenamiento: ' + chg)).slice(0, 200), origin: 'servidor' + (r.note ? ' (cerebro)' : ' (reentrenamiento)'), state: 'principal', auto: true});
+  bot.mainV = nv; const j = bot.journal || (bot.journal = []);
+  const why = r.oos ? ` Fuera de muestra la nueva ganó ${Math.round(r.oos.cand.net)} contra ${Math.round(r.oos.base.net)} de la anterior (${r.oos.cand.n} operaciones${r.coins > 1 ? ` en ${r.coins} monedas` : ''}).` : '';
+  j.push({t: now, kind: 'versión', text: `Mejora automática (servidor): la v${nv} pasó a ser la principal en lugar de la v${prev}.${why} Si no te convence, en Versiones puedes regresar a la v${prev}.`});
+  const run = (bot.paper || []).filter(x => x.status === 'running');
+  if (run.length) { // la simulación en vivo continúa con la versión nueva, en las mismas monedas y temporalidades
+    const cap = run.reduce((a, x) => a + (+x.capital || 0), 0) || sp.risk.capital, grp = now.toString(36) + 'g';
+    for (const x of run) { x.status = 'stopped'; x.pausedAt = now; }
+    for (const x of run) { const s2 = JSON.parse(JSON.stringify(sp)); s2.symbol = x.spec.symbol; s2.interval = x.spec.interval; delete s2.basket; delete s2.intervals; const ns = P.newSession({id: now.toString(36) + Math.random().toString(36).slice(2, 6), v: nv, spec: s2, capital: cap / run.length, startT: now}); ns.grp = grp; bot.paper.push(ns); }
+    j.push({t: now, kind: 'paper', text: `La simulación en vivo se reinició con la v${nv}.`});
+  }
+  if (j.length > 300) j.splice(0, j.length - 300); bot.updatedAt = now; return nv;
 }
 const due = (bot, prev, now, force, linked) => { const c = linked ? Object.assign({enabled: true, everyHours: 24}, bot.cycle, {enabled: true}) : bot.cycle; if (!c || !c.enabled || bot.status === 'paused' || bot.status === 'archived') return false; if (force) return true; const every = Math.max(6, Math.min(24 * 14, c.everyHours || 24)) * 36e5; return !prev || now - (prev.at || 0) >= every - 30 * 6e4; };
 
@@ -94,9 +118,14 @@ async function main() {
     const bd = await u.collection('data').doc('botlab').get(); if (!bd.exists) continue; let S; try { S = JSON.parse(bd.data().items || '{}'); } catch { continue; }
     let links = {}; try { const bb = await u.collection('data').doc('brain_bots').get(); links = (bb.exists && bb.data().bots) || {}; } catch {} const linked = b => links[b.id] && links[b.id].auto !== false;
     const all = S.bots || [], cyc = MODE !== 'paper' ? all.filter(b => b && ((b.cycle && b.cycle.enabled) || linked(b))) : [], pap = MODE !== 'retrain' ? all.filter(b => b && (b.paper || []).some(x => x.status === 'running')) : []; if (!cyc.length && !pap.length) continue;
-    const sd = await u.collection('data').doc('botlab_server').get(), prev = sd.exists ? sd.data() : {}, results = Object.assign({}, prev.results || {}), paper = Object.assign({}, prev.paper || {}), brainMem = Object.assign({}, prev.brainMem || {}); let scripts = null, changed = false;
+    const sd = await u.collection('data').doc('botlab_server').get(), prev = sd.exists ? sd.data() : {}, results = Object.assign({}, prev.results || {}), paper = Object.assign({}, prev.paper || {}), brainMem = Object.assign({}, prev.brainMem || {}); let scripts = null, changed = false, botsChanged = false;
     const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(unpackStr(s.data().items || '[]')) : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } scripts = scripts.concat(catalogScripts().filter(c => c.code && !scripts.some(x => x.id === c.id))); try { const pro = await db.collection('pro').get(); for (const d of pro.docs) if (!scripts.some(x => x.id === 'cat:' + d.id)) scripts.push({id: 'cat:' + d.id, name: d.id, code: d.data().code, builtin: true}); } catch {} }; // los Nova Nexus PRO ya no están en el repo: se leen de Firestore
-    for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force, linked(b))) continue; await loadScripts(); const bc = linked(b) ? {link: links[b.id], memory: brainMem[b.id] || []} : null; const r = await retrainBot(b, scripts, getCandles, now, bc); if (bc && bc.out) { brainMem[b.id] = JSON.parse(JSON.stringify(bc.out.memory || [])); nbr++; } results[b.id] = JSON.parse(JSON.stringify(r)); changed = true; nr++; console.log(`· bot ${nr}${bc ? ' (con cerebro)' : ''}: ${r.status}${r.status === 'error' ? ' · ' + String(r.reason || '').slice(0, 120) : ' · ' + r.decision + (r.brain ? ` · ideas probadas: ${(r.brain.tried || []).length}` : '')}`); if (r.decision === 'propuesta') np++; }
+    for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force, linked(b))) continue; await loadScripts(); const bc = linked(b) ? {link: links[b.id], memory: brainMem[b.id] || []} : null; const r = await retrainBot(b, scripts, getCandles, now, bc); if (bc && bc.out) { brainMem[b.id] = JSON.parse(JSON.stringify(bc.out.memory || [])); nbr++; } const nv = promote(b, r, now); if (nv) { r.applied = {v: nv, at: now}; botsChanged = true; } results[b.id] = JSON.parse(JSON.stringify(r)); changed = true; nr++; console.log(`· bot ${nr}${bc ? ' (con cerebro)' : ''}: ${r.status}${r.status === 'error' ? ' · ' + String(r.reason || '').slice(0, 120) : ' · ' + r.decision + (r.brain ? ` · ideas probadas: ${(r.brain.tried || []).length}` : '')}`); if (r.decision === 'propuesta') np++; }
+    if (botsChanged) { // la versión nueva también queda en tus bots (tu cuenta) aunque no abras la app
+      const str = JSON.stringify(S);
+      if (str.length < 990000) { try { await u.collection('data').doc('botlab').set({items: str, updatedAt: admin.firestore.FieldValue.serverTimestamp()}); console.log('· mejora aplicada sola en tus bots'); } catch (e) { console.log('· no se pudo guardar la mejora en tus bots (la app la aplica al abrir): ' + String(e.message || e).slice(0, 100)); } }
+      else console.log('· tus bots ocupan mucho: la mejora la aplica la app al abrir');
+    }
     const gateF = RK.gateFor(S.risk, all.flatMap(x => x.status === 'archived' ? [] : x.paper || []), now);
     const pushOut = [];
     for (const b of pap) { await loadScripts(); adoptServer(b, (prev.paper || {})[b.id]); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.notify, pushOut); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }

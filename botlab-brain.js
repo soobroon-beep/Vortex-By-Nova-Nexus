@@ -52,6 +52,15 @@ function judge(b, c, capital) {
 
 async function llm(messages, fetchF) {
   const f = fetchF || globalThis.fetch; let last;
+  // primero Groq (gratis, con el secreto GROQ_KEY del repositorio): Pollinations se quedó sin créditos y el cerebro no recibía ideas
+  const gk = typeof process !== 'undefined' && process.env && process.env.GROQ_KEY;
+  if (gk) for (const model of ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile']) {
+    try {
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 90000);
+      const r = await f('https://api.groq.com/openai/v1/chat/completions', {method: 'POST', signal: ctl.signal, headers: {'content-type': 'application/json', authorization: 'Bearer ' + gk}, body: JSON.stringify({model, messages, max_tokens: 1200, temperature: .4})}); clearTimeout(t);
+      if (!r.ok) { last = new Error('Groq ' + r.status); continue; } const j = await r.json(), x = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content; if (x) return String(x);
+    } catch (e) { last = e; }
+  }
   for (const model of ['openai', 'mistral']) for (const [url, key] of [[GEN_URL, POLLEN_KEY], [FREE_URL, '']]) {
     try {
       const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 90000);
