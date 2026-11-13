@@ -27,7 +27,7 @@
   const FEATURES = {chart: 'free', drawings: 'free', freeInd: 'free', replay: 'free', risk: 'free', trade: 'free', watch: 'free', news: 'free', alerts: 'free', layouts: 'plus', novaLite: 'plus', aiChart: 'plus', aiBrief: 'plus', aiLab: 'plus', screener: 'plus', discord: 'plus', novaNexus: 'infinity', proInd: 'plus', liq: 'infinity', pixel: 'infinity', lens: 'infinity', botlab: 'infinity'};
   const can = f => RANK[current()] >= RANK[FEATURES[f] || 'free'];
   const lastUid = () => { try { return localStorage.getItem('cct_last_uid') || ''; } catch { return ''; } };
-  const real = () => { if (owner) return 'infinity'; const id = user ? user.uid : lastUid(); return id && TIERS[st.tier] && st.uid === id ? st.tier : 'free'; }; // sin sesión: Gratis (mientras carga la sesión se usa el último plan de esa cuenta)
+  const real = () => { if (!user) return 'free'; if (owner) return 'infinity'; return TIERS[st.tier] && st.uid === user.uid ? st.tier : 'free'; }; // sin sesión iniciada: siempre Gratis (sin desarrollador ni planes guardados en el dispositivo) // sin sesión: Gratis (mientras carga la sesión se usa el último plan de esa cuenta)
   const pvOn = () => (owner && user ? pv : ''); // la vista previa solo existe para el desarrollador (antes cualquiera podía activarla desde el navegador y ver Infinity)
   const current = () => pvOn() || real();
   const svg = (p, s = 18) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
