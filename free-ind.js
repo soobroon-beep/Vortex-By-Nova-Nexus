@@ -47,22 +47,31 @@ plot(nuevo ? na : s1, "S1", color.new(#26a69a, 20), 1, plot.style_linebr)
 plot(nuevo ? na : s2, "S2", color.new(#26a69a, 40), 1, plot.style_linebr)
 plot(nuevo ? na : s3, "S3", color.new(#26a69a, 60), 1, plot.style_linebr)
 `},
-    {id: 'autofib', cat: 'struct', col: '#ffd54f', name: 'Fibonacci automático', desc: 'Retroceso de Fibonacci entre el máximo y el mínimo recientes, con sus niveles clave', art: 'patterns', code: `//@version=5
-indicator("Fibonacci automático", "Auto Fib", overlay=true, max_lines_count=20, max_labels_count=20)
+    {id: 'autofib', cat: 'struct', col: '#ffd54f', name: 'Fibonacci automático', desc: 'Retroceso de Fibonacci entre el máximo y el mínimo recientes; resalta en dorado la proporción áurea 0.618, la zona dorada 0.618–0.65 y los niveles clave', art: 'patterns', code: `//@version=5
+indicator("Fibonacci automático", "Auto Fib", overlay=true, max_lines_count=20, max_labels_count=20, max_boxes_count=4)
 lb = input.int(150, "Velas a revisar", minval=20)
+gold = input.color(#f5c568, "Color de los niveles clave")
+zona = input.bool(true, "Resaltar la zona dorada (0.618 – 0.65)")
 hi = ta.highest(high, lb)
 lo = ta.lowest(low, lb)
 hiBar = ta.highestbars(high, lb)
 loBar = ta.lowestbars(low, lb)
 sube = loBar < hiBar
-var lvls = array.from(0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0)
-var cols = array.from(#787b86, #ef5350, #ff9800, #4caf50, #089981, #00bcd4, #787b86)
+var lvls = array.from(0.0, 0.236, 0.382, 0.5, 0.618, 0.65, 0.786, 1.0)
+var cols = array.from(#787b86, #8f98a8, #8f98a8, #e9d29a, #f5c568, #d9b45c, #e9d29a, #787b86)
+var names = array.from("", "", "", " · medio", " · proporción áurea", " · zona dorada", " · retroceso profundo", "")
 if barstate.islast
+    yA = sube ? hi - (hi - lo) * 0.618 : lo + (hi - lo) * 0.618
+    yB = sube ? hi - (hi - lo) * 0.65 : lo + (hi - lo) * 0.65
+    if zona
+        box.new(bar_index - lb, math.max(yA, yB), bar_index + 10, math.min(yA, yB), border_color=color.new(gold, 60), bgcolor=color.new(gold, 80))
     for i = 0 to array.size(lvls) - 1
         f = array.get(lvls, i)
         y = sube ? hi - (hi - lo) * f : lo + (hi - lo) * f
-        line.new(bar_index - lb, y, bar_index + 10, y, color=array.get(cols, i), width=1, style=line.style_dashed)
-        label.new(bar_index + 10, y, str.tostring(f) + " (" + str.tostring(y, format.mintick) + ")", style=label.style_label_left, color=color.new(color.black, 100), textcolor=array.get(cols, i), size=size.small)
+        clave = f == 0.618 or f == 0.5 or f == 0.786 or f == 0.65
+        c = f == 0.618 ? gold : array.get(cols, i)
+        line.new(bar_index - lb, y, bar_index + 10, y, color=c, width=f == 0.618 ? 3 : clave ? 2 : 1, style=clave ? line.style_solid : line.style_dashed)
+        label.new(bar_index + 10, y, str.tostring(f) + array.get(names, i) + " (" + str.tostring(y, format.mintick) + ")", style=label.style_label_left, color=color.new(color.black, 100), textcolor=c, size=f == 0.618 ? size.normal : size.small)
 `},
     {id: 'volma', cat: 'volume', col: '#8294a8', name: 'Volumen con media', desc: 'Volumen por vela en panel propio con su media de 20 y marca cuando hay volumen anormal', art: 'volume', code: `//@version=5
 indicator("Volumen con media", "Vol + MA", overlay=false, format=format.volume)

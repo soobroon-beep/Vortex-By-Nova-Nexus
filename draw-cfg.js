@@ -18,7 +18,7 @@
   const SIZE = [pick('sz', 'Tamaño', 1, [[.75, 'S'], [1, 'M'], [1.5, 'L'], [2, 'XL']])];
   const PATTERN = [sec('Patrón'), bool('lb', 'Letras de los puntos', true), ...FILL(12)];
   const FONT = (bo) => [bool('bo', 'Negrita', bo), bool('it', 'Cursiva')];
-  const FIB_ALL = [0, .236, .382, .5, .618, .705, .786, 1, 1.272, 1.414, 1.618, 2, 2.618, 3.618, 4.236];
+  const FIB_ALL = [0, .236, .382, .5, .618, .65, .705, .786, 1, 1.272, 1.414, 1.618, 2, 2.618, 3.618, 4.236];
   const FIB_LBL = [bool('sl', 'Mostrar el nivel', true), bool('sv', 'Mostrar el precio', true), pick('lp', 'Posición de las etiquetas', 'l', [['l', 'Izquierda'], ['r', 'Derecha']])];
   const GAN = [.125, .25, .3333, .5, 1, 2, 3, 4, 8], GAN_LAB = ['1x8', '1x4', '1x3', '1x2', '1x1', '2x1', '3x1', '4x1', '8x1'];
 

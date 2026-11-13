@@ -1,6 +1,7 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
   {v: '3.31', d: '12 nov 2026', t: '15 indicadores gratis nuevos', items: [
+    'Fibonacci (herramienta y automático): la proporción áurea 0.618 y la zona dorada 0.618–0.65 en dorado y con brillo; 0.5, 0.786 y 1.618 también resaltados.',
     'Patrones: cada tipo (armónico, 1-2-3, ABC, doble techo/suelo, HCH, triángulo/cuña, Elliott) se dibuja con su propio tono de verde o de rojo para distinguirlos fácil.',
     'Tendencia: Cinta de EMAs 9/21/50/200, UT Bot (compra/venta), Chandelier Exit y Canal de regresión lineal.',
     'Osciladores: Squeeze Momentum, WaveTrend, RSI con divergencias, Vortex Indicator (VI) y Aroon.',
