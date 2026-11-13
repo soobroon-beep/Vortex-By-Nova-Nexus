@@ -59,7 +59,7 @@
   const CHECK = '<svg viewBox="0 0 36 36" width="30" height="30"><circle cx="18" cy="18" r="15" fill="none" stroke="#20bf9f" stroke-width="3" class="ck-c"/><path d="M11 18.5l5 5 9-10" fill="none" stroke="#20bf9f" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" class="ck-p"/></svg>';
   const LK = window.CCTBotLook, CO = window.CCTBotCoach; let newLook = null, tchart = null, freshV = null; // freshV: aviso «nueva versión aplicada» visible solo hasta que cambias de pestaña o de vista
   const lookOf = b => LK ? LK.of(b) : {color: '#548fff', icon: 'planeta'}, avOf = (b, sz) => LK ? LK.avatar(lookOf(b), sz) : '';
-  const tipsOf = b => { try { return CO && b.status !== 'archived' ? CO.tips(mainSpec(b), runOf(b), b.sweeps).filter(t => !ignoredTip(b, t)) : []; } catch { return []; } }; // sin los consejos que ignoraste
+  const tipsOf = b => { try { return CO && b.status !== 'archived' ? CO.tips(mainSpec(b), runOf(b), b.sweeps).filter(t => !ignoredTip(b, t) && t.kind !== 'temporalidad' && t.kind !== 'activo') : []; } catch { return []; } }; // sin los consejos que ignoraste
   function newBot(spec, method, desc) {
     const now = Date.now(); const sp = B.normalizeSpec(spec);
     const id = uidOf(), look = newLook ? Object.assign({}, newLook) : (LK ? LK.of({id}) : null); newLook = null;
@@ -78,7 +78,7 @@
   const compact = (arr, n) => { if (arr.length <= n) return arr; const out = [], k = (arr.length - 1) / (n - 1); for (let i = 0; i < n; i++) out.push(arr[Math.round(i * k)]); return out; };
   function summarize(res, v, bars) {
     return {id: uidOf(), v, at: Date.now(), avoid: (res.avoid || []).slice(-300), symbol: res.symbol, interval: res.interval, bars: res.bars, reqBars: bars, from: res.from, to: res.to, metrics: res.metrics, segments: res.segments, verdict: res.verdict, buyHold: res.buyHold, daily: res.daily, breakdown: res.breakdown, warnings: res.warnings, halted: res.halted,
-      trades: res.trades.slice(-400).map(t => ({id: t.id, side: t.side, entryT: t.entryT, exitT: t.exitT, entry: t.entry, exit: t.exit, sl: t.sl, tp: t.tp, net: t.net, fees: t.fees, r: t.r, bars: t.bars, why: t.why, reasonIn: t.reasonIn, ctx: t.ctx, open: t.open})), tradesTotal: res.trades.length,
+      trades: res.trades.slice(-400).map(t => ({id: t.id, sym: t.sym, side: t.side, entryT: t.entryT, exitT: t.exitT, entry: t.entry, exit: t.exit, sl: t.sl, tp: t.tp, net: t.net, fees: t.fees, r: t.r, bars: t.bars, why: t.why, reasonIn: t.reasonIn, ctx: t.ctx, open: t.open})), tradesTotal: res.trades.length,
       equity: compact(res.equity, 240).map(p => [p.t, Math.round(p.e * 100) / 100]), bh: (res.bhCurve || []).map(p => [p[0], Math.round(p[1] * 100) / 100]), ext: ext(res)};
   }
   /* ───────── Indicadores del usuario (Pine) → señales por vela ───────── */
@@ -913,16 +913,37 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const k = x => x && {ret: x.metrics.retPct, win: x.metrics.winRate, dd: x.metrics.maxDDPct}; b.lastApply = {title: t.title, v: nv, prev: old, promoted: promote, before: k(m), after: k(r), tip: t, at: Date.now()}; freshV = {id: b.id, v: nv}; touch(b); if (view === 'bot' && cur === b.id) render();
   }
   const COACH_SYS = `Eres el entrenador de UN bot de trading concreto dentro de un laboratorio de backtesting. Hablas en español sencillo. Usa SOLO las reglas y números del contexto; no inventes resultados ni prometas ganancias. Responde SOLO con JSON:
-{"resumen":"3-5 frases: cómo va este bot, qué viste en sus resultados y su mayor debilidad","tips":[{"titulo":"acción corta","por_que":"motivo con los números del contexto","patch":{...}}]}
-Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera de muestra. "patch" es un fragmento de la especificación del bot con el MISMO esquema (solo los campos que cambian; las listas de condiciones se sustituyen completas, así que incluye también las condiciones que se conservan). Puedes cambiar symbol (Binance Spot terminado en USDT) o interval si recomiendas otro activo o temporalidad.`;
+{"resumen":"3-5 frases: cómo va ESTE bot, qué viste en SUS resultados y su mayor debilidad concreta","tips":[{"titulo":"acción corta y específica","por_que":"motivo citando al menos 2 números del contexto (horario, lado, moneda, salida, volatilidad…)","evidencia":"el dato exacto del contexto que lo justifica","patch":{...}}]}
+Reglas para que los consejos NO sean genéricos:
+- Cada consejo debe nacer de un problema que SE VE en los datos de este bot (p. ej. «12 de sus 18 pérdidas salen por stop en menos de 3 velas», «en 16:00–20:00 UTC pierde −$140 en 9 operaciones», «los cortos en DOGE pierden»). Si no hay un dato que lo respalde, no lo propongas.
+- Ajusta los valores a SU temporalidad (la temporalidad del contexto): en 15m los stops y objetivos son más cortos y los filtros de horario pesan más; en 4h, más amplios y la tendencia pesa más.
+- Prohibido repetir o parafrasear los consejos de la lista «YA PROBADOS / APLICADOS / DESCARTADOS».
+- Prohibidos los consejos de manual que valdrían para cualquier bot («añade stop loss», «usa RSI», «opera a favor de la tendencia», «baja el riesgo») salvo que un número de este bot lo exija y lo cites.
+- NO cambies la moneda, la cesta (basket), la temporalidad, el capital ni el riesgo por operación: eso lo decide el usuario. Mejora entradas, salidas, filtros y horarios.
+- Mejor 1 consejo muy bien sustentado que 4 flojos. Si no ves nada claro, devuelve "tips": [].
+Máximo 3 tips. "patch" es un fragmento de la especificación con el MISMO esquema (solo los campos que cambian; las listas de condiciones se sustituyen completas, así que incluye también las condiciones que se conservan).`;
   async function coachAi(b, quiet) {
     const run = runOf(b); if (!run || !LLM || b.coachBusy) return; b.coachBusy = true; b.coachErr = ''; if (view === 'bot' && cur === b.id && sub.est === 'tips' && tab === 'est') render();
     try {
       const sw = b.sweeps ? '\n\nANÁLISIS EN OTROS MERCADOS:\n' + JSON.stringify(b.sweeps.rows.filter(x => !x.err).map(x => [x.symbol, x.interval, x.n, Math.round(x.retPct * 10) / 10, x.win == null ? null : Math.round(x.win)])) : '';
-      const ctx = ctxOf(b, run) + '\n\nDESGLOSE (por horario UTC de 4 h, tendencia, volatilidad y lado):\n' + JSON.stringify(run.breakdown || {}) + sw;
-      const r = await LLM.chat([{role: 'system', content: COACH_SYS}, {role: 'user', content: ctx}], {maxTokens: 1100, temperature: .2, timeout: 90000});
+      const sp0 = mainSpec(b), tr = (run.trades || []).filter(t => !t.open), byExit = {}; for (const t of tr) { const k = String(t.why || 'otra').slice(0, 40), x = byExit[k] || (byExit[k] = {n: 0, net: 0, velas: 0}); x.n++; x.net += t.net || 0; x.velas += t.bars || 0; }
+      for (const x of Object.values(byExit)) { x.net = Math.round(x.net); x.velas = Math.round(x.velas / Math.max(1, x.n)); }
+      const quick = tr.filter(t => t.net < 0 && (t.bars || 0) <= 3).length, bySym = {}; for (const t of tr) { const k = t.sym || sp0.symbol, x = bySym[k] || (bySym[k] = {n: 0, net: 0, w: 0}); x.n++; x.net += t.net || 0; if (t.net > 0) x.w++; } for (const x of Object.values(bySym)) x.net = Math.round(x.net);
+      const tried = [...Object.values(b.tipTests || {}).map(x => `${x.title} → ${x.lvl}`), ...(b.ignoredTips || []).map(z => String(typeof z === 'string' ? z : z.k).split('|')[0] + ' → descartado'), ...b.versions.filter(v => /^Consejo: /.test(v.note || '')).map(v => v.note.replace(/^Consejo: /, '') + ' → aplicado')].slice(-20);
+      const lv = (b.paper || []).filter(x => x.status === 'running'), live = lv.length && PP() ? lv.map(x => { const st = PP().stats(x); return [x.spec.symbol, x.spec.interval, st.nClosed, Math.round(st.retPct * 10) / 10, st.winRate == null ? null : Math.round(st.winRate)]; }) : [];
+      const ctx = ctxOf(b, run) + `\n\nTEMPORALIDAD: ${sp0.interval}${Array.isArray(sp0.basket) && sp0.basket.length ? ' · CESTA: ' + sp0.basket.join(',') : ' · MONEDA: ' + sp0.symbol}`
+        + '\n\nDESGLOSE (por horario UTC de 4 h, tendencia, volatilidad y lado):\n' + JSON.stringify(run.breakdown || {})
+        + '\n\nSALIDAS (motivo → operaciones, neto $, velas promedio):\n' + JSON.stringify(byExit) + `\nPérdidas cerradas en 3 velas o menos: ${quick} de ${tr.filter(t => t.net < 0).length}.`
+        + (Object.keys(bySym).length > 1 ? '\n\nPOR MONEDA (operaciones, neto $, ganadas):\n' + JSON.stringify(bySym) : '')
+        + (live.length ? '\n\nEN VIVO (simulación: moneda, temporalidad, cerradas, rend %, aciertos %):\n' + JSON.stringify(live) : '')
+        + (b.server && b.server.analysis && b.server.analysis.text ? '\n\nANÁLISIS DEL SERVIDOR (8 monedas × 15m/1h/4h):\n' + b.server.analysis.text : '')
+        + (tried.length ? '\n\nYA PROBADOS / APLICADOS / DESCARTADOS (no los repitas):\n- ' + tried.join('\n- ') : '') + sw;
+      const r = await LLM.chat([{role: 'system', content: COACH_SYS}, {role: 'user', content: ctx}], {maxTokens: 1400, temperature: .2, timeout: 90000});
       const raw = (/```json\s*([\s\S]*?)```/.exec(r.text) || [null, r.text])[1], j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
-      b.coach = {runId: run.id, v: b.mainV, at: Date.now(), text: String(j.resumen || '').slice(0, 1200), tips: (j.tips || []).slice(0, 4).map(t => ({kind: 'ia', title: String(t.titulo || 'Consejo de la IA').slice(0, 90), why: String(t.por_que || '').slice(0, 400), patch: t.patch}))};
+      const GEN = /^(a[ñn]ade|pon(le)?|usa|agrega) (un )?(stop|rsi|ema|filtro de tendencia)|opera a favor de la tendencia|baja el riesgo|diversifica|gesti[oó]n de riesgo/i, lock = p => p && typeof p === 'object' && ['symbol', 'basket', 'interval', 'intervals'].some(k => k in p) || (p && p.risk && ('capital' in p.risk || 'riskPct' in p.risk || 'size' in p.risk));
+      const triedT = new Set(tried.map(x => x.split(' → ')[0].toLowerCase()));
+      b.coach = {runId: run.id, v: b.mainV, at: Date.now(), text: String(j.resumen || '').slice(0, 1200), tips: (j.tips || []).filter(t => t && t.patch && /\d/.test(String(t.por_que || '') + String(t.evidencia || '')) && !GEN.test(String(t.titulo || '')) && !lock(t.patch) && !triedT.has(String(t.titulo || '').toLowerCase())).slice(0, 3)
+        .map(t => ({kind: 'ia', title: String(t.titulo || 'Consejo de la IA').slice(0, 90), why: (String(t.por_que || '') + (t.evidencia ? ' (' + String(t.evidencia) + ')' : '')).slice(0, 420), patch: t.patch}))}; // sin consejos de manual, sin cambiar moneda/temporalidad/riesgo y sin repetir lo ya probado
       log(b, 'consejo', 'La IA analizó el bot y dejó ' + b.coach.tips.length + ' sugerencia(s).');
     } catch (e) { b.coachErr = quiet ? '' : 'La IA no respondió (' + (LLM.friendly ? LLM.friendly(e) : e.message) + '). Los consejos de arriba se calculan sin IA con tus datos.'; }
     b.coachBusy = false; touch(b); if (view === 'bot' && cur === b.id && tab === 'est') render();
