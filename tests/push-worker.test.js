@@ -231,3 +231,15 @@ test('/bot-push: avisos de tus bots solo a los celulares de tu cuenta y con la l
   const {botPushKey} = require('../scripts/bot-push-key.js'); const sa = JSON.stringify({private_key_id: 'abc', client_email: 'x@y'});
   assert.strictEqual(botPushKey(sa), botPushKey(sa)); assert.strictEqual(botPushKey(sa).length, 64); assert.strictEqual(botPushKey(''), '');
 });
+
+test('Discord apagado en Ajustes: el servidor no manda nada a Discord (y encendido sí)', async () => {
+  const {sanDc, dcAllow, evalAlerts} = await W();
+  assert.deepEqual(sanDc({on: false, price: true, ind: true}), {on: false, price: false, ind: false});
+  assert.deepEqual(sanDc({on: true, price: false}), {on: true, price: false, ind: true});
+  assert.equal(dcAllow({dc: sanDc({on: false})}, 'price'), false);
+  assert.equal(dcAllow({dc: sanDc({on: true})}, 'ind'), true);
+  assert.equal(dcAllow({dc: sanDc({on: true})}, 'on'), true);
+  assert.equal(dcAllow({dcUrl: ''}, 'price'), false); // app vieja con Discord apagado
+  const r = evalAlerts([{id: 'a', on: true, symbol: 'BTCUSDT', price: 100, dir: 'up', notify: 'app', dc: true}], {BTCUSDT: 101});
+  assert.equal(r.dc.length, 0); // «Solo en la app» ya no sale a Discord
+});

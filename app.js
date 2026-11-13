@@ -694,7 +694,8 @@ function sysNotify(title, body, tag) {
   } catch {}
 }
 const dcSend = (k, o) => { if (window.CCTDiscord && PR.n.discord) CCTDiscord.alert(k, o); }; // Discord solo si se quiere recibir ahí
-const alNotify = (a, kind) => { const n = a.notify || 'both'; return {app: n !== 'discord', dc: n !== 'app' && (!!a.notify || PR.n.discord)}; }; // dónde avisar: app, Discord o ambos (alertas viejas: ambos si Discord está activo en Ajustes)
+const alNotify = (a, kind) => { const n = a.notify || 'both'; return {app: n !== 'discord', dc: n !== 'app' && !!PR.n.discord}; }; // dónde avisar: app, Discord o ambos. Con «Enviar avisos a Discord» apagado en Ajustes no sale nada a Discord
+window.CCT_discordOn = () => !!(PR && PR.n && PR.n.discord); // interruptor general de Discord (lo usan bots, servidor y avisos)
 function fireAlert(a, price) {
   const msg = `${base(a.symbol)} ${a.dir === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`, dir0 = a.dir;
   a.firedAt = Date.now(); a.firedPrice = price;
@@ -3159,7 +3160,7 @@ document.addEventListener('click', e => {
     if (isCopy(id)) removeCopy(id); else state.indicators[id] = false; if (state.stdHide) delete state.stdHide[id]; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast('Indicador apagado: puedes volver a activarlo en Indicadores');
   }
 });
-function render() { renderCore(); syncLegend(); syncLegToggle(); }
+function render() { renderCore(); syncLegend(); syncLegToggle(); if (candles.length && window.CCT_splashDone) CCT_splashDone(); } // ya hay velas: termina la animación de apertura
 /* Reordenar paneles: mantén pulsado el NOMBRE de un indicador (RSI, MACD, un script en panel…) y arrástralo hacia arriba o abajo; al soltar queda guardado.
    Solo se mueve el nombre/panel elegido; los botones y el resto de la leyenda no cambian. */
 (() => {
@@ -4701,6 +4702,7 @@ renderAcct();
 function setPref(k, v, sub) { // guarda una preferencia, la manda a la cuenta y repinta lo que depende de ella
   const n = JSON.parse(JSON.stringify(PR)); if (sub) n.n[k] = v; else n[k] = v; PR = CCTPrefs.sanitize(n);
   syncUi(); renderPrefs(); try { render(); renderWatch(); updateChartHeader(); renderAlerts(); renderMoveAlerts(); } catch {}
+  if (sub && k === 'discord') { try { window.CCTBotLabSave && CCTBotLabSave(); } catch {} try { window.CCTPushSync && CCTPushSync(); } catch {} } // el cambio llega al servidor y a los bots enseguida
 }
 function renderPrefs() {
   const pb = $('#prefsBox'), nb = $('#notifBox'), ab = $('#aboutBox'); if (!pb || !nb || !ab) return; alTabCount();

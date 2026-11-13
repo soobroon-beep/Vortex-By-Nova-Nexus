@@ -51,6 +51,8 @@
     (S.positions || []).forEach((p, i) => {
       if (X().baseOf(p.symbol) !== b) return; const L = +p.contracts * (String(p.side).toLowerCase() === 'long' ? 1 : -1), e = +p.entryPrice, pr = X().protections(p), id = 'x' + i, sd = L > 0 ? 1 : -1, q = Math.abs(+p.contracts) * (+p.contractSize || 1);
       out.push({id, kind: 'pos', price: e, side: sd, txt: `${sd > 0 ? 'LONG' : 'SHORT'} REAL ${qf(q)}${+p.leverage ? ' · ' + p.leverage + 'x' : ''}`, pnl: +p.unrealizedPnl, sub: fin(+p.percentage) ? (+p.percentage >= 0 ? '+' : '') + (+p.percentage).toFixed(2) + '%' : '', x: 1, addTp: !pr.tp, addSl: !pr.sl, real: 1});
+      { const L0 = px(sym), hit = lv => lv > 0 && fin(L0) && (sd > 0 ? L0 >= lv : L0 <= lv), hitDn = lv => lv > 0 && fin(L0) && (sd > 0 ? L0 <= lv : L0 >= lv); // el precio ya tocó el TP, el SL o la liquidación: se vuelve a leer el exchange enseguida para quitar las líneas si se cerró
+        if ((pr.tp && hit(pr.tp.price)) || (pr.sl && hitDn(pr.sl.price)) || hitDn(+p.liquidationPrice)) { const now = Date.now(); if (now - (realLines.chk || 0) > 4000) { realLines.chk = now; X().refreshSoon && X().refreshSoon(300); } } }
       if (pr.tp) out.push({id, kind: 'tp', price: pr.tp.price, txt: 'TP', pnl: (pr.tp.price - e) * q * sd, drag: 1, x: 1, real: 1});
       if (pr.sl) out.push({id, kind: 'sl', price: pr.sl.price, txt: 'SL', pnl: (pr.sl.price - e) * q * sd, drag: 1, x: 1, real: 1});
       if (+p.liquidationPrice > 0) out.push({id, kind: 'liq', price: +p.liquidationPrice, txt: 'Liquidación', real: 1});

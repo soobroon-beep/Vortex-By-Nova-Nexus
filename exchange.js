@@ -14,7 +14,7 @@
   const toast = m => { if (root.CCT_toast) root.CCT_toast(m); };
   const svg = (p, s = 18) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   const load = () => { try { const o = JSON.parse(localStorage.getItem(LS) || 'null'); return o && o.id && o.apiKey ? o : null; } catch { return null; } };
-  let cfg = load(), ex = null, ccxtP = null, snap = {equity: NaN, free: NaN, positions: [], orders: [], at: 0, err: ''}, subs = [], pollT = 0, busy = false, cloudUid = '';
+  let cfg = load(), ex = null, ccxtP = null, snap = {equity: NaN, free: NaN, positions: [], orders: [], at: 0, err: ''}, subs = [], pollT = 0, busy = false, busyAt = 0, soonT = 0, soonAt = 0, cloudUid = '';
   const storeLocal = () => { try { if (cfg) localStorage.setItem(LS, JSON.stringify(cfg)); else localStorage.removeItem(LS); } catch {} };
   const nameOf = id => NAME[id] || (ex && ex.id === id && ex.name) || (root.ccxt && root.ccxt[id] && (root.ccxt[id].prototype && root.ccxt[id].prototype.name)) || (id.charAt(0).toUpperCase() + id.slice(1));
 
@@ -34,8 +34,14 @@
 
   /* Saldo, posiciones y órdenes abiertas (para el saldo de la cuenta y el panel Operar en modo real) */
   async function refresh() {
-    if (!cfg || busy) return snap; busy = true;
-    try {
+    if (!cfg || (busy && Date.now() - busyAt < 30000)) return snap; busy = true; busyAt = Date.now(); const my = busyAt; // si una lectura se colgó más de 30 s, ya no bloquea las siguientes
+    try { const r = await Promise.race([read(), new Promise((_, no) => setTimeout(() => no(new Error('El exchange tardó demasiado en responder')), 25000))]); if (busyAt === my) snap = r; }
+    catch (e) { snap = Object.assign({}, snap, {err: errText(e), at: Date.now()}); }
+    finally { if (busyAt === my) busy = false; }
+    emit(); return snap;
+  }
+  async function read() {
+    {
       if (!ex) ex = await make(cfg);
       const bal = await ex.fetchBalance(), q = ['USDT', 'USDC', 'USD'].find(k => bal.total && Number.isFinite(+bal.total[k]) && +bal.total[k] > 0) || 'USDT';
       let positions = [], orders = [];
@@ -47,10 +53,8 @@
       if (ex.has.fetchOpenOrders) { try { orders = await ex.fetchOpenOrders(); } catch (e) { try { orders = await ex.fetchOpenOrders(undefined, undefined, undefined, {type: cfg.market === 'spot' ? 'spot' : 'swap'}); } catch {} } }
       if (cfg.market !== 'spot' && ex.has.fetchOpenOrders) { try { const tr = await ex.fetchOpenOrders(undefined, undefined, undefined, {stop: true, trigger: true}); for (const o of tr || []) if (!orders.some(x => x.id === o.id)) orders.push(o); } catch {} } // órdenes condicionales (TP/SL)
       const upnl = positions.reduce((a, p) => a + (num(p.unrealizedPnl) || 0), 0), info = bal.info || {}, bxEq = num(info.data && info.data.balance && info.data.balance.equity);
-      snap = {equity: Number.isFinite(bxEq) ? bxEq : num(bal.total && bal.total[q]) + (cfg.market !== 'spot' ? upnl : 0), free: num(bal.free && bal.free[q]), quote: q, positions, orders, posErr, at: Date.now(), err: ''};
-    } catch (e) { snap = Object.assign({}, snap, {err: errText(e), at: Date.now()}); }
-    finally { busy = false; }
-    emit(); return snap;
+      return {equity: Number.isFinite(bxEq) ? bxEq : num(bal.total && bal.total[q]) + (cfg.market !== 'spot' ? upnl : 0), free: num(bal.free && bal.free[q]), quote: q, positions, orders, posErr, at: Date.now(), err: ''};
+    }
   }
   /* El mensaje exacto del exchange (código + texto) para saber qué arreglar */
   function rawOf(e) { const m = String(e && e.message || e); const j = m.match(/\{.*\}/); if (j) { try { const o = JSON.parse(j[0]); const c = o.code ?? o.retCode ?? o.ret_code, t = o.msg ?? o.retMsg ?? o.message ?? o.ret_msg; if (c != null || t) return `${c != null ? 'código ' + c + ': ' : ''}${t || ''}`.slice(0, 160); } catch {} } return m.replace(/^[a-z]+ /, '').slice(0, 160); }
@@ -67,7 +71,16 @@
     if (/Failed to fetch|NetworkError|vortex-exchange/i.test(m)) return 'Sin conexión con el puente de exchanges. Si es la primera vez, puede que aún se esté publicando.';
     return m.replace(/^[a-z]+ /, '').slice(0, 220);
   }
-  function startPoll() { clearInterval(pollT); if (!cfg) return; pollT = setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 60000); setTimeout(refresh, 400); }
+  /* Lectura periódica: cada 8 s si tienes posiciones u órdenes abiertas (para que al cerrarse se quiten sus líneas enseguida) y cada 60 s si no */
+  function startPoll() {
+    clearTimeout(pollT); if (!cfg) return;
+    const loop = async () => { if (!cfg) return; if (document.visibilityState === 'visible') await refresh(); const live = (snap.positions || []).length || (snap.orders || []).length; pollT = setTimeout(loop, live ? 8000 : 60000); };
+    pollT = setTimeout(loop, 400);
+  }
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && cfg) refreshSoon(); });
+  /* Lectura extra pronto (se junta si se pide varias veces): al tocar el precio un TP, SL o la liquidación, o justo después de operar */
+  function refreshSoon(ms = 600) { if (!cfg) return; const at = Date.now() + ms; if (soonT && soonAt <= at) return; clearTimeout(soonT); soonAt = at; soonT = setTimeout(() => { soonT = 0; refresh(); }, ms); }
+  const burst = () => { refreshSoon(800); setTimeout(() => refreshSoon(0), 3000); setTimeout(() => refreshSoon(0), 8000); }; // el exchange tarda unos segundos en reflejar el cierre
 
   /* ───────── Operar en vivo (solo si lo permitiste al conectar) ───────── */
   const pair = s => { const sp = root.CCT_split ? root.CCT_split(s) : [String(s).replace(/USDT$/, ''), 'USDT']; return [sp[0], sp[1] || 'USDT']; };
@@ -87,7 +100,7 @@
     if (o.type === 'stop') p.triggerPrice = +ex.priceToPrecision(m, o.price);
     let r; try { r = await ex.createOrder(m, type, side, amount, price, p); }
     catch (e) { if (cfg.market === 'spot' || !hedgeErr(e)) throw new Error(tradeErr(e)); r = await ex.createOrder(m, type, side, amount, price, Object.assign({}, p, {positionSide: o.side > 0 ? 'LONG' : 'SHORT', hedged: true})).catch(e2 => { throw new Error(tradeErr(e2)); }); }
-    setTimeout(refresh, 800); return r;
+    burst(); return r;
   }
   async function closePosition(pos, frac = 1) {
     if (!canTrade()) throw new Error('Activa «Permitir operar en vivo»');
@@ -95,7 +108,7 @@
     const long = String(pos.side).toLowerCase() === 'long', amount = +ex.amountToPrecision(pos.symbol, Math.abs(num(pos.contracts)) * frac), side = long ? 'sell' : 'buy';
     try { await ex.createOrder(pos.symbol, 'market', side, amount, undefined, {reduceOnly: true}); }
     catch (e) { if (!hedgeErr(e)) throw new Error(tradeErr(e)); await ex.createOrder(pos.symbol, 'market', side, amount, undefined, {positionSide: long ? 'LONG' : 'SHORT', hedged: true}).catch(e2 => { throw new Error(tradeErr(e2)); }); }
-    setTimeout(refresh, 800);
+    burst();
   }
   /* TP y SL de una posición real: se leen de sus órdenes condicionales y se cambian desde el gráfico */
   const trig = o => num(o.triggerPrice || o.stopPrice || o.takeProfitPrice || o.stopLossPrice || (o.info && (o.info.stopPrice || o.info.triggerPrice)));
@@ -117,10 +130,10 @@
     try { await ex.createOrder(pos.symbol, 'market', side, amount, undefined, Object.assign({reduceOnly: true}, base)); }
     catch (e) { if (!hedgeErr(e)) throw new Error(tradeErr(e)); await ex.createOrder(pos.symbol, 'market', side, amount, undefined, Object.assign({positionSide: long ? 'LONG' : 'SHORT', hedged: true}, base)).catch(e2 => { throw new Error(tradeErr(e2)); }); }
     if (prev) { try { await ex.cancelOrder(prev.id, pos.symbol, {stop: true, trigger: true}); } catch { try { await ex.cancelOrder(prev.id, pos.symbol); } catch {} } } // se quita el anterior DESPUÉS de poner el nuevo (nunca queda sin protección)
-    setTimeout(refresh, 700);
+    burst();
   }
-  async function removeTpSl(pos, kind) { const prev = protections(pos)[kind]; if (!prev) return; if (!ex) ex = await make(cfg); try { await ex.cancelOrder(prev.id, pos.symbol, {stop: true, trigger: true}); } catch (e) { try { await ex.cancelOrder(prev.id, pos.symbol); } catch (e2) { throw new Error(tradeErr(e2)); } } setTimeout(refresh, 600); }
-  async function cancel(o) { if (!ex) ex = await make(cfg); try { await ex.cancelOrder(o.id, o.symbol); } catch (e) { throw new Error(tradeErr(e)); } setTimeout(refresh, 600); }
+  async function removeTpSl(pos, kind) { const prev = protections(pos)[kind]; if (!prev) return; if (!ex) ex = await make(cfg); try { await ex.cancelOrder(prev.id, pos.symbol, {stop: true, trigger: true}); } catch (e) { try { await ex.cancelOrder(prev.id, pos.symbol); } catch (e2) { throw new Error(tradeErr(e2)); } } burst(); }
+  async function cancel(o) { if (!ex) ex = await make(cfg); try { await ex.cancelOrder(o.id, o.symbol); } catch (e) { throw new Error(tradeErr(e)); } burst(); }
   const canTrade = () => !!(cfg && cfg.trade);
 
   /* ───────── Guardado: dispositivo + cuenta ───────── */
@@ -156,7 +169,7 @@
     cfg = Object.assign({}, c, {at: Date.now()}); ex = t; storeLocal(); const cloud = await cloudSave(); lensLink(); startPoll(); await checkPerms();
     return cloud;
   }
-  async function disconnect() { cfg = null; ex = null; clearInterval(pollT); snap = {equity: NaN, free: NaN, positions: [], orders: [], at: 0, err: ''}; storeLocal(); await cloudSave(); emit(); }
+  async function disconnect() { cfg = null; ex = null; clearTimeout(pollT); snap = {equity: NaN, free: NaN, positions: [], orders: [], at: 0, err: ''}; storeLocal(); await cloudSave(); emit(); }
 
   /* ───────── Ventana: lista de exchanges → claves → conectado ───────── */
   let ov = null, step = 'list', pickId = '', q = '', all = null;
@@ -233,5 +246,5 @@
   document.addEventListener('click', e => { if (e.target.closest('[data-ex-open]')) { e.preventDefault(); open(); } });
   if (cfg) { startPoll(); setTimeout(checkPerms, 1500); }
 
-  root.CCTExchange = {open, close, refresh, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, protections, setTpSl, removeTpSl, baseOf, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
+  root.CCTExchange = {open, close, refresh, refreshSoon, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, protections, setTpSl, removeTpSl, baseOf, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
 })(typeof self !== 'undefined' ? self : this);

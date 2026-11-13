@@ -1,5 +1,11 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.28', d: '12 nov 2026', t: 'Apertura espacial y Discord bajo tu control', items: [
+    'Nueva animación al abrir o recargar VORTEX: viaje entre estrellas, tu logo con su órbita y un salto a velocidad luz al entrar.',
+    'Si apagas «Enviar avisos a Discord», ya no sale nada a Discord (alertas de precio, con indicador, movimientos, bots y radar), tampoco desde el servidor con la app cerrada. Al encenderlo vuelven a llegar.',
+    'Cuando tu operación real se cierra (TP, SL o a mano), sus líneas se quitan del gráfico en segundos: VORTEX revisa tu exchange más seguido mientras tienes posiciones abiertas.',
+    'En la PC, el ícono de la app instalada y de la pestaña es solo el logo, sin fondo.'
+  ]},
   {v: '3.27', d: '11 nov 2026', t: 'Tus bots aprenden solos', items: [
     'Todos los bots (también los nuevos) tienen reentrenamiento diario y mejora automática: si una versión nueva gana en datos que no vio, pasa a ser la principal, la simulación sigue con ella y te avisa. La anterior queda en Versiones para regresar.',
     'El servidor ya encuentra tus scripts grandes (como Señales iA 2.7) y no repite avisos de los bots.',

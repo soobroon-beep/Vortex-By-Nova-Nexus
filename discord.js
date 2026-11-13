@@ -28,7 +28,7 @@
 
   /* Avisos de la app (movimientos bruscos, precio, indicador) */
   function alert(kind, o) {
-    const D = get(); if (!D.url || !(D.on || {})[kind]) return;
+    const D = get(); if (!D.url || (D.on || {})[kind] === false || (window.CCT_discordOn && !window.CCT_discordOn())) return; // mismo criterio que los interruptores del panel
     let e;
     if (kind === 'move') e = {title: `${o.dir === 'up' ? '🚀 Sube' : '🔻 Cae'} ${Math.abs(o.pct).toFixed(1)}% en ${o.win} · ${o.symbol}`, description: `Precio: **${fmt(o.price)}**`, color: o.dir === 'up' ? COL.up : COL.down, footer: {text: 'VORTEX · Movimiento brusco'}};
     else if (kind === 'price') e = {title: `🔔 ${o.symbol} ${o.dir === 'up' ? 'subió a' : 'bajó a'} ${fmt(o.level)}`, description: `Ahora: **${fmt(o.price)}**${o.note ? '\n' + String(o.note).slice(0, 200) : ''}`, color: o.dir === 'up' ? COL.up : COL.down, footer: {text: 'VORTEX · Alerta de precio'}};
@@ -81,7 +81,7 @@
     else if (id === 'dcBack') { if (window.CCT_switchView) CCT_switchView(window.CCT_dcBack || 'settingsView'); window.CCT_dcBack = ''; }
     else if (e.target.closest('#dcOpenFromSettings')) { if (window.CCT_switchView) CCT_switchView('discordView'); paint(); }
   });
-  document.addEventListener('click', e => { const t = e.target.closest('[data-dc]'); if (!t || !store()) return; const k = t.dataset.dc, on = !t.classList.contains('on'); store().set({on: {[k]: on}}); t.classList.toggle('on', on); t.setAttribute('aria-checked', on); });
+  document.addEventListener('click', e => { const t = e.target.closest('[data-dc]'); if (!t || !store()) return; const k = t.dataset.dc, on = !t.classList.contains('on'); store().set({on: {[k]: on}}); t.classList.toggle('on', on); t.setAttribute('aria-checked', on); try { window.CCTBotLabSave && CCTBotLabSave(); } catch {} try { window.CCTPushSync && CCTPushSync(); } catch {} });
   document.addEventListener('click', e => { if (e.target.closest('#rrDiscord, [data-view=discordView]')) setTimeout(paint, 0); });
   window.CCTDiscord = {alert, sendSignals, send, paint, signalEmbeds, HOOK};
   /* Enlace de configuración personal: abrir …/#dcwebhook=<url> guarda el webhook en esta cuenta (el # nunca viaja al servidor) y borra el enlace de la barra */

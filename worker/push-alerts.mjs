@@ -95,6 +95,14 @@ export function mergeAlerts(incoming, server, since = 0) {
   return {alerts: out.slice(0, MAX_ALERTS), back};
 }
 
+/* ───────── Discord: el interruptor «Enviar avisos a Discord» de Ajustes manda sobre todo ───────── */
+// dc = {on, price, ind}. Apps viejas no mandan «dc»: solo traían dcUrl cuando Discord estaba encendido.
+export function sanDc(dc, dcUrl) {
+  if (dc && typeof dc === 'object') { const on = dc.on === true; return {on, price: on && dc.price !== false, ind: on && dc.ind !== false}; }
+  const on = typeof dcUrl === 'string' && dcUrl.length > 0; return {on, price: on, ind: on};
+}
+export const dcAllow = (d, kind) => { const c = d && d.dc ? d.dc : sanDc(null, d && d.dcUrl); return !!(c.on && (kind === 'on' || c[kind])); };
+
 /* ───────── lógica de alertas (idéntica a checkAlerts/fireAlert de app.js) ───────── */
 export function evalAlerts(alerts, prices, now = Date.now(), priceOn = true) {
   const fired = [], dc = []; let changed = false;
@@ -106,7 +114,7 @@ export function evalAlerts(alerts, prices, now = Date.now(), priceOn = true) {
     if (!past) continue;
     const dir0 = a.dir; a.firedAt = now; a.firedPrice = price; changed = true;
     if (a.repeat === 'every') { if (a.cond) a.wait = true; else a.dir = a.dir === 'up' ? 'down' : 'up'; } else a.on = false;
-    if (a.notify === 'discord' || a.notify === 'both' || a.dc) dc.push(`${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`); // Discord también con la app cerrada
+    if (a.notify === 'discord' || a.notify === 'both') dc.push(`${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`); // Discord también con la app cerrada
     if (priceOn && a.notify !== 'discord') fired.push({title: 'VORTEX · Alerta', body: `${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`, tag: 'al-' + a.id, url: APP_URL + '#alerts'});
   }
   return {fired, changed, dc};
@@ -225,7 +233,7 @@ async function tick(env, now = Date.now()) {
   { const hb = (await env.KV.get('hb', 'json')) || {}; if (now - (hb.at || 0) > 15 * 6e4) await env.KV.put('hb', JSON.stringify({at: now, devices: devs.length})); } // latido: la app puede ver que el servidor sí está revisando
   for (const [id, d] of devs) {
     const msgs = [], r = evalAlerts(d.alerts || [], prices, now, d.priceOn !== false); msgs.push(...r.fired); let changed = r.changed;
-    if (r.dc.length && d.priceOn !== false) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of r.dc.slice(0, 5)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta de precio', description: m, color: 0x548fff}]})}); } catch (e) { console.warn('discord', e.message); } } }
+    if (r.dc.length && dcAllow(d, 'price')) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of r.dc.slice(0, 5)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta de precio', description: m, color: 0x548fff}]})}); } catch (e) { console.warn('discord', e.message); } } }
     if (d.move && d.move.on) { d.moveLast = d.moveLast || {}; for (const s of MOVE_TOP) if (moves[s]) { const m = moveCheck(s, moves[s], d.move.pct, d.moveLast, now); if (m.length) { msgs.push(...m); changed = true; } } }
     for (const t of liveTrades(d)) { // tus trades abiertos: escalones de ganancia/pérdida, cerca de TP/SL/liquidación, breakeven y tus niveles
       t.m = t.m || {}; const r = TW.evalTrade(t, prices[t.k], t.m, now, {step: d.tradeStep, fmt, url: APP_URL});
@@ -415,7 +423,7 @@ export default {
       if (b.subOnly) { if (!cur.sub) return json({ok: false, error: 'Dispositivo sin registrar'}, 404); cur.sub = sub; cur.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(cur)); if (!ids.includes(id)) await env.KV.put('devs', JSON.stringify([...ids, id])); return json({ok: true}); } // el celular renovó su suscripción: se conservan alertas y ajustes
       const incoming = (Array.isArray(b.alerts) ? b.alerts : []).map(sanAlert).filter(Boolean).slice(0, MAX_ALERTS);
       const m = mergeAlerts(incoming, cur.alerts, b.since);
-      const d = {sub, lastPush: cur.lastPush, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now(),
+      const d = {sub, lastPush: cur.lastPush, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dc: sanDc(b.dc, b.dcUrl), dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now(),
         uid: typeof b.uid === 'string' && /^[A-Za-z0-9]{10,64}$/.test(b.uid) ? b.uid : (b.uid === '' ? '' : cur.uid || ''), bots: b.bots == null ? cur.bots !== false : b.bots !== false,
         trades: TW.merge(b.trades, cur.trades), indOn: b.indOn == null ? cur.indOn !== false : b.indOn !== false, tradeStep: TW.STEPS.includes(+b.tradeStep) ? +b.tradeStep : TW.DEF_STEP, syncAt: cur.syncAt || 0};
       const mi = b.ind === undefined ? {ind: cur.ind || [], back: []} : mergeInd(b.ind, cur.ind, b.since); d.ind = mi.ind;
@@ -503,7 +511,7 @@ async function indRoute(req, env, path) {
       a.lastBar = +r.lastBar; a.firedAt = now; a.firedInfo = String(r.info || '').slice(0, 200); if (a.repeat === 'once') a.on = false; changed = true; fired++;
       const text = `${baseOf(a.symbol)} ${a.interval} · ${a.label}${a.firedInfo ? ' · ' + a.firedInfo : ''}${a.note ? ' · ' + a.note : ''}`, n = a.notify || 'both';
       if (n !== 'discord' && d.indOn !== false) msgs.push({title: 'VORTEX · Alerta', body: text, tag: 'in-' + a.id, url: APP_URL + '#alerts'});
-      if (n === 'discord' || n === 'both' && (a.notify || d.dcUrl)) dc.push(text);
+      if (n !== 'app' && dcAllow(d, 'ind')) dc.push(text);
     }
     if (msgs.length) { try { const sts = (await self(env, '/int/push', {id, msgs})).sts || []; sent += sts.filter(x => x >= 200 && x < 300).length; } catch (e) { console.warn('ind push', e.message); } }
     if (dc.length) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of dc.slice(0, 5)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta con indicador', description: m, color: 0xb07cff}]})}); } catch {} } }
@@ -546,8 +554,9 @@ async function scrInternal(req, env, path) {
   }
   if (path.startsWith('/radar/')) {
     const h = {self: (p, body) => self(env, p, body), pool, appUrl: APP_URL, aiKey: () => aiKey(env),
+      anyRadarDc: async () => { const ids = (await env.KV.get('devs', 'json')) || []; for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (d && d.radar && dcAllow(d, 'on')) return true; } return false; },
       anyRadar: async () => { const ids = (await env.KV.get('devs', 'json')) || []; for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (d && d.radar) return true; } return false; },
-      discord: (t, op) => SCR.postDiscord(String(env.DISCORD_WEBHOOK || '').trim(), [{title: '🛰️ ' + t.title, description: t.body + '\n_Radar de Nexus Pixel · no es asesoría financiera._', color: op.side === 'buy' ? 0x089981 : 0xf23645, timestamp: new Date().toISOString()}])};
+      discord: async (t, op) => { if (!(await h.anyRadarDc())) return false; return SCR.postDiscord(String(env.DISCORD_WEBHOOK || '').trim(), [{title: '🛰️ ' + t.title, description: t.body + '\n_Radar de Nexus Pixel · no es asesoría financiera._', color: op.side === 'buy' ? 0x089981 : 0xf23645, timestamp: new Date().toISOString()}]); }};
     try { const r = await radarInternal(path, b, env, h); return r ? J(r) : J({error: 'No encontrado'}, 404); } catch (e) { return J({error: String(e && e.message || e).slice(0, 200)}, 500); }
   }
   if (path === '/scr/top') return J({top: await SCR.topSymbols(SCR.TOP_N)});

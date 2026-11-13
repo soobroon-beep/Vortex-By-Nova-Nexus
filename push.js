@@ -24,7 +24,7 @@
     return j;
   }
   const priceAlerts = () => (st().alerts || []).filter(a => a.kind !== 'ind').map(a => ({id: a.id, symbol: a.symbol, on: a.on, price: a.price, dir: a.dir, cond: a.cond, repeat: a.repeat, wait: a.wait, exp: a.exp, expired: a.expired, note: a.note, notify: a.notify, firedAt: a.firedAt || 0, firedPrice: a.firedPrice}));
-  const payload = () => ({alerts: priceAlerts(), move: {on: !!(st().moveAlerts || {}).on, pct: (st().moveAlerts || {}).pct || 2}, scr: {on: !!(st().scrPush || {}).on, h1: (st().scrPush || {}).h1 !== false, h4: (st().scrPush || {}).h4 !== false}, radar: !!(window.CCTRadar && CCTRadar.on()), priceOn: !((B.prefs() || {}).n && B.prefs().n.price === false), dcUrl: (() => { try { return (B.prefs() || {}).n && B.prefs().n.discord && window.CCT_discordStore ? String(CCT_discordStore.get().url || '') : ''; } catch { return ''; } })(), trades: window.CCTTradeWatch && CCTTradeWatch.payload ? CCTTradeWatch.payload() : [], tradeStep: window.CCTTradeWatch && CCTTradeWatch.step ? CCTTradeWatch.step() : 10, ind: B.indAlerts ? B.indAlerts() : undefined, indOn: !((B.prefs() || {}).n && B.prefs().n.ind === false), uid: B.uid ? B.uid() : '', bots: !((B.prefs() || {}).n && B.prefs().n.bots === false)});
+  const payload = () => ({alerts: priceAlerts(), move: {on: !!(st().moveAlerts || {}).on, pct: (st().moveAlerts || {}).pct || 2}, scr: {on: !!(st().scrPush || {}).on, h1: (st().scrPush || {}).h1 !== false, h4: (st().scrPush || {}).h4 !== false}, radar: !!(window.CCTRadar && CCTRadar.on()), priceOn: !((B.prefs() || {}).n && B.prefs().n.price === false), dc: (() => { try { const on = !!((B.prefs() || {}).n && B.prefs().n.discord), sw = (window.CCT_discordStore && CCT_discordStore.get().on) || {}; return {on, price: on && sw.price !== false, ind: on && sw.ind !== false}; } catch { return {on: false, price: false, ind: false}; } })(), dcUrl: (() => { try { return (B.prefs() || {}).n && B.prefs().n.discord && window.CCT_discordStore ? String(CCT_discordStore.get().url || '') : ''; } catch { return ''; } })(), trades: window.CCTTradeWatch && CCTTradeWatch.payload ? CCTTradeWatch.payload() : [], tradeStep: window.CCTTradeWatch && CCTTradeWatch.step ? CCTTradeWatch.step() : 10, ind: B.indAlerts ? B.indAlerts() : undefined, indOn: !((B.prefs() || {}).n && B.prefs().n.ind === false), uid: B.uid ? B.uid() : '', bots: !((B.prefs() || {}).n && B.prefs().n.bots === false)});
 
   function applyBack(back) { // alertas que el servidor disparó mientras la app estaba cerrada
     let ch = false;
@@ -148,6 +148,7 @@
     if (!cfg.on) return; const p = payload(), sig = JSON.stringify(p); if (sig === lastSig) return;
     try { fetch(url() + '/sync', {method: 'POST', keepalive: true, headers: {'content-type': 'application/json'}, body: JSON.stringify({id: cfg.id, since: cfg.since || 0, ...p})}).then(() => { lastSig = sig; }).catch(() => {}); } catch {}
   } // al volver a la app trae lo que disparó el servidor
+  window.CCTPushSync = () => sync(true);
   setInterval(() => sync(false), 10000); // si cambian tus alertas, se mandan al servidor en ≤10 s
   window.addEventListener('pageshow', () => { if (cfg.on) sync(true); }); // al volver desde otra app (Android puede congelar la página)
   render(); if (cfg.on) { meta(true); sync(true); }

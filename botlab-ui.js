@@ -31,8 +31,9 @@
     if (gone) o.bots = o.bots.filter(b => !o.deleted[b.id] || o.deleted[b.id] < (b.updatedAt || 0));
     return o;
   }
+  window.CCTBotLabSave = () => save(); // al cambiar el interruptor de Discord, se recalcula a dónde avisan los bots
   function save() {
-    try { const D = window.CCT_discordStore && window.CCT_discordStore.get(); S.notify = D && D.url ? {url: D.url, bots: (D.on || {}).bots !== false} : null; } catch {}
+    try { const D = window.CCT_discordStore && window.CCT_discordStore.get(); S.notify = D && D.url && !(window.CCT_discordOn && !window.CCT_discordOn()) ? {url: D.url, bots: (D.on || {}).bots !== false} : null; } catch {}
     const str = JSON.stringify(S); try { localStorage.setItem(H.key ? H.key() : 'cct_botlab_v1', str); } catch { H.toast && H.toast('No se pudo guardar en este dispositivo (almacenamiento lleno)'); }
     clearTimeout(cloudTimer); cloudTimer = setTimeout(async () => { const c = H.cloud && H.cloud(); if (!c) return; const s2 = cloudCopy(); if (s2 === cloudStr) return; if (s2.length > 990000) { if (!save.warned) { save.warned = 1; toast('Tus bots ocupan demasiado para guardarse completos en tu cuenta: archiva o elimina algunos.'); } return; } try { await c.set(s2); cloudStr = s2; save.warned = 0; } catch (e) { if (!save.err) { save.err = 1; toast('No se pudieron guardar tus bots en tu cuenta: ' + (e.message || e)); } } }, 1500);
   }
@@ -663,7 +664,7 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
     const before = sess.ledger.length, r = await PP().step(sess, getC, ropts); notify(b, sess); if (r.changed) { trimLedger(sess); for (const t of sess.ledger.slice(before)) log(b, 'paper', `Paper v${sess.v}: ${t.side === 'long' ? 'compra' : 'venta'} cerrada ${t.net >= 0 ? '+' : '−'}$${num(Math.abs(t.net), 2)} · ${t.why || ''}`); } sess.checkedAt = Date.now(); touch(b); return r;
   }
   const paperBusy = new Set();
-  const discordOk = () => { try { const D = window.CCT_discordStore && window.CCT_discordStore.get(); return !!(D && D.url && (D.on || {}).bots !== false); } catch { return false; } };
+  const discordOk = () => { try { const D = window.CCT_discordStore && window.CCT_discordStore.get(); return !!(D && D.url && (D.on || {}).bots !== false && !(window.CCT_discordOn && !window.CCT_discordOn())); } catch { return false; } };
   function notify(b, sess) {
     const N = window.CCTBotNotify; if (!N) return; const evs = N.pending(sess); if (!evs.length || b.notify === false) return;
     if (window.CCT_botNotify && N.push) for (const e of evs.slice(-3)) { const m = N.push(b, sess, e); window.CCT_botNotify(m.title, m.body, m.tag); } // aviso en la app y en el celular (misma etiqueta que el servidor)

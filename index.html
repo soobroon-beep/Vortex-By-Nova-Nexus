@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="glass.css">
 <link rel="stylesheet" href="pwa.css">
 <link rel="stylesheet" href="ui-modern.css">
+<link rel="stylesheet" href="splash.css">
 <script>/* Alto real de la pantalla: al abrir/recargar la app en el celular el navegador a veces calcula un alto mayor al visible y la barra de abajo queda fuera. Se mide y se corrige. */
 (function () {
   var r = document.documentElement, vv = window.visualViewport;
@@ -29,6 +30,14 @@
 })();</script>
 </head>
 <body>
+<div id="vxSplash" aria-hidden="true"><canvas></canvas><div class="vxs-neb"></div>
+  <div class="vxs-core"><div class="vxs-orb"><div class="vxs-halo"></div>
+    <svg class="vxs-ring" viewBox="0 0 200 120"><defs><linearGradient id="vxsGrad" x1="0" x2="1"><stop offset="0" stop-color="#7c4dff" stop-opacity="0"/><stop offset=".5" stop-color="#b9a2ff"/><stop offset="1" stop-color="#6fb6ff"/></linearGradient><radialGradient id="vxsCom"><stop offset="0" stop-color="#fff"/><stop offset=".4" stop-color="#cdbbff"/><stop offset="1" stop-color="#7c4dff" stop-opacity="0"/></radialGradient></defs>
+      <ellipse class="tr" cx="100" cy="60" rx="95" ry="38"/><ellipse class="dr" cx="100" cy="60" rx="95" ry="38"/><circle class="vxs-comet" r="5" fill="url(#vxsCom)"/></svg>
+    <img class="vxs-logo" src="icons/vortex-mark.png" alt=""></div>
+    <div class="vxs-word">VORTEX</div><div class="vxs-sub">Powered by Nova Nexus</div><div class="vxs-bar"><i></i></div></div>
+</div>
+<script src="splash.js"></script>
 <div id="app">
   <header class="topbar">
     <div class="brand">
