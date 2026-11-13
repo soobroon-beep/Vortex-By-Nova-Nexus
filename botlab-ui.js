@@ -46,7 +46,7 @@
   }
   async function pullCloud() {
     const c = H.cloud && H.cloud(); if (!c) return; let got = false; try { const str = await c.get(); got = true; if (str) { cloudStr = str; const m = merge(readLocal(), JSON.parse(str)); S = m; save(); } } catch {}
-    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) { seedSafe(); fixNov26(); seedLucas(); learnOn(); fixQuick(); seedPachita(); } if (view === 'lib') render();
+    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) { seedSafe(); fixNov26(); seedLucas(); learnOn(); fixQuick(); seedPachita(); healBots(); } if (view === 'lib') render();
   }
 
   /* ───────── Modelo de bot ───────── */
@@ -322,6 +322,19 @@
   }
   /* Ajuste único (nov 2026): bots que abrían y cerraban enseguida (objetivo pegado, trailing muy corto o cierre por la señal contraria a la vela siguiente).
      Nueva versión principal con la corrección (la anterior queda en Versiones) y, si estaba en vivo, la simulación sigue con la nueva. */
+  /* Arreglo automático al abrir: los errores de «tu indicador ya no produce la señal…» ya no detienen a los bots (una señal que no salió en esas velas
+     es solo «no hubo señal»); se limpian solos. Y los bots Nova Nexus · iA Signals v2.7 que quedaron apagados por eso vuelven a encenderse (una vez). */
+  function healBots() {
+    if (!PP()) return; let ch = false; S.seeded = S.seeded || {};
+    for (const b of S.bots) { if (b.status === 'archived') continue;
+      for (const x of b.paper || []) if (x.status === 'running' && x.err && /ya no produce la señal|ya no tiene la línea|Value for argument|not a valid Firestore/i.test(x.err)) { x.err = null; ch = true; touch(b); }
+    }
+    if (!S.seeded.nova27on) { S.seeded.nova27on = Date.now(); ch = true;
+      for (const b of S.bots) { if (b.status === 'archived' || !/^nova27/.test(b.preset || '')) continue; if (b.status === 'paused') b.status = 'tested';
+        if (!isLive(b)) { const paused = (b.paper || []).filter(x => x.status === 'paused'); if (paused.length) { for (const x of paused) { x.status = 'running'; x.pausedAt = null; x.err = null; } log(b, 'paper', 'Reactivado: la simulación en vivo sigue corriendo.'); touch(b); } else { try { startLive(b, b.mainV, mainSpec(b).risk.capital); log(b, 'paper', 'Reactivado: simulación en vivo encendida de nuevo.'); } catch {} } } }
+    }
+    if (ch) save();
+  }
   function fixQuick() {
     S.seeded = S.seeded || {}; if (S.seeded.quick2 || !B.fixQuickClose || !PP()) return; S.seeded.quick2 = Date.now(); let n = 0;
     for (const b of S.bots) {
@@ -1236,7 +1249,7 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
 
   /* ----- Arranque ----- */
   function init() {
-    root = $('#botLabRoot'); if (!root) return; S = dedupe(Object.assign({deleted: {}}, readLocal())); bind(); setTimeout(() => { if (!(H.cloud && H.cloud())) { seedSafe(); seedLucas(); fixQuick(); seedPachita(); if (view === 'lib') render(); } }, 12000); if (window.CCTClaudioUI) window.CCTClaudioUI.onChange = () => { if (view === 'lib') render(); }; render();
+    root = $('#botLabRoot'); if (!root) return; S = dedupe(Object.assign({deleted: {}}, readLocal())); bind(); setTimeout(() => { if (!(H.cloud && H.cloud())) { seedSafe(); seedLucas(); fixQuick(); seedPachita(); healBots(); if (view === 'lib') render(); } }, 12000); if (window.CCTClaudioUI) window.CCTClaudioUI.onChange = () => { if (view === 'lib') render(); }; render();
     const open = () => { S = merge(S, readLocal()); setTimeout(() => { if (view === 'lib') render(); }, 30); pullCloud(); paperTick(); };
     const rb = $('#rrBotLab'); rb && rb.addEventListener('click', open);
     paperTick(); setInterval(() => { if (!document.hidden) paperTick(); }, 60000);

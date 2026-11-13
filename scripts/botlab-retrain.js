@@ -98,7 +98,8 @@ async function main() {
     const pushOut = [];
     for (const b of pap) { await loadScripts(); adoptServer(b, (prev.paper || {})[b.id]); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.notify, pushOut); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
     if (pushOut.length) await botPush(u.id, pushOut);
-    if (changed) { for (const id of Object.keys(results)) if (!all.some(b => b.id === id)) delete results[id]; for (const id of Object.keys(paper)) if (!all.some(b => b.id === id)) delete paper[id]; for (const id of Object.keys(brainMem)) if (!all.some(b => b.id === id)) delete brainMem[id]; await u.collection('data').doc('botlab_server').set({results, paper, brainMem, updatedAt: admin.firestore.FieldValue.serverTimestamp()}); }
+    if (changed) { for (const id of Object.keys(results)) if (!all.some(b => b.id === id)) delete results[id]; for (const id of Object.keys(paper)) if (!all.some(b => b.id === id)) delete paper[id]; for (const id of Object.keys(brainMem)) if (!all.some(b => b.id === id)) delete brainMem[id]; const clean = o => JSON.parse(JSON.stringify(o || {})); // Firestore no acepta «undefined» (p. ej. ctx de una posición abierta): antes el guardado fallaba y los bots no avanzaban
+      await u.collection('data').doc('botlab_server').set({results: clean(results), paper: clean(paper), brainMem: clean(brainMem), updatedAt: admin.firestore.FieldValue.serverTimestamp()}); }
   }
   console.log(`Modo ${MODE} · ciclos: ${nb} · reentrenados: ${nr} · con cerebro: ${nbr} · con propuesta: ${np} · sesiones paper avanzadas: ${nps}`);
 }

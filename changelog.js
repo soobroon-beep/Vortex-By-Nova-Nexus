@@ -1,5 +1,9 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.35', d: '13 nov 2026', t: 'Bots de señales iA v2.7 reactivados', items: [
+    'Se arregló el servidor que mueve tus bots con la app cerrada: al guardar una operación abierta fallaba y los bots dejaban de avanzar y de avisar. Ya guarda bien.',
+    'Los bots Nova Nexus · iA Signals v2.7 se vuelven a encender solos (simulación en vivo) y los errores de «tu indicador ya no produce la señal» se limpian solos.'
+  ]},
   {v: '3.34', d: '13 nov 2026', t: 'Señales de bots, consejos de qué hacer y tu IA', items: [
     'Nova Bot Lab: se quitó «Ver en el gráfico»; «Convertir bot a señales» ocupa su lugar y marca las cajitas COMPRA / VENTA con entrada, SL y TP, y al cerrar dice TP, SL o Cierre con el % que ganó o perdió.',
     'Consejos y mejoras: arriba te dice qué hacer ahora con el bot: dejarlo correr, probarlo más, hacer solo cambios mínimos o cambiarlo (y te avisa si le has hecho demasiados cambios seguidos).',
