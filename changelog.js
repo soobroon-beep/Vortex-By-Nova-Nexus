@@ -10,7 +10,7 @@ window.CCT_CHANGELOG = [
     'Un consejo ignorado vuelve a salir si el bot sigue fallando en eso (la IA lo vuelve a proponer con datos nuevos o tras 15 operaciones en vivo más).',
     'En vivo: arriba y completas solo las sesiones con una operación abierta; las que esperan señal salen como tarjeta pequeña que se despliega al tocarla.',
     'La pestaña «Mejorar» ahora se llama «IA» (dentro: Mejorar con IA). En Operaciones, «Abiertas ahora en cada moneda» muestra solo las monedas con una operación abierta.',
-    'Avisos a Discord por bot: enciéndelos y elige si llegan a tu canal de VORTEX o a un canal solo para ese bot (pegas el webhook de ese canal y se manda una prueba).'
+    'Avisos a Discord por bot: enciéndelos y elige si llegan a tu canal de VORTEX o a un canal solo para ese bot (pegas el webhook de ese canal y se manda una prueba).',
     'Operaciones: en lugar de las velas, una línea de precio simple con cada compra y venta marcada (verde si ganó, rojo si perdió) y tarjetas de las últimas operaciones. Las velas siguen en «Ver con velas».',
     'Consejos: nuevo botón «Ignorar consejo» junto a «Aplicar este consejo»; el consejo se quita y deja lugar a otros.',
     'En vivo: más visual y con menos texto: resultado grande, la posición abierta en una barra (stop · entrada · ahora · objetivo), números clave como fichas y lo que prometió vs. lo que está haciendo en barras.'
