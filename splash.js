@@ -7,7 +7,7 @@
   if (/[?&]pane=/.test(location.search)) { el.remove(); return; } // paneles incrustados: sin animación
   var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   var t0 = performance.now(), MIN = reduce ? 500 : 1500, done = false, warp = 0, raf = 0;
-  try { var id = window.CCTAppIcons && CCTAppIcons.selected; if (id) el.querySelector('.vxs-logo').src = 'icons/pc/' + id + '-192.png'; } catch (e) {}
+  // Siempre el logo OFICIAL: la V blanca sin fondo (icons/vortex-mark.png); los iconos de color son variantes
 
   /* Estrellas en 3D: salen del centro hacia afuera; con «warp» se estiran en rayas de luz */
   var cv = el.querySelector('canvas'), g = cv.getContext('2d'), W = 0, H = 0, dpr = Math.min(2, window.devicePixelRatio || 1), stars = [];

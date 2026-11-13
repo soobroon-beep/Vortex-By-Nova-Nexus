@@ -5,7 +5,7 @@
 #vxSplash .vxs-core{position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;transition:transform .8s cubic-bezier(.6,0,.2,1),opacity .5s ease .15s}
 #vxSplash .vxs-orb{position:relative;width:min(44vw,190px);aspect-ratio:1;display:grid;place-items:center}
 #vxSplash .vxs-halo{position:absolute;inset:8%;border-radius:50%;background:radial-gradient(circle,rgba(150,110,255,.45),rgba(84,143,255,.14) 45%,transparent 70%);animation:vxsHalo 2.4s ease-in-out infinite;opacity:0;animation-delay:.35s}
-#vxSplash .vxs-logo{position:relative;width:72%;height:72%;object-fit:contain;opacity:0;transform:scale(.55) rotate(-8deg);filter:blur(10px) drop-shadow(0 0 18px rgba(160,120,255,.55));animation:vxsIn .95s cubic-bezier(.2,.9,.25,1.15) .15s forwards}
+#vxSplash .vxs-logo{position:relative;width:72%;height:72%;object-fit:contain;opacity:0;transform:scale(.55) rotate(-8deg);filter:blur(10px) drop-shadow(0 0 16px rgba(190,170,255,.6));animation:vxsIn .95s cubic-bezier(.2,.9,.25,1.15) .15s forwards}
 #vxSplash svg.vxs-ring{position:absolute;inset:-14%;width:128%;height:128%;overflow:visible;transform:rotate(-14deg)}
 #vxSplash .vxs-ring ellipse{fill:none;stroke-linecap:round}
 #vxSplash .vxs-ring .tr{stroke:rgba(140,160,255,.16);stroke-width:1}
@@ -18,7 +18,7 @@
 #vxSplash.out{opacity:0;visibility:hidden}
 #vxSplash.out .vxs-core{transform:scale(1.6);opacity:0}
 #vxSplash.out .vxs-neb{opacity:0;transition:opacity .4s}
-@keyframes vxsIn{to{opacity:1;transform:none;filter:blur(0) drop-shadow(0 0 18px rgba(160,120,255,.55))}}
+@keyframes vxsIn{to{opacity:1;transform:none;filter:blur(0) drop-shadow(0 0 16px rgba(190,170,255,.6))}}
 @keyframes vxsHalo{0%,100%{opacity:.55;transform:scale(.92)}50%{opacity:1;transform:scale(1.08)}}
 @keyframes vxsDraw{to{stroke-dashoffset:0}}
 @keyframes vxsOrbit{0%{offset-distance:0%;opacity:0}8%{opacity:1}92%{opacity:1}100%{offset-distance:100%;opacity:0}}
