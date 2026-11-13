@@ -4,7 +4,11 @@ window.CCT_CHANGELOG = [
     'Fibonacci automático: nuevo estilo «Lateral derecho» en sus ajustes: líneas punteadas que salen del lado derecho del gráfico sin tocar las velas, solo con el nivel (sin precio), niveles clave más resaltados y colores por nivel o monocromáticos.',
     'Nova Bot Lab: cada bot se ve como una línea de producción: el motor arranca, opera, muestra resultados y se mejora, unidos por hilos animados. Toca cada estación para ver su detalle.',
     'Nova Bot Lab: nuevo «Cómo aprende»: el ciclo del bot (opera, recuerda, analiza, prueba variantes y se queda con la mejor) con una luz que lo recorre, cuánto mejoró desde su v1 y lo último que aprendió.',
-    'Fibonacci lateral: el largo de las líneas se elige en % del gráfico (como el perfil de volumen) y las líneas son delgadas; los niveles clave solo con el color más vivo.'
+    'Fibonacci lateral: el largo de las líneas se elige en % del gráfico (como el perfil de volumen) y las líneas son delgadas; los niveles clave solo con el color más vivo.',
+    'Nova Bot Lab: nueva caja «Lo que ha aprendido» que se ramifica en tres: dónde gana y dónde falla (Long/Short, cómo cierra y a qué hora le va mejor o peor), cómo ha mejorado versión por versión y qué consejos se le aplicaron.',
+    'Operaciones: en lugar de las velas, una línea de precio simple con cada compra y venta marcada (verde si ganó, rojo si perdió) y tarjetas de las últimas operaciones. Las velas siguen en «Ver con velas».',
+    'Consejos: nuevo botón «Ignorar consejo» junto a «Aplicar este consejo»; el consejo se quita y deja lugar a otros.',
+    'En vivo: más visual y con menos texto: resultado grande, la posición abierta en una barra (stop · entrada · ahora · objetivo), números clave como fichas y lo que prometió vs. lo que está haciendo en barras.'
   ]},
   {v: '3.31', d: '12 nov 2026', t: '15 indicadores gratis nuevos', items: [
     'Leyenda de indicadores abierta: cada nombre con sus botones va en una píldora de cristal oscuro para que no se pierda con las velas.',
