@@ -15,7 +15,7 @@
 
   const when = t => { if (!t) return '—'; const d = Date.now() - t, h = d / 3600e3; return h < 1 ? 'hace ' + Math.max(1, Math.round(d / 6e4)) + ' min' : h < 24 ? 'hace ' + Math.round(h) + ' h' : new Date(t).toLocaleDateString('es-MX', {day: 'numeric', month: 'short'}); };
   async function load() { try { doc = (await C().get('vigia')) || {items: []}; } catch (e) { doc = {items: [], err: 'No se pudo leer tu revisión: ' + (e.message || e)}; } if (!Array.isArray(doc.items)) doc.items = []; }
-  async function save() { if (busy) return; busy = true; try { const o = Object.assign({}, doc); delete o.err; await C().set('vigia', o); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); } busy = false; }
+  async function save() { if (busy) return; busy = true; try { const o = Object.assign({}, doc); delete o.err; await C().set('vigia', o); } catch (e) { toast(/permission|insufficient/i.test(String(e && (e.code || e.message))) ? 'Falta publicar las reglas de Firestore para guardar tus decisiones (ver Vigía: «Publicar reglas de Firestore»)' : 'No se pudo guardar: ' + (e.message || e)); } busy = false; }
   const toast = m => { const t = $('#toast'); if (!t) return; t.textContent = m; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => { t.style.display = 'none'; }, 2600); };
 
   function row() { // fila en Configuración (solo para ti)
