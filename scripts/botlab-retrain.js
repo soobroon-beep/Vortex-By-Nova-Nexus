@@ -17,7 +17,9 @@ async function history(sym, itv, count) { // velas CERRADAS, paginadas hacia atr
   const want = Math.min(8000, Math.max(200, count | 0)), out = []; let end = Date.now();
   while (out.length < want) {
     let raw = null; for (const base of BASES) { try { const r = await fetch(`${base}/klines?symbol=${encodeURIComponent(sym)}&interval=${itv}&limit=1000&endTime=${end}`); if (r.ok) { raw = await r.json(); break; } } catch {} }
-    if (!raw) throw new Error('No se pudieron descargar velas de ' + sym); if (!raw.length) break;
+    if (!raw) { // Binance no responde: velas guardadas por VORTEX o el mismo par de otro exchange (Bybit, OKX, BingX, MEXC…)
+      if (out.length) break; try { const M = require('../markets.js'); return (await M.klinesAny(sym, itv, Math.min(1000, want))).slice(-want); } catch { throw new Error('No se pudieron descargar velas de ' + sym); } }
+    if (!raw.length) break;
     out.unshift(...raw.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5], ct: d[6]}))); end = raw[0][0] - 1; if (raw.length < 1000) break;
   }
   return out.filter(c => c.ct < Date.now()).slice(-want).map(({ct, ...c}) => c);
@@ -84,7 +86,8 @@ async function main() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT; if (!raw) { console.log('FIREBASE_SERVICE_ACCOUNT no está configurado: no hay nada que hacer. (Ver INSTALL.md → Reentrenamiento programado)'); return; }
   const MODE = process.env.MODE || 'all'; // retrain | paper | all
   let admin; try { admin = require('firebase-admin'); } catch { console.log('Falta firebase-admin (npm i --no-save firebase-admin)'); process.exit(1); }
-  admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); const db = admin.firestore(), now = Date.now(), force = process.env.FORCE === '1', cache = new Map();
+  admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); const db = admin.firestore(), now = Date.now(); try { require('../markets.js').setStore(require('./candle-store.js').reader(db)); } catch {}
+  const force = process.env.FORCE === '1', cache = new Map();
   const getCandles = async (s, i, n) => { const k = s + '|' + i + '|' + n; if (!cache.has(k)) cache.set(k, await history(s, i, n)); return cache.get(k); };
   const users = await db.collection('users').listDocuments(); let nb = 0, nr = 0, np = 0, nps = 0, nbr = 0;
   for (const u of users) {

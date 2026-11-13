@@ -269,6 +269,29 @@
     if (src === 'dom') return klinesDom(sym, tf, n);
     return klines(src, src === 'bingxf' || src === 'okxf' ? dashSym(sym) : sym, tf, n);
   }
+  /* ───────── Respaldo automático de exchanges ─────────
+     Si el exchange del activo no responde (caído, bloquea la región del servidor, límite de peticiones…), las velas del MISMO par se
+     piden a otro exchange, en este orden. El último que funcionó se recuerda 10 min para no esperar a los que fallan.
+     Antes de los exchanges, el almacén propio de VORTEX (velas que guarda el Motor del servidor) si está conectado (setStore). */
+  const FALLBACK = ['binance', 'bybit', 'okx', 'bingx', 'mexc', 'gate', 'kucoin', 'bitget'];
+  const DASH = new Set(['okx', 'bingx', 'kucoin', 'coinbase', 'kraken', 'okxf', 'bingxf']);
+  function symFor(src, sym) { const p = splitQ(norm(sym)); if (!p) return sym; const q = p[1] === 'USD' ? 'USDT' : p[1]; return DASH.has(src) ? p[0] + '-' + q : src === 'gate' ? p[0] + '_' + q : p[0] + q; }
+  const within = (pr, ms) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(Error('Tiempo agotado')), ms))]);
+  let good = {src: '', until: 0}, store = null;
+  const setStore = f => { store = typeof f === 'function' ? f : null; };
+  const lastFallback = () => (Date.now() < good.until ? good.src : '');
+  async function fallbackChain(src, sym, tf, n, opts = {}) {
+    const tried = new Set([src]), order = (good.src && Date.now() < good.until ? [good.src] : []).concat(FALLBACK);
+    if (store && !opts.noStore) { try { const cs = tidy(await within(store(norm(sym), tf, n), 6000) || []); if (cs.length >= Math.min(60, n)) return {cs, src: 'vortex', sym: norm(sym)}; } catch {} }
+    let err = null;
+    for (const s of order) {
+      if (tried.has(s)) continue; tried.add(s);
+      if (!['binance', 'bybit', 'okx', 'bingx'].includes(s) && !tfOk(s, tf)) continue; if (s === 'bingx' && !BX_IV[tf]) continue;
+      const ss = symFor(s, sym);
+      try { const cs = tidy(await within(primary(s, ss, tf, n), 10000)); if (cs.length >= 3) { if (s !== 'binance') good = {src: s, until: Date.now() + 10 * 6e4}; return {cs, src: s, sym: ss}; } } catch (e) { err = e; }
+    }
+    throw err || Error('Ningún exchange respondió');
+  }
   async function klinesAny(key, tf, limit = 1000, opts = {}) {
     const xm = /^x(\d+)$/.exec(tf); if (xm) { // temporalidad sin velas propias (3 h, 2 D, 45 min…): se juntan velas de la mayor que la divide
       const M = +xm[1], b = [[10080, '1w'], [1440, '1d'], [720, '12h'], [360, '6h'], [240, '4h'], [120, '2h'], [60, '1h'], [30, '30m'], [15, '15m'], [5, '5m'], [1, '1m']].find(([q]) => q <= M && M % q === 0);
@@ -276,14 +299,14 @@
       for (const c of r.cs) { const t = Math.floor(c.t / span) * span, l = out[out.length - 1]; if (l && l.t === t) { l.h = Math.max(l.h, c.h); l.l = Math.min(l.l, c.l); l.c = c.c; l.v += c.v; } else out.push({t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v}); }
       let cs = out; if (opts.closedOnly !== false) cs = cs.filter(c => c.t + span <= Date.now()); cs = cs.slice(-limit); return opts.meta ? {cs, src: r.src} : cs;
     }
-    const {sym, src} = parse(key); let cs = null, used = src;
-    try { cs = tidy(await primary(src, sym, tf, limit)); } catch (e) { if (src === 'binance' || src === 'dom' || opts.noFallback) throw e; }
-    if (!cs || cs.length < 3) { if (src === 'dom' || opts.noFallback) throw Error('Sin velas de ' + key); cs = tidy(await binanceSpot(sym, tf, limit)); used = 'binance'; }
+    const {sym, src} = parse(key); let cs = null, used = src, usym = sym;
+    try { cs = tidy(await within(primary(src, sym, tf, limit), 15000)); } catch (e) { if (src === 'dom' || opts.noFallback) throw e; }
+    if (!cs || cs.length < 3) { if (src === 'dom' || opts.noFallback) throw Error('Sin velas de ' + key); const r = await fallbackChain(src, sym, tf, limit, opts); cs = r.cs; used = r.src; usym = r.sym; }
     if (opts.closedOnly !== false) { const ms = IVMS[tf], now = Date.now(); cs = ms && tf !== '1M' ? cs.filter(c => c.t + ms <= now) : cs.slice(0, -1); }
-    cs = cs.slice(-limit); if (opts.meta) return {cs, src: used}; return cs;
+    cs = cs.slice(-limit); if (opts.meta) return {cs, src: used, sym: usym}; return cs;
   }
   const LIVE_WS = ['binance', 'binancef', 'bybit', 'bybitf', 'okx', 'okxf']; // el resto se actualiza consultando cada pocos segundos
 
-  root.CCTMarkets = {DOM_NAMES, PERP, isPerp, klines, klinesAny, IVMS, dashSym, tfOk, TF, LIVE_WS, PROXY, klinesDom, EXCH, SHORT, ORDER, parse, symOf, srcOf, mk, norm, N, universe, loaded, search, tickers, klinesBingx, BX_IV, setFetcher, splitQ};
+  root.CCTMarkets = {DOM_NAMES, PERP, isPerp, klines, klinesAny, IVMS, dashSym, tfOk, TF, LIVE_WS, PROXY, klinesDom, EXCH, SHORT, ORDER, parse, symOf, srcOf, mk, norm, N, universe, loaded, search, tickers, klinesBingx, BX_IV, setFetcher, splitQ, symFor, fallbackChain, setStore, lastFallback, FALLBACK};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTMarkets;
 })(typeof window !== 'undefined' ? window : globalThis);

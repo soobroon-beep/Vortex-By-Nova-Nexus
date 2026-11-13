@@ -3,7 +3,9 @@
 // Variables: DISCORD_WEBHOOK (secreto del repositorio, nunca en el código) · TF opcional: «1h», «4h» o «1h,4h» para forzar.
 const fs = require('fs'), path = require('path'), F = require('../discord-format.js');
 const STATE = path.join(__dirname, '..', 'discord-state.json');
-require('../nova-nexus.js'); const NN = globalThis.NovaNexus;
+require('../nova-nexus.js'); const NN = globalThis.NovaNexus, M = require('../markets.js');
+const MAJORS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT', 'LINKUSDT', 'TRXUSDT', 'SUIUSDT', 'LTCUSDT'];
+let lastTop = null; // último top que respondió (si Binance falla, se sigue con él)
 const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com', 'https://api1.binance.com'];
 const STABLE = new Set(['USDC', 'FDUSD', 'TUSD', 'USDP', 'DAI', 'BUSD', 'USDE', 'USDS', 'USD1', 'XUSD', 'PYUSD', 'BFUSD', 'EUR', 'AEUR', 'EURI', 'UST', 'USTC']);
 const SIG_BARS = 5, TOP_N = 50, HOOK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/;
@@ -15,13 +17,14 @@ async function getJSON(path) {
   throw err;
 }
 async function topSymbols(n) {
-  const d = await getJSON('/api/v3/ticker/24hr');
-  return d.filter(t => /^[A-Z0-9]{2,12}USDT$/.test(t.symbol) && !STABLE.has(t.symbol.replace(/USDT$/, '')) && +t.quoteVolume > 2e6 && +t.lastPrice > 0)
+  let d; try { d = await getJSON('/api/v3/ticker/24hr'); } catch (e) { if (lastTop) return lastTop.slice(0, n); return MAJORS.map(symbol => ({symbol, price: 0})); } // Binance no responde: el último top conocido
+  return lastTop = d.filter(t => /^[A-Z0-9]{2,12}USDT$/.test(t.symbol) && !STABLE.has(t.symbol.replace(/USDT$/, '')) && +t.quoteVolume > 2e6 && +t.lastPrice > 0)
     .sort((a, b) => +b.quoteVolume - +a.quoteVolume).slice(0, n).map(t => ({symbol: t.symbol, price: +t.lastPrice}));
 }
 async function candles(sym, tf) { // solo velas cerradas: la señal «edad 1» es la vela que acaba de cerrar
-  const raw = await getJSON(`/api/v3/klines?symbol=${sym}&interval=${tf}&limit=1000`), now = Date.now();
-  return raw.filter(k => k[6] < now).map(k => ({t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5]}));
+  let raw; try { raw = await getJSON(`/api/v3/klines?symbol=${sym}&interval=${tf}&limit=1000`); }
+  catch (e) { return M.klinesAny(sym, tf, 1000); } // Binance no responde: velas guardadas por VORTEX o el mismo par de otro exchange
+  const now = Date.now(); return raw.filter(k => k[6] < now).map(k => ({t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5]}));
 }
 function signalOf(cs) { // misma regla que el Screener de la app (screener.js): última señal sin enfriamiento, vigente SIG_BARS velas
   if (!cs || cs.length < 60) return null;
@@ -110,4 +113,4 @@ async function motorRound(state, key, now = Date.now(), log = console.log) {
   return changed;
 }
 if (require.main === module) main().catch(e => { console.error('Error:', e.message); process.exit(1); });
-module.exports = {signalOf, timeframes, dueTfs, slotOf, topSymbols, scan, post, candles, motorRound};
+module.exports = {signalOf, timeframes, dueTfs, slotOf, topSymbols, scan, post, candles, motorRound, MAJORS, top: () => lastTop || []};

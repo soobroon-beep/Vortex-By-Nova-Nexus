@@ -6,6 +6,15 @@
 const I = (n, z) => CCTI.svg(n, z); // iconos SVG (icons.js)
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const API = 'https://api.binance.com/api/v3';
+/* Velas de VORTEX (las guarda el Motor del servidor en Firestore · candles/<PAR>_<15m|1h|4h>): si los exchanges no responden, el gráfico las usa.
+   Se leen con una sola petición pública (sin iniciar sesión). */
+if (window.CCTMarkets && CCTMarkets.setStore) CCTMarkets.setStore(async (sym, tf, n) => {
+  if (!['15m', '1h', '4h'].includes(tf)) return null; const cfg = window.CCT_FIREBASE || {}; if (!cfg.projectId) return null;
+  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/candles/${encodeURIComponent(sym + '_' + tf)}?key=${cfg.apiKey}`); if (!r.ok) return null;
+  const j = await r.json(), s = j && j.fields && j.fields.d && j.fields.d.stringValue; if (!s) return null;
+  const cs = JSON.parse(s).map(a => ({t: +a[0], o: +a[1], h: +a[2], l: +a[3], c: +a[4], v: +a[5]})), ms = {'15m': 9e5, '1h': 36e5, '4h': 144e5}[tf];
+  return cs.length && Date.now() - cs[cs.length - 1].t < 3 * ms ? cs.slice(-n) : null; // solo si están al día
+});
 const IV_MS = {'1m':6e4,'5m':3e5,'15m':9e5,'30m':18e5,'1h':36e5,'4h':144e5,'1d':864e5,'1w':6048e5,'1M':2592e6};
 const INTERVALS = Object.keys(IV_MS);
 const PANE = /[?&]pane=/.test(location.search); // gráficos extra (2.º a 5.º): la misma app dentro de un iframe, con su propio estado y sin sincronizar
@@ -302,7 +311,7 @@ const PINE_MAX = 6;
 let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null, multi = [];
 let paneMan = {}, paneHit = []; // escala vertical manual por panel (oscilador, RSI…) y su zona táctil; se llena al dibujar
 let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
-let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0, wsPing = 0, dataSrc = 'binance';
+let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0, wsPing = 0, dataSrc = 'binance', dataSym = '';
 const lastShown = {};
 
 /* ───────── Navegación ───────── */
@@ -582,6 +591,18 @@ let suppressClick = 0;
 $('#watchRows').addEventListener('contextmenu', e => { const r = e.target.closest('.watch-row[data-symbol]'); if (!r || e.pointerType === 'touch' || $('#watchRows').classList.contains('wl-dragging')) return; e.preventDefault(); openTagPop(r.dataset.symbol, e.clientX, e.clientY); });
 $('#addSection').onclick = () => { const n = prompt('Nombre de la sección (por ejemplo: BingX)'); if (!n || !n.trim()) return; state.groups.push({id: newSecId(), name: n.trim().slice(0, 40), collapsed: false}); save(); renderWatch(); };
 
+/* Precios de respaldo: si Binance no contesta, los mismos pares (BTCUSDT…) se toman de Bybit, OKX, BingX o MEXC, en ese orden. */
+async function tickerFallback(plain) {
+  if (!window.CCTMarkets) return [];
+  for (const src of ['bybit', 'okx', 'bingx', 'mexc', 'gate']) {
+    try {
+      const keys = plain.map(k => CCTMarkets.mk(CCTMarkets.symFor(src, k), src)), m = await CCTMarkets.tickers(keys), out = [];
+      plain.forEach((k, i) => { const t = m[keys[i]]; if (t && +t.lastPrice > 0) out.push(Object.assign({}, t, {symbol: k, via: src})); });
+      if (out.length >= Math.ceil(plain.length / 2)) { if (fetchTicker.via !== src) { fetchTicker.via = src; toast(`Binance no respondió: precios de ${SOURCES[src] || src} mientras tanto`); } return out; }
+    } catch {}
+  }
+  return [];
+}
 async function fetchTicker() {
   try {
     const plain = state.symbols.filter(k => srcOf(k) === 'binance'), other = state.symbols.filter(k => srcOf(k) !== 'binance');
@@ -589,10 +610,12 @@ async function fetchTicker() {
     let data = [];
     if (plain.length) {
       try { data = await getJSON(`${API}/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(plain))}`); }
-      catch { data = await getJSON(`${API}/ticker/24hr`); } // por si algún símbolo añadido a mano no existe
+      catch { try { data = await getJSON(`${API}/ticker/24hr`); } // por si algún símbolo añadido a mano no existe
+        catch (e) { data = await tickerFallback(plain); if (!data.length) throw e; } } // Binance no responde: los mismos pares de otro exchange
     }
     for (const t of data) tickers[t.symbol] = t;
-    updateStatus(true, 'Binance en línea');
+    if (data.length && !data[0].via) fetchTicker.via = '';
+    updateStatus(true, data.length && data[0].via ? `Precios de ${SOURCES[data[0].via] || data[0].via}` : 'Binance en línea');
     renderWatch(); updateChartHeader(); checkAlertsPoll(); loadSparks();
   } catch {
     updateStatus(false, 'Sin conexión'); renderWatch();
@@ -615,7 +638,8 @@ const popVol = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6)
 
 async function loadPopTickers() {
   let data; // si api.binance.com falla o limita, se prueba el espejo público de datos de mercado
-  try { data = await getJSON(`${API}/ticker/24hr`); } catch (e1) { data = await getJSON('https://data-api.binance.vision/api/v3/ticker/24hr'); }
+  try { data = await getJSON(`${API}/ticker/24hr`); } catch (e1) { try { data = await getJSON('https://data-api.binance.vision/api/v3/ticker/24hr'); }
+    catch (e2) { const l = window.CCTMarkets ? await CCTMarkets.universe('bybit').catch(() => []) : []; if (!l.length) throw e2; data = l.filter(r => r.quote === 'USDT').map(r => ({symbol: r.base + 'USDT', lastPrice: String(r.last), priceChangePercent: String(r.chg), quoteVolume: String(r.vol)})); } } // Binance caído: el top sale de Bybit
   popAll = data.filter(t => /^[A-Z0-9]{2,12}USDT$/.test(t.symbol) && !POP_STABLE.has(base(t.symbol)) && +t.quoteVolume > 2e6 && +t.lastPrice > 0)
     .sort((a, b) => +b.quoteVolume - +a.quoteVolume);
   for (const t of popAll) tickers[t.symbol] = t; // así el gráfico también muestra su cabecera
@@ -1259,8 +1283,12 @@ async function fetchKlinesAny(key, tf, signal, limit = 1000) { // el exchange va
   const sym = symOf(key), src = srcOf(key), f = SRC_FETCH[src];
   if (src === 'dom') return {cs: await f.get(sym, tf, limit, signal), src};
   if (f && f.ok(tf)) { try { return {cs: await f.get(sym, tf, limit, signal), src}; } catch (e) { if (e.name === 'AbortError') throw e; } }
-  const data = await getJSON(`${API}/klines?symbol=${CCTMarkets.norm(sym)}&interval=${tf}&limit=${Math.min(1000, limit)}`, signal);
-  return {cs: data.map(bnRow), src: 'binance'};
+  try { const data = await getJSON(`${API}/klines?symbol=${CCTMarkets.norm(sym)}&interval=${tf}&limit=${Math.min(1000, limit)}`, signal); return {cs: data.map(bnRow), src: 'binance'}; }
+  catch (e) { // Binance (o el exchange elegido) no responde: el mismo par de otro exchange (Bybit, OKX, BingX, MEXC…) o las velas guardadas por VORTEX
+    if (e.name === 'AbortError' || !window.CCTMarkets || !CCTMarkets.fallbackChain) throw e;
+    const r = await CCTMarkets.fallbackChain(src === 'binance' ? 'binance' : src, sym, tf, limit); if (signal && signal.aborted) throw Object.assign(Error('abort'), {name: 'AbortError'});
+    return {cs: r.cs, src: r.src, sym: r.sym, fallback: true};
+  }
 }
 async function loadCandles(silent = false) {
   if (replay && !silent) replayExit(false); // cambiar de moneda o temporalidad termina la repetición
@@ -1271,7 +1299,8 @@ async function loadCandles(silent = false) {
   try {
     const r = await fetchKlinesAny(sym, tf, fetchCtl.signal);
     if (sym !== state.symbol || tf !== state.interval) return;
-    candles = r.cs; dataSrc = r.src;
+    candles = r.cs; dataSrc = r.src === 'vortex' ? 'binance' : r.src; dataSym = r.sym || '';
+    if (r.fallback && !silent) toast(`${SOURCES[srcOf(sym)] || 'Binance'} no respondió: el gráfico usa ${r.src === 'vortex' ? 'las velas guardadas de VORTEX' : SOURCES[r.src] || r.src} mientras tanto`);
     recalc(); setTimeout(() => dvRefresh(), 0);
     if (!silent) { stopMotion(); visible = defaultVisible(); pan = 0; const ca = $('#chartArea'); if (ca) { ca.classList.remove('swap-in'); void ca.offsetWidth; ca.classList.add('swap-in'); } }
     setFeedback(''); updateChartHeader(); render(); connectWS(); return true;
@@ -1348,7 +1377,7 @@ let wsLast = 0, wsReloadAt = 0; // último dato en vivo recibido / última recar
 function connectWS() {
   closeWS(); wsLast = Date.now();
   if (typeof WebSocket === 'undefined') return;
-  const gen = wsGen, sym = symOf(state.symbol), tf = state.interval, src = dataSrc || 'binance';
+  const gen = wsGen, src = dataSrc || 'binance', sym = (dataSym && src !== srcOf(state.symbol) ? dataSym : '') || symOf(state.symbol), tf = state.interval;
   if (src === 'dom') { setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH.dom.get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 60000); return; }
   if (SRC_FETCH[src] && !(window.CCTMarkets ? CCTMarkets.LIVE_WS : ['binance', 'binancef', 'bybit', 'okx']).includes(src)) { // Coinbase, BingX, KuCoin, Gate, MEXC, Bitget, HTX, Kraken: sin WebSocket público sencillo, se consulta cada 8 s
     setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH[src].get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 8000); return;

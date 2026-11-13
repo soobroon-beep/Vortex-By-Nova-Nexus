@@ -200,6 +200,14 @@ async function main() {
   let uid = null, page;
   do { const r = await admin.auth().listUsers(1000, page); page = r.pageToken; for (const u of r.users) if (u.email && crypto.createHash('sha256').update(u.email.trim().toLowerCase()).digest('hex') === OWNER) uid = u.uid; } while (page && !uid);
   if (!uid) { console.log('No se encontró la cuenta del creador.'); return; }
+  // salud del servidor: que el Motor siga vivo y que las velas de VORTEX estén al día
+  try {
+    const mo = (await db.doc('server/motor').get()).data() || {};
+    if (!mo.beat || now - mo.beat > 40 * 6e4) uniq.push({ area: 'Tareas automáticas', kind: 'motor', sev: 'alta', title: 'El Motor del servidor está detenido (alertas, bots y Screener)', sig: 'motor parado', ev: mo.beat ? `Último latido hace ${Math.round((now - mo.beat) / 6e4)} min` : 'Sin latido registrado', where: 'servidor', fix: 'Lanzar a mano «Motor del servidor» en GitHub Actions (Run workflow).' });
+    const cd = (await db.doc('candles/BTCUSDT_1h').get()).data();
+    if (!cd || now - (cd.at || 0) > 3 * 3600e3) uniq.push({ area: 'Datos de mercado', kind: 'candles', sev: 'media', title: 'Las velas de VORTEX no se están guardando', sig: 'velas propias', ev: cd ? `Última actualización hace ${((now - cd.at) / 3600e3).toFixed(1)} h (fuente ${cd.src})` : 'Aún no hay velas guardadas', where: 'servidor' });
+    else if (cd.src && cd.src !== 'binance') uniq.push({ area: 'Datos de mercado', kind: 'source', sev: 'baja', title: `Binance no respondió al servidor: las velas salen de ${cd.src}`, sig: 'fuente respaldo', ev: `Fuente actual: ${cd.src}`, where: 'servidor' });
+  } catch (e) { console.log('No se pudo revisar la salud del servidor'); }
   const ref = db.collection('users').doc(uid).collection('data').doc('vigia'), prev = (await ref.get()).data() || {};
   const { items, fresh } = merge(prev.items, uniq, now), learn = learnOf(items);
   const res = await ai(fresh.filter(f => f.seen === 1), learn);

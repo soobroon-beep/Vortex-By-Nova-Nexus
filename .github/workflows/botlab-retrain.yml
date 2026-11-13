@@ -3,7 +3,7 @@ name: Reentrenar bots (Nova Bot Lab)
 # No cambia versiones principales: solo guarda resultados y propuestas en tu cuenta para que las apruebes en la app.
 # Requiere el secreto FIREBASE_SERVICE_ACCOUNT (ver INSTALL.md → «Reentrenamiento programado»). Sin él, el trabajo termina sin hacer nada.
 on:
-  schedule: [{cron: '17 6 * * *'}]
+  # Lo corre el Motor del servidor (motor.js) cada ~6 h, en fila con el paper trading (así no se pisan). Aquí queda para lanzarlo a mano.
   workflow_dispatch:
     inputs:
       force: {description: 'Reentrenar ahora todos los bots con ciclo activo (ignora la frecuencia)', required: false, default: ''}

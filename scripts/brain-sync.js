@@ -205,7 +205,8 @@ const nrm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300
 function matchBot(link, bots) {
   const res = list(link.name).map(x => new RegExp(x, 'i'));
   const ok = b => { const n = nrm(b.name); if (!res.every(re => re.test(n))) return false; if (!link.interval) return true; const v = list(b.versions).find(x => x && x.v === b.mainV) || {}; const itv = (v.spec && v.spec.interval) || ''; return itv === link.interval || new RegExp('\\b' + link.interval + '\\b|una hora', 'i').test(n); };
-  return list(bots).filter(b => b && b.id && b.status !== 'archived').find(ok) || null;
+  const live = list(bots).filter(b => b && b.id && b.status !== 'archived');
+  return live.find(ok) || live.find(b => res.every(re => re.test(nrm(b.name))) && !/\b\d+\s?(m|h|d|min)\b/i.test(nrm(b.name))) || null; // si cambiaste la temporalidad del bot (p. ej. a 30m) y su nombre no dice otra, el cerebro sigue con el mismo bot
 }
 function loadLinks() { try { return JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'brain-links.json'), 'utf8')).bots || []; } catch { return []; } }
 

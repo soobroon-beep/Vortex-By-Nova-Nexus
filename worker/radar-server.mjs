@@ -12,6 +12,10 @@ const MAX_CANDS = 5, MAX_FOLLOW = 10, MAX_LOG = 120;
 export async function klines(sym, tf, limit = 500) {
   let last;
   for (const h of HOSTS) { try { const r = await fetch(`${h}/api/v3/klines?symbol=${sym}&interval=${tf}&limit=${limit}`); if (!r.ok) { last = new Error('HTTP ' + r.status); continue; } const raw = await r.json(), now = Date.now(); return raw.filter(k => k[6] < now).map(k => ({t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5]})); } catch (e) { last = e; } }
+  // Binance bloquea a Cloudflare: el mismo par en MEXC y después en Gate (velas cerradas, mismo formato {t,o,h,l,c,v})
+  const p = /^([A-Z0-9]+?)(USDT|USDC)$/.exec(sym), MX = {'15m': '15m', '1h': '60m', '4h': '4h', '1d': '1d'}, GT = {'15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d'}, now = Date.now();
+  if (MX[tf]) { try { const r = await fetch(`https://api.mexc.com/api/v3/klines?symbol=${sym}&interval=${MX[tf]}&limit=${Math.min(500, limit)}`); if (r.ok) { const d = await r.json(); if (Array.isArray(d) && d.length) return d.filter(k => +k[6] < now).map(k => ({t: +k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5]})); } } catch (e) { last = e; } }
+  if (p && GT[tf]) { try { const r = await fetch(`https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${p[1]}_${p[2]}&interval=${GT[tf]}&limit=${Math.min(1000, limit)}`); if (r.ok) { const d = await r.json(), ms = {'15m': 9e5, '1h': 36e5, '4h': 144e5, '1d': 864e5}[tf]; if (Array.isArray(d) && d.length) return d.map(x => ({t: x[0] * 1000, c: +x[2], h: +x[3], l: +x[4], o: +x[5], v: +x[6]})).filter(c => c.t + ms <= now); } } catch (e) { last = e; } }
   throw last || new Error('sin velas');
 }
 export async function loadState(env) { const s = (await env.KV.get('radar', 'json')) || {}; return Object.assign(JSON.parse(JSON.stringify(RD.DEF)), s, {w: Object.assign({}, RD.DEF.w, s.w || {}), log: Array.isArray(s.log) ? s.log : [], seen: s.seen || {}}); }

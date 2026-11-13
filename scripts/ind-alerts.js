@@ -15,7 +15,7 @@ const RUN_MS = Math.max(0, +(process.env.RUN_MINUTES || 4.5)) * 60000, EVERY_MS 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function klines(key, itv, limit = 1000) { // velas cerradas del exchange de la moneda (BTCUSDT, BTC-USDT@bingxf, SOLUSDT@bybit…); sin respuesta → mismo par en Binance Spot
-  const r = await M.klinesAny(key, itv, limit, {meta: true}); if (r.src !== M.srcOf(key)) console.log(`${key} ${itv}: ${M.EXCH[M.srcOf(key)] || ''} no respondió, se usó Binance Spot`); return r.cs;
+  const r = await M.klinesAny(key, itv, limit, {meta: true}); if (r.src !== M.srcOf(key)) console.log(`${key} ${itv}: ${M.EXCH[M.srcOf(key)] || ''} no respondió, se usó ${r.src === 'vortex' ? 'el almacén de velas de VORTEX' : M.EXCH[r.src] || r.src}`); return r.cs;
 }
 async function post(path, body) {
   const r = await fetch(PUSH_URL + path, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body)});

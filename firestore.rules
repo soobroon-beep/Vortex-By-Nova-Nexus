@@ -32,6 +32,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Velas de VORTEX: las guarda el Motor del servidor (de Binance y, si falla, de otros exchanges). Son datos públicos de mercado:
+    // cualquiera las puede leer (la app las usa si los exchanges no responden); nadie las escribe desde la app.
+    match /candles/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Cualquier otra ruta, bloqueada.
     match /{document=**} {
       allow read, write: if false;
