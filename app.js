@@ -4128,20 +4128,28 @@ function dStat(d, a, b) { // «mostrar precio, % y velas» de las líneas
   if (!dOpt(d, 'st') || !d.b) return; const dp = d.b.p - d.a.p, bars = Math.round(idxOfTime(d.b.t) - idxOfTime(d.a.t));
   tag(`${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)}) · ${Math.abs(bars)} velas`, b.x + 8, b.y + (b.y < a.y ? -14 : 14), '#5b6b83');
 }
-/* Niveles de Fibonacci que más importan en el trading: dorados y resaltados (0.618 el principal; 0.5, 0.786 y 1.618 secundarios) */
-const FIB_KEY = lv => { const k = Math.round(lv * 1000) / 1000; return k === .618 ? {c: '#f5c568', w: 2.4, glow: 10, n: 'proporción áurea'} : k === 1.618 ? {c: '#f5c568', w: 2.2, glow: 8, n: 'extensión áurea'} : k === .5 ? {c: '#e9d29a', w: 1.6, glow: 4, n: 'medio'} : k === .786 ? {c: '#e9d29a', w: 1.6, glow: 4, n: 'retroceso profundo'} : k === .65 ? {c: '#d9b45c', w: 1.2, glow: 0, n: 'zona dorada'} : null; };
+/* Niveles de Fibonacci que más importan en el trading (0.618 el principal; 0.5, 0.65, 0.786 y 1.618): conservan su color de nivel,
+   pero su línea es más gruesa y con brillo y el fondo que los rodea se ve más fuerte y vivo que el resto. */
+const FIB_KEY = lv => { const k = Math.round(lv * 1000) / 1000; return k === .618 ? {w: 2.6, glow: 9, n: 'proporción áurea', f: 2.6} : k === 1.618 ? {w: 2.2, glow: 7, n: 'extensión áurea', f: 2.2} : k === .5 ? {w: 1.8, glow: 4, n: 'medio', f: 1.8} : k === .786 ? {w: 1.8, glow: 4, n: 'retroceso profundo', f: 1.8} : k === .65 ? {w: 1.6, glow: 3, n: 'zona dorada', f: 2.4} : null; };
+const fibVivid = c => { const m = /^#([0-9a-f]{6})/i.exec(c || ''); if (!m) return c; const v = parseInt(m[1], 16), ch = [v >> 16 & 255, v >> 8 & 255, v & 255], mx = Math.max(...ch), mn = Math.min(...ch), avg = (mx + mn) / 2; return '#' + ch.map(x => Math.round(Math.max(0, Math.min(255, avg + (x - avg) * 1.35 + 8))).toString(16).padStart(2, '0')).join(''); }; // un poco más saturado y brillante
 function dFibRows(d, L, priceOf, x1, x2, rightX, col, dim) { // niveles horizontales (retroceso y extensión): línea, etiqueta y fondo entre niveles
   const sl = dOpt(d, 'sl'), sv = dOpt(d, 'sv'), right = dOpt(d, 'lp') === 'r', fl = dOpt(d, 'fl'), fo = dOpt(d, 'fo') / 100, fc = dOpt(d, 'fc'); g.font = '10px system-ui'; g.lineWidth = 1;
-  // zona dorada (golden pocket 0.618–0.65): la franja donde más rebota el precio, siempre resaltada en dorado
-  if (L.some(lv => Math.abs(lv - .618) < 1e-6)) { const ya = Y(priceOf(.618)), yb = Y(priceOf(.65)); g.save(); const gr = g.createLinearGradient(x1, 0, x2, 0); gr.addColorStop(0, 'rgba(245,197,104,.26)'); gr.addColorStop(1, 'rgba(245,197,104,.08)'); g.fillStyle = gr; g.fillRect(x1, Math.min(ya, yb), x2 - x1, Math.max(2, Math.abs(yb - ya))); g.restore(); }
-  L.forEach((lv, k) => {
-    const pr = priceOf(lv), yy = Y(pr), key = FIB_KEY(lv), c = key ? key.c : dLvCol(d, lv, col);
+  const keyAt = lv => FIB_KEY(lv), has618 = L.some(lv => Math.abs(lv - .618) < 1e-6);
+  // fondos primero (debajo de las líneas): las franjas junto a un nivel clave se ven más fuertes
+  if (fl) for (let k = 0; k < L.length - 1; k++) {
+    const y1 = Y(priceOf(L[k])), y2 = Y(priceOf(L[k + 1])), ka = keyAt(L[k]), kb = keyAt(L[k + 1]), kk = ka || kb, boost = ka && kb ? Math.max(ka.f, kb.f) : kk ? 1.35 : 1; // entre dos niveles clave: mucho más vivo; junto a uno: un poco
+    const c = fc || dLvCol(d, L[k + 1], col); g.globalAlpha = Math.min(.55, fo * boost); g.fillStyle = kk && !fc ? fibVivid(c) : c; g.fillRect(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1));
+  }
+  g.globalAlpha = 1;
+  // zona dorada (0.618–0.65): franja con el color del 0.618, más viva
+  if (has618 && !L.some(lv => Math.abs(lv - .65) < 1e-6)) { const ya = Y(priceOf(.618)), yb = Y(priceOf(.65)), c = fibVivid(dLvCol(d, .618, col)); g.globalAlpha = Math.min(.5, Math.max(.22, fo * 2.6)); g.fillStyle = c; g.fillRect(x1, Math.min(ya, yb), x2 - x1, Math.max(2, Math.abs(yb - ya))); g.globalAlpha = 1; }
+  L.forEach(lv => {
+    const pr = priceOf(lv), yy = Y(pr), key = keyAt(lv), c0 = dLvCol(d, lv, col), c = key ? fibVivid(c0) : c0;
     g.strokeStyle = c; g.fillStyle = c; g.globalAlpha = key || lv === 0 || lv === 1 ? 1 : dim;
-    if (key) { g.save(); g.lineWidth = key.w; g.shadowColor = 'rgba(245,197,104,.55)'; g.shadowBlur = key.glow; } // niveles clave: dorados, más gruesos y con brillo
+    if (key) { g.save(); g.lineWidth = key.w; g.shadowColor = c; g.shadowBlur = key.glow; }
     g.beginPath(); g.moveTo(x1, yy); g.lineTo(x2, yy); g.stroke(); if (key) g.restore(); g.globalAlpha = 1;
     const tx = [sl ? String(lv) : '', sv ? `(${fmt(pr)})` : ''].filter(Boolean).join(' ') + (key && sl ? ' · ' + key.n : '');
-    if (tx) { g.textAlign = right ? 'right' : 'left'; if (key) { g.font = 'bold 11px system-ui'; g.fillStyle = key.c; } g.fillText(tx, right ? x2 - 4 : Math.min(x1 + 4, rightX - 90), yy - 3); g.font = '10px system-ui'; g.textAlign = 'left'; }
-    if (fl && k < L.length - 1) { const y2 = Y(priceOf(L[k + 1])); g.globalAlpha = fo; g.fillStyle = fc || dLvCol(d, L[k + 1], col); g.fillRect(x1, Math.min(yy, y2), x2 - x1, Math.abs(y2 - yy)); g.globalAlpha = 1; }
+    if (tx) { g.textAlign = right ? 'right' : 'left'; if (key) g.font = 'bold 11px system-ui'; g.fillStyle = c; g.fillText(tx, right ? x2 - 4 : Math.min(x1 + 4, rightX - 90), yy - 3); g.font = '10px system-ui'; g.textAlign = 'left'; }
   });
   g.strokeStyle = col; g.fillStyle = col;
 }
