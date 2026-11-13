@@ -253,7 +253,7 @@
   /* ───────── Tu propia IA (opcional): tu clave de OpenAI, Claude, Gemini, Groq… ─────────
      Si la configuras en Configuración › Cuenta, TODO lo que usa IA en VORTEX (Nexus Pixel, briefing, consejos de bots, Analizar gráfico, Laboratorio)
      la usa primero; si falla o no hay, se usa la IA gratis de VORTEX. La clave se guarda solo en este dispositivo y va directo al proveedor. */
-  const OWN_KEY = 'cct_ownai_v1';
+  const OWN_KEY = 'cct_ownai_v1'; let ownPauseUntil = 0, ownFails = 0;
   const OWN = {
     openai: {name: 'OpenAI (ChatGPT)', url: 'https://api.openai.com/v1', model: 'gpt-4o-mini', vision: true, newParams: true, keyHint: 'sk-…', site: 'platform.openai.com/api-keys'},
     anthropic: {name: 'Claude (Anthropic)', url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5-5', vision: true, native: 'anthropic', keyHint: 'sk-ant-…', site: 'console.anthropic.com'},
@@ -319,7 +319,18 @@
   /* ───────── Entrada principal ───────── */
   async function chat(messages, o) {
     o = o || {}; const own = o.noOwn ? null : ownLoad();
-    if (own && own.on) { try { return await chatOwn(messages, o, own); } catch (e) { if (o.signal && o.signal.aborted) throw e; try { o.onProgress && o.onProgress({text: 'Tu IA no respondió (' + String(e.message || e).slice(0, 80) + '); uso la IA gratis de VORTEX…'}); } catch {} } }
+    if (own && own.on && Date.now() > ownPauseUntil) {
+      try { const r = await chatOwn(messages, o, own); ownFails = 0; return r; }
+      catch (e) {
+        if (o.signal && o.signal.aborted) throw e;
+        /* Tu IA falló: se responde con la IA de VORTEX. Si es por saldo/tokens, clave o límite (o falla 2 veces seguidas), se deja de intentar
+           un rato para que todo siga rápido; después se vuelve a probar sola. Nada de la app ni de los bots depende de tu IA. */
+        const msg = String(e.message || e), noCredit = /credit|billing|balance|quota|insufficient|payment|saldo|exceeded/i.test(msg) || e.status === 402, auth = e.kind === 'auth', rate = e.kind === 'rate';
+        ownFails++; const pause = noCredit || auth ? 60 : rate ? 10 : ownFails >= 2 ? 15 : 0;
+        if (pause) { ownPauseUntil = Date.now() + pause * 6e4; ownFails = 0; try { root.dispatchEvent && root.dispatchEvent(new CustomEvent('vx-ownai-paused', {detail: {why: noCredit ? 'sin saldo o tokens' : auth ? 'la clave no es válida' : rate ? 'límite de uso' : 'no responde', min: pause}})); } catch {} }
+        try { o.onProgress && o.onProgress({text: 'Tu IA no respondió (' + msg.slice(0, 80) + '); uso la IA de VORTEX…'}); } catch {}
+      }
+    }
     const cfg = o.cfg || load();
     let prov = o.purpose === 'code' ? cfg.lab : cfg.provider; // el Laboratorio (código) puede usar otro proveedor que el resto
     if (prov === 'webllm' && !(root.navigator && root.navigator.gpu)) prov = cfg.provider === 'webllm' ? 'free' : cfg.provider; // sin WebGPU no puede correr en el navegador

@@ -48,5 +48,7 @@
   const stamp = () => { try { localStorage.setItem('cct_ownai_at', String(Date.now())); } catch {} };
   document.addEventListener('vx-ownai', e => { stamp(); push(e.detail); });
   setInterval(pull, 3000);
+  // aviso (una vez) cuando tu IA se queda sin saldo o falla: la app sigue con la IA de VORTEX
+  window.addEventListener('vx-ownai-paused', e => { const t = document.getElementById('toast'), d = e.detail || {}; if (!t) return; t.textContent = `Tu IA (${d.why}): mientras tanto uso la IA de VORTEX. Vuelvo a probar tu IA en ${d.min} min.`; t.style.display = 'block'; clearTimeout(t._ow); t._ow = setTimeout(() => { t.style.display = 'none'; }, 5000); });
   document.addEventListener('DOMContentLoaded', sub); setTimeout(sub, 800);
 })();
