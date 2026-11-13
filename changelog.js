@@ -2,7 +2,9 @@
 window.CCT_CHANGELOG = [
   {v: '3.32', d: '13 nov 2026', t: 'Fibonacci lateral y bots más visuales', items: [
     'Fibonacci automático: nuevo estilo «Lateral derecho» en sus ajustes: líneas punteadas que salen del lado derecho del gráfico sin tocar las velas, solo con el nivel (sin precio), niveles clave más resaltados y colores por nivel o monocromáticos.',
-    'Nova Bot Lab: cada bot se ve como una línea de producción: el motor arranca, opera, muestra resultados y se mejora, unidos por hilos animados. Toca cada estación para ver su detalle.'
+    'Nova Bot Lab: cada bot se ve como una línea de producción: el motor arranca, opera, muestra resultados y se mejora, unidos por hilos animados. Toca cada estación para ver su detalle.',
+    'Nova Bot Lab: nuevo «Cómo aprende»: el ciclo del bot (opera, recuerda, analiza, prueba variantes y se queda con la mejor) con una luz que lo recorre, cuánto mejoró desde su v1 y lo último que aprendió.',
+    'Fibonacci lateral: el largo de las líneas se elige en % del gráfico (como el perfil de volumen) y las líneas son delgadas; los niveles clave solo con el color más vivo.'
   ]},
   {v: '3.31', d: '12 nov 2026', t: '15 indicadores gratis nuevos', items: [
     'Leyenda de indicadores abierta: cada nombre con sus botones va en una píldora de cristal oscuro para que no se pierda con las velas.',

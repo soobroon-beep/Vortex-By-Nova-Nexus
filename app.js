@@ -3803,7 +3803,7 @@ function fillBetween(top, bot, lo, hi, color, alpha) { // relleno entre dos seri
 }
 /* Fibonacci automático · estilo «Lateral derecho»: lo dibuja el gráfico (el script solo da los ajustes). Líneas punteadas que salen del lado
    derecho y se detienen antes de la última vela; solo dice el nivel (sin precio) y resalta los niveles clave. Entradas del script por posición. */
-const AFIB_DEF = ['150', 'Clásico', true, true, 'Un color por nivel', '#f5c568', 160, 28, false];
+const AFIB_DEF = ['150', 'Clásico', true, true, 'Un color por nivel', '#f5c568', 20, 28, false];
 const AFIB_PAL = {0: '#9aa1ad', .236: '#f23645', .382: '#ff9800', .5: '#4caf50', .618: '#089981', .65: '#00bcd4', .786: '#2962ff', 1: '#9aa1ad', 1.272: '#7c4dff', 1.618: '#e040fb'};
 function drawAutoFibSide() {
   const p = state.pine.find(x => x.sid === 'free:autofib' && x.on && !x.hide); if (!p || !planOk('proInd')) return;
@@ -3811,15 +3811,14 @@ function drawAutoFibSide() {
   const n = candles.length, a = Math.max(0, n - Math.max(20, +inp(0) || 150)); let hi = -Infinity, lo = Infinity, hiI = a, loI = a;
   for (let i = a; i < n; i++) { if (candles[i].h > hi) { hi = candles[i].h; hiI = i; } if (candles[i].l < lo) { lo = candles[i].l; loI = i; } }
   if (!(hi > lo)) return; const up = loI < hiI, L = [0, .236, .382, .5, .618, .65, .786, 1].concat(inp(8) === true || inp(8) === 'true' ? [1.272, 1.618] : []);
-  const xr = geo.left + geo.plotW - 4, lastX = X(n - 1) + geo.step / 2 + (+inp(7) || 0), xl = Math.max(geo.left + 4, lastX, xr - (+inp(6) || 160)), x0 = xr - xl < 40 ? xr - 40 : xl;
+  const xr = geo.left + geo.plotW - 4, lastX = X(n - 1) + geo.step / 2 + (+inp(7) || 0), pctW = Math.max(3, Math.min(70, +inp(6) || 20)), xl = Math.max(geo.left + 4, lastX, xr - geo.plotW * pctW / 100), x0 = xr - xl < 30 ? xr - 30 : xl; // ancho en % del gráfico (como el perfil de volumen), sin llegar a las velas
   const mono = inp(4) === 'Monocromático', mc = String(inp(5) || '#f5c568').slice(0, 7);
   g.save(); g.font = '10px system-ui'; g.textAlign = 'right';
   for (const f of L) {
     const pr = up ? hi - (hi - lo) * f : lo + (hi - lo) * f, y = Y(pr); if (!(y > geo.plotTop - 2 && y < geo.plotTop + geo.plotH + 2)) continue;
     const key = f === .5 || f === .618 || f === .65 || f === .786 || f === 1.618, c = mono ? mc : (key ? fibVivid(AFIB_PAL[f]) : AFIB_PAL[f]) || mc;
-    g.setLineDash(key ? [6, 3] : [3, 4]); g.strokeStyle = c; g.globalAlpha = key ? 1 : .45; g.lineWidth = f === .618 ? 2.6 : key ? 2 : 1;
-    if (key) { g.shadowColor = c; g.shadowBlur = f === .618 ? 8 : 5; }
-    g.beginPath(); g.moveTo(x0, y); g.lineTo(xr, y); g.stroke(); g.shadowBlur = 0;
+    g.setLineDash(key ? [5, 3] : [3, 4]); g.strokeStyle = c; g.globalAlpha = key ? 1 : .42; g.lineWidth = f === .618 ? 1.3 : 1; // líneas delgadas: los niveles clave solo con el color más vivo
+    g.beginPath(); g.moveTo(x0, y); g.lineTo(xr, y); g.stroke();
     const t = String(f); g.font = key ? 'bold 11px system-ui' : '10px system-ui'; const tw = g.measureText(t).width;
     if (tw + 10 > xr - x0) { g.globalAlpha = 1; g.fillStyle = 'rgba(8,11,18,.78)'; roundRect(xr - tw - 7, y - 16, tw + 7, 14, 4); g.fill(); }
     g.fillStyle = c; g.globalAlpha = key ? 1 : .6; g.fillText(t, xr - 3, y - 5);

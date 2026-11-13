@@ -1986,6 +1986,9 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 .bf-gear path{fill:color-mix(in srgb,var(--bc) 70%,#1d2433)}.bf-gear .bf-hole{fill:#0b0f18}
 .bf-on .bf-gear.g1{animation:bfSpin 4s linear infinite}.bf-on .bf-gear.g2{animation:bfSpin 2.6s linear infinite reverse}.bf-on .bf-gear.g3{animation:bfSpin 2.2s linear infinite reverse}
 .bf-off .bf-gear path,.bf-pause .bf-gear path{fill:#3a4252}
+.bf-off .bf-gear,.bf-pause .bf-gear{animation:bfSpinOnce 1.4s cubic-bezier(.2,.8,.3,1) .1s 1}.bf-off .bf-gear.g2,.bf-pause .bf-gear.g2{animation-direction:reverse}
+@keyframes bfSpinOnce{from{transform:rotate(-240deg)}to{transform:none}}
+.bf-st:hover{transform:translateY(-2px)}.bf-st{transition:transform .2s,border-color .2s,background .2s}
 .bf-mt{display:flex;align-items:center;gap:6px;max-width:100%}.bf-mt b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bf-av{display:inline-flex}
 .bf-led{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted)}
 .bf-led i{width:8px;height:8px;border-radius:50%;background:#5d6677}
@@ -2000,7 +2003,7 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 .bf-w0{fill:none;stroke:rgba(255,255,255,.1);stroke-width:2}
 .bf-w1{fill:none;stroke:var(--bc);stroke-width:2;stroke-dasharray:60;stroke-dashoffset:60;animation:bfDraw .5s ease forwards;animation-delay:var(--d)}
 .bf-on .bf-w1{stroke-dasharray:6 6;stroke-dashoffset:0;animation:bfFlow .8s linear infinite;animation-delay:0s}
-.bf-spark{fill:#fff;opacity:0}.bf-on .bf-spark{opacity:.9;filter:drop-shadow(0 0 3px var(--bc))}
+.bf-spark{fill:#fff;filter:drop-shadow(0 0 3px var(--bc))}
 @keyframes bfIn{to{opacity:1;transform:none}}
 @keyframes bfSpin{to{transform:rotate(360deg)}}
 @keyframes bfPulse{0%,100%{opacity:1}50%{opacity:.35}}
@@ -2017,3 +2020,34 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
   .bf-mt{flex:1 1 auto}.bf-led{flex-basis:100%;padding-left:56px}
   .bf-wire{flex:0 0 22px;width:20px;height:22px;align-self:center;transform:rotate(90deg)}
 }
+
+/* Nova Bot Lab · «Cómo aprende»: ciclo animado con una luz que lo recorre y lo último que aprendió */
+.ll-wrap{container-type:inline-size;margin-bottom:14px}
+.ll{padding:14px;border-radius:18px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08)}
+.ll-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px}.ll-h h4{margin:0;font-size:15px}.ll-h small{color:var(--muted);font-size:11.5px;text-align:right}
+.ll-body{display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:18px;align-items:center}
+.ll-svg{width:100%;max-width:420px;overflow:visible;justify-self:center}
+.ll-ring{fill:none;stroke:rgba(255,255,255,.08);stroke-width:2}
+.ll-ring2{fill:none;stroke:var(--bc);stroke-width:2;stroke-dasharray:4 9;opacity:.55;animation:llFlow 2.4s linear infinite}
+.ll-run{fill:#fff;filter:drop-shadow(0 0 6px var(--bc)) drop-shadow(0 0 2px #fff)}.ll-run.t{opacity:.45}
+.ll-n{cursor:pointer;opacity:0;animation:llIn .5s cubic-bezier(.2,.9,.25,1.1) forwards;animation-delay:calc(.15s + var(--i) * .18s)}
+.ll-dot{fill:#0d1320;stroke:color-mix(in srgb,var(--bc) 70%,#fff 0%);stroke-width:1.6}
+.ll-halo{fill:var(--bc);opacity:0;animation:llPulse 7s ease-in-out infinite;animation-delay:calc(var(--i) * 1.4s)}
+.ll-ic{fill:none;stroke:#e6ecf7;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.ll-n:hover .ll-dot{fill:color-mix(in srgb,var(--bc) 30%,#0d1320)}
+.ll-t{font:650 11px system-ui;fill:#dfe6f2}.ll-v{font:500 10.5px system-ui;fill:#8796ab}
+.ll-core circle{fill:color-mix(in srgb,var(--bc) 14%,#0b0f18);stroke:color-mix(in srgb,var(--bc) 50%,transparent);stroke-width:1.2;animation:llBreath 3.5s ease-in-out infinite;transform-origin:150px 150px}
+.ll-ct{font:800 19px system-ui;fill:#fff;text-anchor:middle}.ll-cs{font:500 10px system-ui;fill:#8796ab;text-anchor:middle}
+.ll-side{min-width:0}.ll-why{margin:0 0 10px;color:#c8d2e1;font-size:12.5px;line-height:1.5}.ll-side h5{margin:0 0 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.ll-feed{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ll-e{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;border-radius:11px;background:rgba(255,255,255,.035);opacity:0;transform:translateX(8px);animation:llEv .45s ease forwards;animation-delay:calc(.6s + var(--i) * .12s)}
+.ll-e i{flex:none;width:8px;height:8px;margin-top:4px;border-radius:50%;background:#5d6677}.ll-e.on i{background:#20bf9f;box-shadow:0 0 6px #20bf9f}.ll-e.off i{background:#f06b79}
+.ll-e b{display:block;font-size:12.5px;font-weight:600;line-height:1.35}.ll-e small{color:var(--muted);font-size:11px}
+@keyframes llFlow{to{stroke-dashoffset:-26}}
+@keyframes llIn{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+.ll-n{transform-box:fill-box;transform-origin:center}
+@keyframes llPulse{0%,18%,100%{opacity:0}6%{opacity:.35}}
+@keyframes llBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes llEv{to{opacity:1;transform:none}}
+@container (max-width:640px){.ll-body{grid-template-columns:1fr}.ll-svg{max-width:340px}}
+@media (prefers-reduced-motion:reduce){.ll *{animation:none!important}.ll-n,.ll-e{opacity:1;transform:none}}

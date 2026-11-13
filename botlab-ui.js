@@ -485,7 +485,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
       (SUBS[tab] ? `<div class="bl-subs">${SUBS[tab].map(([k, l]) => `<button class="${sub[tab] === k ? 'on' : ''}" data-a="sub" data-k="${k}">${l}</button>`).join('')}</div>` : '') + `<div id="blTab"></div>`;
     const k = SUBS[tab] ? sub[tab] : tab;
     ({sum: tabSum, gr: tabGr, rob: tabRob, diary: tabDiary, ver: tabVer, pap: tabPap, cic: tabCic, ai: tabAi, est: tabEst}[k] || tabSum)(b, run);
-    if (tab === 'sum') dashBind();
+    if (tab === 'sum') { dashBind(); countUp(); }
   }
   /* ───────── Línea de producción del bot (vista «fábrica») ─────────
      El bot como una maquinaria: el motor arranca (engranes) → opera (cuántas operaciones y si hay una abierta) → resultados (rendimiento y aciertos)
@@ -496,7 +496,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const prev = b.versions.filter(v => v.v !== b.mainV && runOf(b, v.v)).slice(-1)[0], rPrev = prev && runOf(b, prev.v), imp = m && rPrev ? m.retPct - rPrev.metrics.retPct : null;
     const st = live ? 'on' : b.status === 'paused' ? 'pause' : 'off', col = colOf(b.id), pc = c => c == null ? '' : c >= 0 ? 'up' : 'dn';
     const gear = (r, cx, cy, cls) => { let d = ''; const n = 8, ro = r, ri = r * .74; for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * Math.PI * 2, rr = i % 2 ? ri : ro, a2 = (i + 1) / (n * 2) * Math.PI * 2; d += `${i ? 'L' : 'M'}${(cx + rr * Math.cos(a)).toFixed(1)} ${(cy + rr * Math.sin(a)).toFixed(1)}L${(cx + rr * Math.cos(a2)).toFixed(1)} ${(cy + rr * Math.sin(a2)).toFixed(1)}`; } return `<g class="bf-gear ${cls}" style="transform-origin:${cx}px ${cy}px"><path d="${d}Z"/><circle cx="${cx}" cy="${cy}" r="${(r * .32).toFixed(1)}" class="bf-hole"/></g>`; };
-    const wire = i => `<svg class="bf-wire" viewBox="0 0 60 20" preserveAspectRatio="none" style="--d:${.25 + i * .35}s"><path class="bf-w0" d="M0 10 C20 10 40 10 60 10"/><path class="bf-w1" d="M0 10 C20 10 40 10 60 10"/><circle class="bf-spark" r="2.2" cy="10"><animate attributeName="cx" from="0" to="60" dur="1.6s" begin="${(i * .5).toFixed(1)}s" repeatCount="indefinite"/></circle></svg>`;
+    const wire = i => `<svg class="bf-wire" viewBox="0 0 60 20" preserveAspectRatio="none" style="--d:${.25 + i * .35}s"><path class="bf-w0" d="M0 10 C20 10 40 10 60 10"/><path class="bf-w1" d="M0 10 C20 10 40 10 60 10"/><circle class="bf-spark" r="2.2" cy="10" opacity="0"><animate attributeName="cx" from="0" to="60" dur="1.6s" begin="${(.3 + i * .45).toFixed(2)}s" repeatCount="${st === 'on' ? 'indefinite' : '2'}"/><animate attributeName="opacity" values="0;1;1;0" dur="1.6s" begin="${(.3 + i * .45).toFixed(2)}s" repeatCount="${st === 'on' ? 'indefinite' : '2'}"/></circle></svg>`;
     const ring2 = v => { const p = Math.max(0, Math.min(100, v || 0)), c = 2 * Math.PI * 17; return `<svg class="bf-ring" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" class="bf-rb"/><circle cx="20" cy="20" r="17" class="bf-rf ${p >= 50 ? 'up' : 'mid'}" stroke-dasharray="${(c * p / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 20 20)"/><text x="20" y="24">${v == null ? '—' : Math.round(v)}</text></svg>`; };
     return `<div class="bf-wrap"><div class="bf bf-${st}" style="--bc:${col}">
       <button type="button" class="bf-st bf-motor" data-a="tab" data-k="pap" style="--i:0" title="Motor del bot: En vivo">
@@ -506,11 +506,11 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
       </button>${wire(0)}
       <button type="button" class="bf-st" data-a="tab" data-k="diary" style="--i:1" title="Operaciones">
         <svg class="bf-ic" viewBox="0 0 24 24"><path d="M4 18 9 12l4 3 7-8"/><path d="M15 7h5v5"/></svg>
-        <b class="bf-big">${ops}</b><small>operaciones${lv ? ' en vivo' : m ? ' (prueba)' : ''}</small>
+        <b class="bf-big" data-cu="${ops}">${ops}</b><small>operaciones${lv ? ' en vivo' : m ? ' (prueba)' : ''}</small>
         ${open ? `<span class="bf-open"><i></i>${open} abierta${open > 1 ? 's' : ''}</span>` : `<span class="bf-sub">${live ? 'esperando señal' : '—'}</span>`}
       </button>${wire(1)}
       <button type="button" class="bf-st" data-a="tab" data-k="gr" style="--i:2" title="Resultados">
-        ${ring2(wr)}<b class="bf-big ${pc(res)}">${res == null ? '—' : (res >= 0 ? '+' : '') + num(res, 1) + ' %'}</b><small>resultado · aciertos ${wr == null ? '—' : Math.round(wr) + ' %'}</small>
+        ${ring2(wr)}<b class="bf-big ${pc(res)}" ${res == null ? '' : `data-cu="${res.toFixed(1)}" data-dec="1" data-pre="${res >= 0 ? '+' : ''}" data-suf=" %"`}>${res == null ? '—' : (res >= 0 ? '+' : '') + num(res, 1) + ' %'}</b><small>resultado · aciertos ${wr == null ? '—' : Math.round(wr) + ' %'}</small>
       </button>${wire(2)}
       <button type="button" class="bf-st" data-a="tab" data-k="ver" style="--i:3" title="Mejora">
         <svg class="bf-ic" viewBox="0 0 24 24"><path d="M12 3l2.2 4.6 5 .7-3.6 3.5.9 5L12 14.5 7.5 16.8l.9-5L4.8 8.3l5-.7z"/></svg>
@@ -519,6 +519,33 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
       </button>
     </div></div>`;
   }
+  /* ───────── Cómo aprende el bot: el ciclo que se repite (opera → recuerda → analiza → prueba variantes → se queda con la mejor → vuelve a operar)
+     con una luz que lo recorre, sus números reales y lo último que aprendió. Todo sale de lo guardado (versiones, experimentos, reentrenamiento). */
+  function learnLoop(b, run) {
+    const c = cyc(b), lv = liveOf(b), m = run && run.metrics, trades = lv ? lv.nClosed : m ? m.n : 0, exps = (b.optHistory || []).length, nV = b.versions.length;
+    const firstRun = b.versions.map(v => runOf(b, v.v)).find(Boolean), gain = m && firstRun && firstRun !== run ? m.retPct - firstRun.metrics.retPct : null;
+    const every = c.everyHours >= 168 ? 'cada semana' : c.everyHours >= 72 ? 'cada 3 días' : 'cada día', last = b.server && b.server.at;
+    const N = [['Opera', `${trades} op.`, 'diary'], ['Recuerda', `${(b.journal || []).length} notas`, 'diary'], ['Analiza', c.enabled ? every : 'apagado', 'cic'], ['Prueba variantes', `${exps} pruebas`, 'cic'], ['Se queda con la mejor', `v${b.mainV} de ${nV}`, 'ver']];
+    const R = 104, C = 150, pt = i => { const a = (-90 + i * 72) * Math.PI / 180; return [C + R * Math.cos(a), C + R * Math.sin(a)]; };
+    const ICS = ['<path d="M-7 4 -2-1l3 2 6-6"/>', '<rect x="-6" y="-7" width="12" height="14" rx="2"/><path d="M-3-2h6M-3 2h6"/>', '<circle r="5"/><path d="M4 4l4 4"/>', '<path d="M-6 6V-1M0 6V-6M6 6V2"/>', '<path d="M0-7l2 4.5 5 .5-3.7 3.3 1 5L0 3.6-4.3 6.3l1-5L-7-2l5-.5z"/>'];
+    const nodes = N.map(([t, v, k], i) => { const [x, y] = pt(i), lx = x + (x > C + 5 ? 27 : x < C - 5 ? -27 : 0), ly = y + (y < C - 50 ? -44 : y > C + 50 ? 36 : 4), anc = x > C + 5 ? 'start' : x < C - 5 ? 'end' : 'middle';
+      return `<g class="ll-n" data-a="tab" data-k="${k}" style="--i:${i}"><circle class="ll-halo" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="23"/><circle class="ll-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="19"/><g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})" class="ll-ic">${ICS[i]}</g><text class="ll-t" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anc}">${esc(t)}</text><text class="ll-v" x="${lx.toFixed(1)}" y="${(ly + 14).toFixed(1)}" text-anchor="${anc}">${esc(v)}</text></g>`; }).join('');
+    const ring = `M ${C} ${C - R} A ${R} ${R} 0 1 1 ${C - .01} ${C - R}`;
+    const ev = b.versions.filter(v => v.v > 1).map(v => ({at: v.at, txt: `v${v.v} · ${v.note || 'nueva versión'}`, k: v.v === b.mainV ? 'on' : v.state === 'descartada' ? 'off' : ''}))
+      .concat((b.optHistory || []).map(h => ({at: h.at, txt: (decText[h.decision] || [h.decision])[0] + (h.oos != null ? ` · candidata ${money(h.oos)} vs actual ${money(h.base)}` : ''), k: h.decision === 'propuesta' ? 'on' : ''})))
+      .sort((a, z) => (z.at || 0) - (a.at || 0)).slice(0, 5);
+    const feed = ev.length ? ev.map((e, i) => `<li class="ll-e ${e.k}" style="--i:${i}"><i></i><div><b>${esc(e.txt)}</b><small>${e.at ? dt(e.at) : ''}</small></div></li>`).join('') : '<li class="ll-e" style="--i:0"><i></i><div><b>Todavía no aprende nada nuevo</b><small>En cuanto opere y corra su primer reentrenamiento, aquí verás qué cambió.</small></div></li>';
+    return `<div class="ll-wrap"><div class="ll ${isLive(b) ? 'll-live' : ''}" style="--bc:${colOf(b.id)}">
+      <div class="ll-h"><h4>Cómo aprende</h4><small>${c.enabled ? `se reentrena ${every}${last ? ' · último ' + dt(last) : ''}` : 'ciclo automático apagado (actívalo en Mejorar › Reentrenar)'}</small></div>
+      <div class="ll-body"><svg class="ll-svg" viewBox="-95 -10 490 330"><path class="ll-ring" d="${ring}"/><path class="ll-ring2" d="${ring}"/>
+        <circle class="ll-run" r="5"><animateMotion dur="7s" repeatCount="indefinite" path="${ring}"/></circle><circle class="ll-run t" r="3"><animateMotion dur="7s" begin="-.18s" repeatCount="indefinite" path="${ring}"/></circle>
+        ${nodes}
+        <g class="ll-core"><circle cx="${C}" cy="${C}" r="44"/><text x="${C}" y="${C - 6}" class="ll-ct">${gain == null ? 'v' + b.mainV : (gain >= 0 ? '+' : '') + num(gain, 1) + ' %'}</text><text x="${C}" y="${C + 12}" class="ll-cs">${gain == null ? 'versión actual' : 'desde su v1'}</text></g></svg>
+        <div class="ll-side"><p class="ll-why">Cada ciclo usa sus propias operaciones: revisa qué le funcionó y qué no, prueba ajustes (stop, objetivo, filtros) con datos que no vio y solo se queda con un cambio si gana. Así lo que aprende <b>regresa a él</b> en la siguiente operación.</p>
+          <h5>Lo último que aprendió</h5><ul class="ll-feed">${feed}</ul></div></div></div></div>`;
+  }
+  /* Números que suben solos al abrir (operaciones, versiones…) */
+  function countUp() { if (!root) return; root.querySelectorAll('[data-cu]').forEach(el => { const to = +el.dataset.cu, pre = el.dataset.pre || '', suf = el.dataset.suf || '', dec = +el.dataset.dec || 0; if (!Number.isFinite(to)) return; const t0 = performance.now(), D = 900; const f = t => { const k = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - k, 3), v = to * e; el.textContent = pre + (to >= 0 && pre === '±' ? '+' : '') + v.toLocaleString('es', {minimumFractionDigits: dec, maximumFractionDigits: dec}) + suf; if (k < 1) requestAnimationFrame(f); }; requestAnimationFrame(f); }); }
   /* Vista general visual del bot: rendimiento grande, curva de capital interactiva (backtest y/o en vivo), ranking y actividad */
   function overview(b, run) {
     const col = colOf(b.id), ser = [];
@@ -534,8 +561,8 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const liveBox = st ? `<div class="bo-live"><div class="bo-live-h"><span class="bl-dot d-live"></span><b>En vivo desde ${dt(so.startT)}</b><small>empezó en cero · v${so.v}${so.symbols.length > 1 ? ' · ' + so.symbols.map(x => x.replace('USDT', '')).join(', ') : ''}</small></div><div class="bo-ks">${kpi('Resultado', `<span class="${cls(st.retPct)}">${pct(st.retPct)}</span>`)}${kpi('Operaciones cerradas', st.nClosed)}${kpi('Aciertos', st.winRate == null ? '—' : num(st.winRate, 0) + ' %')}${kpi('Posición', so.open.length ? `<span class="pos">${so.open.length} abierta${so.open.length === 1 ? '' : 's'}</span>` : 'Esperando señal')}</div>${st.nClosed === 0 ? '<small class="bl-dim">Solo cuenta lo que pasa DESPUÉS de encenderlo; abajo está su historia (backtest), que es otra cosa.</small>' : ''}</div>` : '';
     const vers = b.versions.slice().reverse().slice(0, 6).map(v => { const r = runOf(b, v.v), on = v.v === b.mainV; return `<div class="bo-ver ${on ? 'on' : ''}"><span class="bo-vn">${/consejo|edición/i.test(v.origin || '') && v.state !== 'descartada' ? '<i class="bo-ck">✓</i>' : ''}v${v.v}</span><div><b>${esc(v.note || 'Versión')}</b><small>${dt(v.at)} · ${esc(v.origin || '')}${on ? ' · <em>principal</em>' : v.state === 'descartada' ? ' · descartada' : ''}</small></div>${r ? `<span class="${cls(r.metrics.retPct)}">${pct(r.metrics.retPct)}<small>${r.metrics.winRate == null ? '—' : num(r.metrics.winRate, 0) + ' %'} aciertos</small></span>` : '<span class="bl-dim">sin probar</span>'}</div>`; }).join('');
     const updates = b.versions.length > 1 ? `<div class="bd-card"><div class="bd-ch"><h4>Cambios aplicados</h4><small>${b.versions.length} versiones</small></div>${vers}</div>` : '';
-    if (!big) return factory(b, run) + liveBox + `<div class="bo-hero empty"><div class="bd-hero-ic">${IC.robot}</div><h3>Pruébalo para ver sus resultados</h3><p>Toca <b>Probar</b>: se ejecuta con velas reales de Binance y aquí verás su curva de capital, aciertos y caída máxima.</p><button class="bl-btn" data-a="quickRun" ${busyMsg ? 'disabled' : ''}>Probar ahora</button></div>`;
-    return factory(b, run) + liveBox + `<div class="bo-hero"><div class="bo-big"><small>${big.lab}</small><b class="${cls(big.v)}">${pct(big.v)}</b><em>${big.sub}</em></div>${run ? verdictChip(run.verdict) : ''}</div>
+    if (!big) return factory(b, run) + learnLoop(b, run) + liveBox + `<div class="bo-hero empty"><div class="bd-hero-ic">${IC.robot}</div><h3>Pruébalo para ver sus resultados</h3><p>Toca <b>Probar</b>: se ejecuta con velas reales de Binance y aquí verás su curva de capital, aciertos y caída máxima.</p><button class="bl-btn" data-a="quickRun" ${busyMsg ? 'disabled' : ''}>Probar ahora</button></div>`;
+    return factory(b, run) + learnLoop(b, run) + liveBox + `<div class="bo-hero"><div class="bo-big"><small>${big.lab}</small><b class="${cls(big.v)}">${pct(big.v)}</b><em>${big.sub}</em></div>${run ? verdictChip(run.verdict) : ''}</div>
       ${m ? `<div class="bo-ks">${kpi('Operaciones', m.n)}${kpi('Aciertos', m.winRate == null ? '—' : num(m.winRate, 0) + ' %', ring(m.winRate, m.winRate >= 50 ? '#20bf9f' : '#f0b90b'))}${kpi('Caída máx.', num(m.maxDDPct, 1) + ' %', ring(Math.min(100, (m.maxDDPct || 0) * 2), (m.maxDDPct || 0) > 25 ? '#f06b79' : (m.maxDDPct || 0) > 12 ? '#f0b90b' : '#20bf9f'))}${kpi('vs. comprar y mantener', `<span class="${cls(m.retPct - run.buyHold.retPct)}">${pct(m.retPct - run.buyHold.retPct)}</span>`)}</div>` : ''}
       <div class="bd-card"><div class="bd-ch"><h4>Curva de capital</h4><small>pasa el cursor para ver valores</small></div>${ser.length > 1 ? `<div class="bd-legs">${ser.map(x => `<button type="button" class="bd-leg ${dash.off.has(x.k) ? 'off' : ''}" data-dleg="${esc(x.k)}"><i style="background:${x.col}"></i>${esc(x.name)}</button>`).join('')}</div>` : ''}${eqChart(W, 210)}</div>
       ${updates}${rank}${feed ? `<div class="bd-card"><div class="bd-ch"><h4>Actividad</h4></div><div class="bd-feed">${feed}</div></div>` : ''}`;
