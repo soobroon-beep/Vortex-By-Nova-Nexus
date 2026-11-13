@@ -23,6 +23,9 @@ window.CCT_CHANGELOG = [
     'Consejos: si la prueba muestra que sí mejora, queda listo para aplicar; si no mejora, se queda la versión actual sola (lo ves en «Probados que no mejoraron»). Para contar como mejora tiene que ganar en las dos partes de los datos que no vio.',
     'Cuando la máquina está detenida porque se trabó en vivo, el botón «Arreglarlo» lo corrige solo: una señal de tu indicador que no salió en esas velas ya no detiene al bot y una línea que cambió de nombre se encuentra sola.',
     '«Icono y color» se movió al menú ⋯ del bot.',
+    'Bot con problema: en la lista, la cabecera y el botón dice «Problema» con el punto naranja en lugar de «En vivo».',
+    'Configuración › Cuenta › Tu IA: elige tu IA (OpenAI, Claude, Gemini, Grok, DeepSeek, Mistral, Groq, OpenRouter…), pega tu clave y todo lo que usa IA (Nexus Pixel, briefing, consejos de bots, Analizar gráfico, Laboratorio) la usa; sin clave sigue la IA gratis.',
+    'Configuración: los iconos van solos, a color, sin el recuadro tipo app.',
     'Operaciones: en lugar de las velas, una línea de precio simple con cada compra y venta marcada (verde si ganó, rojo si perdió) y tarjetas de las últimas operaciones. Las velas siguen en «Ver con velas».',
     'Consejos: nuevo botón «Ignorar consejo» junto a «Aplicar este consejo»; el consejo se quita y deja lugar a otros.',
     'En vivo: más visual y con menos texto: resultado grande, la posición abierta en una barra (stop · entrada · ahora · objetivo), números clave como fichas y lo que prometió vs. lo que está haciendo en barras.'
