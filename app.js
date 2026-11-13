@@ -3122,7 +3122,20 @@ function legLabel(text, x, y, act, dim) {
     if (dim) { g.fillStyle = muted; g.globalAlpha = .5; }
     else if (String(g.fillStyle).toLowerCase() === muted) g.fillStyle = fg;
   }
-  g.fillText(text, x, y); legAt(text, x, y, act, dim); g.font = f;
+  legGlass(text, x, y, act); g.fillText(text, x, y); legAt(text, x, y, act, dim); g.font = f;
+}
+/* Cristal oscuro (liquid glass) detrás de cada fila de la leyenda abierta: cubre el nombre y sus botones para que no se pierdan con las velas.
+   Se hace en el mismo lienzo: se desenfoca lo que hay detrás del recuadro y encima va un velo oscuro con borde fino y brillo arriba. */
+const legW = new Map(), legKey = act => (act.t || '') + ':' + (act.sid || act.key || act.mid || '');
+function legGlass(text, x, y, act) {
+  const tw = g.measureText(text).width, bw = legW.get(legKey(act)) || 3 * (legBtnH() + 7), H = legBtnH() + 2, x0 = x - 7, w = tw + 8 + bw + 9, y0 = y - 5 - H / 2, r = H / 2;
+  const cv = g.canvas, k = cv.width / (cv.clientWidth || cv.width) || 1, prev = g.fillStyle, pa = g.globalAlpha;
+  g.save(); g.globalAlpha = 1; g.beginPath(); g.roundRect ? g.roundRect(x0, y0, w, H, r) : g.rect(x0, y0, w, H); g.clip();
+  try { if ('filter' in g) { g.filter = 'blur(9px) saturate(1.3)'; const m = 14; g.drawImage(cv, Math.max(0, (x0 - m) * k), Math.max(0, (y0 - m) * k), (w + 2 * m) * k, (H + 2 * m) * k, x0 - m, y0 - m, w + 2 * m, H + 2 * m); g.filter = 'none'; } } catch (e) {}
+  g.fillStyle = 'rgba(8,11,19,.58)'; g.fillRect(x0, y0, w, H);
+  const sh = g.createLinearGradient(0, y0, 0, y0 + H); sh.addColorStop(0, 'rgba(255,255,255,.07)'); sh.addColorStop(.5, 'rgba(255,255,255,0)'); g.fillStyle = sh; g.fillRect(x0, y0, w, H);
+  g.restore(); g.save(); g.beginPath(); g.roundRect ? g.roundRect(x0 + .5, y0 + .5, w - 1, H - 1, r) : g.rect(x0 + .5, y0 + .5, w - 1, H - 1); g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1; g.stroke(); g.restore();
+  g.fillStyle = prev; g.globalAlpha = pa;
 }
 function syncLegToggle() {
   const b = $('#legToggle'); if (!b) return; b.hidden = !legN; if (!legN) return;
@@ -3132,6 +3145,7 @@ function syncLegToggle() {
 }
 (() => { const b = $('#legToggle'); if (!b) return; b.insertAdjacentHTML('beforeend', SV(IC.chevron, 12));
   b.addEventListener('click', e => { e.stopPropagation(); legOpen = !legOpen; try { localStorage.setItem('cct_legOpen_v1', legOpen ? '1' : '0'); } catch {} legSig = ''; legStruct = ''; $('#legMenu')?.remove(); scheduleRender(); }); })();
+function legMeasure() { const box = $('#legendBox'); if (!box) return; let ch = false; legRows.forEach((r, i) => { const el = box.children[grips.length + i]; if (!el) return; const w = el.offsetWidth, k = legKey(r.act); if (w && Math.abs((legW.get(k) || 0) - w) > 1) { legW.set(k, w); ch = true; } }); if (ch) scheduleRender(); }
 function syncLegend() {
   const box = $('#legendBox'); if (!box || gripDrag) return;
   const sig = grips.map(q => q.key + ':' + Math.round(q.y)).join(',') + '#' + legRows.map(r => [Math.round(r.x), Math.round(r.y), r.act.t, r.act.sid || r.act.key || '', r.dim ? 1 : 0, r.act.pane || '', r.hk || '', Math.round(r.tw)].join(':')).join('|');
@@ -3145,7 +3159,7 @@ function syncLegend() {
     legRows.forEach((r, i) => { const el = box.children[grips.length + i]; el.style.left = Math.round(r.x) + 'px'; el.style.top = Math.round(r.y) + 'px'; const hd = el.querySelector('.leg-handle'); if (hd) { hd.style.left = '-' + Math.round(r.tw + 8) + 'px'; hd.style.width = Math.round(r.tw) + 'px'; } });
     return;
   }
-  legStruct = struct;
+  legStruct = struct; queueMicrotask(legMeasure);
   box.innerHTML = grips.map(q => `<div class="pane-grip" data-gk="${esc(q.key)}" data-gd="${q.dir}" data-gh="${q.h}" style="top:${Math.round(q.y) - 10}px;left:${geo ? geo.left : 6}px;width:${gw}px" title="Arrastra para cambiar la altura (doble toque: automática)"></div>`).join('') + legRows.map(r => { const a = r.act, id = a.sid || a.key || '', d = `data-leg="${a.t}" data-id="${esc(id)}"`;
     return `<div class="leg-row" style="left:${Math.round(r.x)}px;top:${Math.round(r.y)}px">${r.hk ? `<span class="leg-handle" data-hk="${esc(r.hk)}" title="Mantén pulsado el nombre y arrastra para subirlo o bajarlo" style="left:-${Math.round(r.tw + 8)}px;width:${Math.round(r.tw)}px"></span>` : ''}<button ${d} data-do="eye" title="${r.dim ? 'Mostrar' : 'Ocultar'}" aria-label="${r.dim ? 'Mostrar' : 'Ocultar'}">${SV(r.dim ? IC.eyeoff : IC.eye, 15)}</button><button ${d} data-do="set" title="Ajustes" aria-label="Ajustes">${SV(IC.gear, 15)}</button>${a.t === 'pine' ? `<button ${d} data-do="move" title="Mover de panel" aria-label="Mover de panel">${SV(IC.swap, 15)}</button>` : ''}<button ${d} data-do="del" title="Eliminar del gráfico" aria-label="Eliminar">${SV(IC.close, 15)}</button></div>`; }).join('');
 }

@@ -1,6 +1,7 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
   {v: '3.31', d: '12 nov 2026', t: '15 indicadores gratis nuevos', items: [
+    'Leyenda de indicadores abierta: cada nombre con sus botones va en una píldora de cristal oscuro para que no se pierda con las velas.',
     'Fibonacci (herramienta y automático): cada nivel con su color; los niveles clave (0.5, 0.618, 0.65, 0.786 y 1.618) con línea más gruesa y brillo, y su fondo más fuerte y vivo.',
     'Patrones: cada tipo (armónico, 1-2-3, ABC, doble techo/suelo, HCH, triángulo/cuña, Elliott) se dibuja con su propio tono de verde o de rojo para distinguirlos fácil.',
     'Tendencia: Cinta de EMAs 9/21/50/200, UT Bot (compra/venta), Chandelier Exit y Canal de regresión lineal.',

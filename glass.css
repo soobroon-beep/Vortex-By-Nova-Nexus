@@ -1971,3 +1971,8 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 #devZone .pv-box.dev-glow small{color:#b9acf5}
 #devZone .pv-box.dev-glow .seg{margin-top:10px;background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.12)}
 #devZone .pv-box.dev-glow .seg button{white-space:nowrap}
+/* Leyenda abierta: el cristal oscuro lo pinta el gráfico detrás del nombre y los botones; los botones quedan limpios encima */
+.leg-row{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:none!important;opacity:1!important;gap:1px}
+.leg-row:hover{background:none!important}
+.leg-row button{background:transparent!important;border-color:transparent!important;border-radius:999px!important;color:rgba(237,243,252,.82)!important;transition:background .15s,color .15s}
+.leg-row button:hover{background:rgba(255,255,255,.1)!important;color:#fff!important;border-color:transparent!important}
