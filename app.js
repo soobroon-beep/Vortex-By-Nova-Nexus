@@ -3834,14 +3834,27 @@ function drawChannels(list) { // líneas punteadas discretas de los canales vige
   g.setLineDash([]); g.globalAlpha = 1; g.restore();
 }
 const PAT_STATE = {forming: 'en formación', confirmed: 'confirmado', complete: 'completo'};
+/* Cada tipo de patrón con su propio tono de verde (alcista) o de rojo (bajista), a partir de los colores elegidos en sus ajustes,
+   para distinguir de un vistazo cuál es cuál (armónico, 1-2-3, ABC, doble techo/suelo, HCH, triángulo/cuña/canal, Elliott). */
+const PAT_TONES = {harm: [0, 0], p123: [-12, 15], abc: [12, -10], dbl: [-6, -19], hs: [16, 9], tri: [-16, -3], ell: [6, 25]};
+function patTone(base, kind, k) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(base || ''); if (!m) return base; const v = parseInt(m[1], 16), r = (v >> 16 & 255) / 255, gg = (v >> 8 & 255) / 255, b = (v & 255) / 255;
+  const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b); let h = 0, sat = 0, l = (mx + mn) / 2;
+  if (mx !== mn) { const d = mx - mn; sat = l > .5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? (gg - b) / d + (gg < b ? 6 : 0) : mx === gg ? (b - r) / d + 2 : (r - gg) / d + 4; h *= 60; }
+  const [dh, dl] = PAT_TONES[kind] || [0, 0], extra = (k || 0) % 3 * 7; // si hay varios del mismo tipo, cada uno un poco distinto
+  h = (h + dh + 360) % 360; l = Math.max(.3, Math.min(.78, l + (dl + extra) / 100)); sat = Math.max(.45, sat);
+  const f = n => { const kk = (n + h / 30) % 12, a = sat * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(kk - 3, 9 - kk, 1)))).toString(16).padStart(2, '0'); };
+  return '#' + f(0) + f(8) + f(4);
+}
 function drawPatterns(list) {
   if (!list.length) return;
   const P = k => sp('patterns', k), labelsOn = P('labels') === 'Sí', przOn = P('prz') === 'Sí', n = candles.length, xr = geo.left + geo.plotW, xl = geo.left;
   const clX = x => clamp(x, xl + 4, xr - 4), line = (x1, y1, x2, y2, col, w, dash) => { g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || []); g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); g.setLineDash([]); };
   const tag = (txt, x, y, col, up) => { g.font = '10px system-ui'; const w = g.measureText(txt).width + 10, bx = clamp(x - w / 2, xl + 2, xr - w - 2), by = up ? y - 20 : y + 4; g.fillStyle = 'rgba(8,12,22,.82)'; roundRect(bx, by, w, 16, 5); g.fill(); g.strokeStyle = col; g.lineWidth = 1; g.stroke(); g.fillStyle = col; g.textAlign = 'left'; g.fillText(txt, bx + 5, by + 11.5); };
   g.save(); g.lineJoin = 'round'; g.lineCap = 'round';
+  const seen = {}, cache = new Map(), colOf = p => { const base = p.dir > 0 ? P('cBull') : p.dir < 0 ? P('cBear') : '#9aa7bd'; if (!p.dir) return base; if (cache.has(p)) return cache.get(p); const k = seen[p.kind + p.dir] = (seen[p.kind + p.dir] || 0) + 1, c = patTone(base, p.kind, k - 1); cache.set(p, c); return c; };
   for (const p of list) {
-    const col = p.dir > 0 ? P('cBull') : p.dir < 0 ? P('cBear') : '#9aa7bd', pts = p.pts.map(q => ({x: X(q.i), y: Y(q.p), q}));
+    const col = colOf(p), pts = p.pts.map(q => ({x: X(q.i), y: Y(q.p), q}));
     if (p.kind === 'harm' && pts.length >= 4) { // rellenos XAB y BCD (o ABC y BCD) y diagonales
       const tri = (a, b, c) => { g.fillStyle = col + '22'; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(c.x, c.y); g.closePath(); g.fill(); };
       if (pts.length === 5) { tri(pts[0], pts[1], pts[2]); tri(pts[2], pts[3], pts[4]); line(pts[0].x, pts[0].y, pts[2].x, pts[2].y, col + '99', 1, [4, 3]); line(pts[1].x, pts[1].y, pts[3].x, pts[3].y, col + '99', 1, [4, 3]); line(pts[2].x, pts[2].y, pts[4].x, pts[4].y, col + '99', 1, [4, 3]); line(pts[0].x, pts[0].y, pts[4].x, pts[4].y, col + '99', 1, [2, 4]); }
@@ -3863,7 +3876,7 @@ function drawPatterns(list) {
     tag(`${p.name} · ${PAT_STATE[p.status]} ${Math.round(p.score)} %`, lp.x, lp.y, col, !!(lp.q && lp.q.hi));
   }
   if (P('panel') === 'Sí') { // panel: qué patrones hay ahora
-    g.font = '11px system-ui'; const rows = list.map(p => ({col: p.dir > 0 ? P('cBull') : p.dir < 0 ? P('cBear') : '#9aa7bd', txt: `${p.name} — ${PAT_STATE[p.status]}`})), w = Math.max(...rows.map(r => g.measureText(r.txt).width)) + 30, h = rows.length * 17 + 12, x = xr - w - 8, y = geo.plotTop + 8;
+    g.font = '11px system-ui'; const rows = list.map(p => ({col: colOf(p), txt: `${p.name} — ${PAT_STATE[p.status]}`})), w = Math.max(...rows.map(r => g.measureText(r.txt).width)) + 30, h = rows.length * 17 + 12, x = xr - w - 8, y = geo.plotTop + 8;
     g.fillStyle = 'rgba(8,12,22,.78)'; roundRect(x, y, w, h, 7); g.fill(); g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1; g.stroke(); g.textAlign = 'left';
     rows.forEach((r, k) => { g.fillStyle = r.col; g.beginPath(); g.arc(x + 12, y + 14 + k * 17, 4, 0, 7); g.fill(); g.fillStyle = '#dfe7f5'; g.fillText(r.txt, x + 22, y + 18 + k * 17); });
   }
