@@ -75,16 +75,17 @@
     let bn = document.getElementById('pvBanner');
     if (pv) {
       if (!bn) { bn = document.createElement('div'); bn.id = 'pvBanner'; bn.className = 'pv-banner'; bn.setAttribute('role', 'status'); document.body.appendChild(bn); }
-      bn.innerHTML = `<span>Vista previa · plan <b>${esc(TIERS[pv].n)}</b></span><button type="button" data-pv="">Salir</button>`;
+      bn.innerHTML = `<span>Vista previa · plan <b>${tx(pv)}</b></span><button type="button" data-pv="">Salir</button>`;
     } else if (bn) bn.remove();
   }
   if (typeof document !== 'undefined') document.addEventListener('click', e => { const b = e.target.closest('button[data-pv]'); if (b) setPreview(b.dataset.pv); });
 
+  const DEV_IC = '<path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>', tx = k => `<span class="pl-tx ${TIERS[k] ? TIERS[k].c : k}">${esc(TIERS[k] ? TIERS[k].n : k)}</span>`; // nombre del plan con su efecto (Infinity dorado, Plus estrellado)
   function badge() {
     applyTier();
     const t = TIERS[current()];
-    document.querySelectorAll('[data-plan-badge]').forEach(el => { el.className = 'pl-badge ' + t.c; el.innerHTML = svg(t.ic, 13) + esc(t.n); });
-    document.querySelectorAll('[data-plan-sub]').forEach(el => { el.textContent = pv ? 'Vista previa de ' + TIERS[pv].n + ' · Salir en Vista de membresía' : owner ? 'Cuenta del creador · acceso total' : !user ? 'Inicia sesión con Google para ver tu plan' : real() !== 'free' ? 'Plan ' + TIERS[real()].n + ' verificado' : st.bx ? 'UID de BingX pendiente de verificar' : 'Gratis, Plus o Infinity'; });
+    const dev = owner && !pv; document.querySelectorAll('[data-plan-badge]').forEach(el => { el.className = 'pl-badge ' + (dev ? 'dev' : t.c); el.innerHTML = dev ? svg(DEV_IC, 13) + 'Desarrollador' : svg(t.ic, 13) + esc(t.n); });
+    document.querySelectorAll('[data-plan-sub]').forEach(el => { el.innerHTML = pv ? 'Vista previa de ' + tx(pv) + ' · Salir en Vista de membresía' : owner ? '<span class="pl-tx dev">Desarrollador</span> · acceso total' : !user ? 'Inicia sesión con Google para ver tu plan' : real() !== 'free' ? 'Plan ' + tx(real()) + ' verificado' : st.bx ? 'UID de BingX pendiente de verificar' : 'Gratis, Plus o Infinity'; });
   }
 
   function col(k) {
@@ -92,12 +93,12 @@
     let act = '';
     if (k === 'free') act = `<div class="pl-act"><button type="button" class="pl-btn ghost" disabled>${cur ? 'Tu plan actual' : 'Incluido'}</button></div>`;
     const plusOk = RANK[real()] >= RANK.plus, infOk = real() === 'infinity', login = !user ? `<button type="button" class="pl-btn ghost" data-pl-login>Inicia sesión con Google primero</button>` : '';
-    if (k === 'plus') act = plusOk ? `<div class="pl-act"><button type="button" class="pl-btn ghost" disabled>${svg(CHK, 15)} Plus activo</button></div>` : `<ol class="pl-steps"><li><b>Suscríbete a CriptoChaman</b><small>Con la misma cuenta de Google con la que entras a VORTEX. Es gratis.</small><a class="pl-btn plus" href="${YT_SUB}" target="_blank" rel="noopener noreferrer" data-pl-yt>${svg(TIERS.plus.ic, 16)} Suscribirme en YouTube</a></li>
+    if (k === 'plus') act = plusOk ? `<div class="pl-act"><button type="button" class="pl-btn ghost" disabled>${svg(CHK, 15)} <span class="pl-tx plus">Plus</span> activo</button></div>` : `<ol class="pl-steps"><li><b>Suscríbete a CriptoChaman</b><small>Con la misma cuenta de Google con la que entras a VORTEX. Es gratis.</small><a class="pl-btn plus" href="${YT_SUB}" target="_blank" rel="noopener noreferrer" data-pl-yt>${svg(TIERS.plus.ic, 16)} Suscribirme en YouTube</a></li>
         <li><b>Verifica tu suscripción</b><small>Google te pedirá permiso para que VORTEX vea (solo ver) si sigues el canal.</small>${login || `<button type="button" class="pl-btn ghost" data-pl-ytok>Verificar suscripción</button>`}<small class="pl-msg" data-pl-ytmsg></small></li></ol>`;
     if (k === 'infinity') act = `<ol class="pl-steps"><li><b>Crea tu cuenta en BingX con mi código</b><small>Código de referido <button type="button" class="pl-code" data-pl-copy title="Copiar código">${BX_CODE} ${svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>', 13)}</button></small><a class="pl-btn inf" href="${BX}" target="_blank" rel="noopener noreferrer">${svg(TIERS.infinity.ic, 16)} Abrir cuenta en BingX</a></li>
         <li><b>Escribe tu UID de BingX</b><small>Lo ves en tu perfil de BingX. Solo lo usamos para comprobar que entraste con el código.</small>${login || `<div class="pl-uid"><input inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Ej. 123456789" value="${esc(st.bx || '')}" data-pl-uid aria-label="UID de BingX"><button type="button" class="pl-btn ghost" data-pl-uidok>Verificar</button></div>`}<small class="pl-msg" data-pl-uidmsg>${st.bx && !infOk ? 'UID guardado: pendiente de verificar.' : ''}</small></li></ol>`;
-    if (k === 'infinity' && infOk) act = `<div class="pl-act"><button type="button" class="pl-btn ghost" disabled>${svg(CHK, 15)} Infinity activo</button></div>`;
-    return `<section class="pl-col ${t.c}${cur ? ' cur' : ''}"><canvas class="pl-bg" data-fx="${k}" aria-hidden="true"></canvas><header><span class="pl-ic">${svg(t.ic, 22)}</span><div><b>${t.n}</b><small>${t.sub}</small></div>${cur ? '<em class="pl-now">Tu plan</em>' : ''}</header>
+    if (k === 'infinity' && infOk) act = `<div class="pl-act"><button type="button" class="pl-btn ghost" disabled>${svg(CHK, 15)} <span class="pl-tx inf">Infinity</span> activo</button></div>`;
+    return `<section class="pl-col ${t.c}${cur ? ' cur' : ''}"><canvas class="pl-bg" data-fx="${k}" aria-hidden="true"></canvas><header><span class="pl-ic">${svg(t.ic, 22)}</span><div><b>${k === 'free' ? t.n : tx(k)}</b><small>${t.sub}</small></div>${cur ? '<em class="pl-now">Tu plan</em>' : ''}</header>
       <ul class="pl-f">${t.f.map(x => `<li>${svg(CHK, 14)}${esc(x)}</li>`).join('')}</ul>${act}</section>`;
   }
 
