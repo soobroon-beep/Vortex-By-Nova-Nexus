@@ -139,9 +139,12 @@
   const ROUTE_ORDER = ['rss2json', 'direct', 'codetabs', 'allorigins', 'alloriginsjson', 'corsproxy', 'thingproxy', 'codetabs2'];
   const ls = {get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
   let goodRoute = {}; try { goodRoute = JSON.parse(ls.get('cct_news_route') || '{}') || {}; } catch {}
+  /* El tiempo límite cubre TODA la respuesta (antes solo la cabecera: un proxy lento dejaba la lectura colgada para siempre,
+     la actualización nunca terminaba y el botón «Actualizar» ya no hacía nada). Devuelve el texto. */
   async function fetchWithTimeout(url, ms) {
-    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, to = setTimeout(() => ctl && ctl.abort(), ms);
-    try { const r = await fetch(url, {signal: ctl ? ctl.signal : undefined, cache: 'no-store'}); if (!r.ok) throw new Error('HTTP ' + r.status); return r; } finally { clearTimeout(to); }
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null; let to;
+    const lim = new Promise((_, rej) => { to = setTimeout(() => { try { ctl && ctl.abort(); } catch {} rej(new Error('Tiempo agotado')); }, ms); });
+    try { return await Promise.race([lim, (async () => { const r = await fetch(url, {signal: ctl ? ctl.signal : undefined, cache: 'no-store'}); if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })()]); } finally { clearTimeout(to); }
   }
   // Las rutas se lanzan escalonadas (la que funcionó antes va primero) y gana la primera que devuelva ítems: así un proxy caído o lento no frena a los demás.
   function loadSource(src) {
@@ -152,10 +155,10 @@
       order.forEach((name, i) => timers.push(setTimeout(async () => {
         if (won) return fail();
         try {
-          const rt = ROUTES[name](src.url), r = await fetchWithTimeout(rt.url, FETCH_TIMEOUT); let items;
-          if (rt.json) items = parseRss2json(await r.json());
-          else if (rt.wrap) { const j = await r.json(); items = parseFeed(j && j[rt.wrap]); }
-          else items = parseFeed(await r.text());
+          const rt = ROUTES[name](src.url), txt = await fetchWithTimeout(rt.url, FETCH_TIMEOUT); let items;
+          if (rt.json) items = parseRss2json(JSON.parse(txt));
+          else if (rt.wrap) { const j = JSON.parse(txt); items = parseFeed(j && j[rt.wrap]); }
+          else items = parseFeed(txt);
           if (!items.length) throw new Error('sin ítems');
           if (!won) { won = true; timers.forEach(clearTimeout); if (goodRoute[src.id] !== name) { goodRoute[src.id] = name; ls.set('cct_news_route', JSON.stringify(goodRoute)); } resolve(items); }
         } catch { fail(); }
@@ -220,8 +223,9 @@
   function renderAll() { if (!rootEl) return; renderChips(); renderList(); }
   function tickTimes() { const now = Date.now(); document.querySelectorAll('#nwList .nw-time').forEach(el => { el.textContent = relTime(+el.dataset.t, now); }); renderStatus(now); }
 
-  async function refresh(force) {
-    if (st.loading) return; const now0 = Date.now();
+  async function refresh(force, manual) {
+    if (st.loading && Date.now() - (st.loadAt || 0) < 40e3) { if (manual) { btnBusy(true); st.wantToast = true; } return; } // ya se está actualizando (si algo se colgó más de 40 s, se vuelve a intentar)
+    const now0 = Date.now(); st.loadAt = now0;
     if (!force && st.updated && now0 - st.updated < 45e3) return; // recién actualizado
     st.loading = true; st.ok = 0; renderStatus(now0);
     const lists = {}; let done = 0; const hadItems = st.items.length > 0;
@@ -229,17 +233,22 @@
        Solo si no había nada que mostrar se pinta lo primero que llegue; al terminar se pinta una sola vez, mezclado con lo anterior. */
     const partial = () => { st.per = Object.assign({}, st.per, lists); if (!hadItems && !st.items.length) { st.items = mergeItems(Object.values(st.per), Date.now()); renderAll(); } };
     // 1) Archivo generado por el servidor (mismo origen, sin CORS) → casi siempre funciona.
-    const stat = (async () => { try { const r = await fetchWithTimeout((window.CCT_DATA ? CCT_DATA('news-data.json') : 'news-data.json') + '?_=' + Math.floor(Date.now() / 6e4), FETCH_TIMEOUT), j = await r.json(), n = Date.now();
+    const stat = (async () => { try { const j = JSON.parse(await fetchWithTimeout((window.CCT_DATA ? CCT_DATA('news-data.json') : 'news-data.json') + '?_=' + Math.floor(Date.now() / 6e4), FETCH_TIMEOUT)), n = Date.now();
       const its = (j.items || []).filter(i => i && i.title && Number.isFinite(i.t) && n - i.t <= MAX_AGE_MS && looksSpanish(i.title)); if (its.length) { lists.static = its; st.ok++; st.staticAt = j.at || 0; partial(); } } catch {} })();
+    const before = new Set(st.items.map(i => i.id || i.title)); if (manual) btnBusy(true);
+    const cap = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(null), ms))]); // ninguna fuente puede frenar la actualización más de 20 s
     await Promise.all([stat, ...SOURCES.map(async src => {
-      const raw = await loadSource(src); done++;
+      const raw = await cap(loadSource(src), 20000); done++;
       if (raw) { st.ok++; lists[src.id] = buildItems(raw, src, Date.now()); } else if (st.per[src.id]) lists[src.id] = st.per[src.id]; // si una fuente falla se conserva lo último que dio
       if (Object.keys(lists).length) partial();
     })]);
     st.loading = false; st.per = Object.assign({}, st.per, lists); if (Object.keys(lists).length) st.items = mergeItems(Object.values(st.per), Date.now()); // lo nuevo + lo último de cada fuente: la lista nunca se encoge de golpe
     if (st.ok) { st.updated = Date.now(); st.fails = 0; saveCache(); } else st.fails++;
     renderAll();
+    btnBusy(false); if (manual || st.wantToast) { st.wantToast = false; const nw = st.items.filter(i => !before.has(i.id || i.title)).length; toastN(st.ok ? (nw ? `${nw} noticia${nw > 1 ? 's' : ''} nueva${nw > 1 ? 's' : ''}` : 'Noticias al día: no hay nuevas por ahora') : 'No se pudieron traer noticias ahora: revisa tu conexión'); }
   }
+  function btnBusy(on) { const b = $('#nwRefresh'); if (!b) return; b.disabled = !!on; b.classList.toggle('busy', !!on); b.textContent = on ? '↻ Actualizando…' : '↻ Actualizar'; }
+  function toastN(m) { const t = document.getElementById('toast'); if (!t) return; t.textContent = m; t.style.display = 'block'; clearTimeout(toastN.t); toastN.t = setTimeout(() => { t.style.display = 'none'; }, 2600); }
   const viewVisible = () => { const v = document.getElementById('newsView'); return !!v && v.offsetParent !== null; };
   function schedule() { clearInterval(st.timer); st.timer = setInterval(() => { if (document.visibilityState === 'visible' && viewVisible() && st.tab === 'news') refresh(true); else tickTimes(); }, REFRESH_MS); }
 
@@ -276,7 +285,7 @@
     rootEl.addEventListener('click', e => {
       const t = e.target.closest('[data-nw-tab]'); if (t) { setTab(t.dataset.nwTab); return; }
       const f = e.target.closest('[data-nw-f]'); if (f) { st.filter = f.dataset.nwF; st.shown = SHOW_STEP; ls.set('cct_news_filter', st.filter); renderAll(); return; }
-      if (e.target.closest('#nwRefresh')) { refresh(true); return; }
+      if (e.target.closest('#nwRefresh')) { refresh(true, true); return; }
       if (e.target.closest('#nwMore')) { st.shown += SHOW_STEP; renderList(); }
     });
     rootEl.addEventListener('change', e => { if (e.target.id === 'nwHi') { st.hi = e.target.checked; ls.set('cct_news_hi', st.hi ? '1' : '0'); st.shown = SHOW_STEP; renderList(); } });
