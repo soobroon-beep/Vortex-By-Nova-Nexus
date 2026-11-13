@@ -38,7 +38,7 @@
   }
   window.CCTBotLabSave = () => save(); // al cambiar el interruptor de Discord, se recalcula a dónde avisan los bots
   function save() {
-    try { const D = window.CCT_discordStore && window.CCT_discordStore.get(); S.notify = D && D.url && !(window.CCT_discordOn && !window.CCT_discordOn()) ? {url: D.url, bots: (D.on || {}).bots !== false} : null; } catch {}
+    try { const D = window.CCT_discordStore && window.CCT_discordStore.get(); const dcOff = !!(window.CCT_discordOn && !window.CCT_discordOn()) || ((D && D.on) || {}).bots === false; S.notify = D && D.url && !dcOff ? {url: D.url, bots: true} : null; S.dcOff = dcOff; } catch {} /* dcOff: Discord apagado → ningún bot manda a Discord, ni a su canal propio */
     const str = JSON.stringify(S); try { localStorage.setItem(H.key ? H.key() : 'cct_botlab_v1', str); } catch { H.toast && H.toast('No se pudo guardar en este dispositivo (almacenamiento lleno)'); }
     clearTimeout(cloudTimer); cloudTimer = setTimeout(cloudFn = async () => { cloudTimer = 0; const c = H.cloud && H.cloud(); if (!c) return; try { const rem = await c.get(); if (rem && rem !== cloudStr) { const m = merge(S, JSON.parse(rem)); if (JSON.stringify(m.bots.map(x => [x.id, x.mainV, x.updatedAt])) !== JSON.stringify(S.bots.map(x => [x.id, x.mainV, x.updatedAt]))) { S = m; try { localStorage.setItem(H.key ? H.key() : 'cct_botlab_v1', JSON.stringify(S)); } catch {} if (typeof render === 'function') try { render(); } catch {} } cloudStr = rem; } } catch {} /* antes de guardar se lee tu cuenta: no se pisa lo que cambió el servidor (mejoras automáticas) */ const s2 = cloudCopy(); if (s2 === cloudStr) return; if (s2.length > 990000) { if (!save.warned) { save.warned = 1; toast('Tus bots ocupan demasiado para guardarse completos en tu cuenta: archiva o elimina algunos.'); } return; } try { await c.set(s2); cloudStr = s2; save.warned = 0; } catch (e) { if (!save.err) { save.err = 1; toast('No se pudieron guardar tus bots en tu cuenta: ' + (e.message || e)); } } }, 1500);
   }
@@ -962,9 +962,9 @@ Máximo 3 tips. "patch" es un fragmento de la especificación con el MISMO esque
   const paperBusy = new Set();
   const discordOk = () => { try { const D = window.CCT_discordStore && window.CCT_discordStore.get(); return !!(D && D.url && (D.on || {}).bots !== false && !(window.CCT_discordOn && !window.CCT_discordOn())); } catch { return false; } };
   function notify(b, sess) {
-    const N = window.CCTBotNotify; if (!N) return; const evs = N.pending(sess); if (!evs.length || b.notify === false) return;
+    const N = window.CCTBotNotify; if (!N) return; const evs = N.pending(sess); if (!evs.length) return; // la campanita del bot es SOLO Discord; la app y el celular los decide «Mis bots» en Configuración
     if (window.CCT_botNotify && N.push) for (const e of evs.slice(-3)) { const m = N.push(b, sess, e); window.CCT_botNotify(m.title, m.body, m.tag); } // aviso en la app y en el celular (misma etiqueta que el servidor)
-    if (!window.CCTDiscord) return; const em = evs.slice(-6).map(e => N.embed(b, sess, e));
+    if (!window.CCTDiscord || b.notify === false || (window.CCT_discordOn && !window.CCT_discordOn())) return; const em = evs.slice(-6).map(e => N.embed(b, sess, e)); // Discord apagado en Ajustes: tampoco al canal propio
     if (b.dcDest === 'own' && HOOK_RE.test(b.dcHook || '') && window.CCTDiscord.sendTo) window.CCTDiscord.sendTo(b.dcHook, em); else if (discordOk()) window.CCTDiscord.send(em);
   }
   async function paperUpdate(b, sess, quiet) {

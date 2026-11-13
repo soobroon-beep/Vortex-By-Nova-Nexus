@@ -729,8 +729,7 @@ function fireAlert(a, price) {
   const msg = `${base(a.symbol)} ${a.dir === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`, dir0 = a.dir;
   a.firedAt = Date.now(); a.firedPrice = price;
   if (a.repeat === 'every') { if (a.cond) a.wait = true; else a.dir = a.dir === 'up' ? 'down' : 'up'; } else a.on = false; // «todo el tiempo»: el cruce normal vigila el sentido contrario; ascendente/descendente espera a que el precio vuelva
-  if (!PR.n.price) return; // avisos de precio apagados en Configuración
-  const n = alNotify(a);
+  const n = alNotify(a); if (!PR.n.price) n.app = false; // «Alertas de precio» apagado = no avisar en la app; Discord sigue según su propio interruptor
   if (n.app) { toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} sysNotify('VORTEX · Alerta', msg, 'al-' + a.id); }
   if (n.dc && window.CCTDiscord) CCTDiscord.alert('price', {symbol: base(a.symbol), dir: dir0, level: a.price, price, note: a.note, text: msg});
 }
@@ -913,9 +912,9 @@ function indSummary(a) { // texto legible de una alerta de indicador
 const alGroups = new Map(); let alBusy = false;
 function closedIdx(cs, lastClosedT) { for (let i = cs.length - 1; i >= 0; i--) if (cs[i].t === lastClosedT) return i; return -1; }
 function fireInd(a, info) {
-  a.firedAt = Date.now(); a.firedInfo = info; if (a.repeat === 'once') a.on = false; if (!PR.n.ind) return;
+  a.firedAt = Date.now(); a.firedInfo = info; if (a.repeat === 'once') a.on = false;
   const msg = `${base(a.symbol)} ${a.interval} · ${a.label}${info ? ' · ' + info : ''}${a.note ? ' · ' + a.note : ''}`;
-  const n = alNotify(a);
+  const n = alNotify(a); if (!PR.n.ind) n.app = false; // igual que en precio: apagar la app no apaga Discord
   if (n.app) { toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} sysNotify('VORTEX · Alerta', msg, 'in-' + a.id); }
   if (n.dc && window.CCTDiscord) CCTDiscord.alert('ind', {symbol: base(a.symbol), interval: a.interval, label: a.label, info, note: a.note, text: msg});
 }

@@ -114,8 +114,9 @@ export function evalAlerts(alerts, prices, now = Date.now(), priceOn = true) {
     if (!past) continue;
     const dir0 = a.dir; a.firedAt = now; a.firedPrice = price; changed = true;
     if (a.repeat === 'every') { if (a.cond) a.wait = true; else a.dir = a.dir === 'up' ? 'down' : 'up'; } else a.on = false;
-    if (a.notify === 'discord' || a.notify === 'both') dc.push(`${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`); // Discord también con la app cerrada
-    if (priceOn && a.notify !== 'discord') fired.push({title: 'VORTEX · Alerta', body: `${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`, tag: 'al-' + a.id, url: APP_URL + '#alerts'});
+    const nt = a.notify || 'both'; // igual que la app: sin elegir = app y Discord
+    if (nt === 'discord' || nt === 'both') dc.push(`${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`); // Discord también con la app cerrada
+    if (priceOn && nt !== 'discord') fired.push({title: 'VORTEX · Alerta', body: `${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`, tag: 'al-' + a.id, url: APP_URL + '#alerts'});
   }
   return {fired, changed, dc};
 }
