@@ -1906,3 +1906,23 @@ body .cfg-overlay.cfg-live .cfg-head{position:relative}
 .vg-dc-row{display:flex;gap:8px}.vg-dc-row input{flex:1;min-width:0;padding:9px 11px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:var(--text);font-size:13px}
 @media(max-width:640px){.vg-ov{align-items:flex-end;padding:0}.vg-box{width:100%;max-height:90vh;border-radius:20px 20px 0 0}}
 .vg-body>*{flex:none}
+/* Paleta de colores compartida (colorpick.js) y «Mis colores» en la paleta de los dibujos */
+.cp-pop{position:fixed;z-index:2147482500;width:262px;padding:10px;border-radius:16px;border:1px solid rgba(255,255,255,.13);background:rgba(9,12,20,.72);-webkit-backdrop-filter:blur(26px) saturate(1.7);backdrop-filter:blur(26px) saturate(1.7);box-shadow:0 16px 40px rgba(0,0,0,.5);color:var(--text);opacity:0;transform:translateY(6px) scale(.98);transition:opacity .14s,transform .18s cubic-bezier(.2,.9,.25,1)}
+.cp-pop.open{opacity:1;transform:none}
+body.light .cp-pop{background:rgba(255,255,255,.88)}
+.cp-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.cp-sw{position:relative;aspect-ratio:1;min-width:0;padding:0;border-radius:5px;border:1px solid rgba(255,255,255,.18);cursor:pointer;transition:transform .12s}
+.cp-sw:hover{transform:scale(1.12)}.cp-sw.on{outline:2px solid #fff;outline-offset:1px}
+.cp-sw i{position:absolute;top:-6px;right:-6px;width:15px;height:15px;border-radius:50%;background:#f06b79;color:#fff;font:700 11px/15px system-ui;font-style:normal;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.cp-mine{margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.08)}
+.cp-h{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:7px;font:600 12px system-ui;color:#c8d2e1}.cp-h small{color:var(--muted);font-weight:500}
+.cp-acts{display:flex;gap:5px}.cp-acts button{padding:4px 8px;border-radius:7px;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.06);color:var(--text);font:600 11px system-ui;cursor:pointer}
+.cp-acts button[data-save]:not([disabled]){background:#548fff;border-color:#548fff;color:#fff}.cp-acts button[disabled]{opacity:.55;cursor:default}
+.cp-empty{display:block;color:var(--muted);font-size:11.5px;line-height:1.4}
+.cp-other{display:flex;align-items:center;gap:8px;margin-top:10px;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.05);font-size:12px;color:#c8d2e1;cursor:pointer;position:relative}
+.cp-other input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.cp-prev{width:20px;height:20px;border-radius:6px;border:1px solid rgba(255,255,255,.25)}.cp-other b{margin-left:auto;font:600 11px ui-monospace,monospace;color:var(--muted)}
+.pp-mine{margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)}
+.pp-mine-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:12px;color:#9598a1}
+.pp-mine-add{padding:3px 8px;border-radius:7px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:var(--text);font:600 11px system-ui;cursor:pointer}
+.pp-mine-e{display:block;font-size:11px;color:#9598a1;line-height:1.35}

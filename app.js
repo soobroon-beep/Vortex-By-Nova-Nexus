@@ -153,6 +153,7 @@ function sanUi(u) {
   if (q.favBar && typeof q.favBar === 'object') { const f = q.favBar, c01 = v => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null; o.favBar = {show: f.show !== false, x: c01(f.x), y: c01(f.y), mx: c01(f.mx), my: c01(f.my)}; }
   if (Array.isArray(q.pillFavs)) o.pillFavs = q.pillFavs.filter(x => typeof x === 'string' && /^[A-Za-z0-9-]{2,40}$/.test(x)).slice(0, 5); // favoritos de la píldora del celular (se sincronizan con tu cuenta)
   if (Array.isArray(q.favs)) o.favs = q.favs.filter(x => typeof x === 'string' && /^[a-zA-Z0-9]{2,24}$/.test(x)).slice(0, 24);
+  if (Array.isArray(q.myColors)) o.myColors = [...new Set(q.myColors.filter(x => typeof x === 'string' && /^#[0-9a-f]{6}$/i.test(x)).map(x => x.toLowerCase()))].slice(0, 20); // «Mis colores» de la paleta (se comparten en toda la app y en tu cuenta)
   return o;
 }
 function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estilo de línea, texto, bloqueo y visibilidad
@@ -1904,6 +1905,8 @@ const FAV_KEY = 'cct_favtools_v1';
 let FAVS = ['brush']; try { const f = JSON.parse(lsGet(FAV_KEY) || 'null'); if (Array.isArray(f)) FAVS = f.filter(x => typeof x === 'string').slice(0, 24); } catch {}
 let FB = Object.assign({show: true, x: null, y: null, mx: null, my: null}, (state.ui && state.ui.favBar) || {}); // (mx,my: posición del botón estrella en celular) barra flotante de favoritos: visible y posición (fracciones del gráfico)
 if (state.ui && Array.isArray(state.ui.favs)) FAVS = state.ui.favs.slice(0, 24);
+let MYCOL = state.ui && Array.isArray(state.ui.myColors) ? state.ui.myColors.slice(0, 20) : []; // tus colores guardados (máx. 20)
+window.CCTColors = {pal: () => SB_PAL, get: () => MYCOL.slice(), has: c => MYCOL.includes(String(c).toLowerCase()), add(c) { c = String(c || '').toLowerCase(); if (!/^#[0-9a-f]{6}$/.test(c)) return false; if (MYCOL.includes(c)) return true; if (MYCOL.length >= 20) return 'full'; MYCOL = [...MYCOL, c]; syncUi(); return true; }, remove(c) { c = String(c || '').toLowerCase(); MYCOL = MYCOL.filter(x => x !== c); syncUi(); }};
 const favTools = () => FAVS.map(k => toolOf(k)).filter(Boolean);
 function toggleFav(k) {
   FAVS = FAVS.includes(k) ? FAVS.filter(x => x !== k) : [...FAVS, k];
@@ -2430,7 +2433,8 @@ function sbResetStyle() { const d = curDraw(); if (!d) return; patchD(d.type ===
 const posColors = d => `<label class="pp-lbl">Objetivo (ganancia)</label>${sbPal('data-pgc', d.gc || '#089981')}<label class="pp-lbl">Stop (pérdida)</label>${sbPal('data-prc', d.rc || '#f23645')}`;
 const posToggles = d => `<label class="pp-lbl">Textos que se muestran</label><div class="pp-col">${[['nt', 'Título (Long / Short)'], ['no', 'Texto del objetivo'], ['ns', 'Texto del stop'], ['nr', 'Tamaño y riesgo (calculadora)']].map(([k, n]) => `<button class="pp-item${d[k] ? '' : ' on'}" data-ptog="${k}"><span class="pp-ic">${d[k] ? '' : I('check', 16)}</span><span>${n}</span></button>`).join('')}</div>`;
 const sbSw = (attr, c, cur) => `<button class="pp-sw${String(cur || '').toLowerCase() === c ? ' on' : ''}" ${attr}="${c}" style="background:${c}" aria-label="${c}"></button>`;
-const sbPal = (attr, cur) => `<div class="pp-grid">${SB_PAL.flat().map(c => sbSw(attr, c, cur)).join('')}</div><label class="pp-custom">Otro color <input type="color" ${attr}-in value="${/^#[0-9a-f]{6}$/i.test(cur || '') ? cur : '#e9c36e'}"></label>`;
+const sbMine = (attr, cur) => { const m = window.CCTColors ? CCTColors.get() : []; const ok = /^#[0-9a-f]{6}$/i.test(cur || ''); return `<div class="pp-mine"><div class="pp-mine-h"><span>Mis colores</span>${ok ? `<button type="button" class="pp-mine-add" data-mycol-add="${String(cur).toLowerCase()}" title="Guardar el color actual">+ Guardar</button>` : ''}</div>${m.length ? `<div class="pp-grid">${m.map(c => sbSw(attr, c, cur)).join('')}</div>` : '<small class="pp-mine-e">Guarda hasta 20 colores y aparecerán en todas las paletas.</small>'}</div>`; };
+const sbPal = (attr, cur) => `<div class="pp-grid">${SB_PAL.flat().map(c => sbSw(attr, c, cur)).join('')}</div>${sbMine(attr, cur)}<label class="pp-custom">Otro color <input type="color" ${attr}-in value="${/^#[0-9a-f]{6}$/i.test(cur || '') ? cur : '#e9c36e'}"></label>`;
 const sbLwRow = (list, cur) => `<div class="pp-row">${list.map(w => `<button class="pp-lw${Math.round(cur) === w ? ' on' : ''}" data-pw="${w}"><i style="height:${Math.min(w, 8)}px"></i><span>${w}px</span></button>`).join('')}</div>`;
 const sbDsRow = cur => `<div class="pp-col">${[['', 'Línea', ''], ['dash', 'Línea discontinua', '7 5'], ['dot', 'Línea de puntos', '1.5 4']].map(([k, n, da]) => `<button class="pp-item${(cur || '') === k ? ' on' : ''}" data-pd="${k}"><svg width="46" height="8" viewBox="0 0 46 8"><path d="M1 4h44" stroke="currentColor" stroke-width="2" ${da ? `stroke-dasharray="${da}" stroke-linecap="${k === 'dot' ? 'round' : 'butt'}"` : ''}/></svg><span>${n}</span></button>`).join('')}</div>`;
 const sbSizeRow = cur => `<div class="pp-row">${SB_TS.map(([s, n]) => `<button class="pp-lw${(cur || 13) === s ? ' on' : ''}" data-pts="${s}"><span>${n}</span></button>`).join('')}</div>`;
@@ -3081,10 +3085,11 @@ let paneScale = paneScale0();
 const devClass = () => (window.matchMedia && matchMedia('(min-width: 1024px)').matches ? 'pc' : 'movil');
 function syncUi() { // vuelca las preferencias de interfaz al estado (que se guarda en el dispositivo y en la cuenta)
   const panes = Object.assign({}, (state.ui || {}).panes); panes[devClass()] = {paneH, paneScale, order: paneOrder, man: paneManKeep()}; // cada tipo de dispositivo guarda su propio tamaño
-  state.ui = sanUi({panes, dopt: DOPT, favBar: FB, favs: FAVS, pillFavs: window.CCT_pillFavs ? window.CCT_pillFavs() : (state.ui || {}).pillFavs, prefs: PR, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
+  state.ui = sanUi({panes, dopt: DOPT, favBar: FB, favs: FAVS, myColors: MYCOL, pillFavs: window.CCT_pillFavs ? window.CCT_pillFavs() : (state.ui || {}).pillFavs, prefs: PR, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
 }
 function applyUi() { // al recibir el estado de la cuenta: aplica sus preferencias de interfaz en este dispositivo
   const u = state.ui || {};
+  if (Array.isArray(u.myColors)) MYCOL = u.myColors.slice(0, 20);
   const pn = (u.panes || {})[devClass()] || {}; // solo se aplica el tamaño guardado para este tipo de dispositivo
   if (pn.paneH) { paneH = {...pn.paneH}; try { localStorage.setItem('cct_paneH_v1', JSON.stringify(paneH)); } catch {} }
   if (pn.man) { paneManSaved = {...pn.man}; try { localStorage.setItem('cct_paneMan_v1', JSON.stringify(paneManSaved)); } catch {} }
