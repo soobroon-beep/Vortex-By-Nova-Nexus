@@ -920,7 +920,7 @@ Máximo 4 tips, enfocados en subir el porcentaje de aciertos y la robustez fuera
     try {
       const sw = b.sweeps ? '\n\nANÁLISIS EN OTROS MERCADOS:\n' + JSON.stringify(b.sweeps.rows.filter(x => !x.err).map(x => [x.symbol, x.interval, x.n, Math.round(x.retPct * 10) / 10, x.win == null ? null : Math.round(x.win)])) : '';
       const ctx = ctxOf(b, run) + '\n\nDESGLOSE (por horario UTC de 4 h, tendencia, volatilidad y lado):\n' + JSON.stringify(run.breakdown || {}) + sw;
-      const r = await LLM.chat([{role: 'system', content: COACH_SYS}, {role: 'user', content: ctx}], {maxTokens: 1100, temperature: .2, timeout: 90000, noOwn: !!quiet});
+      const r = await LLM.chat([{role: 'system', content: COACH_SYS}, {role: 'user', content: ctx}], {maxTokens: 1100, temperature: .2, timeout: 90000});
       const raw = (/```json\s*([\s\S]*?)```/.exec(r.text) || [null, r.text])[1], j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
       b.coach = {runId: run.id, v: b.mainV, at: Date.now(), text: String(j.resumen || '').slice(0, 1200), tips: (j.tips || []).slice(0, 4).map(t => ({kind: 'ia', title: String(t.titulo || 'Consejo de la IA').slice(0, 90), why: String(t.por_que || '').slice(0, 400), patch: t.patch}))};
       log(b, 'consejo', 'La IA analizó el bot y dejó ' + b.coach.tips.length + ' sugerencia(s).');

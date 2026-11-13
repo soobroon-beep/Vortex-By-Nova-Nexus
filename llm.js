@@ -292,7 +292,7 @@
      · la captura del gráfico se achica a 1024 px (cuesta ~la mitad y se ve igual de bien)
      · la misma pregunta en 5 min no se vuelve a cobrar (se reutiliza la respuesta)
      · con Claude, las instrucciones del sistema se guardan en caché (las siguientes preguntas cuestan ~10 % de esa parte)
-     · lo automático (Pixel asomándose, radar, consejos en segundo plano) usa la IA gratis de VORTEX, no tu clave */
+     · Nexus Pixel y el radar usan la IA gratis de VORTEX; todo lo demás (Analizar gráfico, Briefing, Laboratorio, consejos y creación de bots) usa TU IA */
   const ownCache = new Map(), OWN_TTL = 5 * 6e4, CAP = 12000;
   const tidyTxt = t => { t = String(t).replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim(); return t.length > CAP ? t.slice(0, 8000) + '\n…(datos recortados para ahorrar)…\n' + t.slice(-(CAP - 8000)) : t; };
   async function smallImg(url) { // data:image → máx. 1024 px de ancho (JPEG)

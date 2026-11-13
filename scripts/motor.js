@@ -17,6 +17,16 @@ async function vigiaDue(day) { // ¿ya corrió hoy el Vigía de la mañana? (Git
   if (!r.ok) return false; const j = await r.json();
   return !(j.workflow_runs || []).some(x => x.event === 'workflow_dispatch' || x.event === 'schedule');
 }
+/* Calendario: si un evento importante ya salió y aún no tiene su dato, se pide la actualización (noticias/calendario) cada 15 min hasta tenerlo */
+let calAt = 0;
+async function calCheck(now) {
+  if (!REPO || !process.env.GH_TOKEN || now - calAt < 15 * 6e4) return; calAt = now;
+  try { const j = await (await fetch(`https://raw.githubusercontent.com/${REPO}/main/calendar-data.json?_=${Math.floor(now / 6e4)}`)).json();
+    const wait = (j.events || []).some(e => /high|medium/i.test(e.impact) && ['USD', 'EUR', 'GBP', 'JPY', 'CNY'].includes(e.country) && e.t <= now && now - e.t < 2 * 36e5 && !e.actual);
+    const stale = now - (j.at || 0) > 6 * 36e5;
+    if (wait || stale) { const r = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/news.yml/dispatches`, {method: 'POST', headers: {authorization: 'Bearer ' + process.env.GH_TOKEN, accept: 'application/vnd.github+json', 'content-type': 'application/json'}, body: JSON.stringify({ref: 'main'})}); console.log(`${new Date(now).toISOString()} · calendario: ${wait ? 'esperando el dato de un evento' : 'viejo'} → actualización pedida (${r.status})`); }
+  } catch (e) {}
+}
 async function vigiaRun() {
   const r = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/vigia.yml/dispatches`, {method: 'POST', headers: {authorization: 'Bearer ' + process.env.GH_TOKEN, accept: 'application/vnd.github+json', 'content-type': 'application/json'}, body: JSON.stringify({ref: process.env.GITHUB_REF_NAME || 'main'})});
   return r.status;
@@ -44,6 +54,7 @@ const child = (script, env) => new Promise(res => {
     if (db) { const syms = [...new Set(DS.MAJORS.concat(DS.top().slice(0, 30).map(t => t.symbol)))]; try { await CS.round(db, syms, Date.now(), memC, m => console.log(`${new Date().toISOString()} · ${m}`)); } catch (e) { console.log('velas:', String(e.message || e).slice(0, 160)); } }
     if (Date.now() - retrainAt > 6 * 36e5 && d.getUTCMinutes() >= 40) { retrainAt = Date.now(); await child('botlab-retrain.js', {MODE: 'retrain'}); await child('brain-sync.js', {MODE: 'cerebro', BRAIN_APP: 'vortex', BRAIN_NO_COMMITS: '1'}); } // y el análisis de cada bot sube a Neural Brain enseguida // reentrenamiento (cada bot decide si ya le toca; GitHub se saltaba su horario) · en fila con el paper trading para que no se pisen
     if (db && Math.floor(t0 / 6e5) !== beatKey) { beatKey = Math.floor(t0 / 6e5); db.doc('server/motor').set({beat: Date.now()}, {merge: true}).catch(() => {}); } // latido cada 10 min: el Vigía revisa que el Motor siga vivo
+    await calCheck(Date.now());
     const qKey = Math.floor(t0 / 9e5);
     if (qKey !== lastQ && d.getUTCMinutes() % 15 >= 2) { // cada 15 min (2 min después del cierre): bots de 15 m como Pachita; los de 1 h/4 h solo avanzan cuando cerró su vela
       lastQ = qKey;

@@ -199,7 +199,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
   async function llmAsk(text) {
     const L = LLM(); if (!L || !L.chat) throw new Error('sin IA');
     const msgs = [{role: 'system', content: SYS + profile()}, ...hist.slice(-6), {role: 'user', content: `${text}\n\nDATOS DEL GRÁFICO (JSON): ${JSON.stringify(context())}`}];
-    const r = await Promise.race([L.chat(msgs, {purpose: 'text', maxTokens: 380}), sleep(28000).then(() => { throw new Error('La IA tardó demasiado'); })]);
+    const r = await Promise.race([L.chat(msgs, {purpose: 'text', maxTokens: 380, noOwn: true}), sleep(28000).then(() => { throw new Error('La IA tardó demasiado'); })]);
     const raw = String(r && r.text || ''), m = raw.match(/\{[\s\S]*\}/); let j = null; try { j = m ? JSON.parse(m[0]) : null; } catch {}
     const reply = j && typeof j.reply === 'string' ? j.reply : raw.replace(/```[\s\S]*?```/g, '').trim();
     const ok = ['channel', 'range', 'sr', 'trend', 'fib', 'hline', 'clear', 'style', 'remove', 'move'], TG = ['channel', 'sup', 'res', 'trend', 'fib', 'range', 'hline', 'line', 'last'], hx = c => /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : (D.COLORS[String(c || '').toLowerCase()] || undefined);
@@ -301,7 +301,7 @@ Secciones: Gráfico (velas, indicadores, dibujos; tú puedes dibujar), Mi seguim
 Habla en español, claro, breve y con buena onda. No prometas ganancias (no es asesoría financiera). Usa SOLO los datos que te dan; si falta algo, dilo.`;
   async function llmText(sys, user, maxTokens = 650) {
     const L = LLM(); if (!L || !L.chat) throw new Error('sin IA');
-    const r = await Promise.race([L.chat([{role: 'system', content: sys + profile()}, ...hist.slice(-4), {role: 'user', content: user}], {purpose: 'text', maxTokens}), sleep(60000).then(() => { throw new Error('tarde'); })]);
+    const r = await Promise.race([L.chat([{role: 'system', content: sys + profile()}, ...hist.slice(-4), {role: 'user', content: user}], {purpose: 'text', maxTokens, noOwn: true}), sleep(60000).then(() => { throw new Error('tarde'); })]);
     const t = String(r && r.text || '').replace(/```[\s\S]*?```/g, '').trim(); hist.push({role: 'user', content: user.slice(0, 300)}, {role: 'assistant', content: t.slice(0, 600)}); if (hist.length > 12) hist.splice(0, hist.length - 12); return t;
   }
   const big = on => { bub.classList.toggle('long', !!on); if (!bub.hidden) placeBubble(); };
@@ -421,7 +421,7 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     let ctx = null; try { ctx = window.CCT_getAIContext && window.CCT_getAIContext(); } catch {} const R = W.read(ctx); if (!R) return null;
     watchAt = now; watchKey = key; if (!force && R.sig === watchSig && now - watchSaid < 60 * 6e4) return null; // nada cambió: no repite lo mismo (como mucho, un recordatorio por hora)
     watchBusy = true; let text = '';
-    try { const L = LLM(); if (L && L.chat) { const r = await Promise.race([L.chat([{role: 'system', content: W.SYS + profile()}, {role: 'user', content: W.prompt(R, coin, h.interval(), ctx)}], Object.assign({purpose: 'text', maxTokens: 150}, force ? {} : {noOwn: true})), sleep(25000).then(() => { throw new Error('tarde'); })]); text = W.clean(r && r.text); } } catch {}
+    try { const L = LLM(); if (L && L.chat) { const r = await Promise.race([L.chat([{role: 'system', content: W.SYS + profile()}, {role: 'user', content: W.prompt(R, coin, h.interval(), ctx)}], {purpose: 'text', maxTokens: 150, noOwn: true}), sleep(25000).then(() => { throw new Error('tarde'); })]); text = W.clean(r && r.text); } } catch {}
     watchBusy = false; if (!text) text = W.local(R, coin, h.interval(), c);
     if (h.symbol() + '|' + h.interval() !== key || (busy && !force)) return null; // cambiaste de gráfico mientras pensaba
     watchSig = R.sig; watchSaid = Date.now(); showWatch(text); return text;

@@ -4810,7 +4810,7 @@ function renderAcct() {
   }
   const sub = $('#acctSub'); if (sub) sub.textContent = i.ok ? i.tip : 'Sin configurar. Pon tu capital inicial y tu saldo actual';
 }
-function openAcctDialog() {
+function openAcctDialog(anchor) {
   document.querySelectorAll('.acct-pop').forEach(x => x.remove());
   const A = state.acct || {}, m = document.createElement('div'); m.className = 'acct-pop';
   m.innerHTML = `<b>Saldo de la cuenta</b><small>La mitad de la barra es tu capital inicial. Si ganas sube y se pone verde; si pierdes se vacía y pasa a amarillo, naranja y rojo. Úsala para cuidar tu stop loss.</small>
@@ -4819,6 +4819,8 @@ function openAcctDialog() {
     <label class="ac-chk"><input id="acAuto" type="checkbox" ${A.auto !== false ? 'checked' : ''}><span>Actualizar automático desde Nexus Lens (equity de BingX)</span></label>
     <div class="ac-btns"><button class="small-button" data-ac="clear" type="button">Quitar</button><button class="small-button" data-ac="close" type="button">Cancelar</button><button class="primary" data-ac="ok" type="button">Guardar</button></div>`;
   document.body.appendChild(m);
+  // desde el widget de Saldo (abajo del gráfico) el menú sale de ahí mismo, hacia arriba; desde Configuración o la barra derecha, donde estaba
+  if (anchor && anchor.id === 'stAcct' && anchor.getClientRects().length) { const r = anchor.getBoundingClientRect(); m.classList.add('from-anchor'); m.style.right = 'auto'; m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.bottom = (innerHeight - r.top + 10) + 'px'; }
   const num = v => { const n = parseFloat(String(v).replace(/[^0-9.,-]/g, '').replace(',', '.')); return Number.isFinite(n) && n >= 0 ? n : NaN; };
   const close = () => { uxOut(m); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = e => { if (!m.contains(e.target) && !e.target.closest('[data-acct-open]')) close(); }, esc = e => { if (e.key === 'Escape') close(); };
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); const f = $('#acStart'); if (f) f.focus(); });
@@ -4832,7 +4834,7 @@ function openAcctDialog() {
     state.acct = sanAcct({start: st, cur: cu, auto: $('#acAuto').checked}); save(); renderAcct(); close(); toast('Barra de la cuenta actualizada');
   };
 }
-document.addEventListener('click', e => { if (e.target.closest('[data-acct-open]')) { e.preventDefault(); openAcctDialog(); } });
+document.addEventListener('click', e => { const a = e.target.closest('[data-acct-open]'); if (a) { e.preventDefault(); openAcctDialog(a); } });
 window.addEventListener('message', e => { // Nexus Lens (iframe del mismo sitio) avisa el equity de la cuenta
   if (e.origin !== location.origin || !e.data || e.data.cct !== 'equity') return;
   const v = +e.data.value; if (!Number.isFinite(v) || v < 0 || !state.acct || state.acct.auto === false) return;
