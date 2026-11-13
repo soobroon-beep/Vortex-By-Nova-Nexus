@@ -18,8 +18,9 @@ test('cesta: cada moneda opera con su parte del capital y el resultado suma exac
 test('señales al gráfico: el indicador generado corre en el motor del gráfico y marca casi las mismas entradas que el bot', () => {
   const C = walk(1500, 7);
   for (const k of ['emaRsi', 'macdTrend', 'safe1h']) { const sp = B.PRESETS[k](); sp.symbol = 'BTCUSDT'; delete sp.basket; const {code} = T.toPine(sp), res = Pine.run(code, C, {interval: '1h', symbol: 'BTCUSDT', name: 'x'});
-    assert.ok(res.ok, k); const buys = res.shapes.find(x => x.title === 'Compra').pts.map(p => p[0]), bt = B.backtest(C, sp).trades.filter(t => t.side === 'long').map(t => C.findIndex(c => c.t === t.entryT) - 1);
-    assert.ok(bt.filter(i => buys.includes(i)).length >= bt.length * .7, k); }
+    assert.ok(res.ok, k + ': ' + JSON.stringify(res.error)); const buys = res.labels.filter(l => l.text === 'COMPRA').map(l => l.x), from = Math.min(...buys), bt = B.backtest(C, sp).trades.filter(t => t.side === 'long').map(t => C.findIndex(c => c.t === t.entryT) - 1).filter(i => i >= from);
+    assert.ok(buys.length > 0 && bt.filter(i => buys.includes(i)).length >= bt.length * .7, k);
+    assert.ok(!res.plots.length && !res.shapes.length, k + ': solo cajitas y niveles, sin líneas de plot'); assert.ok(res.lines.length > 0, k + ': niveles de entrada/SL/TP'); }
   const nova = B.PRESETS.novaNexus(); assert.throws(() => T.toPine(nova), /Nova/);
 });
 

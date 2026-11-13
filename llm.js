@@ -106,6 +106,7 @@
     /* Límite total y límite de SILENCIO: antes, si el servidor empezaba a responder y luego se quedaba callado, la app esperaba para siempre
        (el celular se quedaba «trabado»). Ahora se corta y se prueba otro modelo o se usa el análisis local. */
     const body = {model, messages, temperature: o.temperature == null ? .4 : o.temperature, max_tokens: o.maxTokens || 1600, stream: !!o.onToken};
+    if (o.newParams) { body.max_completion_tokens = body.max_tokens; delete body.max_tokens; if (/^(o\d|gpt-5)/i.test(model)) delete body.temperature; } // OpenAI: modelos nuevos
     if (o.task && /vortex-push/.test(url)) body.task = o.task; // tu servidor elige la IA open source según el uso: chat, vision o code
     const headers = {'content-type': 'application/json'}; if (key) headers.authorization = 'Bearer ' + key;
     const ctl = new AbortController(), kill = () => ctl.abort(); let idle = 0; const total = setTimeout(kill, o.timeout || 60000), bump = () => { clearTimeout(idle); idle = setTimeout(kill, o.idle || 25000); };
@@ -249,9 +250,54 @@
     return {text, model: id, image: img};
   }
 
+  /* ───────── Tu propia IA (opcional): tu clave de OpenAI, Claude, Gemini, Groq… ─────────
+     Si la configuras en Configuración › Cuenta, TODO lo que usa IA en VORTEX (Nexus Pixel, briefing, consejos de bots, Analizar gráfico, Laboratorio)
+     la usa primero; si falla o no hay, se usa la IA gratis de VORTEX. La clave se guarda solo en este dispositivo y va directo al proveedor. */
+  const OWN_KEY = 'cct_ownai_v1';
+  const OWN = {
+    openai: {name: 'OpenAI (ChatGPT)', url: 'https://api.openai.com/v1', model: 'gpt-4o-mini', vision: true, newParams: true, keyHint: 'sk-…', site: 'platform.openai.com/api-keys'},
+    anthropic: {name: 'Claude (Anthropic)', url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5-5', vision: true, native: 'anthropic', keyHint: 'sk-ant-…', site: 'console.anthropic.com'},
+    gemini: {name: 'Google Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-flash', vision: true, keyHint: 'AIza…', site: 'aistudio.google.com/apikey'},
+    xai: {name: 'Grok (xAI)', url: 'https://api.x.ai/v1', model: 'grok-3-mini', vision: false, keyHint: 'xai-…', site: 'console.x.ai'},
+    deepseek: {name: 'DeepSeek', url: 'https://api.deepseek.com/v1', model: 'deepseek-chat', vision: false, keyHint: 'sk-…', site: 'platform.deepseek.com'},
+    mistral: {name: 'Mistral', url: 'https://api.mistral.ai/v1', model: 'mistral-small-latest', vision: false, keyHint: '…', site: 'console.mistral.ai'},
+    groq: {name: 'Groq (rápida, plan gratis)', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', vision: false, keyHint: 'gsk_…', site: 'console.groq.com/keys'},
+    openrouter: {name: 'OpenRouter (muchos modelos)', url: 'https://openrouter.ai/api/v1', model: 'openrouter/auto', vision: true, keyHint: 'sk-or-…', site: 'openrouter.ai/keys'},
+    together: {name: 'Together AI', url: 'https://api.together.xyz/v1', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', vision: false, keyHint: '…', site: 'api.together.xyz'},
+    custom: {name: 'Otra compatible con OpenAI', url: '', model: '', vision: false, keyHint: '…', site: ''}
+  };
+  function ownLoad() { let o = {}; try { o = JSON.parse(lsGet(OWN_KEY) || '{}') || {}; } catch {} const P = OWN[o.provider] ? o.provider : ''; return {on: !!(o.on && P && o.key), provider: P, key: String(o.key || ''), model: String(o.model || (P ? OWN[P].model : '')), url: String(o.url || (P ? OWN[P].url : ''))}; }
+  const ownSave = c => lsSet(OWN_KEY, c ? JSON.stringify(c) : null);
+  async function ownModels(c) {
+    const P = OWN[c.provider]; if (!P || !c.key) return []; const base = String(c.url || P.url).replace(/\/+$/, '');
+    const headers = P.native === 'anthropic' ? {'x-api-key': c.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'} : {authorization: 'Bearer ' + c.key};
+    const r = await fetchT(base + '/models', {headers}, 12000); if (!r.ok) { let m = ''; try { const j = await r.json(); m = (j.error && (j.error.message || j.error)) || ''; } catch {} throw new LLMError(String(m || 'Error ' + r.status).slice(0, 160), kindOf(r.status), r.status); }
+    const j = await r.json(), arr = Array.isArray(j) ? j : Array.isArray(j.data) ? j.data : Array.isArray(j.models) ? j.models : [];
+    return arr.map(x => String(x.id || x.name || '').replace(/^models\//, '')).filter(x => x && !NOT_CHAT.test(x) && !/embedding|dall-e|tts|whisper|davinci|babbage|moderation|search|transcribe|realtime|audio|image/i.test(x)).sort();
+  }
+  async function anthropicCall(c, messages, o) {
+    const sys = messages.filter(m => m.role === 'system').map(m => typeof m.content === 'string' ? m.content : '').join('\n\n');
+    const conv = (m) => ({role: m.role === 'assistant' ? 'assistant' : 'user', content: typeof m.content === 'string' ? m.content : (m.content || []).map(p => { if (p.type === 'text') return {type: 'text', text: p.text}; const u = (p.image_url && (p.image_url.url || p.image_url)) || ''; const d = /^data:(image\/[\w+.-]+);base64,(.*)$/.exec(u); return d ? {type: 'image', source: {type: 'base64', media_type: d[1], data: d[2]}} : {type: 'image', source: {type: 'url', url: u}}; })});
+    const msgs = messages.filter(m => m.role !== 'system').map(conv); if (!msgs.length || msgs[0].role !== 'user') msgs.unshift({role: 'user', content: '.'});
+    const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), o.timeout || 90000); if (o.signal) o.signal.addEventListener('abort', () => ctl.abort(), {once: true});
+    try {
+      let r; try { r = await fetch(String(c.url || OWN.anthropic.url).replace(/\/+$/, '') + '/messages', {method: 'POST', signal: ctl.signal, headers: {'content-type': 'application/json', 'x-api-key': c.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'}, body: JSON.stringify({model: c.model, max_tokens: o.maxTokens || 1600, temperature: o.temperature == null ? .4 : o.temperature, system: sys || undefined, messages: msgs})}); } catch (e) { throw new LLMError(ctl.signal.aborted ? 'Tiempo agotado' : 'Sin conexión', ctl.signal.aborted ? 'abort' : 'network'); }
+      if (!r.ok) { let m = ''; try { const j = await r.json(); m = (j.error && j.error.message) || ''; } catch {} throw new LLMError(String(m || 'Error ' + r.status).slice(0, 200), kindOf(r.status), r.status); }
+      const j = await r.json(), text = (j.content || []).filter(x => x.type === 'text').map(x => x.text).join('').trim(); if (!text) throw new LLMError('Tu IA no devolvió texto.', 'server'); if (o.onToken) o.onToken(text); return text;
+    } finally { clearTimeout(tm); }
+  }
+  async function chatOwn(messages, o, c) {
+    const P = OWN[c.provider], img = hasImage(messages), vis = P.vision || VISION.test(c.model), msgs = img && !vis ? stripImages(messages) : messages;
+    const text = P.native === 'anthropic' ? await anthropicCall(c, msgs, o) : await openaiCall(String(c.url || P.url).replace(/\/+$/, '') + '/chat/completions', c.key, c.model, msgs, Object.assign({}, o, {newParams: !!P.newParams, idle: Math.max(o.idle || 0, 45000)}));
+    return {text, model: c.model + ' · tu IA (' + P.name.replace(/\s*\(.*\)$/, '') + ')', image: img && vis, own: true};
+  }
+  async function ownTest(c) { const r = await chatOwn([{role: 'user', content: 'Responde solo: OK'}], {maxTokens: 20, timeout: 30000}, c); return r.text; }
+
   /* ───────── Entrada principal ───────── */
   async function chat(messages, o) {
-    o = o || {}; const cfg = o.cfg || load();
+    o = o || {}; const own = o.noOwn ? null : ownLoad();
+    if (own && own.on) { try { return await chatOwn(messages, o, own); } catch (e) { if (o.signal && o.signal.aborted) throw e; try { o.onProgress && o.onProgress({text: 'Tu IA no respondió (' + String(e.message || e).slice(0, 80) + '); uso la IA gratis de VORTEX…'}); } catch {} } }
+    const cfg = o.cfg || load();
     let prov = o.purpose === 'code' ? cfg.lab : cfg.provider; // el Laboratorio (código) puede usar otro proveedor que el resto
     if (prov === 'webllm' && !(root.navigator && root.navigator.gpu)) prov = cfg.provider === 'webllm' ? 'free' : cfg.provider; // sin WebGPU no puede correr en el navegador
     const phone = !!(root.matchMedia && (root.matchMedia('(pointer: coarse)').matches && root.matchMedia('(max-width: 1023px)').matches)); // en el celular el modelo del navegador (GB de descarga) dejaba la IA «trabada»
@@ -270,7 +316,8 @@
       return await chatFree(messages, o, cfg);
     } catch (e) { if (e instanceof LLMError) { e.message = friendly(e) + (e.kind === 'model' || e.kind === 'server' || e.kind === 'other' ? ' (' + String(e.message).slice(0, 120) + ')' : ''); throw e; } throw new LLMError(String(e && e.message || e), 'other'); }
   }
-  const providerLabel = cfg => (cfg = cfg || load(), cfg.provider === 'compat' ? 'Servidor · ' + cfg.compat.model : cfg.provider === 'webllm' ? 'En tu navegador' : 'Gratis · modelo abierto');
+  const providerLabel = cfg => { const ow = ownLoad(); if (ow.on) return 'Tu IA · ' + ow.model; return providerLabelBase(cfg); };
+  const providerLabelBase = cfg => (cfg = cfg || load(), cfg.provider === 'compat' ? 'Servidor · ' + cfg.compat.model : cfg.provider === 'webllm' ? 'En tu navegador' : 'Gratis · modelo abierto');
 
   /* ───────── Guía de Pine para el Laboratorio y métricas de señales ───────── */
   const PINE_GUIDE = `Eres un experto en Pine Script v5. Escribes indicadores para el intérprete propio de VORTEX, que soporta un SUBCONJUNTO de Pine v5.
@@ -300,7 +347,7 @@ FORMATO DE RESPUESTA: primero 2-4 líneas en español explicando qué hace y có
 
   // Libera el espacio del modelo de navegador (cientos de MB) que se descargaba antes por defecto, si no lo elegiste tú
   try { if (typeof caches !== 'undefined' && typeof document !== 'undefined' && !load().webllmOptIn) setTimeout(() => caches.keys().then(ks => ks.filter(k => /^webllm\//.test(k)).forEach(k => caches.delete(k))).catch(() => {}), 4000); } catch {}
-  const api = {pickVx, looksBad, serverStatus, serverSetKey, resetCache: () => { freeCache = null; }, LLMError, load, save, chat, freeModels, pickFree, supportsVision, imageMessage, hasImage, stripImages, extractCode, stripCode, applyPatch, friendly, providerLabel, PINE_GUIDE, signalMetrics, WEBLLM_MODELS, FREE_URL};
+  const api = {OWN, ownLoad, ownSave, ownModels, ownTest, pickVx, looksBad, serverStatus, serverSetKey, resetCache: () => { freeCache = null; }, LLMError, load, save, chat, freeModels, pickFree, supportsVision, imageMessage, hasImage, stripImages, extractCode, stripCode, applyPatch, friendly, providerLabel, PINE_GUIDE, signalMetrics, WEBLLM_MODELS, FREE_URL};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTLLM = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -1,5 +1,5 @@
 /* NOVA BOT LAB · convierte un bot en un indicador para el gráfico de VORTEX (con el mismo motor de scripts del gráfico).
-   Dibuja las señales del bot: ▲ C = compra, ▼ V = venta (corto), ● X = salida (regla, stop o objetivo). Sigue la posición como el bot: no repite entradas mientras está dentro.
+   Dibuja las señales del bot como cajitas COMPRA / VENTA (como IA Signals de Nova Nexus) y, mientras la operación sigue abierta, su entrada, stop (SL) y objetivo (TP); al cerrar marca TP, SL o Cierre. Sigue la posición como el bot: no repite entradas mientras está dentro.
    Limitaciones honestas: con indicadores Nova o tus indicadores propios no se puede convertir; en una cesta, el indicador se aplica a la moneda que tengas abierta. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('./botlab-engine.js')); else root.CCTBotPine = factory(root.CCTBotLab);
@@ -34,18 +34,24 @@
     const slD = r.sl ? (r.sl.type === 'atr' ? `atrv * ${r.sl.v}` : `close * ${r.sl.v / 100}`) : null;
     const tpD = r.tp ? (r.tp.type === 'rr' ? (slD ? `(${slD}) * ${r.tp.v}` : null) : r.tp.type === 'atr' ? `atrv * ${r.tp.v}` : `close * ${r.tp.v / 100}`) : null;
     const name = ('Bot · ' + s.name).replace(/["\\\n]/g, '').slice(0, 60);
-    const code = [`//@version=5`, `indicator("${name}", overlay=true)`, `// Señales del bot «${s.name.replace(/\n/g, ' ')}» de Nova Bot Lab (${s.interval}). Se evalúan con la vela cerrada, igual que el bot.`,
+    const code = [`//@version=5`, `indicator("${name}", overlay=true, max_labels_count=500, max_lines_count=500)`, `// Señales del bot «${s.name.replace(/\n/g, ' ')}» de Nova Bot Lab (${s.interval}), como cajitas COMPRA / VENTA (estilo IA Signals) con su entrada, stop (SL) y objetivo (TP). Se evalúan con la vela cerrada, igual que el bot.`,
       `atrv = ta.atr(${r.atrLen})`, ...pre, `okFilters = ${flt.length ? flt.join(' and ') : 'true'}`,
       `longIn = ${L ? eL : 'false'}`, `longOut = ${L ? xL : 'false'}`, `shortIn = ${S ? eS : 'false'}`, `shortOut = ${S ? xS : 'false'}`,
-      `var int pos = 0`, `var float sl = na`, `var float tp = na`, `var int bars = 0`, `buySig = false`, `sellSig = false`, `exitSig = false`,
+      `var int pos = 0`, `var float sl = na`, `var float tp = na`, `var float ent = na`, `var int bars = 0`, `var line lE = na`, `var line lS = na`, `var line lT = na`, `var label tS = na`, `var label tT = na`,
+      `exitNow = false`, `why = ""`,
       `if pos != 0`, `    bars += 1`, `    hitSL = not na(sl) and (pos == 1 ? low <= sl : high >= sl)`, `    hitTP = not na(tp) and (pos == 1 ? high >= tp : low <= tp)`, `    hitT = ${r.maxBars ? `bars >= ${r.maxBars}` : 'false'}`,
-      `    if hitSL or hitTP or hitT or (pos == 1 and longOut) or (pos == -1 and shortOut)`, `        exitSig := true`, `        pos := 0`,
-      `if pos == 0 and not exitSig and okFilters`, `    if longIn`, `        pos := 1`, `        bars := 0`, `        buySig := true`, `        sl := ${slD ? `close - ${slD}` : 'na'}`, `        tp := ${tpD ? `close + ${tpD}` : 'na'}`,
-      `    else if shortIn`, `        pos := -1`, `        bars := 0`, `        sellSig := true`, `        sl := ${slD ? `close + ${slD}` : 'na'}`, `        tp := ${tpD ? `close - ${tpD}` : 'na'}`,
-      `plotshape(buySig, "Compra", shape.triangleup, location.belowbar, color.new(#20bf9f, 0), size = size.small, text = "C", textcolor = color.new(#20bf9f, 0))`,
-      `plotshape(sellSig, "Venta", shape.triangledown, location.abovebar, color.new(#f06b79, 0), size = size.small, text = "V", textcolor = color.new(#f06b79, 0))`,
-      `plotshape(exitSig, "Salida", shape.circle, location.abovebar, color.new(#f0b90b, 0), size = size.tiny, text = "X", textcolor = color.new(#f0b90b, 0))`,
-      `plot(pos != 0 ? sl : na, "Stop", color.new(#f06b79, 40), style = plot.style_linebr)`, `plot(pos != 0 ? tp : na, "Objetivo", color.new(#20bf9f, 40), style = plot.style_linebr)`].join('\n');
+      `    line.set_x2(lE, bar_index)`, `    line.set_x2(lS, bar_index)`, `    line.set_x2(lT, bar_index)`, `    label.set_x(tS, bar_index)`, `    label.set_x(tT, bar_index)`,
+      `    if hitSL or hitTP or hitT or (pos == 1 and longOut) or (pos == -1 and shortOut)`, `        exitNow := true`, `        why := hitSL ? "SL" : hitTP ? "TP" : "Cierre"`,
+      `        label.new(bar_index, pos == 1 ? high : low, why, yloc = pos == 1 ? yloc.abovebar : yloc.belowbar, style = pos == 1 ? label.style_label_down : label.style_label_up, color = color.new(hitTP ? #20bf9f : hitSL ? #f06b79 : #6f7b8f, 25), textcolor = color.white, size = size.tiny)`,
+      `        pos := 0`,
+      `if pos == 0 and not exitNow and okFilters and (longIn or shortIn)`, `    dir = longIn ? 1 : -1`, `    pos := dir`, `    bars := 0`, `    ent := close`,
+      `    sl := ${slD ? `close - dir * (${slD})` : 'na'}`, `    tp := ${tpD ? `close + dir * (${tpD})` : 'na'}`,
+      `    label.new(bar_index, dir == 1 ? low : high, dir == 1 ? "COMPRA" : "VENTA", yloc = dir == 1 ? yloc.belowbar : yloc.abovebar, style = dir == 1 ? label.style_label_up : label.style_label_down, color = dir == 1 ? #20bf9f : #f06b79, textcolor = color.white, size = size.small)`,
+      `    lE := line.new(bar_index, ent, bar_index, ent, color = color.new(#9aa1ad, 30), style = line.style_dashed)`,
+      `    lS := na(sl) ? na : line.new(bar_index, sl, bar_index, sl, color = #f06b79, width = 1)`,
+      `    lT := na(tp) ? na : line.new(bar_index, tp, bar_index, tp, color = #20bf9f, width = 1)`,
+      `    tS := na(sl) ? na : label.new(bar_index, sl, "SL", style = label.style_label_left, color = #f06b79, textcolor = color.white, size = size.tiny)`,
+      `    tT := na(tp) ? na : label.new(bar_index, tp, "TP", style = label.style_label_left, color = #20bf9f, textcolor = color.white, size = size.tiny)`].join('\n');
     return {code, name};
   }
   return {toPine};

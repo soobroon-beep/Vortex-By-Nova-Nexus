@@ -29,7 +29,7 @@ function userSeries(spec, candles, scripts) { // ejecuta tus indicadores Pine so
     const sc = scripts.find(x => x.id === sid); if (!sc || !sc.code) throw new Error('El indicador «' + (uo.find(x => x.sid === sid).sname || sid) + '» ya no existe en tu cuenta');
     const res = Pine.run(sc.code, candles, {interval: spec.interval, symbol: spec.symbol, name: sc.name, timeLimitMs: 90000, alertCap: 30000, logLabels: true}); if (!res.ok) throw new Error('Tu indicador falló en el servidor: ' + ((res.error && res.error.msg) || ''));
     const src = O.extractSources(res, candles.length);
-    for (const x of uo.filter(y => y.sid === sid)) { const f = src.find(q => q.src === x.src); if (!f) throw new Error('El indicador «' + (x.sname || sid) + '» ya no produce la señal «' + (x.sl || x.src) + '»'); user[sid + '|' + x.src] = f.series; }
+    for (const x of uo.filter(y => y.sid === sid)) { const f = O.pickSource(src, x, candles.length); if (!f) throw new Error('El indicador «' + (x.sname || sid) + '» ya no tiene la línea «' + (x.sl || x.src) + '»'); user[sid + '|' + x.src] = f.series; }
   }
   return user;
 }
@@ -61,7 +61,9 @@ async function paperBot(bot, scripts, getCandles, now, gateF, notify, pushOut) {
     try { await P.step(sess, async (sym, itv, count) => { const C = await getCandles(sym, itv, count); const u = userSeries(sess.spec, C, scripts); ropts.user = Object.keys(u).length ? u : null; return C; }, ropts, now); sess.err = null; sess.checkedAt = now; sess.by = 'servidor'; }
     catch (e) { sess.err = String(e.message || e).slice(0, 200); sess.checkedAt = now; sess.by = 'servidor'; }
     const evs = NT.pending(sess); if (evs.length && pushOut && bot.notify !== false) for (const e of evs.slice(-6)) pushOut.push(NT.push(bot, sess, e)); // también a tu celular (servidor de avisos)
-    if (evs.length && notify && notify.url && notify.bots !== false && bot.notify !== false && /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\//.test(notify.url)) await postDiscord(notify.url, evs.slice(-6).map(e => NT.embed(bot, sess, e)));
+    const HK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\//, own = bot.dcDest === 'own' && HK.test(bot.dcHook || '') ? bot.dcHook : null; // canal propio del bot
+    const dUrl = own || (notify && notify.url && notify.bots !== false && HK.test(notify.url) ? notify.url : null);
+    if (evs.length && dUrl && bot.notify !== false) await postDiscord(dUrl, evs.slice(-6).map(e => NT.embed(bot, sess, e)));
     const L = sess.ledger; for (let i = 0; i < L.length - 300; i++) { delete L[i].reasonIn; delete L[i].ctx; delete L[i].sl; delete L[i].tp; } out.push(sess);
   } return out;
 }

@@ -26,6 +26,16 @@
     return out;
   }
 
+  /* Busca la señal que usa el bot dentro de lo que produjo el indicador. Una señal (alerta, forma, etiqueta) que no apareció en estas velas
+     no es un error: simplemente no hubo señal → serie en cero. Si una línea cambió de nombre se busca la equivalente (mismo título sin «#2»). */
+  function pickSource(sources, x, n) {
+    const f = sources.find(q => q.src === x.src); if (f) return {series: f.series};
+    const base = s => String(s || '').replace(/#\d+$/, '').toLowerCase(), kind = String(x.src || '').slice(0, 3);
+    const alt = sources.find(q => q.src.slice(0, 3) === kind && base(q.src) === base(x.src)) || (x.sl ? sources.find(q => q.label === x.sl) : null); if (alt) return {series: alt.series, remap: alt.src};
+    if (/^(al|sh|lb):/.test(kind)) return {series: new Array(n).fill(0), none: true};
+    return null;
+  }
+
   /* ───────── Espacio de búsqueda derivado de la propia estrategia ───────── */
   function space(spec) {
     const dims = [], uniq = (vals, base) => [...new Set(vals.concat([base]))].filter(v => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
@@ -98,5 +108,5 @@
     if (!why.length) { out.decision = 'propuesta'; out.candidate = apply(spec, f.assign); } else out.decision = out.changes.length ? 'sin_mejora' : 'sin_mejora';
     if (opts.onProgress) opts.onProgress(total, total, 'Listo'); return out;
   }
-  return {optimize, space, apply, extractSources, hash, validAssign};
+  return {optimize, space, apply, extractSources, pickSource, hash, validAssign};
 });

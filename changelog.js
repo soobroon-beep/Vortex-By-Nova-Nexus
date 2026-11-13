@@ -1,5 +1,33 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.33', d: '13 nov 2026', t: 'Nova Bot Lab renovado y tu propia IA', items: [
+    'Nova Bot Lab: cada bot se ve como una línea de producción: el motor arranca, opera, muestra resultados y se mejora, unidos por hilos animados. Toca cada estación para ver su detalle.',
+    'Nova Bot Lab: nuevo «Cómo aprende»: el ciclo del bot (opera, recuerda, analiza, prueba variantes y se queda con la mejor) con una luz que lo recorre, cuánto mejoró desde su v1 y lo último que aprendió.',
+    'Nova Bot Lab: bajo la línea de producción, un hilo regresa de «Mejora» al bot con lo último que aprendió: lo que aprende vuelve a él.',
+    'Reglas plegadas en un botón «Reglas del bot» (tócalo para verlas o editarlas) y una fila con los consejos ya aplicados.',
+    'Un consejo ignorado vuelve a salir si el bot sigue fallando en eso (la IA lo vuelve a proponer con datos nuevos o tras 15 operaciones en vivo más).',
+    'En vivo: arriba y completas solo las sesiones con una operación abierta; las que esperan señal salen como tarjeta pequeña que se despliega al tocarla.',
+    'La pestaña «Mejorar» ahora se llama «IA» (dentro: Mejorar con IA). En Operaciones, «Abiertas ahora en cada moneda» muestra solo las monedas con una operación abierta.',
+    'Avisos a Discord por bot: enciéndelos y elige si llegan a tu canal de VORTEX o a un canal solo para ese bot (pegas el webhook de ese canal y se manda una prueba).',
+    'Si al bot le falta algo (una regla de entrada, un stop válido, un indicador que ya no está) o se traba en vivo, la máquina se ve apagada y te dice qué falla y cómo componerlo, con un botón directo.',
+    'Operaciones ahora es el historial: lo ya cerrado en vivo o en el backtest, con el gráfico de dónde compró y vendió y una barra por operación (ganó/perdió) con lo acumulado.',
+    'En vivo: cada operación abierta trae su gráfico con la entrada, el stop (rojo), el objetivo (verde) y dónde va el precio ahora.',
+    'El botón «Editar» ahora es «Mejorar», con tres partes: Reglas (plegadas), Consejos y mejoras, y Versiones.',
+    'Consejos y cambios a las reglas se PRUEBAN primero con velas reales contra la versión actual en los mismos datos; ves si de verdad mejora en lo que no vio (sí mejora, casi igual o empeora) y tú decides si aplicarlo. Puedes mandar varios a probar: van en fila sin trabarse.',
+    'Versiones: cuál ha sido la mejor (con botón para restaurarla), qué cambió respecto a la anterior y qué hace cada una.',
+    'Operaciones: «Cerradas» en lugar de «Cerradas en vivo» y cada moneda muestra cuántas operaciones hizo (las que no tienen, solo el nombre).',
+    '«Convertir bot a señales»: el indicador que se crea marca cajitas COMPRA / VENTA como IA Signals y, mientras la operación sigue abierta, su entrada, SL y TP; al cerrar marca TP, SL o Cierre.',
+    'Los bots con indicadores Nova o tuyos también se convierten a señales: sus cajitas COMPRA / VENTA con entrada, SL y TP salen en el gráfico que tengas abierto (el mismo botón las quita).',
+    'Consejos: si la prueba muestra que sí mejora, queda listo para aplicar; si no mejora, se queda la versión actual sola (lo ves en «Probados que no mejoraron»). Para contar como mejora tiene que ganar en las dos partes de los datos que no vio.',
+    'Cuando la máquina está detenida porque se trabó en vivo, el botón «Arreglarlo» lo corrige solo: una señal de tu indicador que no salió en esas velas ya no detiene al bot y una línea que cambió de nombre se encuentra sola.',
+    '«Icono y color» se movió al menú ⋯ del bot.',
+    'Bot con problema: en la lista, la cabecera y el botón dice «Problema» con el punto naranja en lugar de «En vivo».',
+    'Configuración › Cuenta › Tu IA: elige tu IA (OpenAI, Claude, Gemini, Grok, DeepSeek, Mistral, Groq, OpenRouter…), pega tu clave y todo lo que usa IA (Nexus Pixel, briefing, consejos de bots, Analizar gráfico, Laboratorio) la usa; sin clave sigue la IA gratis.',
+    'Configuración: los iconos van solos, a color, sin el recuadro tipo app.',
+    'Operaciones: en lugar de las velas, una línea de precio simple con cada compra y venta marcada (verde si ganó, rojo si perdió) y tarjetas de las últimas operaciones. Las velas siguen en «Ver con velas».',
+    'Consejos: nuevo botón «Ignorar consejo» junto a «Aplicar este consejo»; el consejo se quita y deja lugar a otros.',
+    'En vivo: más visual y con menos texto: resultado grande, la posición abierta en una barra (stop · entrada · ahora · objetivo), números clave como fichas y lo que prometió vs. lo que está haciendo en barras.'
+  ]},
   {v: '3.32', d: '13 nov 2026', t: 'Fibonacci lateral', items: [
     'Fibonacci automático: nuevo estilo «Lateral derecho» en sus ajustes: líneas punteadas y delgadas que salen del lado derecho del gráfico sin tocar las velas, solo con el nivel (sin precio) y los niveles clave más resaltados.',
     'Colores por nivel o monocromáticos, y el largo de las líneas se elige en % del gráfico (como el perfil de volumen).'
