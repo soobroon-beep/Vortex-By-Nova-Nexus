@@ -1,7 +1,8 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
   {v: '3.29', d: '12 nov 2026', t: 'Ajustes en vivo', items: [
-    'Al configurar un indicador, Nova Nexus, tus scripts Pine o el Aspecto del gráfico, los cambios se ven al momento en el gráfico: la ventana ya no difumina el fondo y se hace a un lado.',
+    'Al configurar un indicador, Nova Nexus, tus scripts Pine o el Aspecto del gráfico, los cambios se ven al momento en el gráfico. La ventana sale centrada y la puedes mover arrastrando su título (doble clic: regresa al centro).',
+    'Nueva apertura: cielo negro con estrellas que se acercan y el logo oficial en blanco.',
     'Aceptar guarda; Cancelar (o cerrar la ventana) regresa todo como estaba.'
   ]},
   {v: '3.28', d: '12 nov 2026', t: 'Apertura espacial y Discord bajo tu control', items: [

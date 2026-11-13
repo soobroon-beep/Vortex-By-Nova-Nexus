@@ -1,24 +1,24 @@
 /* Animación de apertura (splash.js) */
-#vxSplash{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;background:#04060e;overflow:hidden;transition:opacity .55s ease .3s,visibility 0s linear .9s}
+#vxSplash{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;background:#000;overflow:hidden;transition:opacity .55s ease .3s,visibility 0s linear .9s}
 #vxSplash canvas{position:absolute;inset:0}
-#vxSplash .vxs-neb{position:absolute;inset:-20%;pointer-events:none;background:radial-gradient(38% 30% at 35% 42%,rgba(124,77,255,.28),transparent 70%),radial-gradient(34% 28% at 66% 60%,rgba(40,140,255,.22),transparent 70%),radial-gradient(22% 18% at 52% 50%,rgba(255,120,200,.12),transparent 70%);filter:blur(24px);animation:vxsNeb 14s linear infinite;mix-blend-mode:screen}
+#vxSplash .vxs-neb{display:none;position:absolute;inset:-20%;pointer-events:none;background:radial-gradient(38% 30% at 35% 42%,rgba(124,77,255,.28),transparent 70%),radial-gradient(34% 28% at 66% 60%,rgba(40,140,255,.22),transparent 70%),radial-gradient(22% 18% at 52% 50%,rgba(255,120,200,.12),transparent 70%);filter:blur(24px);animation:vxsNeb 14s linear infinite;mix-blend-mode:screen}
 #vxSplash .vxs-core{position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;transition:transform .8s cubic-bezier(.6,0,.2,1),opacity .5s ease .15s}
 #vxSplash .vxs-orb{position:relative;width:min(44vw,190px);aspect-ratio:1;display:grid;place-items:center}
-#vxSplash .vxs-halo{position:absolute;inset:8%;border-radius:50%;background:radial-gradient(circle,rgba(150,110,255,.45),rgba(84,143,255,.14) 45%,transparent 70%);animation:vxsHalo 2.4s ease-in-out infinite;opacity:0;animation-delay:.35s}
-#vxSplash .vxs-logo{position:relative;width:72%;height:72%;object-fit:contain;opacity:0;transform:scale(.55) rotate(-8deg);filter:blur(10px) drop-shadow(0 0 16px rgba(190,170,255,.6));animation:vxsIn .95s cubic-bezier(.2,.9,.25,1.15) .15s forwards}
+#vxSplash .vxs-halo{position:absolute;inset:8%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.16),rgba(200,215,255,.05) 45%,transparent 70%);animation:vxsHalo 2.4s ease-in-out infinite;opacity:0;animation-delay:.35s}
+#vxSplash .vxs-logo{position:relative;width:72%;height:72%;object-fit:contain;opacity:0;transform:scale(.55) rotate(-8deg);filter:blur(10px) drop-shadow(0 0 14px rgba(255,255,255,.35));animation:vxsIn .95s cubic-bezier(.2,.9,.25,1.15) .15s forwards}
 #vxSplash svg.vxs-ring{position:absolute;inset:-14%;width:128%;height:128%;overflow:visible;transform:rotate(-14deg)}
 #vxSplash .vxs-ring ellipse{fill:none;stroke-linecap:round}
-#vxSplash .vxs-ring .tr{stroke:rgba(140,160,255,.16);stroke-width:1}
+#vxSplash .vxs-ring .tr{stroke:rgba(255,255,255,.08);stroke-width:1}
 #vxSplash .vxs-ring .dr{stroke:url(#vxsGrad);stroke-width:1.6;stroke-dasharray:600;stroke-dashoffset:600;animation:vxsDraw 1.3s cubic-bezier(.6,0,.2,1) .45s forwards}
 #vxSplash .vxs-comet{offset-path:path('M5 60 A95 38 0 1 0 195 60 A95 38 0 1 0 5 60');offset-rotate:0deg;animation:vxsOrbit 3.2s linear .9s infinite;opacity:0}
-#vxSplash .vxs-word{font:800 clamp(20px,6vw,30px)/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.6em;margin-right:-.6em;color:transparent;background:linear-gradient(90deg,#8f7dff,#fff 45%,#7fc4ff 55%,#8f7dff) 0 0/220% 100%;-webkit-background-clip:text;background-clip:text;opacity:0;animation:vxsWord .9s ease .7s forwards,vxsShine 2.6s linear 1.4s infinite}
+#vxSplash .vxs-word{font:800 clamp(20px,6vw,30px)/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.6em;margin-right:-.6em;color:transparent;background:linear-gradient(90deg,#9aa3b5,#fff 45%,#fff 55%,#9aa3b5) 0 0/220% 100%;-webkit-background-clip:text;background-clip:text;opacity:0;animation:vxsWord .9s ease .7s forwards,vxsShine 2.6s linear 1.4s infinite}
 #vxSplash .vxs-sub{font:500 11px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.32em;color:#8796ab;text-transform:uppercase;opacity:0;animation:vxsFade .8s ease 1s forwards}
 #vxSplash .vxs-bar{width:120px;height:2px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden;opacity:0;animation:vxsFade .6s ease 1.1s forwards}
-#vxSplash .vxs-bar i{display:block;width:40%;height:100%;border-radius:2px;background:linear-gradient(90deg,transparent,#a58bff,#6fb6ff,transparent);animation:vxsBar 1.1s ease-in-out infinite}
+#vxSplash .vxs-bar i{display:block;width:40%;height:100%;border-radius:2px;background:linear-gradient(90deg,transparent,#fff,transparent);animation:vxsBar 1.1s ease-in-out infinite}
 #vxSplash.out{opacity:0;visibility:hidden}
 #vxSplash.out .vxs-core{transform:scale(1.6);opacity:0}
 #vxSplash.out .vxs-neb{opacity:0;transition:opacity .4s}
-@keyframes vxsIn{to{opacity:1;transform:none;filter:blur(0) drop-shadow(0 0 16px rgba(190,170,255,.6))}}
+@keyframes vxsIn{to{opacity:1;transform:none;filter:blur(0) drop-shadow(0 0 14px rgba(255,255,255,.35))}}
 @keyframes vxsHalo{0%,100%{opacity:.55;transform:scale(.92)}50%{opacity:1;transform:scale(1.08)}}
 @keyframes vxsDraw{to{stroke-dashoffset:0}}
 @keyframes vxsOrbit{0%{offset-distance:0%;opacity:0}8%{opacity:1}92%{opacity:1}100%{offset-distance:100%;opacity:0}}

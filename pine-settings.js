@@ -145,6 +145,23 @@
     });
     const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
     document.addEventListener('keydown', onKey, true); dlg = {el, onKey, cfg, pvT: 0}; draw();
+    if (cfg.onPreview) movable(el);
+  }
+  /* La ventana se mueve arrastrando su título (ratón o dedo); recuerda dónde la dejaste para la próxima */
+  const POS = 'cct_cfg_pos_v1';
+  function movable(el) {
+    const box = el.querySelector('.cfg-dlg'), head = el.querySelector('.cfg-head'); if (!box || !head) return;
+    let off = {x: 0, y: 0}; try { const p = JSON.parse(localStorage.getItem(POS) || 'null'); if (p && isFinite(p.x) && isFinite(p.y)) off = p; } catch (e) {}
+    const clamp = () => { box.style.transform = ''; const r = box.getBoundingClientRect(), m = 40; // siempre queda a la vista
+      off.x = Math.max(-r.left - r.width + m * 3, Math.min(innerWidth - r.right + r.width - m * 3, off.x)); off.y = Math.max(-r.top, Math.min(innerHeight - r.top - m, off.y));
+      box.style.transform = `translate(${off.x}px,${off.y}px)`; };
+    if (innerWidth > 640) requestAnimationFrame(() => { box.style.animation = 'none'; clamp(); });
+    let d = null;
+    head.addEventListener('pointerdown', e => { if (e.target.closest('button') || innerWidth <= 640 || e.button > 0) return; d = {x: e.clientX - off.x, y: e.clientY - off.y}; el.classList.add('cfg-moving'); try { head.setPointerCapture(e.pointerId); } catch (er) {} e.preventDefault(); });
+    head.addEventListener('pointermove', e => { if (!d) return; off = {x: e.clientX - d.x, y: e.clientY - d.y}; box.style.transform = `translate(${off.x}px,${off.y}px)`; });
+    const end = () => { if (!d) return; d = null; el.classList.remove('cfg-moving'); clamp(); try { localStorage.setItem(POS, JSON.stringify(off)); } catch (e) {} };
+    head.addEventListener('pointerup', end); head.addEventListener('pointercancel', end);
+    head.addEventListener('dblclick', e => { if (e.target.closest('button')) return; off = {x: 0, y: 0}; box.style.transform = ''; try { localStorage.removeItem(POS); } catch (er) {} }); // doble clic: vuelve al centro
   }
   const api = {open, close, UNITS, hexOf, joinHex};
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CCTSettings = api;

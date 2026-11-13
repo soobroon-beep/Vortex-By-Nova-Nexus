@@ -246,5 +246,5 @@
   }
   document.addEventListener('click', e => { if (e.target.closest('[data-plans-open]')) open(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', badge); else badge();
-  root.CCTPlans = {open, close, current, real, can, setPreview, importSaved, verifyYouTube, get user() { return user; }, get preview() { return pv; }, FEATURES, setUser, TIERS, links: {youtube: YT, bingx: BX, code: BX_CODE}};
+  root.CCTPlans = {open, close, current, real, can, setPreview, importSaved, verifyYouTube, get user() { return user; }, get owner() { return owner; }, get preview() { return pv; }, FEATURES, setUser, TIERS, links: {youtube: YT, bingx: BX, code: BX_CODE}};
 })(typeof self !== 'undefined' ? self : this);
