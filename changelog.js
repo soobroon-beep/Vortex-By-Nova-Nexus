@@ -3,8 +3,9 @@ window.CCT_CHANGELOG = [
   {v: '3.35', d: '13 nov 2026', t: 'Bots de señales iA v2.7 reactivados', items: [
     'Se arregló el servidor que mueve tus bots con la app cerrada: al guardar una operación abierta fallaba y los bots dejaban de avanzar y de avisar. Ya guarda bien.',
     'Los bots Nova Nexus · iA Signals v2.7 se vuelven a encender solos (simulación en vivo) y los errores de «tu indicador ya no produce la señal» se limpian solos.',
-    'Tu plan se ve con su efecto donde aparezca: Infinity en dorado con estrellas, Plus con un fondo estrellado sencillo y Gratis igual que siempre.',
-    'En la computadora, Alertas ya no muestra el botón para regresar (solo en el celular).'
+    'Tu plan se ve con su efecto donde aparezca (también en el menú de tu cuenta): Infinity morado con borde que se mueve y estrellas discretas, Plus dorado y Gratis igual que siempre.',
+    'En la computadora, Alertas ya no muestra el botón para regresar (solo en el celular).',
+    'Los puntos y botones de encendido de los bots ahora dicen la verdad: verde solo si está funcionando bien, naranja si tiene un problema (error, detenido por riesgo o si no ha avanzado a tiempo) y rojo apagado si está en pausa. «Arreglarlo» también pone al día a los que se atrasaron.'
   ]},
   {v: '3.34', d: '13 nov 2026', t: 'Señales de bots, consejos de qué hacer y tu IA', items: [
     'Nova Bot Lab: se quitó «Ver en el gráfico»; «Convertir bot a señales» ocupa su lugar y marca las cajitas COMPRA / VENTA con entrada, SL y TP, y al cerrar dice TP, SL o Cierre con el % que ganó o perdió.',

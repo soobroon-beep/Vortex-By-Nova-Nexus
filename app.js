@@ -5642,7 +5642,7 @@ function paintAcctMenu() {
   acctMenu.innerHTML = `<div class="am-head">${fbUser.photoURL ? `<img class="am-av" src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : `<span class="am-av">${I('user', 26)}</span>`}<div class="am-t"><b>${esc(fbUser.displayName || 'Cuenta de Google')}</b><small>${esc(fbUser.email || '')}</small></div></div>
     <div class="am-sync">${I('check', 14)}<span>${esc(syncStatus || 'Todo se guarda en tu cuenta')}</span></div>
     <button type="button" class="am-it" data-ex-open>${SV('<path d="M7 7h11l-3-3M17 17H6l3 3"/>', 17)}<span>${window.CCTExchange && CCTExchange.connected() ? esc(CCTExchange.info().name) : 'Conectar exchange'}</span>${window.CCTExchange && CCTExchange.connected() ? '<em class="am-plan am-ok">Conectado</em>' : ''}</button>
-    ${plan ? `<button type="button" class="am-it" data-plans-open>${SV('<path d="M3 8.5 7.5 12 12 5l4.5 7L21 8.5 19 18H5z"/>', 17)}<span>Tu plan</span><em class="am-plan">${esc(plan.n)}</em></button>` : ''}
+    ${plan ? `<button type="button" class="am-it" data-plans-open>${SV('<path d="M3 8.5 7.5 12 12 5l4.5 7L21 8.5 19 18H5z"/>', 17)}<span>Tu plan</span>${(() => { const P = window.CCTPlans, dev = P && P.owner && !P.preview, k = P ? (P.preview || (P.real ? P.real() : P.current())) : 'free', t = P && P.TIERS[k] || plan; return `<em class="am-plan pl-badge ${dev ? 'dev' : t.c}">${dev ? 'Desarrollador' : esc(t.n)}</em>`; })()}</button>` : ''}
     <button type="button" class="am-it danger" id="signOutBtn">${I('power', 17)}<span>Cerrar sesión</span></button>`;
   acctMenu.querySelector('#signOutBtn').onclick = () => { closeAcctMenu(); signOut(); };
   placeAcctMenu();
