@@ -13,7 +13,7 @@
   function html() {
     const cur = (target && target.value || '').toLowerCase(), pal = (C() && C().pal()) || [], mine = C() ? C().get() : [], saved = C() && C().has(cur);
     return `<div class="cp-grid">${pal.flat().map(c => sw(c, cur)).join('')}</div>
-      <div class="cp-mine"><div class="cp-h"><span>Mis colores <small>${mine.length}/20</small></span><span class="cp-acts">${mine.length ? `<button type="button" data-edit>${edit ? 'Listo' : 'Editar'}</button>` : ''}<button type="button" data-save ${saved || !hex(cur) ? 'disabled' : ''}>${saved ? 'Guardado' : '+ Guardar este'}</button></span></div>
+      <div class="cp-mine"><div class="cp-h"><span>Mis colores <small>${mine.length}/20</small></span><span class="cp-acts">${mine.length ? `<button type="button" data-edit>${edit ? 'Listo' : 'Editar'}</button>` : ''}<button type="button" class="cp-add" data-save ${saved || !hex(cur) ? 'disabled' : ''} title="${saved ? 'Ya está en Mis colores' : 'Guardar este color en Mis colores'}" aria-label="Guardar este color en Mis colores">${saved ? '✓' : '+'}</button></span></div>
         ${mine.length ? `<div class="cp-grid">${mine.map(c => sw(c, cur, true)).join('')}</div>` : '<small class="cp-empty">Guarda hasta 20 colores: aparecerán aquí en todas las paletas de la app.</small>'}</div>
       <label class="cp-other"><span class="cp-prev" style="background:${esc(hex(cur) ? cur : '#000000')}"></span><span>Otro color</span><input type="color" data-native value="${esc(hex(cur) ? cur : '#e9c36e')}"><b>${esc(cur.toUpperCase())}</b></label>`;
   }
@@ -40,7 +40,7 @@
     if (e.target.closest('[data-save]')) { if (target) save(target.value); paint(); return; }
     const s = e.target.closest('[data-c]'); if (s) { if (edit) return; apply(s.dataset.c); paint(); }
   }
-  function onNative(e) { if (!e.target.matches('[data-native]')) return; apply(e.target.value); const pv = pop.querySelector('.cp-prev'), b = pop.querySelector('.cp-other b'); if (pv) pv.style.background = e.target.value; if (b) b.textContent = e.target.value.toUpperCase(); pop.querySelectorAll('.cp-sw').forEach(x => x.classList.toggle('on', x.dataset.c === e.target.value.toLowerCase())); const sv = pop.querySelector('[data-save]'); if (sv) { const has = C().has(e.target.value); sv.disabled = has; sv.textContent = has ? 'Guardado' : '+ Guardar este'; } }
+  function onNative(e) { if (!e.target.matches('[data-native]')) return; apply(e.target.value); const pv = pop.querySelector('.cp-prev'), b = pop.querySelector('.cp-other b'); if (pv) pv.style.background = e.target.value; if (b) b.textContent = e.target.value.toUpperCase(); pop.querySelectorAll('.cp-sw').forEach(x => x.classList.toggle('on', x.dataset.c === e.target.value.toLowerCase())); const sv = pop.querySelector('[data-save]'); if (sv) { const has = C().has(e.target.value); sv.disabled = has; sv.textContent = has ? '✓' : '+'; } }
 
   // cualquier cuadrito de color de la app abre la paleta (menos el «Otro color» nativo de las paletas)
   const own = el => el.matches('input[type=color]') && !el.closest('.cp-pop, .pp-custom') && !el.hasAttribute('data-native') && !el.disabled;

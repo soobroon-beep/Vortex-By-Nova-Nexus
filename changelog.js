@@ -2,7 +2,9 @@
 window.CCT_CHANGELOG = [
   {v: '3.30', d: '12 nov 2026', t: 'Tu paleta de colores en toda la app', items: [
     'Cualquier cuadro de color (indicadores, Nova Nexus, scripts Pine, Aspecto del gráfico, alertas…) abre la misma paleta que las herramientas de dibujo.',
-    'Mis colores: guarda hasta 20 colores con «+ Guardar»; quedan en tu cuenta y salen en todas las paletas, también en la de los dibujos. Con «Editar» quitas los que ya no uses.'
+    'Mis colores: guarda hasta 20 colores con «+ Guardar»; quedan en tu cuenta y salen en todas las paletas, también en la de los dibujos. Con «Editar» quitas los que ya no uses.',
+    'Los menús y cajas de ajustes de las herramientas, la calculadora de riesgo y los menús de clic derecho aparecen y se desvanecen con animación.',
+    'La ventana de bienvenida muestra el logo oficial en blanco.'
   ]},
   {v: '3.29', d: '12 nov 2026', t: 'Ajustes en vivo', items: [
     'Al configurar un indicador, Nova Nexus, tus scripts Pine o el Aspecto del gráfico, los cambios se ven al momento en el gráfico. La ventana sale centrada y la puedes mover arrastrando su título (doble clic: regresa al centro).',

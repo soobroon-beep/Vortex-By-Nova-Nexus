@@ -288,6 +288,8 @@ const pct = n => !Number.isFinite(n) ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let toastTimer;
+/* Menús y ventanas de ajustes: se desvanecen al cerrarse (la entrada la pone glass.css) */
+function uxOut(el, ms = 150) { if (!el || el.classList.contains('ux-out')) return; el.classList.add('ux-out'); if (el.id) el.removeAttribute('id'); el.style.pointerEvents = 'none'; setTimeout(() => el.remove(), ms); }
 function toast(msg) { if (cfgLive) return; const el = $('#toast'); el.textContent = msg; el.style.display = 'block'; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.style.display = 'none', 2400); }
 function updateStatus(ok, msg) { $('#connection').textContent = '● ' + msg; $('#connection').className = 'connection ' + (ok ? 'online' : 'offline'); }
 async function getJSON(url, signal) { const r = await fetch(url, {signal}); if (!r.ok) throw Error('Binance HTTP ' + r.status); return r.json(); }
@@ -406,7 +408,7 @@ function openTagPop(k, x, y) {
   m.innerHTML = `<small>Color de ${esc(base(k))}</small><div class="tag-grid">${TAGS.map(([c, n]) => `<button type="button" data-tagc="${c}" style="--c:${c}" class="${tagOf(k) === c ? 'on' : ''}" aria-label="${n}" title="${n}"></button>`).join('')}</div><button type="button" class="tag-none" data-tagc="">Sin color</button>`;
   document.body.appendChild(m);
   const w = m.offsetWidth, h = m.offsetHeight; m.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + 'px'; m.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + 'px';
-  const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', onKey, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, onKey = ev => { if (ev.key === 'Escape') close(); };
+  const close = () => { uxOut(m); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', onKey, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, onKey = ev => { if (ev.key === 'Escape') close(); };
   m.addEventListener('click', ev => { const b = ev.target.closest('[data-tagc]'); if (!b) return; close(); setTag(k, b.dataset.tagc); });
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', onKey, true); });
 }
@@ -424,7 +426,7 @@ function openRowMenu(k, x, y) {
     <button type="button" class="rm-it danger" data-rm="del">${ic('<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>')}<span>Quitar de la lista</span></button>`;
   document.body.appendChild(m);
   const w = m.offsetWidth, h = m.offsetHeight; m.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + 'px'; m.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + 'px';
-  const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', onKey, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, onKey = ev => { if (ev.key === 'Escape') close(); };
+  const close = () => { uxOut(m); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', onKey, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, onKey = ev => { if (ev.key === 'Escape') close(); };
   m.addEventListener('click', ev => {
     const c = ev.target.closest('[data-tagc]'); if (c) { close(); setTag(k, c.dataset.tagc); return; }
     const sc = ev.target.closest('[data-rm-sec]'); if (sc) { close(); if (sc.dataset.rmSec) state.symGroup[k] = sc.dataset.rmSec; else delete state.symGroup[k]; save(); renderWatch(); return; }
@@ -2433,7 +2435,7 @@ function sbResetStyle() { const d = curDraw(); if (!d) return; patchD(d.type ===
 const posColors = d => `<label class="pp-lbl">Objetivo (ganancia)</label>${sbPal('data-pgc', d.gc || '#089981')}<label class="pp-lbl">Stop (pérdida)</label>${sbPal('data-prc', d.rc || '#f23645')}`;
 const posToggles = d => `<label class="pp-lbl">Textos que se muestran</label><div class="pp-col">${[['nt', 'Título (Long / Short)'], ['no', 'Texto del objetivo'], ['ns', 'Texto del stop'], ['nr', 'Tamaño y riesgo (calculadora)']].map(([k, n]) => `<button class="pp-item${d[k] ? '' : ' on'}" data-ptog="${k}"><span class="pp-ic">${d[k] ? '' : I('check', 16)}</span><span>${n}</span></button>`).join('')}</div>`;
 const sbSw = (attr, c, cur) => `<button class="pp-sw${String(cur || '').toLowerCase() === c ? ' on' : ''}" ${attr}="${c}" style="background:${c}" aria-label="${c}"></button>`;
-const sbMine = (attr, cur) => { const m = window.CCTColors ? CCTColors.get() : []; const ok = /^#[0-9a-f]{6}$/i.test(cur || ''); return `<div class="pp-mine"><div class="pp-mine-h"><span>Mis colores</span>${ok ? `<button type="button" class="pp-mine-add" data-mycol-add="${String(cur).toLowerCase()}" title="Guardar el color actual">+ Guardar</button>` : ''}</div>${m.length ? `<div class="pp-grid">${m.map(c => sbSw(attr, c, cur)).join('')}</div>` : '<small class="pp-mine-e">Guarda hasta 20 colores y aparecerán en todas las paletas.</small>'}</div>`; };
+const sbMine = (attr, cur) => { const m = window.CCTColors ? CCTColors.get() : []; const ok = /^#[0-9a-f]{6}$/i.test(cur || ''); return `<div class="pp-mine"><div class="pp-mine-h"><span>Mis colores</span>${ok ? `<button type="button" class="pp-mine-add" data-mycol-add="${String(cur).toLowerCase()}" title="Guardar el color actual en Mis colores" aria-label="Guardar el color actual en Mis colores">+</button>` : ''}</div>${m.length ? `<div class="pp-grid">${m.map(c => sbSw(attr, c, cur)).join('')}</div>` : '<small class="pp-mine-e">Guarda hasta 20 colores y aparecerán en todas las paletas.</small>'}</div>`; };
 const sbPal = (attr, cur) => `<div class="pp-grid">${SB_PAL.flat().map(c => sbSw(attr, c, cur)).join('')}</div>${sbMine(attr, cur)}<label class="pp-custom">Otro color <input type="color" ${attr}-in value="${/^#[0-9a-f]{6}$/i.test(cur || '') ? cur : '#e9c36e'}"></label>`;
 const sbLwRow = (list, cur) => `<div class="pp-row">${list.map(w => `<button class="pp-lw${Math.round(cur) === w ? ' on' : ''}" data-pw="${w}"><i style="height:${Math.min(w, 8)}px"></i><span>${w}px</span></button>`).join('')}</div>`;
 const sbDsRow = cur => `<div class="pp-col">${[['', 'Línea', ''], ['dash', 'Línea discontinua', '7 5'], ['dot', 'Línea de puntos', '1.5 4']].map(([k, n, da]) => `<button class="pp-item${(cur || '') === k ? ' on' : ''}" data-pd="${k}"><svg width="46" height="8" viewBox="0 0 46 8"><path d="M1 4h44" stroke="currentColor" stroke-width="2" ${da ? `stroke-dasharray="${da}" stroke-linecap="${k === 'dot' ? 'round' : 'butt'}"` : ''}/></svg><span>${n}</span></button>`).join('')}</div>`;
@@ -2474,12 +2476,12 @@ function popHtml(kind, d) {
   return '';
 }
 function sbMoreNoSel() { return `<button class="pp-item" data-sb="undo"><span class="pp-ic">${I('undo', 16)}</span><span>Deshacer</span></button><button class="pp-item" data-sb="redo"><span class="pp-ic">${I('redo', 16)}</span><span>Rehacer</span></button><button class="pp-item" data-sb="clear"><span class="pp-ic">${I('trash', 16)}</span><span>Borrar todos los dibujos</span></button>`; }
-function closePop() { selPop = ''; dPpCol = ''; const p = $('#selPop'); if (p) p.remove(); document.querySelectorAll('#selBar [data-sb].open').forEach(b => b.classList.remove('open')); }
+function closePop() { selPop = ''; dPpCol = ''; const p = $('#selPop'); if (p) uxOut(p); document.querySelectorAll('#selBar [data-sb].open').forEach(b => b.classList.remove('open')); }
 function renderPop() {
-  const old = $('#selPop'), bar = $('#selBar'), keepTop = old && old.dataset.k === selPop ? old.scrollTop : 0; if (old) old.remove(); // al cambiar un ajuste el panel se vuelve a dibujar: conserva por dónde ibas
+  const old = $('#selPop'), bar = $('#selBar'), keepTop = old && old.dataset.k === selPop ? old.scrollTop : 0, again = !!(old && old.dataset.k === selPop); if (old) { if (again) old.remove(); else uxOut(old); } // al cambiar un ajuste el panel se vuelve a dibujar: conserva por dónde ibas
   if (!selPop || !bar) return;
   const d = curDraw(); let html = selPop === 'more' && !d ? sbMoreNoSel() : popHtml(selPop, d); if (!html) { selPop = ''; return; }
-  const pop = document.createElement('div'); pop.id = 'selPop'; pop.className = 'pbar-pop'; pop.dataset.k = selPop; pop.innerHTML = html; pop.addEventListener('wheel', e => e.stopPropagation(), {passive: true}); $('#chartArea').appendChild(pop); pop.scrollTop = keepTop; // la rueda del ratón desplaza el panel (no hace zoom al gráfico)
+  const pop = document.createElement('div'); pop.id = 'selPop'; pop.className = 'pbar-pop' + (again ? ' ux-still' : ''); pop.dataset.k = selPop; pop.innerHTML = html; pop.addEventListener('wheel', e => e.stopPropagation(), {passive: true}); $('#chartArea').appendChild(pop); pop.scrollTop = keepTop; // la rueda del ratón desplaza el panel (no hace zoom al gráfico)
   const btn = bar.querySelector(`[data-sb="${selPop}"]`); if (btn) btn.classList.add('open');
   const ar = $('#chartArea').getBoundingClientRect(), br = (btn || bar).getBoundingClientRect(), below = br.top - ar.top < ar.height / 2;
   pop.style.left = clamp(br.left - ar.left - 4, 6, Math.max(6, ar.width - pop.offsetWidth - 6)) + 'px';
@@ -2575,7 +2577,7 @@ function openRisk(d, priceHint) {
       + `<p class="rk-note">Cálculo educativo para futuros con margen aislado (mantenimiento ${(CCTRisk.MMR * 100).toFixed(1)} %). El exchange puede variar un poco. No es asesoría financiera.</p>`;
   };
   m.addEventListener('input', paint); paint();
-  const close = () => m.remove();
+  const close = () => uxOut(m, 180);
   m.querySelector('.rk-x').onclick = close; m.addEventListener('pointerdown', e => { if (e.target === m) close(); });
   m.addEventListener('click', e => {
     const b = e.target.closest('[data-rk]'); if (!b) return;
@@ -2684,9 +2686,9 @@ function syncRail() {
   });
   rail.querySelectorAll('[data-opt]').forEach(b => { const k = b.dataset.opt; if (k === 'clear') return; b.classList.toggle('on', !!DOPT[k]); if (k === 'hide') { const want = DOPT.hide ? IC.eyeoff : IC.eye; if (b.dataset.ic !== (DOPT.hide ? '1' : '0')) { b.dataset.ic = DOPT.hide ? '1' : '0'; b.querySelector('svg').outerHTML = SV(want); } } });
 }
-function closeFly() { const f = $('#railFly'); if (f) f.remove(); }
+function closeFly() { const f = $('#railFly'); if (f) uxOut(f); }
 function openFly(id, btn) {
-  const old = $('#railFly'); if (old) { const same = old.dataset.g === id; old.remove(); if (same) return; }
+  const old = $('#railFly'); if (old) { const same = old.dataset.g === id; if (same) { uxOut(old); return; } old.remove(); }
   const gr = TOOL_GROUPS.find(x => x.id === id); if (!gr) return;
   const f = document.createElement('div'); f.id = 'railFly'; f.className = 'rail-fly'; f.dataset.g = id;
   f.innerHTML = `<h4>${esc(gr.name)}</h4>` + gr.tools.map(([k, t, d, ic]) => `<button data-rtool="${k}" title="${esc(d)}" class="${drawTool === k ? 'on' : ''}"><span class="ti">${SV(ic, 20)}</span><span class="tn">${esc(t)}</span>${starBtn(k)}</button>`).join('');
@@ -2703,7 +2705,7 @@ function syncCursorMode(m) { // aplica el tipo de cursor al gráfico (clases CSS
 }
 function setCursorMode(m) { if (!CURSOR_MODES.includes(m)) return; state.chartStyle = sanChartStyle(Object.assign({}, state.chartStyle || {}, {cursor: m})); if (m === 'Cruz') delete state.chartStyle.cursor; save(); cancelTool(); syncCursorMode(m); scheduleRender(); toast(`Cursor: ${CURSOR_TXT[m][0]}`); }
 function openCurFly(btn) {
-  const old = $('#railFly'); if (old) { const same = old.dataset.g === 'cursor'; old.remove(); if (same) return; }
+  const old = $('#railFly'); if (old) { const same = old.dataset.g === 'cursor'; if (same) { uxOut(old); return; } old.remove(); }
   const cur = cstyle().cursor || 'Cruz', f = document.createElement('div'); f.id = 'railFly'; f.className = 'rail-fly'; f.dataset.g = 'cursor';
   f.innerHTML = `<h4>Cursor</h4>` + CURSOR_MODES.map(k => `<button data-cur="${k}" title="${esc(CURSOR_TXT[k][1])}" class="${cur === k ? 'on' : ''}"><span class="ti">${SV(CURSOR_IC[k], 20)}</span><span class="tn">${esc(CURSOR_TXT[k][0])}<small class="cur-sub">${esc(CURSOR_TXT[k][1])}</small></span></button>`).join('');
   document.body.appendChild(f);
@@ -2799,7 +2801,7 @@ function setFavBar(show) { FB.show = !!show; syncUi(); renderFavBar(); toast(FB.
     const m = document.createElement('div'); m.className = 'pop-menu chart-ctx';
     m.innerHTML = `<button data-a="hide">${I('eyeoff', 16)}<span>Ocultar barra de favoritos</span></button><button data-a="pos">${I('reset', 16)}<span>Volver a su lugar</span></button>`;
     document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
-    const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
+    const close = () => { uxOut(m); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
     setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
     m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'hide') setFavBar(false); else { FB.x = FB.y = null; syncUi(); placeFavBar(); } };
   }, true);
@@ -4651,7 +4653,7 @@ area.addEventListener('contextmenu', e => {
   m.innerHTML = `<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="copyp">${SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 16)}<span>Copiar precio ${fmt(ctxPrice)}</span></button>${PANE ? '' : `<button data-a="alertp">${SV('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 16)}<span>Añadir alerta en ${fmt(ctxPrice)}</span></button>`}<i class="ctx-sep"></i>` // lo que más se usa, arriba
     + (window.CCTTrade && ctxPrice > 0 ? `<button data-a="trbuy" class="ctx-buy">${SV('<path d="M12 19V5M6 11l6-6 6 6"/>', 16)}<span>Comprar en ${fmt(ctxPrice)}</span></button><button data-a="trsell" class="ctx-sell">${SV('<path d="M12 5v14M6 13l6 6 6-6"/>', 16)}<span>Vender en ${fmt(ctxPrice)}</span></button>` : '') + `<button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><i class="ctx-sep"></i><button data-a="risk">${SV('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11v6M8 14h2M12 14h2M8 17h2M12 17h2"/>', 16)}<span>Calculadora de riesgo</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
   document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
-  const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
+  const close = () => { uxOut(m); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
   m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'trbuy' || b.dataset.a === 'trsell') { CCTTrade.at(b.dataset.a === 'trbuy' ? 1 : -1, window.__ctxPrice); return; } if (b.dataset.a === 'risk') { const sel = curDraw(); openRisk(isPos(sel) ? sel : null, window.__ctxPrice); } else if (b.dataset.a === 'reset') resetChart(); else if (b.dataset.a === 'style') openChartStyle(); else if (b.dataset.a === 'copyp') copyText(String(ctxPrice), 'Precio copiado: ' + fmt(ctxPrice)); else if (b.dataset.a === 'alertp') alertAtPrice(ctxPrice); else if (b.dataset.a === 'favbar') setFavBar(!FB.show); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
 });
@@ -4692,7 +4694,7 @@ function openAcctDialog() {
     <div class="ac-btns"><button class="small-button" data-ac="clear" type="button">Quitar</button><button class="small-button" data-ac="close" type="button">Cancelar</button><button class="primary" data-ac="ok" type="button">Guardar</button></div>`;
   document.body.appendChild(m);
   const num = v => { const n = parseFloat(String(v).replace(/[^0-9.,-]/g, '').replace(',', '.')); return Number.isFinite(n) && n >= 0 ? n : NaN; };
-  const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = e => { if (!m.contains(e.target) && !e.target.closest('[data-acct-open]')) close(); }, esc = e => { if (e.key === 'Escape') close(); };
+  const close = () => { uxOut(m); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = e => { if (!m.contains(e.target) && !e.target.closest('[data-acct-open]')) close(); }, esc = e => { if (e.key === 'Escape') close(); };
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); const f = $('#acStart'); if (f) f.focus(); });
   m.onclick = e => {
     const b = e.target.closest('[data-ac]'); if (!b) return;
@@ -4854,7 +4856,7 @@ function pickSource(anchor) { // menú para elegir la fuente de velas (Binance S
   const m = document.createElement('div'); m.className = 'src-menu';
   m.innerHTML = Object.entries(SOURCES).map(([k, v]) => `<button data-src="${k}" class="${k === state.source ? 'on' : ''}">${v}</button>`).join('') + '<small>Si la fuente no tiene el par o la temporalidad, se usa Binance Spot.</small>';
   document.body.appendChild(m); const r = anchor.getBoundingClientRect(); m.style.top = Math.max(8, Math.min(innerHeight - 280, r.bottom + 6)) + 'px'; m.style.left = Math.max(8, Math.min(innerWidth - 230, r.left)) + 'px';
-  const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); }, away = e => { if (!m.contains(e.target) && e.target !== anchor) close(); };
+  const close = () => { uxOut(m); document.removeEventListener('pointerdown', away, true); }, away = e => { if (!m.contains(e.target) && e.target !== anchor) close(); };
   setTimeout(() => document.addEventListener('pointerdown', away, true));
   m.onclick = e => { const b2 = e.target.closest('[data-src]'); if (b2) { close(); setSource(b2.dataset.src); } };
 }
@@ -5606,7 +5608,7 @@ function showWelcome() {
   const ov = document.createElement('div'); ov.className = 'vw-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Bienvenido a VORTEX');
   const T = window.CCTPlans ? CCTPlans.TIERS : null, row = (k, t) => `<li class="vw-t ${k}"><b>${t}</b><small>${T && T[k] ? esc(T[k].sub) : ''}</small></li>`;
   ov.innerHTML = `<div class="vw-box"><canvas class="vw-fx" aria-hidden="true"></canvas><button type="button" class="vw-x" data-wl="close" aria-label="Cerrar y seguir gratis">✕</button>
-    <img class="vw-logo" data-app-icon src="icons/${(window.CCTAppIcons && CCTAppIcons.selected) || 'i01'}-192.png" alt="">
+    <img class="vw-logo" src="icons/vortex-mark.png" alt="VORTEX">
     <h2>Bienvenido a VORTEX</h2><p>Inicia sesión con Google para guardar tu gráfico en todos tus dispositivos y desbloquear tu plan. Nada se cobra.</p>
     <ul class="vw-tiers">${row('free', 'Gratis')}${row('plus', 'Plus')}${row('infinity', 'Infinity')}</ul>
     <button type="button" class="google-btn vw-go" data-wl="login"><span class="g">G</span> Iniciar sesión con Google</button>
