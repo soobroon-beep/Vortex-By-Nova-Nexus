@@ -3131,10 +3131,9 @@ function legGlass(text, x, y, act) {
   const tw = g.measureText(text).width, bw = legW.get(legKey(act)) || 3 * (legBtnH() + 7), H = legBtnH() + 2, x0 = x - 7, w = tw + 8 + bw + 9, y0 = y - 5 - H / 2, r = H / 2;
   const cv = g.canvas, k = cv.width / (cv.clientWidth || cv.width) || 1, prev = g.fillStyle, pa = g.globalAlpha;
   g.save(); g.globalAlpha = 1; g.beginPath(); g.roundRect ? g.roundRect(x0, y0, w, H, r) : g.rect(x0, y0, w, H); g.clip();
-  try { if ('filter' in g) { g.filter = 'blur(9px) saturate(1.3)'; const m = 14; g.drawImage(cv, Math.max(0, (x0 - m) * k), Math.max(0, (y0 - m) * k), (w + 2 * m) * k, (H + 2 * m) * k, x0 - m, y0 - m, w + 2 * m, H + 2 * m); g.filter = 'none'; } } catch (e) {}
-  g.fillStyle = 'rgba(8,11,19,.58)'; g.fillRect(x0, y0, w, H);
-  const sh = g.createLinearGradient(0, y0, 0, y0 + H); sh.addColorStop(0, 'rgba(255,255,255,.07)'); sh.addColorStop(.5, 'rgba(255,255,255,0)'); g.fillStyle = sh; g.fillRect(x0, y0, w, H);
-  g.restore(); g.save(); g.beginPath(); g.roundRect ? g.roundRect(x0 + .5, y0 + .5, w - 1, H - 1, r) : g.rect(x0 + .5, y0 + .5, w - 1, H - 1); g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1; g.stroke(); g.restore();
+  try { if ('filter' in g) { g.filter = 'blur(12px) saturate(1.2)'; const m = 14; g.drawImage(cv, Math.max(0, (x0 - m) * k), Math.max(0, (y0 - m) * k), (w + 2 * m) * k, (H + 2 * m) * k, x0 - m, y0 - m, w + 2 * m, H + 2 * m); g.filter = 'none'; } } catch (e) {}
+  g.fillStyle = 'rgba(14,18,28,.34)'; g.fillRect(x0, y0, w, H); // velo plano y translúcido (sin reflejo): estilo liquid glass minimalista
+  g.restore(); g.save(); g.beginPath(); g.roundRect ? g.roundRect(x0 + .5, y0 + .5, w - 1, H - 1, r) : g.rect(x0 + .5, y0 + .5, w - 1, H - 1); g.strokeStyle = 'rgba(255,255,255,.09)'; g.lineWidth = 1; g.stroke(); g.restore();
   g.fillStyle = prev; g.globalAlpha = pa;
 }
 function syncLegToggle() {
