@@ -61,7 +61,9 @@ async function paperBot(bot, scripts, getCandles, now, gateF, notify, pushOut) {
     try { await P.step(sess, async (sym, itv, count) => { const C = await getCandles(sym, itv, count); const u = userSeries(sess.spec, C, scripts); ropts.user = Object.keys(u).length ? u : null; return C; }, ropts, now); sess.err = null; sess.checkedAt = now; sess.by = 'servidor'; }
     catch (e) { sess.err = String(e.message || e).slice(0, 200); sess.checkedAt = now; sess.by = 'servidor'; }
     const evs = NT.pending(sess); if (evs.length && pushOut && bot.notify !== false) for (const e of evs.slice(-6)) pushOut.push(NT.push(bot, sess, e)); // también a tu celular (servidor de avisos)
-    if (evs.length && notify && notify.url && notify.bots !== false && bot.notify !== false && /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\//.test(notify.url)) await postDiscord(notify.url, evs.slice(-6).map(e => NT.embed(bot, sess, e)));
+    const HK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\//, own = bot.dcDest === 'own' && HK.test(bot.dcHook || '') ? bot.dcHook : null; // canal propio del bot
+    const dUrl = own || (notify && notify.url && notify.bots !== false && HK.test(notify.url) ? notify.url : null);
+    if (evs.length && dUrl && bot.notify !== false) await postDiscord(dUrl, evs.slice(-6).map(e => NT.embed(bot, sess, e)));
     const L = sess.ledger; for (let i = 0; i < L.length - 300; i++) { delete L[i].reasonIn; delete L[i].ctx; delete L[i].sl; delete L[i].tp; } out.push(sess);
   } return out;
 }

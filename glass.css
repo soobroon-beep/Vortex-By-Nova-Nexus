@@ -2051,32 +2051,6 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 @keyframes llEv{to{opacity:1;transform:none}}
 @container (max-width:640px){.ll-body{grid-template-columns:1fr}.ll-svg{max-width:340px}}
 @media (prefers-reduced-motion:reduce){.ll *{animation:none!important}.ll-n,.ll-e{opacity:1;transform:none}}
-/* Nova Bot Lab · árbol «Lo que ha aprendido» (dónde gana y falla · cómo mejora · consejos aplicados) */
-.lt-wrap{container-type:inline-size;margin-bottom:14px}
-.lt{padding:14px;border-radius:18px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08)}
-.lt-root{display:flex;align-items:center;gap:8px;justify-content:center;margin:0 auto;width:max-content;padding:7px 14px;border-radius:999px;border:1px solid color-mix(in srgb,var(--bc) 55%,transparent);background:rgba(10,14,22,.6)}
-.lt-root b{font-size:13.5px}.lt-root small{color:var(--muted);font-size:11px}
-.lt-tree{display:block;width:100%;height:26px}.lt-tree path{fill:none;stroke:var(--bc);stroke-width:1.4;opacity:.55;stroke-dasharray:240;stroke-dashoffset:240;animation:bfDraw .8s ease .2s forwards}
-.lt-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.lt-card{padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.09);background:rgba(10,14,22,.55);opacity:0;transform:translateY(8px);animation:bfIn .5s ease forwards;animation-delay:calc(.45s + var(--i) * .15s)}
-.lt-card h5{display:flex;align-items:center;gap:7px;margin:0 0 10px;font-size:12.5px}.lt-ic{width:9px;height:9px;border-radius:3px}.lt-ic.dn{background:#f06b79}.lt-ic.up{background:#20bf9f}.lt-ic.tp{background:#f0b90b}
-.lt-bar{display:grid;grid-template-columns:44px 1fr 38px;align-items:center;gap:4px 8px;margin-bottom:7px}.lt-bar small{grid-column:2/4;font-size:10.5px;color:var(--muted)}.lt-bl{font-size:12px;font-weight:600}
-.lt-track{height:8px;border-radius:5px;background:rgba(255,255,255,.07);overflow:hidden}.lt-track i{display:block;height:100%;border-radius:5px;animation:ltGrow .9s ease .6s both}.lt-track i.up{background:#20bf9f}.lt-track i.dn{background:#f06b79}
-@keyframes ltGrow{from{width:0!important}}
-.lt-bar b{font-size:12px;text-align:right}
-.lt-chips{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 9px}.lt-chip{font-size:11px;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.06)}.lt-chip.pos{color:#7fe3cc}.lt-chip.neg{color:#ffb3bc}
-.lt-heat{display:grid;grid-template-columns:repeat(24,1fr);gap:2px}.lt-heat i{height:14px;border-radius:2px}
-.lt-heat-l{display:flex;justify-content:space-between;font-size:9.5px;color:#6f7b8f;margin:3px 0 6px}
-.lt-say{margin:6px 0 0;font-size:11.5px;color:#c8d2e1}.lt-say.dn b{color:#ff9aa6}.lt-say.up b{color:#7fe3cc}.lt-empty{margin:0;font-size:12px;color:var(--muted)}
-.lt-vbars{display:flex;align-items:flex-end;gap:8px;height:110px;padding:4px 2px 0;border-bottom:1px solid rgba(255,255,255,.08)}
-.lt-vb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;min-width:0}.lt-vb i{width:70%;max-width:26px;border-radius:5px 5px 2px 2px;transform-origin:bottom;animation:ltUp .7s cubic-bezier(.2,.9,.25,1.1) both;animation-delay:calc(.6s + var(--i) * .1s)}
-.lt-vb i.up{background:linear-gradient(#20bf9f,#139c80)}.lt-vb i.dn{background:linear-gradient(#f06b79,#c4485a)}.lt-vb.off i{opacity:.35}.lt-vb.main i{box-shadow:0 0 0 2px var(--bc),0 0 10px var(--bc)}
-.lt-vb small{font-size:10px}.lt-vb b{font-size:10.5px;color:var(--muted)}.lt-vb.main b{color:#fff}
-@keyframes ltUp{from{transform:scaleY(0)}}
-.lt-tips{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:6px}.lt-tips li{display:flex;gap:8px;align-items:flex-start}.lt-tips i{flex:none;width:8px;height:8px;margin-top:4px;border-radius:50%;background:#20bf9f;box-shadow:0 0 6px #20bf9f}.lt-tips li.off i{background:#f06b79;box-shadow:none}
-.lt-tips b{display:block;font-size:12px;line-height:1.3}.lt-tips small{font-size:10.5px;color:var(--muted)}
-.lt-go{width:100%;padding:7px 10px;border-radius:10px;border:1px solid color-mix(in srgb,var(--bc) 45%,transparent);background:color-mix(in srgb,var(--bc) 12%,transparent);color:var(--text);font:600 12px system-ui;cursor:pointer}
-@container (max-width:700px){.lt-cards{grid-template-columns:1fr}.lt-tree{height:16px}}
 /* Operaciones: línea de precio con cada operación (dónde compró, dónde vendió) */
 .st-legend{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:11.5px;color:var(--muted);margin-bottom:6px}.st-legend i{display:inline-block;width:9px;height:9px;margin-right:5px;border-radius:2px;vertical-align:-1px}.st-legend i.lg{background:#20bf9f}.st-legend i.sh{background:#f06b79}.st-legend i.ot{background:#fff;border-radius:50%}.st-sum{margin-left:auto}
 .st{display:block;width:100%;height:auto}.st-line{fill:none;stroke:#8796ab;stroke-width:1.2;opacity:.7}
@@ -2113,3 +2087,50 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 .pv-pb{display:flex;align-items:center;gap:6px}.pv-pb i{display:block;height:7px;border-radius:4px;min-width:3px;animation:ltGrow .8s ease both}.pv-pb em{font-style:normal;font-size:11px;color:#c8d2e1;white-space:nowrap}
 .pv-alert{margin:6px 0 0;padding:8px 10px;border-radius:10px;background:rgba(240,185,11,.1);color:#ffe08a;font-size:12px}
 .pv-what summary{cursor:pointer;color:var(--muted);font-size:12px;margin:2px 0 6px}
+
+/* Nova Bot Lab · lo que aprende vuelve al bot: un hilo de regreso bajo la línea de producción */
+.bf-wrap .bf{margin-bottom:0}
+.bf-back{position:relative;display:block;width:100%;margin:-2px 0 14px;padding:0 0 4px;border:0;background:none;color:var(--text);font:inherit;cursor:pointer}
+.bf-loop{display:block;width:100%;height:34px;overflow:visible}
+.bf-l0{fill:none;stroke:rgba(255,255,255,.09);stroke-width:1.5;vector-effect:non-scaling-stroke}
+.bf-l1{fill:none;stroke:var(--bc);stroke-width:1.5;vector-effect:non-scaling-stroke;opacity:.55;stroke-dasharray:5 7;animation:bfFlowBack 1.2s linear infinite}
+.bf-off .bf-l1,.bf-pause .bf-l1{animation:none;opacity:.3}
+@keyframes bfFlowBack{to{stroke-dashoffset:24}}
+.bf-lsp{fill:var(--bc);filter:drop-shadow(0 0 4px var(--bc))}.bf-back.bf-off .bf-lsp,.bf-back.bf-pause .bf-lsp{display:none}
+.bf-lesson{position:absolute;left:50%;top:26px;transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:7px;max-width:72%;padding:4px 12px;border-radius:999px;background:#0b0f18;border:1px solid color-mix(in srgb,var(--bc) 40%,transparent);font-size:11.5px;white-space:nowrap}
+.bf-lesson svg{flex:none;width:13px;height:13px;fill:none;stroke:var(--bc);stroke-width:2;stroke-linecap:round}
+.bf-back:not(.bf-off):not(.bf-pause) .bf-lesson svg{animation:bfSpin 3s linear infinite}
+.bf-lesson b{font-weight:650}.bf-lesson em{font-style:normal;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.bf-back:hover .bf-lesson{border-color:var(--bc)}
+@container (max-width:560px){.bf-lesson em{display:none}}
+/* Pestaña IA */
+.bl-aih{display:flex;align-items:center;gap:8px;margin:10px 0 8px;font-size:15px}.bl-aih span{font-size:10.5px;font-weight:800;padding:3px 7px;border-radius:6px;background:linear-gradient(135deg,#7c5cff,#4c8dff);color:#fff}
+/* Reglas plegadas */
+.bl-rules{padding:0}.bl-rules>summary{list-style:none;display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer}.bl-rules>summary::-webkit-details-marker{display:none}
+.bl-rules-ic{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:rgba(76,141,255,.12)}.bl-rules-ic svg{width:18px;height:18px;fill:none;stroke:#7fa8ff;stroke-width:1.8;stroke-linejoin:round}
+.bl-rules summary div{flex:1}.bl-rules summary b{display:block;font-size:13.5px}.bl-rules summary small{font-size:11.5px;color:var(--muted)}
+.bl-rules-ch,.pv-mch{width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .2s;margin-right:4px}
+.bl-rules[open] .bl-rules-ch,.pv-mini[open] .pv-mch{transform:rotate(-135deg)}
+.bl-rules-b{padding:0 14px 12px;animation:bfIn .3s ease both;opacity:0;transform:translateY(-4px)}
+/* Consejos aplicados y consejos que vuelven */
+.bl-tapp{margin:6px 0 10px}.bl-tapp>small{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}.bl-tapp>div{display:flex;flex-wrap:wrap;gap:6px}
+.bl-tapp-c{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);font-size:11.5px}.bl-tapp-c i{width:7px;height:7px;border-radius:50%;background:#20bf9f}.bl-tapp-c.off i{background:#f06b79}.bl-tapp-c.off{color:var(--muted)}
+.bl-tip-back{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(240,185,11,.14);color:#ffd36b;font-size:10.5px;font-weight:600}
+/* En vivo: sesiones esperando en tarjeta pequeña */
+.pv-mini{margin-bottom:8px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03)}
+.pv-mini>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;font-size:12.5px}.pv-mini>summary::-webkit-details-marker{display:none}
+.pv-mdot{width:8px;height:8px;border-radius:50%;background:#5d6677}.pv-mini.on .pv-mdot{background:#20bf9f;box-shadow:0 0 6px #20bf9f;animation:bfPulse 1.8s infinite}
+.pv-mlab{color:var(--muted);font-size:11.5px;flex:1}.pv-mn{color:var(--muted);font-size:11.5px}.pv-mr{min-width:58px;text-align:right}
+.pv-mini[open]{background:transparent;border-color:transparent}.pv-mini[open]>.pv{margin-top:4px;animation:bfIn .3s ease both;opacity:0;transform:translateY(-4px)}
+/* Avisos a Discord por bot */
+.bl-dc{margin:8px 0 12px;padding:12px 14px;border-radius:16px;border:1px solid rgba(88,101,242,.35);background:rgba(88,101,242,.07);animation:bfIn .25s ease both;opacity:0;transform:translateY(-4px)}
+.bl-dc-h{display:flex;align-items:center;justify-content:space-between;gap:10px}.bl-dc-h b{font-size:13.5px}.bl-dc>.bl-dim{margin:4px 0 10px;font-size:12px}
+.bl-sw{position:relative;width:38px;height:22px;border-radius:999px;border:0;background:#3a4252;cursor:pointer;transition:background .2s}.bl-sw i{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s}.bl-sw.on{background:#5865f2}.bl-sw.on i{transform:translateX(16px)}
+.bl-dc-opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}.bl-dc-opts.off{opacity:.4;pointer-events:none}
+.bl-dc-o{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(10,14,22,.5);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.bl-dc-o b{display:block;font-size:12.5px}.bl-dc-o small{font-size:11px;color:var(--muted)}.bl-dc-o.on{border-color:#5865f2;background:rgba(88,101,242,.14)}
+.bl-dc-r{flex:none;width:14px;height:14px;border-radius:50%;border:2px solid #6f7b8f}.bl-dc-o.on .bl-dc-r{border-color:#5865f2;box-shadow:inset 0 0 0 3px #0b0f18;background:#5865f2}
+.bl-dc-own{margin-top:10px}.bl-dc-steps{margin:0 0 8px;padding-left:18px;font-size:12px;color:#c8d2e1;line-height:1.6}.bl-dc-ok{margin:0 0 6px;color:#7fe3cc;font-size:12.5px}
+.bl-dc-in{display:flex;gap:8px}.bl-dc-in input{flex:1;min-width:0}
+@media (max-width:560px){.bl-dc-opts{grid-template-columns:1fr}}
+.bl-dc-in input{padding:9px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(10,14,22,.7);color:var(--text);font:inherit;font-size:12.5px}.bl-dc-in input:focus{outline:none;border-color:#5865f2}

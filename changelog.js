@@ -5,7 +5,12 @@ window.CCT_CHANGELOG = [
     'Nova Bot Lab: cada bot se ve como una línea de producción: el motor arranca, opera, muestra resultados y se mejora, unidos por hilos animados. Toca cada estación para ver su detalle.',
     'Nova Bot Lab: nuevo «Cómo aprende»: el ciclo del bot (opera, recuerda, analiza, prueba variantes y se queda con la mejor) con una luz que lo recorre, cuánto mejoró desde su v1 y lo último que aprendió.',
     'Fibonacci lateral: el largo de las líneas se elige en % del gráfico (como el perfil de volumen) y las líneas son delgadas; los niveles clave solo con el color más vivo.',
-    'Nova Bot Lab: nueva caja «Lo que ha aprendido» que se ramifica en tres: dónde gana y dónde falla (Long/Short, cómo cierra y a qué hora le va mejor o peor), cómo ha mejorado versión por versión y qué consejos se le aplicaron.',
+    'Nova Bot Lab: bajo la línea de producción, un hilo regresa de «Mejora» al bot con lo último que aprendió: lo que aprende vuelve a él.',
+    'Reglas plegadas en un botón «Reglas del bot» (tócalo para verlas o editarlas) y una fila con los consejos ya aplicados.',
+    'Un consejo ignorado vuelve a salir si el bot sigue fallando en eso (la IA lo vuelve a proponer con datos nuevos o tras 15 operaciones en vivo más).',
+    'En vivo: arriba y completas solo las sesiones con una operación abierta; las que esperan señal salen como tarjeta pequeña que se despliega al tocarla.',
+    'La pestaña «Mejorar» ahora se llama «IA» (dentro: Mejorar con IA). En Operaciones, «Abiertas ahora en cada moneda» muestra solo las monedas con una operación abierta.',
+    'Avisos a Discord por bot: enciéndelos y elige si llegan a tu canal de VORTEX o a un canal solo para ese bot (pegas el webhook de ese canal y se manda una prueba).'
     'Operaciones: en lugar de las velas, una línea de precio simple con cada compra y venta marcada (verde si ganó, rojo si perdió) y tarjetas de las últimas operaciones. Las velas siguen en «Ver con velas».',
     'Consejos: nuevo botón «Ignorar consejo» junto a «Aplicar este consejo»; el consejo se quita y deja lugar a otros.',
     'En vivo: más visual y con menos texto: resultado grande, la posición abierta en una barra (stop · entrada · ahora · objetivo), números clave como fichas y lo que prometió vs. lo que está haciendo en barras.'
