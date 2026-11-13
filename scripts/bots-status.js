@@ -6,6 +6,10 @@ const ago = t => t ? ((Date.now() - t) / 36e5).toFixed(1) + ' h' : '—';
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT; if (!raw) { console.log('Sin FIREBASE_SERVICE_ACCOUNT'); return; }
   const admin = require('firebase-admin'); admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); const db = admin.firestore();
   try { const pro = await db.collection('pro').get(); console.log('Scripts PRO en el servidor: ' + pro.docs.map(d => d.id + (d.data().code ? '' : ' (vacío)')).join(', ')); } catch (e) { console.log('Scripts PRO: ' + e.message); }
+  try { // salud del servidor: latido del Motor, Screener y velas propias de VORTEX
+    const mo = (await db.doc('server/motor').get()).data() || {}; console.log(`Motor: último latido hace ${mo.beat ? Math.round((Date.now() - mo.beat) / 6e4) + ' min' : '—'} · franjas del Screener ${JSON.stringify(mo.scr || {})}`);
+    for (const id of ['BTCUSDT_15m', 'BTCUSDT_1h', 'ETHUSDT_4h', 'SOLUSDT_1h']) { const c = (await db.doc('candles/' + id).get()).data(); console.log(`Velas de VORTEX ${id}: ${c ? `${c.n} velas · fuente ${c.src} · guardadas hace ${Math.round((Date.now() - c.at) / 6e4)} min` : 'aún no hay'}`); }
+  } catch (e) { console.log('Salud del servidor: ' + e.message); }
   const users = await db.collection('users').listDocuments(); let n = 0;
   for (const u of users) {
     const bd = await u.collection('data').doc('botlab').get(); if (!bd.exists) continue; let S; try { S = JSON.parse(bd.data().items || '{}'); } catch (e) { console.log('botlab ilegible:', e.message); continue; }
