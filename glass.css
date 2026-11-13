@@ -1976,3 +1976,44 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 .leg-row:hover{background:none!important}
 .leg-row button{background:transparent!important;border-color:transparent!important;border-radius:999px!important;color:rgba(237,243,252,.82)!important;transition:background .15s,color .15s}
 .leg-row button:hover{background:rgba(255,255,255,.1)!important;color:#fff!important;border-color:transparent!important}
+/* Nova Bot Lab · línea de producción del bot (vista «fábrica»): motor → operando → resultados → mejora, unidos por hilos animados */
+.bf{display:flex;align-items:stretch;gap:0;margin:4px 0 14px;padding:12px;border-radius:18px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);overflow-x:auto}
+.bf-st{flex:1 1 0;min-width:118px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:12px 8px;border-radius:14px;border:1px solid rgba(255,255,255,.09);background:rgba(10,14,22,.55);color:var(--text);font:inherit;cursor:pointer;text-align:center;
+  opacity:0;transform:translateY(8px) scale(.96);animation:bfIn .5s cubic-bezier(.2,.9,.25,1.1) forwards;animation-delay:calc(var(--i) * .35s);transition:border-color .2s,background .2s}
+.bf-st:hover{border-color:color-mix(in srgb,var(--bc) 60%,transparent);background:rgba(16,22,34,.7)}
+.bf-motor{flex:1.25 1 0}
+.bf-gears{width:64px;height:48px}
+.bf-gear path{fill:color-mix(in srgb,var(--bc) 70%,#1d2433)}.bf-gear .bf-hole{fill:#0b0f18}
+.bf-on .bf-gear.g1{animation:bfSpin 4s linear infinite}.bf-on .bf-gear.g2{animation:bfSpin 2.6s linear infinite reverse}.bf-on .bf-gear.g3{animation:bfSpin 2.2s linear infinite reverse}
+.bf-off .bf-gear path,.bf-pause .bf-gear path{fill:#3a4252}
+.bf-mt{display:flex;align-items:center;gap:6px;max-width:100%}.bf-mt b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bf-av{display:inline-flex}
+.bf-led{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted)}
+.bf-led i{width:8px;height:8px;border-radius:50%;background:#5d6677}
+.bf-on .bf-led i{background:#20bf9f;box-shadow:0 0 8px #20bf9f;animation:bfPulse 1.6s ease-in-out infinite}.bf-pause .bf-led i{background:#f0b90b}
+.bf-ic{width:26px;height:26px;fill:none;stroke:var(--bc);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.bf-big{font-size:22px;line-height:1.1;font-weight:750}.bf-big.up,.bf-st .up{color:#20bf9f}.bf-big.dn,.bf-st .dn{color:#f06b79}
+.bf-st small{font-size:11.5px;color:var(--muted)}.bf-sub{font-size:11px;color:#6f7b8f}
+.bf-open{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:#f0b90b}.bf-open i{width:7px;height:7px;border-radius:50%;background:#f0b90b;animation:bfPulse 1.2s ease-in-out infinite}
+.bf-ring{width:44px;height:44px}.bf-rb{fill:none;stroke:rgba(255,255,255,.1);stroke-width:4}.bf-rf{fill:none;stroke-width:4;stroke-linecap:round}.bf-rf.up{stroke:#20bf9f}.bf-rf.mid{stroke:#f0b90b}
+.bf-ring text{font:700 11px system-ui;fill:var(--text);text-anchor:middle}
+.bf-wire{flex:0 0 46px;align-self:center;height:20px;overflow:visible}
+.bf-w0{fill:none;stroke:rgba(255,255,255,.1);stroke-width:2}
+.bf-w1{fill:none;stroke:var(--bc);stroke-width:2;stroke-dasharray:60;stroke-dashoffset:60;animation:bfDraw .5s ease forwards;animation-delay:var(--d)}
+.bf-on .bf-w1{stroke-dasharray:6 6;stroke-dashoffset:0;animation:bfFlow .8s linear infinite;animation-delay:0s}
+.bf-spark{fill:#fff;opacity:0}.bf-on .bf-spark{opacity:.9;filter:drop-shadow(0 0 3px var(--bc))}
+@keyframes bfIn{to{opacity:1;transform:none}}
+@keyframes bfSpin{to{transform:rotate(360deg)}}
+@keyframes bfPulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes bfDraw{to{stroke-dashoffset:0}}
+@keyframes bfFlow{to{stroke-dashoffset:-12}}
+@media (prefers-reduced-motion:reduce){.bf *{animation:none!important}.bf-st{opacity:1;transform:none}}
+/* en el panel angosto la línea de producción va de arriba a abajo (cada estación en una fila) */
+.bf-wrap{container-type:inline-size}
+@container (max-width:620px){
+  .bf{flex-direction:column;align-items:stretch;overflow:visible}
+  .bf-st,.bf-motor{flex:none;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:4px 10px;padding:10px 12px;text-align:left;min-width:0}
+  .bf-st .bf-big{font-size:19px}.bf-st small{flex:1 1 auto}.bf-sub,.bf-open{flex-basis:100%;padding-left:52px}
+  .bf-gears{width:46px;height:36px}.bf-ic{width:42px}.bf-ring{width:42px;height:42px}
+  .bf-mt{flex:1 1 auto}.bf-led{flex-basis:100%;padding-left:56px}
+  .bf-wire{flex:0 0 22px;width:20px;height:22px;align-self:center;transform:rotate(90deg)}
+}
