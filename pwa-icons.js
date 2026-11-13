@@ -15,6 +15,9 @@
     ['i31', '31 Olas azules'], ['i32', '32 Llamas rojas'], ['i33', '33 Ópalo'],
     ['i34', '34 Camuflaje dorado'], ['i35', '35 Neón sobre negro']
   ];
+  const ua = navigator.userAgent || '';
+  const mobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.userAgentData && navigator.userAgentData.mobile) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const pc = !mobileUA && matchMedia('(pointer: fine)').matches;
   const key = 'cct_app_icon_v1', valid = id => variants.some(v => v[0] === id);
   const query = new URLSearchParams(location.search).get('appIcon');
   let saved; try { saved = localStorage.getItem(key); } catch {}
@@ -31,9 +34,12 @@
     if (!valid(id)) return false;
     selected = id;
     try { localStorage.setItem(key, id); } catch {}
-    link('manifest', 'appManifest', `manifests/${id}.webmanifest`);
+    // En PC: solo el logo, sin fondo y llenando el lienzo (barra de tareas, escritorio, pestaña y favoritos).
+    // En celular/tablet todo sigue igual (iconos con fondo y maskable).
+    link('manifest', 'appManifest', pc ? `manifests/pc/${id}.webmanifest` : `manifests/${id}.webmanifest`);
     link('apple-touch-icon', 'appTouchIcon', `icons/${id}-180.png`, '180x180');
-    link('icon', 'appFavicon', `icons/${id}-192.png`, '192x192');
+    link('icon', 'appFavicon', pc ? `icons/pc/${id}-192.png` : `icons/${id}-192.png`, '192x192');
+    if (pc) link('icon', 'appFavicon32', `icons/pc/${id}-32.png`, '32x32');
     try { window.dispatchEvent(new Event('cct-theme')); } catch {}
     document.querySelectorAll('[data-app-icon]').forEach(img => { img.src = `icons/${id}-192.png`; });
     return true;
