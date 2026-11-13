@@ -163,6 +163,9 @@ function vortexItems(x) {
   if (x.claudioServer && x.claudioServer.summary) { const t = clip(typeof x.claudioServer.summary === 'string' ? x.claudioServer.summary : JSON.stringify(x.claudioServer.summary), 900); out.push({ key: 'cl:summary', type: 'resumen de Claudio', title: 'Claudio (bot autónomo)', text: t, verbs: { c: 'recibió', u: 'recibió' } }); }
   const jr = list(parseJSON(unpack(x.journal && x.journal.items)));
   for (const j of jr) if (j && j.id) out.push({ key: 'j:' + j.id, type: 'operación', title: `${String(j.side || '').toUpperCase()} ${symName(j.sym)} · ${num(j.pnl)} USD`, text: journalText(j), at: toMs(j.tClose || j.tOpen), verbs: { c: 'cerró', u: 'anotó en' } });
+  // Vigía de VORTEX: lo que encontró en la revisión diaria y lo que decidiste (aprobar, descartar) → el cerebro aprende qué te importa
+  const VG = { nuevo: 'vio de nuevo', aprobado: 'aprobó el cambio', descartado: 'descartó', resuelto: 'quedó resuelto' };
+  for (const v of list(x.vigia && x.vigia.items)) if (v && v.id) out.push({ key: 'vg:' + v.id, type: 'revisión de la app', title: `${v.area || 'App'} · ${v.title || ''}`, text: lines([v.detail, v.fix ? 'Propuesta: ' + v.fix : '', `Prioridad ${v.sev || 'media'} · visto ${v.seen || 1} vez/veces`]), quiet: true, flag: v.status || 'nuevo', at: toMs(v.first), verbs: { c: 'detectó', flag: f => VG[f] || 'actualizó' } });
   return out;
 }
 
@@ -240,8 +243,8 @@ async function run() {
       if (!d) return false; items = novahubItems(d);
     } else {
       const base = sdb.collection('users').doc(su.uid).collection('data'), g = async id => (await base.doc(id).get()).data() || null;
-      const [cct, scripts, botlab, botlabServer, claudioServer, journal] = await Promise.all(['cct_mobile', 'scripts', 'botlab', 'botlab_server', 'claudio_server', 'journal'].map(g));
-      items = vortexItems({ state: vortexState(cct), scripts, botlab, botlabServer, claudioServer, journal });
+      const [cct, scripts, botlab, botlabServer, claudioServer, journal, vigia] = await Promise.all(['cct_mobile', 'scripts', 'botlab', 'botlab_server', 'claudio_server', 'journal', 'vigia'].map(g));
+      items = vortexItems({ state: vortexState(cct), scripts, botlab, botlabServer, claudioServer, journal, vigia });
       const bp = parseJSON(unpack(botlab && botlab.items)), bots = list(Array.isArray(bp) ? bp : bp && bp.bots), linkSt = {};
       for (const link of loadLinks()) { // crea el cerebro del bot si todavía no existe (no toca uno que ya tengas)
         const bot = matchBot(link, bots);

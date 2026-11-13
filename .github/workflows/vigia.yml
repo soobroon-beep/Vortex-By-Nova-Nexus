@@ -1,0 +1,36 @@
+name: Vigía de VORTEX (revisión diaria)
+# Cada mañana abre VORTEX en PC y celular con un navegador real, prueba botones, fluidez, carga y lo que corre por detrás
+# (tareas automáticas, Screener, pruebas). La IA (Groq, gratis) explica cada hallazgo y propone el cambio.
+# Todo queda en TU cuenta: lo apruebas o descartas en VORTEX › Configuración › Vigía. Nada se cambia solo.
+# El registro solo muestra conteos (el repo es público). Capturas: en los artefactos de cada ejecución (7 días).
+on:
+  schedule: [{cron: '17 13 * * *'}]   # 7:17 a. m. en Veracruz
+  push:
+    branches: [main]
+    paths: ['*.js', '*.css', '*.html', 'scripts/vigia.js', '.github/workflows/vigia.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency: {group: vigia, cancel-in-progress: true}
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12 playwright@1 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Esperar a que se publique (si vino de un cambio)
+        if: github.event_name == 'push'
+        run: sleep 150
+      - name: Revisar la app
+        run: node scripts/vigia.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GROQ_KEY: ${{ secrets.GROQ_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: capturas-vigia, path: 'vigia-*.png', retention-days: 7, if-no-files-found: ignore}

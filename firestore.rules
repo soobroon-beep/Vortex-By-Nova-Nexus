@@ -7,7 +7,7 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null
                             && request.auth.uid == userId
-                            && docId in ['cct_mobile', 'scripts', 'botlab', 'claudio', 'exchanges', 'radar', 'journal']
+                            && docId in ['cct_mobile', 'scripts', 'botlab', 'claudio', 'exchanges', 'radar', 'journal', 'vigia']
                             && request.resource.size() < 1000000;   // tope de Firestore: 1 MiB por documento
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
