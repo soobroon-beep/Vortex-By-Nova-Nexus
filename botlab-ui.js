@@ -90,7 +90,12 @@
   const userOps = sp => { const o = []; for (const g of [sp.entry, sp.exit]) for (const side of ['long', 'short']) for (const c of g[side] || []) for (const x of [c.a, c.b]) if (x && x.k === 'user') o.push(x); return o; };
   async function execute(spec, bars, extra) { // descarga velas cerradas y corre el backtest (en el navegador, sin tocar el gráfico)
     const sp = B.normalizeSpec(spec);
-    if (Array.isArray(sp.basket) && sp.basket.length) { if (userOps(sp).length) throw new Error('Una cesta de monedas no puede usar tus indicadores propios (aún)'); const by = {}; for (const sym of sp.basket) by[sym] = await candlesFor(sym, sp.interval, bars); await new Promise(r => setTimeout(r, 20)); return B.backtestBasket(by, sp, Object.assign({nova: window.NovaNexus}, extra || {})); }
+    if (Array.isArray(sp.basket) && sp.basket.length) { // cesta: cada moneda con sus propias velas y, si el bot usa tus indicadores, con sus señales en ESA moneda
+      const uoB = userOps(sp), by = {}, users = {}; for (const sym of sp.basket) {
+        by[sym] = await candlesFor(sym, sp.interval, bars); if (!uoB.length) continue; const u = {};
+        for (const sid of [...new Set(uoB.map(x => x.sid))]) { const r = await userSources(sid, sym, sp.interval, bars); for (const x of uoB.filter(y => y.sid === sid)) { const f = window.CCTBotOpt.pickSource(r.sources, x, r.n); if (f) u[sid + '|' + x.src] = f.series; } }
+        users[sym] = u; }
+      await new Promise(r => setTimeout(r, 20)); return B.backtestBasket(by, sp, Object.assign({nova: window.NovaNexus}, extra || {}, uoB.length ? {per: sym => Object.assign({nova: window.NovaNexus, user: users[sym]}, extra || {})} : {})); }
     const candles = await candlesFor(sp.symbol, sp.interval, bars); if (candles.length < 60) throw new Error(`Binance devolvió solo ${candles.length} velas de ${sp.symbol} ${sp.interval}`);
     const uo = userOps(sp), user = {}, uw = []; for (const sid of [...new Set(uo.map(x => x.sid))]) { const r = await userSources(sid, sp.symbol, sp.interval, bars); for (const x of uo.filter(y => y.sid === sid)) { const f = window.CCTBotOpt.pickSource(r.sources, x, r.n); if (!f) throw new Error(`Tu indicador «${x.sname || sid}» ya no tiene la línea «${x.sl || x.src}» en ${sp.symbol} ${sp.interval}`); if (f.none) uw.push(`La señal «${x.sl || x.src}» de tu indicador no apareció en estas velas.`); user[sid + '|' + x.src] = f.series; } if (!r.complete) uw.push(`Tu indicador «${(uo.find(y => y.sid === sid) || {}).sname || sid}» no se pudo ejecutar por completo (funciones no soportadas): sus señales pueden faltar.`); }
     await new Promise(r => setTimeout(r, 20)); const res = B.backtest(candles, sp, Object.assign({nova: window.NovaNexus, user}, extra || {})); if (uo.length) res.warnings.push(...uw, `Este bot usa tu indicador «${uo[0].sname || uo[0].sid}». Cada señal se toma en la vela donde nace, sin mirar al futuro, pero el laboratorio no puede comprobar que tu script no repinte ni que no use datos futuros (por ejemplo con request.security). Confírmalo en paper trading antes de fiarte del resultado.`); const t0 = res.equity[0].t, cs = candles.filter(c => c.t >= t0); if (cs.length) res.bhCurve = compact(cs.map(c => [c.t, sp.risk.capital * c.c / cs[0].o]), 240); return res;
@@ -781,7 +786,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const wk = Date.now() - 7 * 864e5, changes = b.versions.filter(v => v.v > 1 && v.at > wk && (v.state === 'principal' || v.state === 'anterior')).length;
     const drift = lv && ln >= 15 && ((lv.winRate != null && m.winRate != null && m.winRate - lv.winRate > 15) || (lv.retPct < 0 && m.retPct > 0));
     if (changes >= 2) return ['calma', 'Déjalo correr: ya no le cambies por ahora', `Lleva ${changes} cambios en los últimos 7 días. Cada cambio reinicia lo que sabemos de él: deja correr la v${b.mainV} al menos ${Math.max(20, ln + 15)} operaciones en vivo antes de tocarlo otra vez.`];
-    if (oos < 0 && m.retPct < 0) return ['cambiar', 'Necesita cambios', `Pierde en todo el periodo (${pct(m.retPct)}) y en los datos que no vio (${pct(oos)}). Prueba los consejos de abajo, de uno en uno, y quédate solo con los que de verdad mejoren.`];
+    if (oos < 0 && m.retPct < 0) return ['cambiar', 'Necesita cambios', `Pierde en todo el periodo (${pct(m.retPct)}) y en los datos que no vio (${pct(oos)}). Aquí solo te salen los consejos que ya comprobé con sus velas que lo mejoran; si no hay, pide ideas nuevas a la IA.`];
     if (m.n < 30 || (lv && ln < 15)) return ['probar', 'Pruébalo más antes de cambiarlo', `${lv ? `En vivo lleva ${ln} operación(es) cerrada(s)` : `En la prueba hizo ${m.n} operaciones`}: todavía es poco para saber si funciona. Déjalo correr${lv ? '' : ' en vivo'} hasta unas ${lv ? 20 : 30} operaciones antes de hacer cambios grandes.`];
     if (drift) return ['revisar', 'En vivo va peor que en la prueba: solo cambios mínimos', `En vivo acierta ${lv.winRate == null ? '—' : Math.round(lv.winRate) + ' %'} contra ${m.winRate == null ? '—' : Math.round(m.winRate) + ' %'} en la prueba. Ajusta solo stop u objetivo y vuelve a revisar en unos días; no cambies las reglas de entrada todavía.`];
     if (oos > 0 && pf >= 1.3) return ['correr', 'Va bien: déjalo correr así', `Gana también en los datos que no vio (${pct(oos)}) con factor de beneficio ${num(pf, 2)}. No le muevas nada; revisa otra vez cuando lleve más operaciones${lv ? ` (ahora ${ln} en vivo)` : ''}.`];
@@ -793,7 +798,10 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const tested = b.tipTests || {}, inTest = t => tested[tipKey(t)] || TQ.has(b.id + '|' + tipKey(t));
     const aiTips = ai && CO ? (ai.tips || []).filter(t => CO.validTip(sp, t) && !tips.some(x => JSON.stringify(x.patch) === JSON.stringify(t.patch)) && !ignoredTip(b, t)) : [];
     const card = (t, k) => `<div class="bl-tip k-${esc(t.kind || 'ia')}"><div class="bl-tip-h"><span class="bl-tip-k">${esc({reglas: 'Reglas', riesgo: 'Riesgo', filtro: 'Filtro', temporalidad: 'Temporalidad', activo: 'Activo'}[t.kind] || 'IA')}</span><b>${esc(t.title)}</b>${ignRec(b, t) ? '<span class="bl-tip-back">Volvió: sigue fallando en esto</span>' : ''}</div><p>${esc(t.why)}</p><div class="bl-tip-b"><button class="bl-btn" data-a="tip" data-k="${k}">Probar este consejo</button><button class="bl-btn ghost" data-a="tipIgnore" data-k="${k}" title="Quitar este consejo para que salgan otros">Ignorar consejo</button></div></div>`;
-    T._tips = tips.concat(aiTips).filter(t => !inTest(t));
+    const allTips = tips.concat(aiTips).filter(t => !inTest(t)), run0 = runOf(b), scr = b.tipScreen && run0 && b.tipScreen.run === run0.id ? b.tipScreen : null;
+    if (run0 && allTips.length) screenTips(b, allTips);
+    const checking = allTips.filter(t => !scr || !((tipKey(t) in scr.ok) || (tipKey(t) in scr.bad))).length, dropped = scr ? allTips.filter(t => tipKey(t) in scr.bad).length : 0;
+    T._tips = allTips.filter(t => scr && tipKey(t) in scr.ok).map(t => Object.assign({}, t, {why: t.why + ' Ya lo probé con tus velas: ' + scr.ok[tipKey(t)].say}));
     const pend = [...TQ.values()].filter(x => x.bid === b.id), done = Object.entries(tested).sort((x, z) => (z[1].at || 0) - (x[1].at || 0));
     const L = {mejora: ['Sí mejora', 'up'], igual: ['Casi igual', 'eq'], empeora: ['Empeora', 'dn'], malo: ['No sirve así', 'dn']};
     const res = ([k, x]) => x.auto ? `<details class="tt tt-auto ${(L[x.lvl] || L.igual)[1]}"><summary><span class="tt-v">${(L[x.lvl] || L.igual)[0]}</span><b>${esc(x.title)}</b><small>se quedó la v${x.base}</small></summary><p class="tt-say">${esc(x.say || '')}</p><ul class="tt-why">${(x.why || []).map(w => `<li><span>${esc(w[0])}</span><b class="${w[3] || ''}">${esc(w[1])} → ${esc(w[2])}</b></li>`).join('')}</ul><div class="bl-card-b"><button class="bl-mini" data-a="tipApply" data-k="${esc(k)}">Aplicar de todos modos</button><button class="bl-mini" data-a="tipDrop" data-k="${esc(k)}">Quitar de la lista</button></div></details>` : `<div class="tt ${(L[x.lvl] || L.igual)[1]}"><div class="tt-h"><span class="tt-v">${(L[x.lvl] || L.igual)[0]}</span><b>${esc(x.title)}</b><small>v${x.v} · probado ${dt(x.at)}</small></div>
@@ -807,7 +815,9 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
         ${ap.length ? `<div class="bl-tapp"><small>Consejos aplicados</small><div>${ap.map(v => `<span class="bl-tapp-c ${v.state === 'descartada' ? 'off' : 'on'}" title="${esc(dt(v.at))}"><i></i>v${v.v} · ${esc(String(v.note || '').replace(/^Consejo: /, ''))}</span>`).join('')}</div></div>` : ''}
         ${sm ? `<div class="bl-sum l-${sm.level}"><b>${esc(sm.title)}</b>${sm.lines.map(l => `<p>${esc(l)}</p>`).join('')}</div>` : ''}
         ${ai && ai.text ? `<div class="bl-aisum"><small>Lo que vio la IA</small>${mdLite(ai.text)}</div>` : ''}
-        ${T._tips.length ? `<div class="bl-tips">${T._tips.map(card).join('')}</div>` : (run && !done.length && !pend.length ? '<p class="bl-dim">Con sus resultados actuales no veo un cambio claro que valga la pena. Puedes pedir un análisis a la IA o probarlo en otras monedas.</p>' : '')}
+        ${checking ? `<div class="tt-q"><div class="tt-qi probando"><span class="bl-spin"></span><b>Revisando qué consejos sí le sirven a este bot</b><small>Probando ${checking} con sus velas reales…</small></div></div>` : ''}
+        ${T._tips.length ? `<div class="bl-tips">${T._tips.map(card).join('')}</div>` : (run && !checking && !done.length && !pend.length ? '<p class="bl-dim">Probé los consejos posibles con sus velas reales y ninguno lo mejora: déjalo correr así. Puedes pedir un análisis a la IA para buscar ideas nuevas.</p>' : '')}
+        ${dropped && !checking ? `<small class="bl-dim">${dropped} consejo(s) revisado(s) no le sirven a este bot y no se muestran.</small>` : ''}
         <div class="bl-actions">${run ? `<button class="bl-btn ghost" data-a="coachAi" ${b.coachBusy ? 'disabled' : ''}>${b.coachBusy ? 'La IA está analizando…' : ai ? 'Pedir más consejos a la IA' : 'Analizar a fondo con IA'}</button>` : `<button class="bl-btn" data-a="quickRun">Probar para recibir consejos</button>`}${run && !b.sweeps ? `<button class="bl-btn ghost" data-a="sweep">¿En qué monedas funciona mejor?</button>` : ''}</div>
         ${b.coachErr ? note('⚠ ' + b.coachErr, 'warn') : ''}</div>`;
     if (run && CO && LLM && !ai && !b.coachBusy && b.coachTried !== b.mainV) { b.coachTried = b.mainV; coachAi(b, true); }
@@ -833,9 +843,34 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     else { lvl = 'igual'; say = `La diferencia es muy chica (${dO >= 0 ? '+' : '−'}${num(Math.abs(dO), 1, 1)} puntos en lo que no vio): no vale la pena el cambio salvo que te guste por otra razón.`; }
     return {lvl, say, why};
   }
+  /* ───────── Solo consejos que de verdad le sirven a ESTE bot ─────────
+     Antes de mostrar un consejo se prueba en silencio con las velas reales del bot (sus monedas, su temporalidad, sus indicadores)
+     contra la versión actual. Solo se muestran los que mejoran en los datos que no vio; los genéricos o que no le aplican se quedan fuera. */
+  const SCR = new Map(); let scrChain = Promise.resolve();
+  const sameSpec = (a, b2) => { try { return JSON.stringify(B.normalizeSpec(a)) === JSON.stringify(B.normalizeSpec(b2)); } catch { return false; } };
+  function screenTips(b, list) {
+    const run = runOf(b); if (!run || !list.length) return; const sc = b.tipScreen && b.tipScreen.run === run.id ? b.tipScreen : (b.tipScreen = {run: run.id, ok: {}, bad: {}, at: Date.now()});
+    const todo = list.filter(t => !(tipKey(t) in sc.ok) && !(tipKey(t) in sc.bad) && !SCR.has(b.id + '|' + tipKey(t))); if (!todo.length) return;
+    for (const t of todo) SCR.set(b.id + '|' + tipKey(t), 1);
+    scrChain = scrChain.then(async () => {
+      for (const t of todo) {
+        const k = tipKey(t);
+        try {
+          const sp = t.spec ? B.normalizeSpec(t.spec) : CO.apply(mainSpec(b), t.patch);
+          if (!B.validateSpec(sp).ok || sameSpec(sp, mainSpec(b))) sc.bad[k] = 'no cambia nada en este bot';
+          else { const res = await execute(sp, run.reqBars || 3000), r = summarize(res, 0, run.reqBars || 3000), J = judge(r, run);
+            if (r.metrics.n === run.metrics.n && Math.abs(r.metrics.net - run.metrics.net) < 1e-6) sc.bad[k] = 'no cambia el resultado';
+            else if (J.lvl === 'mejora') sc.ok[k] = {say: J.say, why: J.why}; else sc.bad[k] = J.say; }
+        } catch (e) { sc.bad[k] = 'no se pudo probar: ' + String(e.message || e).slice(0, 80); }
+        SCR.delete(b.id + '|' + k); save(); if (view === 'bot' && cur === b.id && tab === 'est') render();
+      }
+    });
+  }
   function testTip(b, t) {
     const key = t.manual ? 'manual:' + Date.now() : tipKey(t), qk = b.id + '|' + key; if (TQ.has(qk)) return;
     let sp; try { sp = t.spec ? B.normalizeSpec(t.spec) : CO.apply(mainSpec(b), t.patch); } catch (e) { return toast('El consejo no es aplicable: ' + (e.message || e)); } const v = B.validateSpec(sp); if (!v.ok) return toast('No se puede probar: ' + v.errors[0]);
+    // un consejo que no cambia nada (el bot ya lo tiene) antes salía «Casi igual» al instante sin probar nada: ahora se avisa y se quita de la lista
+    if (JSON.stringify(B.normalizeSpec(sp)) === JSON.stringify(B.normalizeSpec(mainSpec(b)))) { if (!t.manual) { b.ignoredTips = (b.ignoredTips || []).filter(z => (typeof z === 'string' ? z : z.k) !== tipKey(t)); b.ignoredTips.push({k: tipKey(t), at: Date.now(), run: (runOf(b) || {}).id, n: liveClosed(b)}); touch(b); render(); } return toast(`«${t.title}»: tu bot ya funciona así, no hay nada que probar.`); }
     const job = {bid: b.id, key, title: t.title, st: 'cola'}; TQ.set(qk, job); render();
     tipChain = tipChain.then(async () => {
       job.st = 'probando'; if (view === 'bot' && cur === b.id) render();
@@ -844,7 +879,8 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
         let m = m0; if (!m || Date.now() - (m.t || 0) > iv) { job.msg = 'Actualizando la versión actual con las velas de hoy…'; if (view === 'bot' && cur === b.id) render(); m = await runBot(b, b.mainV, bars); }
         const nv = Math.max(...b.versions.map(x => x.v)) + 1; b.versions.push({v: nv, spec: sp, at: Date.now(), note: t.manual ? t.title : 'Consejo: ' + t.title, origin: t.manual ? 'edición tuya' : 'consejo de la IA', state: 'prueba', base: b.mainV});
         job.msg = 'Probando el cambio con velas reales…'; if (view === 'bot' && cur === b.id) render();
-        const r = await runBot(b, nv, bars), J = judge(r, m), good = J.lvl === 'mejora'; ver(b, nv).state = good ? 'candidata' : 'descartada'; J.auto = !good;
+        const tStart = Date.now(), r = await runBot(b, nv, bars); if (Date.now() - tStart < 900) await new Promise(z => setTimeout(z, 900 - (Date.now() - tStart))); // que se vea que sí se probó
+        const J = judge(r, m), good = J.lvl === 'mejora'; if (r.metrics.n === m.metrics.n && Math.abs(r.metrics.net - m.metrics.net) < 1e-6) { J.lvl = 'igual'; J.say = 'Este cambio no mueve nada en tu bot (mismas operaciones y mismo resultado): no le aplica.'; } ver(b, nv).state = good ? 'candidata' : 'descartada'; J.auto = !good;
         if (!good && !t.manual) { const k2 = tipKey(t), rr = runOf(b); b.ignoredTips = (b.ignoredTips || []).filter(z => (typeof z === 'string' ? z : z.k) !== k2); b.ignoredTips.push({k: k2, at: Date.now(), run: rr && rr.id, n: liveClosed(b)}); }
         (b.tipTests = b.tipTests || {})[key] = Object.assign({v: nv, base: b.mainV, title: t.title, at: Date.now(), tip: t.manual ? null : t}, J);
         log(b, t.manual ? 'edición' : 'consejo', `Probado «${t.title}» (v${nv}): ${({mejora: 'sí mejora, listo para aplicar', igual: 'casi igual, se queda la versión actual', empeora: 'empeora, se queda la versión actual', malo: 'no sirve así, se queda la versión actual'})[J.lvl]}.`);
