@@ -12,7 +12,8 @@
   const joinHex = (hex, op) => op >= 100 ? hex : hex + Math.round(op / 100 * 255).toString(16).padStart(2, '0');
   let dlg = null;
 
-  function close() { if (dlg) { document.removeEventListener('keydown', dlg.onKey, true); dlg.el.remove(); dlg = null; } }
+  /* cancel: cerrar SIN aceptar → si hubo vista previa en vivo, se regresa todo como estaba */
+  function close(cancel = true) { if (dlg) { const d = dlg; dlg = null; document.removeEventListener('keydown', d.onKey, true); clearTimeout(d.pvT); d.el.classList.add('cfg-closing'); setTimeout(() => d.el.remove(), 160); if (cancel && d.cfg.onCancel) try { d.cfg.onCancel(); } catch (e) {} } }
 
   function groupItems(inputs) { // grupos en orden de aparición; sin grupo primero
     const names = [], by = new Map();
@@ -93,7 +94,7 @@
     close();
     const vals = {}; for (const i of cfg.inputs) vals[i.key] = cfg.values && cfg.values[i.key] !== undefined ? cfg.values[i.key] : i.value;
     const st = JSON.parse(JSON.stringify(cfg.style || {})), vis = JSON.parse(JSON.stringify(cfg.vis || {}));
-    const el = document.createElement('div'); el.className = 'cfg-overlay';
+    const el = document.createElement('div'); el.className = 'cfg-overlay' + (cfg.onPreview ? ' cfg-live' : '');
     el.innerHTML = `<div class="cfg-dlg" role="dialog" aria-modal="true" aria-label="Configuración"><div class="cfg-head"><strong>${esc(cfg.title)}</strong><button class="cfg-x" aria-label="Cerrar">✕</button></div>
       <div class="cfg-tabs">${[['in', 'Entradas de datos'], ['st', 'Estilo'], ['vi', 'Visibilidad']].filter(t => !cfg.tabs || cfg.tabs.includes(t[0])).map((t, k) => `<button data-tab="${t[0]}" class="${k ? '' : 'on'}">${t[1]}</button>`).join('')}</div>
       ${cfg.note ? `<p class="cfg-note">${esc(cfg.note)}</p>` : ''}<div class="cfg-body"></div><div class="cfg-foot"><button class="cfg-btn ghost" data-act="reset">Por defecto</button><span class="cfg-sp"></span><button class="cfg-btn" data-act="cancel">Cancelar</button><button class="cfg-btn cfg-ok" data-act="ok">Aceptar</button></div></div>`;
@@ -125,22 +126,25 @@
         const u = t.dataset.vu, p = t.dataset.vp; vis[u] = vis[u] || {}; vis[u][p] = p === 'on' ? t.checked : +t.value;
       }
     };
-    el.addEventListener('input', onEdit); el.addEventListener('change', onEdit);
+    const result = () => {
+      const changed = {}; for (const i of cfg.inputs) if (JSON.stringify(vals[i.key]) !== JSON.stringify(i.def)) changed[i.key] = vals[i.key];
+      const clean = o => { const r = {}; for (const g of Object.keys(o)) { const m = {}; for (const k of Object.keys(o[g] || {})) if (Object.keys(o[g][k]).length) m[k] = o[g][k]; if (Object.keys(m).length) r[g] = m; } return r; };
+      const visClean = {}; for (const u of Object.keys(vis)) { const v = vis[u], d = UNITS.find(x => x[0] === u); if (v.on === false || (v.min != null && v.min !== d[2]) || (v.max != null && v.max !== d[3])) visClean[u] = v; }
+      return JSON.parse(JSON.stringify({inputs: changed, style: clean(st), vis: visClean}));
+    };
+    // vista previa en vivo: cada cambio se ve en el gráfico detrás de la ventana; «Aceptar» lo guarda y «Cancelar» lo regresa
+    const preview = () => { if (!cfg.onPreview || !dlg) return; clearTimeout(dlg.pvT); dlg.pvT = setTimeout(() => { if (dlg && dlg.el === el) try { cfg.onPreview(result()); } catch (e) {} }, 140); };
+    el.addEventListener('input', e => { onEdit(e); preview(); }); el.addEventListener('change', e => { onEdit(e); preview(); });
     el.addEventListener('click', e => {
       const t = e.target;
       if (t === el || t.closest('.cfg-x') || t.dataset.act === 'cancel') return close();
       if (t.dataset.tab) { tab = t.dataset.tab; draw(); return; }
       if (t.classList.contains('cfg-tip-btn')) { const row = t.closest('.cfg-row'); let tp = row.nextElementSibling; if (tp && tp.classList.contains('cfg-tip')) tp.remove(); else { tp = document.createElement('div'); tp.className = 'cfg-tip'; tp.textContent = t.dataset.tip; row.after(tp); } return; }
-      if (t.dataset.act === 'reset') { for (const i of cfg.inputs) vals[i.key] = i.def; for (const k of Object.keys(st)) delete st[k]; for (const k of Object.keys(vis)) delete vis[k]; draw(); return; }
-      if (t.dataset.act === 'ok') {
-        const changed = {}; for (const i of cfg.inputs) if (JSON.stringify(vals[i.key]) !== JSON.stringify(i.def)) changed[i.key] = vals[i.key];
-        const clean = o => { const r = {}; for (const g of Object.keys(o)) { const m = {}; for (const k of Object.keys(o[g] || {})) if (Object.keys(o[g][k]).length) m[k] = o[g][k]; if (Object.keys(m).length) r[g] = m; } return r; };
-        const visClean = {}; for (const u of Object.keys(vis)) { const v = vis[u], d = UNITS.find(x => x[0] === u); if (v.on === false || (v.min != null && v.min !== d[2]) || (v.max != null && v.max !== d[3])) visClean[u] = v; }
-        close(); cfg.onApply({inputs: changed, style: clean(st), vis: visClean});
-      }
+      if (t.dataset.act === 'reset') { for (const i of cfg.inputs) vals[i.key] = i.def; for (const k of Object.keys(st)) delete st[k]; for (const k of Object.keys(vis)) delete vis[k]; draw(); preview(); return; }
+      if (t.dataset.act === 'ok') { const r = result(); close(false); cfg.onApply(r); }
     });
     const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
-    document.addEventListener('keydown', onKey, true); dlg = {el, onKey}; draw();
+    document.addEventListener('keydown', onKey, true); dlg = {el, onKey, cfg, pvT: 0}; draw();
   }
   const api = {open, close, UNITS, hexOf, joinHex};
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CCTSettings = api;

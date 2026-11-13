@@ -271,7 +271,8 @@ let remoteRev = 0; // versión (rev) más reciente que se sabe que hay en la nub
    antes se usaba siempre el orden de la nube, y si otro dispositivo guardaba al mismo tiempo, el orden que acababas de arrastrar se deshacía. */
 const listSigOf = st => JSON.stringify([st.symbols, st.groups, st.symGroup, st.symColor]);
 let listSig = listSigOf(state);
-const save = () => { tabTouch(); const ls = listSigOf(state); if (ls !== listSig) { listSig = ls; state.listRev = Date.now(); } state.rev = Math.max(Date.now(), (+state.rev || 0) + 1, (+remoteRev || 0) + 1); try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
+let cfgLive = false; // vista previa de una ventana de ajustes: se ve en el gráfico pero no se guarda hasta «Aceptar»
+const save = () => { if (cfgLive) return; tabTouch(); const ls = listSigOf(state); if (ls !== listSig) { listSig = ls; state.listRev = Date.now(); } state.rev = Math.max(Date.now(), (+state.rev || 0) + 1, (+remoteRev || 0) + 1); try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
 
 /* ───────── Utilidades ───────── */
 const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','A'],UNI:['Uniswap','U'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
@@ -286,7 +287,7 @@ const pct = n => !Number.isFinite(n) ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let toastTimer;
-function toast(msg) { const el = $('#toast'); el.textContent = msg; el.style.display = 'block'; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.style.display = 'none', 2400); }
+function toast(msg) { if (cfgLive) return; const el = $('#toast'); el.textContent = msg; el.style.display = 'block'; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.style.display = 'none', 2400); }
 function updateStatus(ok, msg) { $('#connection').textContent = '● ' + msg; $('#connection').className = 'connection ' + (ok ? 'online' : 'offline'); }
 async function getJSON(url, signal) { const r = await fetch(url, {signal}); if (!r.ok) throw Error('Binance HTTP ' + r.status); return r.json(); }
 
@@ -1625,11 +1626,19 @@ const NOVA_SCHEMA = [
 ];
 const novaDef = k => { const e = NOVA_SCHEMA.find(x => x.key === k); return e ? e.def : undefined; };
 function novaP(k) { const v = state.novaParams && state.novaParams[k]; const d = novaDef(k); if (k === 'rulesText') return v ? String(v).split('|').map(x => '• ' + x.trim().replace(/^•\s*/, '')).join('\n') : undefined; return v === undefined ? d : v; }
+/* Ventanas de ajustes con vista previa en vivo: snap() copia lo que se puede cambiar y restore(copia) lo regresa si cancelas */
+function liveCfg(c, snap, restore) {
+  const s0 = snap(); let touched = false;
+  c.onPreview = res => { touched = true; cfgLive = true; try { c.onApply(res); } finally { cfgLive = false; } };
+  c.onCancel = () => { if (touched) try { restore(s0); } catch (e) { console.warn(e); } };
+  return c;
+}
+const jcopy = o => o == null ? o : JSON.parse(JSON.stringify(o));
 function openNovaDialog() {
   const mods = NOVA_GROUPS.flatMap(([t, ks]) => ks.map(k => ({key: 'mod:' + k, title: novaTitle(k), type: 'bool', def: NOVA_DEFAULT.includes(k), value: !!state.indicators[k], group: 'MÓDULOS (ON/OFF)', tooltip: novaDesc(k)})));
   const params = NOVA_SCHEMA.map(e => Object.assign({}, e, {value: state.novaParams[e.key] !== undefined ? state.novaParams[e.key] : e.def}));
   const values = {}; for (const i of mods.concat(params)) values[i.key] = i.value;
-  CCTSettings.open({title: 'Nova Nexus', tabs: ['in'], note: 'Estos son los parámetros que el indicador ya permite cambiar. Para tener TODOS los parámetros del Pine original, pega su código en «Scripts de Pine».', inputs: mods.concat(params), values, plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
+  CCTSettings.open(liveCfg({title: 'Nova Nexus', tabs: ['in'], note: 'Estos son los parámetros que el indicador ya permite cambiar. Para tener TODOS los parámetros del Pine original, pega su código en «Scripts de Pine».', inputs: mods.concat(params), values, plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
     const get = i => res.inputs[i.key] !== undefined ? res.inputs[i.key] : i.def;
     const prevStrat = state.novaParams.strat, strat = NOVA_STRATS[get(params.find(p => p.key === 'strat'))];
     if (strat) {
@@ -1638,7 +1647,8 @@ function openNovaDialog() {
     } else if (prevStrat && NOVA_STRATS[prevStrat] && state.novaSaved) { for (const k of NN_KEYS) state.indicators[k] = !!state.novaSaved[k]; if (!novaOn()) NOVA_DEFAULT.forEach(k => state.indicators[k] = true); state.novaSaved = null; }
     else { for (const i of mods) state.indicators[i.key.slice(4)] = !!get(i); state.novaSaved = null; } const np = {}; for (const i of params) { const v = get(i); if (JSON.stringify(v) !== JSON.stringify(i.def)) np[i.key] = v; } state.novaParams = np;
     save(); renderIndicators(); countIndicators(); calcNova(); calcExtra(); scheduleRender(); toast('Configuración aplicada');
-  }});
+  }}, () => ({ind: jcopy(state.indicators), np: jcopy(state.novaParams), ns: jcopy(state.novaSaved)}),
+  s0 => { state.indicators = s0.ind; state.novaParams = s0.np; state.novaSaved = s0.ns; renderIndicators(); countIndicators(); calcNova(); calcExtra(); scheduleRender(); }));
 }
 function calcNova() {
   const I = state.indicators;
@@ -3213,11 +3223,11 @@ function openStdDialog(key) {
   const meta = indicatorMeta.find(m => m[0] === key), schema = STD_SCHEMA[key], cTitle = isCopy(key) ? stdName(key) : '';
   if (!schema) { toast('Este indicador no tiene parámetros'); return; }
   const inputs = schema.map(([nm, title, type, def, mn, mx, opts]) => Object.assign({key: nm, title, type, def, min: mn, max: mx, value: sp(key, nm), group: type === 'color' || nm === 'width' || nm === 'dash' ? 'ESTILO' : 'PARÁMETROS'}, opts ? {options: opts} : {}));
-  CCTSettings.open({title: cTitle || (meta ? meta[1] : key), tabs: ['in'], note: 'Parámetros del indicador. Las alertas con este indicador siguen usando los valores clásicos.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
+  CCTSettings.open(liveCfg({title: cTitle || (meta ? meta[1] : key), tabs: ['in'], note: 'Parámetros del indicador. Las alertas con este indicador siguen usando los valores clásicos.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
     const q = {}; for (const i of inputs) { let v = res.inputs[i.key]; if (v === undefined) continue; if (i.type === 'string') { if (!i.options.includes(v) || v === i.def) continue; } else if (i.type !== 'color') { v = +v; if (!Number.isFinite(v)) continue; v = Math.max(i.min, Math.min(i.max, v)); if (i.type === 'int') v = Math.round(v); } if (v !== i.def) q[i.key] = v; }
     const sps = Object.assign({}, state.stdParams); if (Object.keys(q).length) sps[key] = q; else delete sps[key]; state.stdParams = sanStdParams(sps);
     save(); if (candles.length) recalc(); scheduleRender(); toast('Configuración aplicada');
-  }});
+  }}, () => jcopy(state.stdParams), s0 => { state.stdParams = s0; if (candles.length) recalc(); scheduleRender(); }));
 }
 function openChartStyle() {
   const cs = cstyle(); let bgDef = '#0b0f18'; try { if (!document.body.classList.contains('light')) throw 0; let n = $('#chartArea'); while (n) { const c = getComputedStyle(n).backgroundColor, m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(c); if (m && (m[4] === undefined || +m[4] > 0)) { bgDef = '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join(''); break; } n = n.parentElement; } } catch { if (!document.body.classList.contains('light')) bgDef = CHART_DEF.bg; }
@@ -3230,11 +3240,11 @@ function openChartStyle() {
     P('hollow', 'Velas alcistas huecas', 'bool', false, 'VELAS'),
     P('cursor', 'Tipo de cursor', 'string', 'Cruz', 'CURSOR', {options: CURSOR_MODES}), P('cross', 'Color del cursor (cruz)', 'color', document.body.classList.contains('light') ? '#0b1220' : '#edf3fc', 'CURSOR'), P('crossA', 'Opacidad del cursor (%)', 'int', 55, 'CURSOR', {min: 5, max: 100}), P('crossS', 'Estilo de línea', 'string', 'Guiones', 'CURSOR', {options: ['Guiones', 'Sólida', 'Puntos']}), P('crossW', 'Grosor (px)', 'int', 1, 'CURSOR', {min: 1, max: 4}),
     P('alertCol', 'Color de la línea', 'color', document.body.classList.contains('light') ? '#5b6678' : '#8a96a8', 'LÍNEA DE ALERTA'), P('alertA', 'Opacidad (%)', 'int', 28, 'LÍNEA DE ALERTA', {min: 5, max: 100}), P('alertS', 'Estilo de línea', 'string', 'Puntos', 'LÍNEA DE ALERTA', {options: ['Puntos', 'Guiones', 'Sólida']}), P('alertW', 'Grosor (px)', 'int', 1, 'LÍNEA DE ALERTA', {min: 1, max: 4}), {key: 'reset', title: 'Restablecer todo a los valores por defecto', type: 'bool', def: false, value: false, group: 'RESTABLECER'}];
-  CCTSettings.open({title: 'Aspecto del gráfico', tabs: ['in'], note: 'Colores, cuadrícula, cursor y línea de las alertas. Se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
+  CCTSettings.open(liveCfg({title: 'Aspecto del gráfico', tabs: ['in'], note: 'Colores, cuadrícula, cursor y línea de las alertas. Se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
     const v = res.inputs, o = {};
     if (!v.reset) for (const i of inputs) { if (i.key === 'reset') continue; const x = v[i.key]; if (x === undefined) continue; const dflt = i.key === 'bg' ? bgDef : i.key === 'grid' ? lineDef : (i.key === 'upBorder' ? (v.up || CHART_DEF.up) : i.key === 'downBorder' ? (v.down || CHART_DEF.down) : i.key === 'upWick' ? (v.up || CHART_DEF.up) : i.key === 'downWick' ? (v.down || CHART_DEF.down) : i.def); if (x !== dflt) o[i.key] = x; }
     state.chartStyle = sanChartStyle(o); save(); scheduleRender(); toast(v.reset ? 'Aspecto restablecido' : 'Aspecto aplicado');
-  }});
+  }}, () => jcopy(state.chartStyle), s0 => { state.chartStyle = s0; scheduleRender(); }));
 }
 function ctypeLabel() { const c = CTYPES.find(x => x[0] === state.ctype) || CTYPES[0]; return I(c[2], 16) + ' ' + c[1]; }
 function syncCtypeBtn() { const b = $('#ctypeBtn'); if (b) b.innerHTML = ctypeLabel(); }
@@ -5108,11 +5118,12 @@ function pineDialogData(p, r) {
 function openPineDialog(sid) {
   const p = state.pine.find(x => x.sid === sid), r = pineRes[sid];
   if (!p) return; if (!r || !r.ok) { toast(r ? 'Error del script: ' + ((r.error && r.error.msg) || 'desconocido') + (r.error && r.error.line ? ' (línea ' + r.error.line + ')' : '') : 'Espera a que termine de calcularse'); return; }
-  CCTSettings.open(Object.assign(pineDialogData(p, r), {onApply: res => {
+  CCTSettings.open(liveCfg(Object.assign(pineDialogData(p, r), {onApply: res => {
     const inChanged = JSON.stringify(res.inputs) !== JSON.stringify(p.inputs || {});
     p.inputs = res.inputs; p.style = res.style; p.vis = res.vis; if (!Object.keys(p.style).length) delete p.style; if (!Object.keys(p.vis).length) delete p.vis;
     save(); if (inChanged) { pineKey = ''; schedulePine(); } renderIndicators(); scheduleRender(); toast('Configuración aplicada');
-  }}));
+  }}), () => ({inputs: jcopy(p.inputs), style: jcopy(p.style), vis: jcopy(p.vis)}),
+  s0 => { const inCh = JSON.stringify(s0.inputs || {}) !== JSON.stringify(p.inputs || {}); for (const k of ['inputs', 'style', 'vis']) { if (s0[k] === undefined) delete p[k]; else p[k] = s0[k]; } if (inCh) { pineKey = ''; schedulePine(); } renderIndicators(); scheduleRender(); }));
 }
 /* ───────── Imagen de referencia de cada script que subes (se genera sola, en este dispositivo) ───────── */
 const PREV_KEY = 'cct_prev_v1', prevBusy = new Set();

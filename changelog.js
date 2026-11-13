@@ -1,5 +1,9 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.29', d: '12 nov 2026', t: 'Ajustes en vivo', items: [
+    'Al configurar un indicador, Nova Nexus, tus scripts Pine o el Aspecto del gráfico, los cambios se ven al momento en el gráfico: la ventana ya no difumina el fondo y se hace a un lado.',
+    'Aceptar guarda; Cancelar (o cerrar la ventana) regresa todo como estaba.'
+  ]},
   {v: '3.28', d: '12 nov 2026', t: 'Apertura espacial y Discord bajo tu control', items: [
     'Nueva animación al abrir o recargar VORTEX: viaje entre estrellas, tu logo con su órbita y un salto a velocidad luz al entrar.',
     'Si apagas «Enviar avisos a Discord», ya no sale nada a Discord (alertas de precio, con indicador, movimientos, bots y radar), tampoco desde el servidor con la app cerrada. Al encenderlo vuelven a llegar.',
