@@ -2287,6 +2287,9 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
   #chartView.pill-fixed .chart-toolbar>button{width:38px!important;min-width:38px!important;height:38px!important;padding:0!important;justify-content:center}
   #chartView.pill-fixed #tfBtn{font-size:12px!important;letter-spacing:-.2px}
   #chartView.pill-fixed .chart-toolbar .pill-favs{flex-direction:column}
+  /* orden de arriba hacia abajo: flecha del menú · tus botones fijados · temporalidad · estrella (hasta abajo, junto al logo) */
+  #chartView.pill-fixed .chart-toolbar>*{order:5}
+  #chartView.pill-fixed #moreBtn{order:1}#chartView.pill-fixed .chart-toolbar .pill-favs{order:2}#chartView.pill-fixed #tfBtn{order:3}#chartView.pill-fixed #favPillBtn{order:4}
   #chartView.pill-fixed #moreBtn svg{transition:transform .25s}
   #chartView.pill-fixed.more-open #moreBtn svg{transform:rotate(180deg)}
 }

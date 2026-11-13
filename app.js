@@ -5661,7 +5661,7 @@ if (window.CCTTrade) {
 }
 /* Puente para exchange.js: documentos privados de tu cuenta (Firestore) y separador de pares */
 window.CCT_split = s => splitSym(s);
-window.CCTCloudPriv = {ready: () => !!(uid && db && fbUser), get: async n => { const sn = await db.doc(`users/${uid}/data/${n}`).get(); return sn.exists ? sn.data() : null; }, set: (n, o) => db.doc(`users/${uid}/data/${n}`).set(o)};
+window.CCTCloudPriv = {uid: () => uid || '', ready: () => !!(uid && db && fbUser), get: async n => { const sn = await db.doc(`users/${uid}/data/${n}`).get(); return sn.exists ? sn.data() : null; }, set: (n, o) => db.doc(`users/${uid}/data/${n}`).set(o)};
 function exSub() { const x = window.CCTExchange && CCTExchange.info(), s = x && CCTExchange.snap(); $$('[data-ex-sub]').forEach(el => { el.textContent = x ? `${x.name} conectado · ${s && s.err ? 'revisa la conexión' : Number.isFinite(s && s.equity) ? 'saldo $' + s.equity.toLocaleString('es-MX', {maximumFractionDigits: 2}) : 'leyendo saldo…'}` : 'Conecta BingX, Binance, Bybit o cualquier otro'; }); }
 if (window.CCTExchange) CCTExchange.onChange(s => { exSub(); if (acctMenu) paintAcctMenu(); if (Number.isFinite(s.equity) && s.equity >= 0 && !s.err && !(state.acct && state.acct.auto === false)) { const v = Math.round(s.equity * 100) / 100, A = state.acct || {}; if (A.cur !== v || !(A.start > 0)) { state.acct = sanAcct({start: A.start > 0 ? A.start : v, cur: v, auto: true}); save(); if (typeof renderAcct === 'function') renderAcct(); } } }); // el saldo real de tu exchange alimenta la barra de saldo de la cuenta
 function renderAccount() {

@@ -7,7 +7,7 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null
                             && request.auth.uid == userId
-                            && docId in ['cct_mobile', 'scripts', 'botlab', 'claudio', 'exchanges', 'radar', 'journal', 'vigia', 'ownai']
+                            && docId in ['cct_mobile', 'scripts', 'botlab', 'claudio', 'exchanges', 'radar', 'journal', 'vigia', 'ownai', 'prefs']
                             && request.resource.size() < 1000000;   // tope de Firestore: 1 MiB por documento
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
@@ -15,6 +15,7 @@ service cloud.firestore {
     // Nova Bot Lab: 'botlab' (tus bots) lo escribe la app; 'botlab_server' (resultados del reentrenamiento) solo lo escribe el trabajo programado con credenciales de servicio (que ignora estas reglas); tú solo puedes leerlo.
     // Claudio: 'claudio' (encendido, interruptor de emergencia, capital) lo escribe la app; 'claudio_server' (la sesión del agente) solo el trabajo programado.
 
+    // 'prefs': el resto de tus ajustes (Nexus Pixel, cuenta demo, avisos de trades, filtros…) para que salgan igual en todos tus dispositivos.
     // 'ownai': tu propia IA (proveedor, modelo y clave): privada, solo tú la lees, para que salga igual en tu PC y tu celular.
     // 'exchanges': tu exchange conectado (API Key para el saldo, Nexus Lens y Operar). Solo tú puedes leerlo o escribirlo.
 

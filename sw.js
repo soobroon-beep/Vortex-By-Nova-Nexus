@@ -1,9 +1,9 @@
 'use strict';
 // Bump this version when changing cached application files. No API responses or account data are cached.
-const CACHE = 'cct-shell-v234';
+const CACHE = 'cct-shell-v235';
 const ROOT = new URL('./', self.location.href);
 const SHELL = ['index.html', 'splash.css', 'splash.js', 'style.css', 'glass.css', 'pwa.css', 'pwa-icons.js', 'pwa.js', 'icons.js',
-  'star-cursor.js', 'data-src.js', 'app.js', 'colorpick.js', 'screener.js', 'firebase-config.js', 'markets.js', 'indicators.js', 'patterns.js', 'channels.js', 'discord-format.js', 'discord.js', 'vigia-panel.js', 'nova-nexus.js', 'catalog.js', 'free-ind.js', 'pine-convert.js', 'risk.js', 'draw-cfg.js', 'pine.js',
+  'star-cursor.js', 'data-src.js', 'app.js', 'colorpick.js', 'screener.js', 'firebase-config.js', 'prefs-sync.js', 'markets.js', 'indicators.js', 'patterns.js', 'channels.js', 'discord-format.js', 'discord.js', 'vigia-panel.js', 'nova-nexus.js', 'catalog.js', 'free-ind.js', 'pine-convert.js', 'risk.js', 'draw-cfg.js', 'pine.js',
   'own-ai.js', 'brain-panel.js', 'pine-draw.js', 'pine-preview.js', 'dock.js', 'pine-settings.js', 'news.js', 'macro.js', 'plans.js', 'derivs.js', 'book.js', 'journal.js', 'trade-engine.js', 'exchange.js', 'trade-watch.js', 'ui-modern.css', 'alert-eval.js', 'radar.js', 'trade.js', 'ai.js', 'llm.js', 'ai-ui.js', 'botlab-engine.js','botlab-optimizer.js','botlab-paper.js','botlab-risk.js', 'botlab-coach.js', 'botlab-pine.js', 'botlab-notify.js', 'botlab-look.js', 'icons/bots/robot.png', 'icons/bots/astronauta.png', 'icons/bots/alien.png', 'icons/bots/cohete.png', 'icons/bots/planeta.png', 'icons/bots/estrella.png', 'icons/bots/ovni.png', 'icons/bots/luna.png', 'icons/bots/cometa.png', 'icons/bots/pulpo.png', 'icons/bots/satelite.png', 'icons/bots/vortice.png', 'botlab-tradechart.js', 'claudio-core.js', 'claudio-candidates.js', 'claudio-ui.js', 'botlab-ui.js', 'fx.js', 'prefs.js', 'sessions.js', 'econbar.js', 'changelog.js', 'push.js', 'lens.html', 'pixel-draw.js', 'pixel-watch.js', 'pixel.js', 'pixel-model.js'];
 const ASSETS = new Set(SHELL.map(p => new URL(p, ROOT).href));
 self.addEventListener('install', event => {

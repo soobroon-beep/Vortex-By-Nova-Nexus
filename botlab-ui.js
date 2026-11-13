@@ -15,6 +15,9 @@
 
   /* ───────── Almacenamiento (local + cuenta) ───────── */
   let S = {v: 1, bots: [], deleted: {}, risk: null}, cloudTimer = 0, cloudStr = '';
+  let cloudFn = null; // si cierras la app justo después de cambiar un bot, el cambio sube a tu cuenta al instante (no se pierde)
+  const flushCloud = () => { if (cloudTimer && cloudFn) { clearTimeout(cloudTimer); cloudTimer = 0; cloudFn(); } };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushCloud(); }); window.addEventListener('pagehide', flushCloud);
   const readLocal = () => { try { const o = JSON.parse(localStorage.getItem(H.key ? H.key() : 'cct_botlab_v1') || 'null'); if (o && Array.isArray(o.bots)) return o; } catch {} return {v: 1, bots: [], deleted: {}}; };
   function merge(a, b) { // une dos copias: gana la versión más reciente de cada bot; los borrados se respetan
     const del = Object.assign({}, a.deleted, b.deleted), map = new Map(); for (const x of [...a.bots, ...b.bots]) { const y = map.get(x.id); if (!y || (x.updatedAt || 0) > (y.updatedAt || 0)) map.set(x.id, x); }
@@ -35,7 +38,7 @@
   function save() {
     try { const D = window.CCT_discordStore && window.CCT_discordStore.get(); S.notify = D && D.url && !(window.CCT_discordOn && !window.CCT_discordOn()) ? {url: D.url, bots: (D.on || {}).bots !== false} : null; } catch {}
     const str = JSON.stringify(S); try { localStorage.setItem(H.key ? H.key() : 'cct_botlab_v1', str); } catch { H.toast && H.toast('No se pudo guardar en este dispositivo (almacenamiento lleno)'); }
-    clearTimeout(cloudTimer); cloudTimer = setTimeout(async () => { const c = H.cloud && H.cloud(); if (!c) return; const s2 = cloudCopy(); if (s2 === cloudStr) return; if (s2.length > 990000) { if (!save.warned) { save.warned = 1; toast('Tus bots ocupan demasiado para guardarse completos en tu cuenta: archiva o elimina algunos.'); } return; } try { await c.set(s2); cloudStr = s2; save.warned = 0; } catch (e) { if (!save.err) { save.err = 1; toast('No se pudieron guardar tus bots en tu cuenta: ' + (e.message || e)); } } }, 1500);
+    clearTimeout(cloudTimer); cloudTimer = setTimeout(cloudFn = async () => { cloudTimer = 0; const c = H.cloud && H.cloud(); if (!c) return; const s2 = cloudCopy(); if (s2 === cloudStr) return; if (s2.length > 990000) { if (!save.warned) { save.warned = 1; toast('Tus bots ocupan demasiado para guardarse completos en tu cuenta: archiva o elimina algunos.'); } return; } try { await c.set(s2); cloudStr = s2; save.warned = 0; } catch (e) { if (!save.err) { save.err = 1; toast('No se pudieron guardar tus bots en tu cuenta: ' + (e.message || e)); } } }, 1500);
   }
   /* Copia ligera para tu cuenta: guarda TODO lo que importa (versiones, ediciones, consejos aplicados, simulaciones, apariencia, historial) y recorta lo que se puede recalcular (detalle de backtests viejos). */
   function cloudCopy() {
