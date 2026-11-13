@@ -9,7 +9,7 @@
   const $ = (s, e) => (e || document).querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const REPO = 'soobroon-beep/Vortex-By-Nova-Nexus';
-  const C = () => window.CCTCloudPriv, isOwner = () => !!(window.CCTPlans && CCTPlans.owner && C() && C().ready());
+  const C = () => window.CCTCloudPriv, isOwner = () => !!(window.CCTPlans && CCTPlans.dev && C() && C().ready());
   let ov = null, st = null, busy = false;
   const when = t => { if (!t) return '—'; const d = Date.now() - t, h = d / 3600e3; return h < 1 ? 'hace ' + Math.max(1, Math.round(d / 6e4)) + ' min' : h < 48 ? 'hace ' + Math.round(h) + ' h' : new Date(t).toLocaleDateString('es-MX', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}); };
   const ms = v => !v ? 0 : typeof v === 'number' ? v : v.toMillis ? v.toMillis() : v.seconds ? v.seconds * 1000 : Date.parse(v) || 0;

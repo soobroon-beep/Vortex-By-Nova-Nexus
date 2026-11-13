@@ -10,7 +10,7 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const load = () => { try { return Object.assign({tier: 'free'}, JSON.parse(localStorage.getItem(LS) || '{}')); } catch { return {tier: 'free'}; } };
   const save = s => { try { localStorage.setItem(LS, JSON.stringify(s)); } catch {} };
-  let st = load(), owner = !!st.own, user = null, ov = null; // owner: se recuerda el último resultado para no parpadear al abrir
+  let st = load(), owner = false, user = null, ov = null; // owner: solo después de comprobar tu sesión con Google (antes se tomaba lo guardado en el dispositivo y otra cuenta podía ver lo de desarrollador un momento)
   const PV_LS = 'cct_plan_view'; // vista previa TEMPORAL: ver la app como Gratis, Plus o Infinity (solo en este dispositivo)
   let pv = (() => { try { const v = localStorage.getItem(PV_LS) || ''; return ['free', 'plus', 'infinity'].includes(v) ? v : ''; } catch { return ''; } })();
 
@@ -28,7 +28,8 @@
   const can = f => RANK[current()] >= RANK[FEATURES[f] || 'free'];
   const lastUid = () => { try { return localStorage.getItem('cct_last_uid') || ''; } catch { return ''; } };
   const real = () => { if (owner) return 'infinity'; const id = user ? user.uid : lastUid(); return id && TIERS[st.tier] && st.uid === id ? st.tier : 'free'; }; // sin sesión: Gratis (mientras carga la sesión se usa el último plan de esa cuenta)
-  const current = () => pv || real();
+  const pvOn = () => (owner && user ? pv : ''); // la vista previa solo existe para el desarrollador (antes cualquiera podía activarla desde el navegador y ver Infinity)
+  const current = () => pvOn() || real();
   const svg = (p, s = 18) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   const CHK = '<path d="m5 12.5 4.5 4.5L19 7.5"/>';
 
@@ -60,6 +61,7 @@
     if (document.body) watch(); else document.addEventListener('DOMContentLoaded', watch);
   }
   function setPreview(t) {
+    if (!(owner && user)) return;
     pv = ['free', 'plus', 'infinity'].includes(t) ? t : '';
     try { if (pv) localStorage.setItem(PV_LS, pv); else localStorage.removeItem(PV_LS); } catch {}
     badge(); if (ov && !ov.hidden) render();
@@ -67,15 +69,15 @@
   }
   function applyTier() {
     const b = document.body; if (!b) return; const cur = current();
-    b.dataset.tier = cur; if (pv) b.dataset.pv = pv; else delete b.dataset.pv;
+    b.dataset.tier = cur; const pp = pvOn(); if (pp) b.dataset.pv = pp; else delete b.dataset.pv;
     const liq = document.getElementById('liqBtn'); // bloqueado: fondo de galaxia (lo pone markLocks); desbloqueado: botón normal
     if (liq) { const prem = !can('liq'); liq.classList.remove('prem-btn'); const tg = liq.querySelector('.prem-tag'); if (tg) tg.hidden = true; liq.title = prem ? 'Mapa de calor de liquidaciones · plan Infinity' : 'Mapa de calor de liquidaciones'; }
     markLocks(); if (root.CCT_planChanged) try { root.CCT_planChanged(cur); } catch {}
-    document.querySelectorAll('[data-pv]').forEach(x => { if (x !== b) x.setAttribute('aria-pressed', String((x.dataset.pv || '') === pv)); });
+    document.querySelectorAll('[data-pv]').forEach(x => { if (x !== b) x.setAttribute('aria-pressed', String((x.dataset.pv || '') === pvOn())); });
     let bn = document.getElementById('pvBanner');
-    if (pv) {
+    if (pvOn()) {
       if (!bn) { bn = document.createElement('div'); bn.id = 'pvBanner'; bn.className = 'pv-banner'; bn.setAttribute('role', 'status'); document.body.appendChild(bn); }
-      bn.innerHTML = `<span>Vista previa · plan <b>${tx(pv)}</b></span><button type="button" data-pv="">Salir</button>`;
+      bn.innerHTML = `<span>Vista previa · plan <b>${tx(pvOn())}</b></span><button type="button" data-pv="">Salir</button>`;
     } else if (bn) bn.remove();
   }
   if (typeof document !== 'undefined') document.addEventListener('click', e => { const b = e.target.closest('button[data-pv]'); if (b) setPreview(b.dataset.pv); });
@@ -84,8 +86,8 @@
   function badge() {
     applyTier();
     const t = TIERS[current()];
-    const dev = owner && !pv; document.querySelectorAll('[data-plan-badge]').forEach(el => { el.className = 'pl-badge ' + (dev ? 'dev' : t.c); el.innerHTML = dev ? svg(DEV_IC, 13) + 'Desarrollador' : svg(t.ic, 13) + esc(t.n); });
-    document.querySelectorAll('[data-plan-sub]').forEach(el => { el.innerHTML = pv ? 'Vista previa de ' + tx(pv) + ' · Salir en Vista de membresía' : owner ? '<span class="pl-tx dev">Desarrollador</span> · acceso total' : !user ? 'Inicia sesión con Google para ver tu plan' : real() !== 'free' ? 'Plan ' + tx(real()) + ' verificado' : st.bx ? 'UID de BingX pendiente de verificar' : 'Gratis, Plus o Infinity'; });
+    const pv = pvOn(), dev = owner && !!user && !pv; document.querySelectorAll('[data-plan-badge]').forEach(el => { el.className = 'pl-badge ' + (dev ? 'dev' : t.c); el.innerHTML = dev ? svg(DEV_IC, 13) + 'Desarrollador' : svg(t.ic, 13) + esc(t.n); });
+    document.querySelectorAll('[data-plan-sub]').forEach(el => { el.innerHTML = pv ? 'Vista previa de ' + tx(pv) + ' · Salir en Vista de membresía' : owner && user ? '<span class="pl-tx dev">Desarrollador</span> · acceso total' : !user ? 'Inicia sesión con Google para ver tu plan' : real() !== 'free' ? 'Plan ' + tx(real()) + ' verificado' : st.bx ? 'UID de BingX pendiente de verificar' : 'Gratis, Plus o Infinity'; });
   }
 
   function col(k) {
@@ -247,5 +249,5 @@
   }
   document.addEventListener('click', e => { if (e.target.closest('[data-plans-open]')) open(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', badge); else badge();
-  root.CCTPlans = {open, close, current, real, can, setPreview, importSaved, verifyYouTube, get user() { return user; }, get owner() { return owner; }, get preview() { return pv; }, FEATURES, setUser, TIERS, links: {youtube: YT, bingx: BX, code: BX_CODE}};
+  root.CCTPlans = {open, close, current, real, can, setPreview, importSaved, verifyYouTube, get user() { return user; }, get owner() { return owner && !!user; }, get dev() { return owner && !!user && !pv; }, get previewOn() { return pvOn(); }, /* dev: herramientas de desarrollador (no en la vista previa de Gratis/Plus/Infinity) */ get preview() { return pvOn(); }, FEATURES, setUser, TIERS, links: {youtube: YT, bingx: BX, code: BX_CODE}};
 })(typeof self !== 'undefined' ? self : this);

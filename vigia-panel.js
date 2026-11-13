@@ -8,7 +8,7 @@
   const $ = (s, e) => (e || document).querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const HOOK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/;
-  const C = () => window.CCTCloudPriv, isOwner = () => !!(window.CCTPlans && CCTPlans.owner && C() && C().ready());
+  const C = () => window.CCTCloudPriv, isOwner = () => !!(window.CCTPlans && CCTPlans.dev && C() && C().ready()); // solo tú y solo en modo desarrollador (no al ver la app como Gratis, Plus o Infinity)
   const TABS = [['nuevo', 'Por decidir'], ['aprobado', 'Aprobados'], ['descartado', 'Descartados'], ['resuelto', 'Resueltos']];
   const SEVN = {alta: 'Alta', media: 'Media', baja: 'Baja'};
   let doc = null, tab = 'nuevo', ov = null, busy = false, open1 = '';
@@ -36,7 +36,7 @@
   const toast = m => { const t = $('#toast'); if (!t) return; t.textContent = m; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => { t.style.display = 'none'; }, 2600); };
 
   function row() { // fila en Configuración (solo para ti)
-    const z = $('#devZone'), dev = !!(window.CCTPlans && CCTPlans.owner); if (z) z.hidden = !dev; // zona de desarrollador: Vigía y Vista de membresía, solo para el creador
+    const z = $('#devZone'), dev = !!(window.CCTPlans && CCTPlans.owner), pv = !!(window.CCTPlans && CCTPlans.preview); if (z) { z.hidden = !dev; z.classList.toggle('pv-on', dev && pv); } // zona de desarrollador: solo para el creador; en vista previa de un plan solo queda el selector para volver
     const r = $('#setVigia'); if (!r) return; const own = isOwner(); r.hidden = !own; if (!own) return;
     const n = (doc && doc.items || []).filter(o => o.status === 'nuevo').length, b = $('.vg-count', r);
     if (b) { b.textContent = n; b.hidden = !n; }
