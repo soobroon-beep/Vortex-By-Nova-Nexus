@@ -37,13 +37,13 @@ function userSeries(spec, candles, scripts) { // ejecuta tus indicadores Pine so
 }
 async function retrainBot(bot, scripts, getCandles, now, brainCtx) {
   const v = bot.versions.find(x => x.v === bot.mainV); if (!v) return {at: now, status: 'error', reason: 'Sin versión principal'};
-  const spec = B.normalizeSpec(v.spec), cyc = bot.cycle || {}, bars = Math.min(8000, Math.max(1500, cyc.bars || 4000));
+  const spec = B.normalizeSpec(v.spec), cyc = cycOf(bot), bars = Math.min(8000, Math.max(1500, cyc.bars || 4000));
   try {
     const candles = await getCandles(spec.symbol, spec.interval, bars); if (candles.length < 300) throw new Error('Pocas velas disponibles (' + candles.length + ')');
     const user = userSeries(spec, candles, scripts), ropts = {nova: globalThis.NovaNexus, user: Object.keys(user).length ? user : null};
     const res = B.backtest(candles, spec, {nova: ropts.nova, user: ropts.user || undefined}), m = res.metrics;
     // aprende con TODAS las monedas que opera el bot (su cesta), no solo con la principal: así junta suficientes operaciones para comprobar una mejora
-    const syms = Array.isArray(spec.basket) && spec.basket.length ? [...new Set([spec.symbol, ...spec.basket])].slice(0, 8) : [spec.symbol], series = [{sym: spec.symbol, C: candles, user: ropts.user}];
+    const syms = learnSyms(spec), series = [{sym: spec.symbol, C: candles, user: ropts.user}];
     for (const sym of syms.slice(1)) { try { const C = await getCandles(sym, spec.interval, bars); if (C.length >= 1200) { const u = userSeries(Object.assign({}, spec, {symbol: sym}), C, scripts); series.push({sym, C, user: Object.keys(u).length ? u : null}); } } catch {} }
     const opt = await O.optimize(candles, spec, {seed: O.hash(bot.id + new Date(now).toISOString().slice(0, 10)), budget: cyc.budget || 60, ropts, series});
     let br = null; // bot conectado a un cerebro de Neural Brain: además prueba las ideas del cerebro y elige la mejor que gane fuera de muestra
@@ -72,28 +72,42 @@ async function paperBot(bot, scripts, getCandles, now, gateF, notify, pushOut) {
     const L = sess.ledger; for (let i = 0; i < L.length - 300; i++) { delete L[i].reasonIn; delete L[i].ctx; delete L[i].sl; delete L[i].tp; } out.push(sess);
   } return out;
 }
+/* Todos tus bots (también los que crees después) se reentrenan solos cada ~12 h con mejora automática.
+   Solo se salta un bot si TÚ apagaste su reentrenamiento a mano en la app o si está archivado. */
+const cycOf = bot => Object.assign({enabled: true, everyHours: 12, bars: 4000, auto: true}, bot.cycle || {});
+/* Monedas con las que aprende un bot: su cesta; si opera una sola, aprende con las 8 principales (no cambia en qué opera, solo junta más muestra). */
+const learnSyms = spec => Array.isArray(spec.basket) && spec.basket.length ? [...new Set([spec.symbol, ...spec.basket])].slice(0, 8) : [...new Set([spec.symbol, ...B.NOVA8])].slice(0, 8);
 /* Mejora automática en el servidor: si la candidata ganó fuera de muestra y el bot tiene la mejora automática, pasa a ser la principal
    SIN esperar a que abras la app (antes solo se aplicaba al abrir Nova Bot Lab). La simulación en vivo sigue con la versión nueva.
    La anterior queda en Versiones («anterior») para regresar con un clic. Devuelve el número de la versión nueva o 0. */
-function promote(bot, r, now) {
-  if (!r || r.decision !== 'propuesta' || !r.candidate || (bot.cycle && bot.cycle.auto === false) || bot.status === 'archived') return 0;
+function promote(bot, r, now, manual) {
+  if (!r || r.decision !== 'propuesta' || !r.candidate || (!manual && cycOf(bot).auto === false) || bot.status === 'archived') return 0;
   const sp = B.normalizeSpec(r.candidate); if (!B.validateSpec(sp).ok) return 0;
   const vs = bot.versions || (bot.versions = []), nv = Math.max(0, ...vs.map(x => x.v || 0)) + 1, prev = bot.mainV, chg = (r.changes || []).map(c => `${c.path} ${c.from}→${c.to}`).join('; ');
   vs.forEach(x => { if (x.v === prev) x.state = 'anterior'; });
   vs.push({v: nv, spec: sp, at: now, note: String(r.note || ('Reentrenamiento: ' + chg)).slice(0, 200), origin: 'servidor' + (r.note ? ' (cerebro)' : ' (reentrenamiento)'), state: 'principal', auto: true});
   bot.mainV = nv; const j = bot.journal || (bot.journal = []);
   const why = r.oos ? ` Fuera de muestra la nueva ganó ${Math.round(r.oos.cand.net)} contra ${Math.round(r.oos.base.net)} de la anterior (${r.oos.cand.n} operaciones${r.coins > 1 ? ` en ${r.coins} monedas` : ''}).` : '';
-  j.push({t: now, kind: 'versión', text: `Mejora automática (servidor): la v${nv} pasó a ser la principal en lugar de la v${prev}.${why} Si no te convence, en Versiones puedes regresar a la v${prev}.`});
+  j.push({t: now, kind: 'versión', text: manual ? `v${nv}: ${r.note} (antes v${prev}; en Versiones puedes regresar).` : `Mejora automática (servidor): la v${nv} pasó a ser la principal en lugar de la v${prev}.${why} Si no te convence, en Versiones puedes regresar a la v${prev}.`});
   const run = (bot.paper || []).filter(x => x.status === 'running');
   if (run.length) { // la simulación en vivo continúa con la versión nueva, en las mismas monedas y temporalidades
     const cap = run.reduce((a, x) => a + (+x.capital || 0), 0) || sp.risk.capital, grp = now.toString(36) + 'g';
     for (const x of run) { x.status = 'stopped'; x.pausedAt = now; }
-    for (const x of run) { const s2 = JSON.parse(JSON.stringify(sp)); s2.symbol = x.spec.symbol; s2.interval = x.spec.interval; delete s2.basket; delete s2.intervals; const ns = P.newSession({id: now.toString(36) + Math.random().toString(36).slice(2, 6), v: nv, spec: s2, capital: cap / run.length, startT: now}); ns.grp = grp; bot.paper.push(ns); }
+    const targets = manual && Array.isArray(sp.basket) && sp.basket.length ? [...new Set(run.map(x => x.spec.interval))].flatMap(iv => sp.basket.map(sym => ({spec: {symbol: sym, interval: iv}}))) : run;
+    for (const x of targets) { const s2 = JSON.parse(JSON.stringify(sp)); s2.symbol = x.spec.symbol; s2.interval = x.spec.interval; delete s2.basket; delete s2.intervals; const ns = P.newSession({id: now.toString(36) + Math.random().toString(36).slice(2, 6), v: nv, spec: s2, capital: cap / targets.length, startT: now}); ns.grp = grp; bot.paper.push(ns); }
     j.push({t: now, kind: 'paper', text: `La simulación en vivo se reinició con la v${nv}.`});
   }
   if (j.length > 300) j.splice(0, j.length - 300); bot.updatedAt = now; return nv;
 }
-const due = (bot, prev, now, force, linked) => { const c = linked ? Object.assign({enabled: true, everyHours: 24}, bot.cycle, {enabled: true}) : bot.cycle; if (!c || !c.enabled || bot.status === 'paused' || bot.status === 'archived') return false; if (force) return true; const every = Math.max(6, Math.min(24 * 14, c.everyHours || 24)) * 36e5; return !prev || now - (prev.at || 0) >= every - 30 * 6e4; };
+/* Una sola vez: el bot de Señales iA 2.7 opera también en las 8 monedas principales (lo pediste para que aprenda y opere con más muestra). */
+function widen(bot, now) {
+  if (bot.widened || bot.status === 'archived' || !/se[nñ]al/i.test(bot.name || '') || !/2\W?7/.test(bot.name || '')) return false;
+  const v = (bot.versions || []).find(x => x.v === bot.mainV); if (!v || (Array.isArray(v.spec.basket) && v.spec.basket.length)) { bot.widened = now; return false; }
+  const sp = B.normalizeSpec(Object.assign(JSON.parse(JSON.stringify(v.spec)), {basket: [...new Set([v.spec.symbol, ...B.NOVA8])].slice(0, 8)})); if (!B.validateSpec(sp).ok) { bot.widened = now; return false; }
+  promote(bot, {decision: 'propuesta', candidate: sp, note: 'Ahora opera y aprende en 8 monedas (BTC, ETH, SOL, BNB, XRP, DOGE, AVAX, LINK).'}, now, true);
+  bot.widened = now; return true;
+}
+const due = (bot, prev, now, force) => { const c = cycOf(bot); if (!c.enabled || bot.status === 'archived' || bot.status === 'paused') return false; if (force) return true; const every = Math.max(6, Math.min(12, c.everyHours || 12)) * 36e5; return !prev || now - (prev.at || 0) >= every - 30 * 6e4; };
 
 /* La app comprime tus scripts cuando son grandes («gz1:» + base64 gzip): sin esto el servidor no los encontraba («ya no existe en tu cuenta») */
 function unpackStr(v) { return typeof v === 'string' && v.startsWith('gz1:') ? require('zlib').gunzipSync(Buffer.from(v.slice(4), 'base64')).toString('utf8') : v; }
@@ -117,10 +131,12 @@ async function main() {
   for (const u of users) {
     const bd = await u.collection('data').doc('botlab').get(); if (!bd.exists) continue; let S; try { S = JSON.parse(bd.data().items || '{}'); } catch { continue; }
     let links = {}; try { const bb = await u.collection('data').doc('brain_bots').get(); links = (bb.exists && bb.data().bots) || {}; } catch {} const linked = b => links[b.id] && links[b.id].auto !== false;
-    const all = S.bots || [], cyc = MODE !== 'paper' ? all.filter(b => b && ((b.cycle && b.cycle.enabled) || linked(b))) : [], pap = MODE !== 'retrain' ? all.filter(b => b && (b.paper || []).some(x => x.status === 'running')) : []; if (!cyc.length && !pap.length) continue;
+    const all = S.bots || [], cyc = MODE !== 'paper' ? all.filter(b => b && b.id && b.status !== 'archived' && cycOf(b).enabled) : [], pap = MODE !== 'retrain' ? all.filter(b => b && (b.paper || []).some(x => x.status === 'running')) : []; if (!cyc.length && !pap.length) continue;
     const sd = await u.collection('data').doc('botlab_server').get(), prev = sd.exists ? sd.data() : {}, results = Object.assign({}, prev.results || {}), paper = Object.assign({}, prev.paper || {}), brainMem = Object.assign({}, prev.brainMem || {}); let scripts = null, changed = false, botsChanged = false;
     const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(unpackStr(s.data().items || '[]')) : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } scripts = scripts.concat(catalogScripts().filter(c => c.code && !scripts.some(x => x.id === c.id))); try { const pro = await db.collection('pro').get(); for (const d of pro.docs) if (!scripts.some(x => x.id === 'cat:' + d.id)) scripts.push({id: 'cat:' + d.id, name: d.id, code: d.data().code, builtin: true}); } catch {} }; // los Nova Nexus PRO ya no están en el repo: se leen de Firestore
-    for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force, linked(b))) continue; await loadScripts(); const bc = linked(b) ? {link: links[b.id], memory: brainMem[b.id] || []} : null; const r = await retrainBot(b, scripts, getCandles, now, bc); if (bc && bc.out) { brainMem[b.id] = JSON.parse(JSON.stringify(bc.out.memory || [])); nbr++; } const nv = promote(b, r, now); if (nv) { r.applied = {v: nv, at: now}; botsChanged = true; } results[b.id] = JSON.parse(JSON.stringify(r)); changed = true; nr++; console.log(`· bot ${nr}${bc ? ' (con cerebro)' : ''}: ${r.status}${r.status === 'error' ? ' · ' + String(r.reason || '').slice(0, 120) : ' · ' + r.decision + (r.brain ? ` · ideas probadas: ${(r.brain.tried || []).length}` : '')}`); if (r.decision === 'propuesta') np++; }
+    for (const b of all) if (b && b.id && widen(b, now)) { botsChanged = true; console.log('· el bot de Señales 2.7 ahora opera en 8 monedas'); }
+    const improved = [];
+    for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force, linked(b))) continue; await loadScripts(); const bc = linked(b) ? {link: links[b.id], memory: brainMem[b.id] || []} : null; const r = await retrainBot(b, scripts, getCandles, now, bc); if (bc && bc.out) { brainMem[b.id] = JSON.parse(JSON.stringify(bc.out.memory || [])); nbr++; } const nv = promote(b, r, now); if (nv) { r.applied = {v: nv, at: now}; botsChanged = true; improved.push({b, nv, r}); } results[b.id] = JSON.parse(JSON.stringify(r)); changed = true; nr++; console.log(`· bot ${nr}${bc ? ' (con cerebro)' : ''}: ${r.status}${r.status === 'error' ? ' · ' + String(r.reason || '').slice(0, 120) : ' · ' + r.decision + (r.brain ? ` · ideas probadas: ${(r.brain.tried || []).length}` : '')}`); if (r.decision === 'propuesta') np++; }
     if (botsChanged) { // la versión nueva también queda en tus bots (tu cuenta) aunque no abras la app
       const str = JSON.stringify(S);
       if (str.length < 990000) { try { await u.collection('data').doc('botlab').set({items: str, updatedAt: admin.firestore.FieldValue.serverTimestamp()}); console.log('· mejora aplicada sola en tus bots'); } catch (e) { console.log('· no se pudo guardar la mejora en tus bots (la app la aplica al abrir): ' + String(e.message || e).slice(0, 100)); } }
@@ -128,6 +144,14 @@ async function main() {
     }
     const gateF = RK.gateFor(S.risk, all.flatMap(x => x.status === 'archived' ? [] : x.paper || []), now);
     const pushOut = [];
+    // aviso de cada mejora: a tu celular y a Discord (también sale en la app al abrir Nova Bot Lab)
+    for (const {b, nv, r} of improved) {
+      const how = r.oos ? `ganó ${Math.round(r.oos.cand.net)} contra ${Math.round(r.oos.base.net)} de la anterior en pruebas que no vio (${r.oos.cand.n} operaciones${r.coins > 1 ? `, ${r.coins} monedas` : ''})` : 'ganó en pruebas que no vio';
+      const what = (r.changes || []).slice(0, 3).map(c => `${c.path.replace(/^risk\./, '').replace(/\.v$/, '')} ${c.from}→${c.to}`).join(', ');
+      pushOut.push({title: `🚀 ${b.name} mejoró solo (v${nv})`, body: `La nueva versión ${how}.${what ? ' Cambió: ' + what + '.' : ''} Ya opera en simulación.`, tag: 'bot-up-' + b.id});
+      const HK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\//, own = b.dcDest === 'own' && HK.test(b.dcHook || '') ? b.dcHook : null, dUrl = own || (S.notify && S.notify.url && S.notify.bots !== false && HK.test(S.notify.url) ? S.notify.url : null);
+      if (dUrl) await postDiscord(dUrl, [{title: `🚀 ${b.name} mejoró solo · v${nv}`, description: `La nueva versión ${how}.${what ? '\n**Cambió:** ' + what : ''}\nLa simulación en vivo ya sigue con la v${nv}. En Versiones puedes regresar a la anterior.`, color: 0x20bf9f, timestamp: new Date(now).toISOString()}]);
+    }
     for (const b of pap) { await loadScripts(); adoptServer(b, (prev.paper || {})[b.id]); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.notify, pushOut); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
     if (pushOut.length) await botPush(u.id, pushOut);
     if (changed) { for (const id of Object.keys(results)) if (!all.some(b => b.id === id)) delete results[id]; for (const id of Object.keys(paper)) if (!all.some(b => b.id === id)) delete paper[id]; for (const id of Object.keys(brainMem)) if (!all.some(b => b.id === id)) delete brainMem[id]; const clean = o => JSON.parse(JSON.stringify(o || {})); // Firestore no acepta «undefined» (p. ej. ctx de una posición abierta): antes el guardado fallaba y los bots no avanzaban
