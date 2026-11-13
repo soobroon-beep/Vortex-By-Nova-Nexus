@@ -11,6 +11,9 @@ window.CCT_CHANGELOG = [
     'En vivo: arriba y completas solo las sesiones con una operación abierta; las que esperan señal salen como tarjeta pequeña que se despliega al tocarla.',
     'La pestaña «Mejorar» ahora se llama «IA» (dentro: Mejorar con IA). En Operaciones, «Abiertas ahora en cada moneda» muestra solo las monedas con una operación abierta.',
     'Avisos a Discord por bot: enciéndelos y elige si llegan a tu canal de VORTEX o a un canal solo para ese bot (pegas el webhook de ese canal y se manda una prueba).',
+    'Si al bot le falta algo (una regla de entrada, un stop válido, un indicador que ya no está) o se traba en vivo, la máquina se ve apagada y te dice qué falla y cómo componerlo, con un botón directo.',
+    'Operaciones ahora es el historial: lo ya cerrado en vivo o en el backtest, con el gráfico de dónde compró y vendió y una barra por operación (ganó/perdió) con lo acumulado.',
+    'En vivo: cada operación abierta trae su gráfico con la entrada, el stop (rojo), el objetivo (verde) y dónde va el precio ahora.',
     'Operaciones: en lugar de las velas, una línea de precio simple con cada compra y venta marcada (verde si ganó, rojo si perdió) y tarjetas de las últimas operaciones. Las velas siguen en «Ver con velas».',
     'Consejos: nuevo botón «Ignorar consejo» junto a «Aplicar este consejo»; el consejo se quita y deja lugar a otros.',
     'En vivo: más visual y con menos texto: resultado grande, la posición abierta en una barra (stop · entrada · ahora · objetivo), números clave como fichas y lo que prometió vs. lo que está haciendo en barras.'

@@ -2134,3 +2134,32 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 .bl-dc-in{display:flex;gap:8px}.bl-dc-in input{flex:1;min-width:0}
 @media (max-width:560px){.bl-dc-opts{grid-template-columns:1fr}}
 .bl-dc-in input{padding:9px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(10,14,22,.7);color:var(--text);font:inherit;font-size:12.5px}.bl-dc-in input:focus{outline:none;border-color:#5865f2}
+
+/* Bot detenido por un error: todo apagado y sin animación hasta componerlo */
+.bf-broken .bf-st{filter:saturate(.15) brightness(.8)}.bf-broken .bf-gear path{fill:#3a4252}.bf-broken .bf-gear{animation:none!important}
+.bf-broken .bf-led{color:#ff9aa6}.bf-broken .bf-led i{background:#f06b79;box-shadow:none;animation:none}
+.bf-broken .bf-w1{stroke:#3a4252;animation:none;stroke-dashoffset:0}.bf-broken .bf-spark,.bf-back.bf-broken .bf-lsp{display:none}
+.bf-back.bf-broken .bf-l1{animation:none;opacity:.2}.bf-back.bf-broken .bf-lesson svg{animation:none}.bf-back.bf-broken{filter:saturate(.15)}
+.ll-broken{filter:saturate(.15) brightness(.85)}.ll-broken .ll-run{display:none}.ll-broken .ll-ring2{animation:none;opacity:.15}
+.bh{margin:0 0 14px;padding:12px 14px;border-radius:16px;border:1px solid rgba(240,107,121,.35);background:rgba(240,107,121,.07);animation:bfIn .35s ease both;opacity:0;transform:translateY(-4px)}
+.bh.warn{border-color:rgba(240,185,11,.3);background:rgba(240,185,11,.06)}
+.bh-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}.bh-h b{display:block;font-size:13.5px}.bh-h small{font-size:11.5px;color:var(--muted)}
+.bh-ic{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#f06b79;color:#0b0f18;font-weight:900}.bh.warn .bh-ic{background:#f0b90b}
+.bh ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.bh li{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;background:rgba(10,14,22,.55);border-left:3px solid #f06b79}.bh li.warn{border-left-color:#f0b90b}
+.bh li>div{flex:1;min-width:0}.bh li b{display:block;font-size:12.5px}.bh li small{font-size:11.5px;color:#c8d2e1}
+/* Historial: ganó o perdió en cada operación */
+.ph-k{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin-bottom:8px}.ph-k b{font-size:13px}
+.ph-svg{display:block;width:100%;height:120px}.ph-z{stroke:rgba(255,255,255,.12);stroke-width:1;vector-effect:non-scaling-stroke}
+.ph-svg rect.w{fill:#20bf9f}.ph-svg rect.l{fill:#f06b79}.ph-svg rect{transform-origin:center 50%;animation:ltUp2 .5s ease both;animation-delay:calc(var(--i) * .015s)}
+@keyframes ltUp2{from{transform:scaleY(0)}}
+.ph-cum{fill:none;stroke:#f0b90b;stroke-width:1.6;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.ph-leg{display:flex;gap:14px;font-size:11px;color:var(--muted);margin-top:6px}.ph-leg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}.ph-leg i.w{background:#20bf9f}.ph-leg i.l{background:#f06b79}.ph-leg i.c{height:2px;background:#f0b90b;vertical-align:3px}
+/* En vivo: gráfico de la posición abierta */
+.pv-oc{margin:-2px 0 10px}.oc{display:block;width:100%;height:auto}
+.oc-p{fill:none;stroke:#c8d2e1;stroke-width:1.4;stroke-linejoin:round}
+.oc-z.tp{fill:rgba(32,191,159,.1)}.oc-z.sl{fill:rgba(240,107,121,.1)}
+.oc-l{stroke-width:1.3;stroke-dasharray:5 4}.oc-l.tp{stroke:#20bf9f}.oc-l.sl{stroke:#f06b79}.oc-l.en{stroke:#8796ab;stroke-dasharray:none}
+.oc-tag rect{fill:#0b0f18;stroke-width:1}.oc-tag.tp rect{stroke:#20bf9f}.oc-tag.sl rect{stroke:#f06b79}.oc-tag.en rect{stroke:#8796ab}
+.oc-tag text{font:600 10px system-ui}.oc-tag.tp text{fill:#7fe3cc}.oc-tag.sl text{fill:#ffb3bc}.oc-tag.en text{fill:#c8d2e1}
+.oc-in.lg{fill:#20bf9f}.oc-in.sh{fill:#f06b79}.oc-now{fill:#f0b90b;stroke:#0b0f18;stroke-width:1.5;animation:bfPulse 1.4s infinite}
