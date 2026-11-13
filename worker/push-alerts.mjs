@@ -175,9 +175,24 @@ export async function sendPush(sub, msg, v) {
 }
 
 /* ───────── precios ───────── */
+/* Binance bloquea las IP de Cloudflare (HTTP 403/451): por eso las alertas de precio y los movimientos bruscos no avisaban.
+   Si Binance no responde, los precios y las velas de 1 min se piden a MEXC (mismos símbolos BTCUSDT y mismo formato). */
+let binanceDownUntil = 0;
+export function mexcPath(path) {
+  const u = new URL('https://x' + path);
+  if (u.pathname === '/api/v3/ticker/price') return '/api/v3/ticker/price'; // MEXC: la lista completa (luego se filtra)
+  if (u.pathname === '/api/v3/klines' && u.searchParams.get('interval') === '1m') return path;
+  return null;
+}
 async function getJSON(path) {
-  let err; for (const h of HOSTS) { try { const r = await fetch(h + path, {headers: {'user-agent': 'VORTEX-Push/1.0'}}); if (r.ok) return await r.json(); err = new Error(h + ' HTTP ' + r.status); } catch (e) { err = e; } }
-  throw err;
+  let err;
+  if (Date.now() >= binanceDownUntil) {
+    for (const h of HOSTS) { try { const r = await fetch(h + path, {headers: {'user-agent': 'VORTEX-Push/1.0'}}); if (r.ok) return await r.json(); err = new Error(h + ' HTTP ' + r.status); } catch (e) { err = e; } }
+    binanceDownUntil = Date.now() + 10 * 6e4; // no se insiste cada minuto: se vuelve a probar en 10 min
+  }
+  const mp = mexcPath(path);
+  if (mp) { try { const r = await fetch('https://api.mexc.com' + mp, {headers: {'user-agent': 'VORTEX-Push/1.0'}}); if (r.ok) return await r.json(); err = new Error('MEXC HTTP ' + r.status); } catch (e) { err = e; } }
+  throw err || new Error('Binance no disponible');
 }
 async function spotPrices(syms) { // solo las monedas con alerta; si Binance rechaza la lista (símbolo raro), se piden todas
   if (!syms.length) return {};
@@ -394,6 +409,7 @@ export default {
       return json({colo: (req.cf && req.cf.colo) || '', out});
     }
     if (req.method === 'POST' && path === '/bot-push') return botPush(req, env);
+    if (req.method === 'POST' && path === '/ext/scr') return scrExt(req, env); // el Motor (GitHub Actions) calculó el Screener con Binance: aquí se aparta la franja y se avisa a los celulares + radar
     if (req.method === 'POST' && (path === '/ind/jobs' || path === '/ind/report')) return indRoute(req, env, path); // alertas con indicador (GitHub Actions) // Nova Bot Lab (GitHub Actions): avisos de tus bots a tus celulares
     if (!ok) return json({error: 'Origen no permitido'}, 403);
     if (path === '/ai' || path.startsWith('/ai/')) return aiRoute(req, env, path, json, cors);
@@ -489,6 +505,28 @@ async function botPush(req, env) {
     try { const sts = (await self(env, '/int/push', {id, msgs})).sts || []; sent += sts.filter(x => x >= 200 && x < 300).length; } catch (e) { console.warn('bot-push', e.message); }
   }
   return J({ok: true, devices, sent});
+}
+
+/* ───────── Screener calculado por el Motor del servidor (GitHub Actions) ─────────
+   Binance bloquea las IP de Cloudflare, así que el Screener lo calcula el Motor (scripts/motor.js) con los mismos datos que la app.
+   Antes de mandarlo a Discord llama aquí: si la franja ya salió, contesta skip (no se duplica); si no, la aparta, avisa a los
+   celulares que activaron las señales y le pasa las señales al radar de Nexus Pixel. */
+async function scrExt(req, env) {
+  let b; try { b = JSON.parse((await req.text()).slice(0, 200000)); } catch { return J({error: 'JSON inválido'}, 400); }
+  if (!env.BOT_PUSH_KEY || !sameKey(b && b.key, env.BOT_PUSH_KEY)) return J({error: 'No autorizado'}, 401);
+  const tf = b.tf === '4h' ? '4h' : '1h', now = Date.now(), slot = SCR.slotOf(tf, now);
+  if (+b.slot !== slot) return J({ok: false, why: 'franja vencida'});
+  const st = (await env.KV.get('scr', 'json')) || {};
+  if ((+st[tf] || 0) >= slot) return J({ok: true, skip: 'ya enviado'});
+  const rows = (Array.isArray(b.rows) ? b.rows : []).slice(0, 60).filter(r => r && /^[A-Z0-9]{2,20}$/.test(r.symbol) && r.sg && typeof r.sg === 'object')
+    .map(r => ({symbol: r.symbol, price: +r.price || 0, sg: {side: r.sg.side === 'buy' ? 'buy' : 'sell', range: !!r.sg.range, div: !!r.sg.div, score: +r.sg.score || 0, age: +r.sg.age || 1, ago: +r.sg.ago || 0}}));
+  st[tf] = slot; st.lock = 0; st.err = null; st.last = Object.assign(st.last || {}, {[tf]: {at: now, n: rows.length, of: +b.of || 0, discord: rows.length > 0, pushed: 0, by: 'motor'}});
+  await env.KV.put('scr', JSON.stringify(st));
+  let pushed = 0, radar = null;
+  if (rows.length) { try { const t = SCR.pushText(tf, rows); pushed = (await self(env, '/scr/push', {tf, msg: {title: t.title, body: t.body, tag: 'scr-' + tf, url: APP_URL + '#screener'}})).sent; } catch (e) { console.error('push', e.message); } }
+  if (pushed) { st.last[tf].pushed = pushed; await env.KV.put('scr', JSON.stringify(st)); }
+  try { radar = await self(env, '/radar/run', {tf, now, rows: rows.map(r => ({symbol: r.symbol, sg: r.sg}))}); } catch (e) { radar = {error: e.message}; }
+  return J({ok: true, claimed: true, pushed, radar: radar && (radar.error || 'ok')});
 }
 
 /* ───────── Alertas con indicador con la app cerrada (las calcula scripts/ind-alerts.js en GitHub Actions) ───────── */

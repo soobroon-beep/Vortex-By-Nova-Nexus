@@ -1,6 +1,7 @@
 name: Actualizar noticias
+# Copia de respaldo de noticias y calendario cada ~3 h (la app ya las trae al momento cuando abres Noticias; no hace falta más seguido).
 on:
-  schedule: [{cron: '*/10 * * * *'}]
+  schedule: [{cron: '41 */3 * * *'}]
   workflow_dispatch:
 permissions:
   contents: write

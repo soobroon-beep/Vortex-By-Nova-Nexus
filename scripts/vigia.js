@@ -209,7 +209,13 @@ async function main() {
   const summary = clip((res && res.summary) || (open.length ? `Hay ${open.length} punto(s) por revisar; ${open.filter(o => o.sev === 'alta').length} de prioridad alta.` : 'Todo en orden: no se encontraron fallas nuevas.'), 600);
   const doc = { at: now, items, summary, stats, runUrl, fresh: fresh.length, learn: learn.by, v: 1 };
   if (typeof prev.hook === 'string') doc.hook = prev.hook;
-  await ref.set(doc);
+  // en una transacción: si aprobaste o descartaste algo mientras corría la revisión (o cambiaste el webhook), se respeta lo tuyo
+  await db.runTransaction(async tx => {
+    const cur = (await tx.get(ref)).data() || {}, before = new Map((prev.items || []).map(x => [x.id, x.decided || 0]));
+    for (const c of cur.items || []) { const it = items.find(x => x.id === c.id); if (it && c.decided && c.decided > (before.get(c.id) || 0)) { it.status = c.status; it.decided = c.decided; } }
+    if (typeof cur.hook === 'string') doc.hook = cur.hook;
+    tx.set(ref, doc);
+  });
   console.log(`Guardado: ${items.length} en la lista · ${fresh.length} nuevos o de regreso · IA: ${res ? 'sí' : 'no'}`);
   if (HOOK.test(doc.hook || '')) {
     try { const r = await fetch(doc.hook + '?wait=false', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(discordPayload(doc, fresh, runUrl)) }); console.log('Discord: ' + r.status); } catch (e) { console.log('Discord: sin conexión'); }

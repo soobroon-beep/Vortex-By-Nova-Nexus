@@ -66,7 +66,7 @@ async function main() {
     console.log('Estado del servidor:', JSON.stringify(srv));
     tfs = tfs.filter(tf => {
       if (srv && (+srv[tf] || 0) >= slotOf(tf, now)) { state[tf] = slotOf(tf, now); console.log(`${tf}: ya lo mandó el servidor`); return false; }
-      const mins = (now - slotOf(tf, now) * SLOT_MS[tf]) / 6e4; if (srv && mins < 25) { console.log(`${tf}: el servidor aún tiene tiempo de mandarlo (${mins.toFixed(0)} min)`); return false; }
+      const mins = (now - slotOf(tf, now) * SLOT_MS[tf]) / 6e4; if (srv && mins < 8) { /* el Motor lo manda al minuto 1-2 */ console.log(`${tf}: el servidor aún tiene tiempo de mandarlo (${mins.toFixed(0)} min)`); return false; }
       return true;
     });
     fs.writeFileSync(STATE, JSON.stringify(state));
@@ -81,5 +81,33 @@ async function main() {
     if (!forced) { state[tf] = slotOf(tf, now); state.updated = new Date().toISOString(); fs.writeFileSync(STATE, JSON.stringify(state)); }
   }
 }
+/* Motor del servidor (scripts/motor.js): esta es la vía PRINCIPAL. El Motor corre siempre (no depende de los horarios de GitHub, que
+   llegaban cada 4-7 h), calcula el Screener con Binance (los mismos datos que la app) al cerrar cada vela de 1h/4h y lo manda a Discord.
+   Antes de mandarlo, le avisa al servidor de avisos (Cloudflare): si esa franja ya salió no se repite; si no, el servidor la aparta,
+   manda la notificación a los celulares que activaron las señales y pasa las señales al radar de Nexus Pixel.
+   state = {'1h': franja, '4h': franja} (el Motor lo guarda en Firestore para no repetir al relanzarse). Devuelve true si cambió. */
+const PUSH_URL = process.env.PUSH_URL || 'https://vortex-push.soobroon.workers.dev';
+async function motorRound(state, key, now = Date.now(), log = console.log) {
+  const url = String(process.env.DISCORD_WEBHOOK || '').trim(); if (!HOOK.test(url)) return false;
+  const tfs = dueTfs(now, state).filter(tf => (now - slotOf(tf, now) * SLOT_MS[tf]) / 6e4 >= 1); if (!tfs.length) return false; // 1 min para que Binance cierre la vela
+  let srv = null; try { const r = await fetch(PUSH_URL + '/scr/state', {signal: AbortSignal.timeout(8000)}); if (r.ok) srv = await r.json(); } catch {}
+  let top = null, changed = false;
+  for (const tf of tfs) {
+    const slot = slotOf(tf, now);
+    if (srv && (+srv[tf] || 0) >= slot) { state[tf] = slot; changed = true; continue; }
+    if ((now - slot * SLOT_MS[tf]) / 6e4 > (tf === '1h' ? 30 : 90)) { state[tf] = slot; changed = true; log(`Screener ${tf}: franja ya muy avanzada, se espera la siguiente`); continue; } // no mandar señales viejas (p. ej. al encender el Motor a media hora)
+    if (!top) top = await topSymbols(TOP_N);
+    const rows = await scan(tf, top);
+    if (rows.length < 1 && top.length < 10) throw new Error('Binance no devolvió el top');
+    let claim = null; try { const r = await fetch(PUSH_URL + '/ext/scr', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({key, tf, slot, of: top.length, rows}), signal: AbortSignal.timeout(25000)}); claim = await r.json().catch(() => null); } catch {}
+    if (claim && claim.skip) { state[tf] = slot; changed = true; log(`Screener ${tf}: ya había salido`); continue; }
+    const em = F.signalEmbeds(tf, rows, top.map(t => t.symbol));
+    if (em.length) await post(url, em);
+    state[tf] = slot; changed = true;
+    log(`Screener ${tf}: ${rows.length} señales → Discord${em.length ? '' : ' (nada que mandar)'} · celulares: ${claim && claim.ok ? claim.pushed || 0 : 'servidor sin respuesta'}`);
+    await sleep(1200);
+  }
+  return changed;
+}
 if (require.main === module) main().catch(e => { console.error('Error:', e.message); process.exit(1); });
-module.exports = {signalOf, timeframes, dueTfs, slotOf, topSymbols, scan, post, candles};
+module.exports = {signalOf, timeframes, dueTfs, slotOf, topSymbols, scan, post, candles, motorRound};

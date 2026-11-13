@@ -14,8 +14,25 @@
   let doc = null, tab = 'nuevo', ov = null, busy = false, open1 = '';
 
   const when = t => { if (!t) return '—'; const d = Date.now() - t, h = d / 3600e3; return h < 1 ? 'hace ' + Math.max(1, Math.round(d / 6e4)) + ' min' : h < 24 ? 'hace ' + Math.round(h) + ' h' : new Date(t).toLocaleDateString('es-MX', {day: 'numeric', month: 'short'}); };
-  async function load() { try { doc = (await C().get('vigia')) || {items: []}; } catch (e) { doc = {items: [], err: 'No se pudo leer tu revisión: ' + (e.message || e)}; } if (!Array.isArray(doc.items)) doc.items = []; }
-  async function save() { if (busy) return; busy = true; try { const o = Object.assign({}, doc); delete o.err; await C().set('vigia', o); } catch (e) { toast(/permission|insufficient/i.test(String(e && (e.code || e.message))) ? 'Falta publicar las reglas de Firestore para guardar tus decisiones (ver Vigía: «Publicar reglas de Firestore»)' : 'No se pudo guardar: ' + (e.message || e)); } busy = false; }
+  async function load() { if (busy) return; try { doc = (await C().get('vigia')) || {items: []}; } catch (e) { doc = {items: [], err: 'No se pudo leer tu revisión: ' + (e.message || e)}; } if (!Array.isArray(doc.items)) doc.items = []; }
+  /* Guardado sin pisar la revisión: antes se escribía la copia que tenías abierta (si el Vigía corrió mientras tanto, su revisión nueva
+     se perdía) y si tocabas dos botones seguidos el segundo no se guardaba. Ahora cada decisión queda en fila, se vuelve a leer lo último
+     del servidor, se le aplican tus decisiones y se escribe eso. */
+  const pend = {}; let hookPend = null, chain = Promise.resolve();
+  function save() { chain = chain.then(doSave, doSave); return chain; }
+  async function doSave() {
+    const ids = Object.keys(pend), hk = hookPend; if (!ids.length && hk === null) return;
+    busy = true;
+    try {
+      const fresh = (await C().get('vigia')) || {items: []}; if (!Array.isArray(fresh.items)) fresh.items = [];
+      for (const id of ids) { const it = fresh.items.find(x => x.id === id), loc = doc.items.find(x => x.id === id); if (it) Object.assign(it, pend[id]); else if (loc) fresh.items.push(Object.assign({}, loc, pend[id])); }
+      if (hk !== null) fresh.hook = hk; delete fresh.err;
+      await C().set('vigia', fresh);
+      for (const id of ids) delete pend[id]; if (hookPend === hk) hookPend = null;
+      doc = fresh; for (const id of Object.keys(pend)) { const it = doc.items.find(x => x.id === id); if (it) Object.assign(it, pend[id]); } paint(); // lo más nuevo del servidor + lo que aún está en fila
+    } catch (e) { toast(/permission|insufficient/i.test(String(e && (e.code || e.message))) ? 'Falta publicar las reglas de Firestore para guardar tus decisiones (ver Vigía: «Publicar reglas de Firestore»)' : 'No se pudo guardar: ' + (e.message || e)); }
+    busy = false;
+  }
   const toast = m => { const t = $('#toast'); if (!t) return; t.textContent = m; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => { t.style.display = 'none'; }, 2600); };
 
   function row() { // fila en Configuración (solo para ti)
@@ -65,9 +82,9 @@
     if (t === ov || t.closest('.vg-x')) return closePanel();
     const tb = t.closest('[data-tab]'); if (tb) { tab = tb.dataset.tab; open1 = ''; paint(); return; }
     const b = t.closest('[data-vg]');
-    if (b) { const o = doc.items.find(x => x.id === b.dataset.id); if (!o) return; o.status = b.dataset.vg; o.decided = Date.now(); paint(); await save();
+    if (b) { const o = doc.items.find(x => x.id === b.dataset.id); if (!o) return; o.status = b.dataset.vg; o.decided = Date.now(); pend[o.id] = {status: o.status, decided: o.decided}; paint(); await save();
       toast(o.status === 'aprobado' ? 'Aprobado: queda en «Aprobados» para aplicarlo' : o.status === 'descartado' ? 'Descartado: no se volverá a proponer' : 'Regresó a «Por decidir»'); return; }
-    if (t.closest('[data-vg-hook]')) { const v = ($('#vgHook', ov).value || '').trim(); if (v && !HOOK.test(v)) { toast('Ese enlace no parece un webhook de Discord'); return; } doc.hook = v; await save(); toast(v ? 'Webhook guardado: el resumen llegará ahí cada mañana' : 'Webhook quitado'); return; }
+    if (t.closest('[data-vg-hook]')) { const v = ($('#vgHook', ov).value || '').trim(); if (v && !HOOK.test(v)) { toast('Ese enlace no parece un webhook de Discord'); return; } doc.hook = v; hookPend = v; await save(); toast(v ? 'Webhook guardado: el resumen llegará ahí cada mañana' : 'Webhook quitado'); return; }
     const c = t.closest('[data-open]'); if (c && !t.closest('button, details, input')) { open1 = open1 === c.dataset.open ? '' : c.dataset.open; paint(); }
   }
 

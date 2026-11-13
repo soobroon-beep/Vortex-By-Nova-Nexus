@@ -21,6 +21,8 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          GH_TOKEN: ${{ github.token }}
           RUN_MINUTES: '340'
       - name: Volver a lanzarse
         if: always()
