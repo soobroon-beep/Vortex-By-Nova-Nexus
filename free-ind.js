@@ -47,31 +47,38 @@ plot(nuevo ? na : s1, "S1", color.new(#26a69a, 20), 1, plot.style_linebr)
 plot(nuevo ? na : s2, "S2", color.new(#26a69a, 40), 1, plot.style_linebr)
 plot(nuevo ? na : s3, "S3", color.new(#26a69a, 60), 1, plot.style_linebr)
 `},
-    {id: 'autofib', cat: 'struct', col: '#ffd54f', name: 'Fibonacci automático', desc: 'Retroceso de Fibonacci entre el máximo y el mínimo recientes, con línea punteada del tramo medido; un color por nivel y los niveles clave (0.5, 0.618, 0.65, 0.786) más vivos', art: 'patterns', code: `//@version=5
+    {id: 'autofib', cat: 'struct', col: '#ffd54f', name: 'Fibonacci automático', desc: 'Fibonacci entre el máximo y el mínimo recientes. Dos estilos: Clásico (sobre las velas, con fondo y tramo medido) o Lateral derecho (líneas punteadas a la derecha, sin tocar las velas)', art: 'patterns', code: `//@version=5
 indicator("Fibonacci automático", "Auto Fib", overlay=true, max_lines_count=20, max_labels_count=20, max_boxes_count=12)
 lb = input.int(150, "Velas a revisar", minval=20)
-fondo = input.bool(true, "Fondo entre niveles")
-tramo = input.bool(true, "Línea del tramo medido")
+estilo = input.string("Clásico", "Estilo", options=["Clásico", "Lateral derecho"], tooltip="Lateral derecho: líneas punteadas que salen del lado derecho del gráfico y se detienen antes de las velas, solo con el nivel.")
+fondo = input.bool(true, "Fondo entre niveles (Clásico)")
+tramo = input.bool(true, "Línea del tramo medido (Clásico)")
+modo = input.string("Un color por nivel", "Colores", options=["Un color por nivel", "Monocromático"])
+mono = input.color(#f5c568, "Color (monocromático)")
+largo = input.int(20, "Ancho de las líneas, % del gráfico (Lateral)", minval=3, maxval=70, tooltip="Como el ancho del perfil de volumen: más alto, las líneas llegan más cerca de las velas; más bajo, quedan más cortas y pegadas a la derecha.")
+sep = input.int(28, "Separación de las velas en px (Lateral)", minval=0, maxval=200)
+ext = input.bool(false, "Extensiones 1.272 y 1.618 (Lateral)")
 hi = ta.highest(high, lb)
 lo = ta.lowest(low, lb)
 hiBar = ta.highestbars(high, lb)
 loBar = ta.lowestbars(low, lb)
 sube = loBar < hiBar
+esMono = modo == "Monocromático"
 var lvls = array.from(0.0, 0.236, 0.382, 0.5, 0.618, 0.65, 0.786, 1.0)
 var cols = array.from(#787b86, #f23645, #ff9800, #4caf50, #089981, #00bcd4, #2962ff, #787b86)
 var vivos = array.from(#9aa1ad, #ff4d5c, #ffa726, #5fe066, #00d6aa, #18e0ff, #4d7dff, #9aa1ad)
-if barstate.islast
+if barstate.islast and estilo == "Clásico"
     if tramo
         line.new(bar_index + loBar, lo, bar_index + hiBar, hi, color=color.new(#c3cad6, 35), width=1, style=line.style_dotted)
     for i = 0 to array.size(lvls) - 1
         f = array.get(lvls, i)
         y = sube ? hi - (hi - lo) * f : lo + (hi - lo) * f
         clave = f == 0.618 or f == 0.5 or f == 0.786 or f == 0.65
-        c = clave ? array.get(vivos, i) : color.new(array.get(cols, i), 45)
+        c = esMono ? (clave ? mono : color.new(mono, 50)) : clave ? array.get(vivos, i) : color.new(array.get(cols, i), 45)
         if fondo and i < array.size(lvls) - 1
             f2 = array.get(lvls, i + 1)
             y2 = sube ? hi - (hi - lo) * f2 : lo + (hi - lo) * f2
-            box.new(bar_index - lb, math.max(y, y2), bar_index + 10, math.min(y, y2), border_color=color.new(array.get(cols, i + 1), 100), bgcolor=color.new(array.get(cols, i + 1), 90))
+            box.new(bar_index - lb, math.max(y, y2), bar_index + 10, math.min(y, y2), border_color=color.new(esMono ? mono : array.get(cols, i + 1), 100), bgcolor=color.new(esMono ? mono : array.get(cols, i + 1), 90))
         line.new(bar_index - lb, y, bar_index + 10, y, color=c, width=f == 0.618 ? 2 : 1, style=line.style_dashed)
         label.new(bar_index + 10, y, str.tostring(f) + " (" + str.tostring(y, format.mintick) + ")", style=label.style_label_left, color=color.new(color.black, 100), textcolor=c, size=size.small)
 `},

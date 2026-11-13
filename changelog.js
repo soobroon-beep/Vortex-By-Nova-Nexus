@@ -1,5 +1,9 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.32', d: '13 nov 2026', t: 'Fibonacci lateral', items: [
+    'Fibonacci automático: nuevo estilo «Lateral derecho» en sus ajustes: líneas punteadas y delgadas que salen del lado derecho del gráfico sin tocar las velas, solo con el nivel (sin precio) y los niveles clave más resaltados.',
+    'Colores por nivel o monocromáticos, y el largo de las líneas se elige en % del gráfico (como el perfil de volumen).'
+  ]},
   {v: '3.31', d: '12 nov 2026', t: '15 indicadores gratis nuevos', items: [
     'Leyenda de indicadores abierta: cada nombre con sus botones va en una píldora de cristal oscuro para que no se pierda con las velas.',
     'Fibonacci (herramienta y automático): todos los niveles con su color tenue y el mismo fondo; solo las líneas de los niveles clave (0.5, 0.618, 0.65, 0.786 y 1.618) más vivas. El automático usa líneas punteadas y marca con una línea punteada el tramo que está midiendo.',
