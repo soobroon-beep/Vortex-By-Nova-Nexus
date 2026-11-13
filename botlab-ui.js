@@ -796,7 +796,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
   }
   function tabEst(b) {
     const sp = mainSpec(b), run = runOf(b), T = $('#blTab'), st = (b.paper || []).find(x => x.status === 'running'), live = st && PP() ? PP().stats(st) : null;
-    const sm = CO ? CO.summary(sp, run, live) : null, tips = tipsOf(b), ai = b.coach && run && (b.coach.runId === run.id || b.coach.v === b.mainV) ? b.coach : null;
+    const sm = CO ? CO.summary(sp, run, live) : null, tips = tipsOf(b), ai = b.coach && b.coach.g2 && run && (b.coach.runId === run.id || b.coach.v === b.mainV) ? b.coach : null; /* g2: consejos a la medida (los anteriores, más genéricos, se vuelven a pedir) */
     const tested = b.tipTests || {}, inTest = t => tested[tipKey(t)] || TQ.has(b.id + '|' + tipKey(t));
     const aiTips = ai && CO ? (ai.tips || []).filter(t => CO.validTip(sp, t) && !tips.some(x => JSON.stringify(x.patch) === JSON.stringify(t.patch)) && !ignoredTip(b, t)) : [];
     const card = (t, k) => `<div class="bl-tip k-${esc(t.kind || 'ia')}"><div class="bl-tip-h"><span class="bl-tip-k">${esc({reglas: 'Reglas', riesgo: 'Riesgo', filtro: 'Filtro', temporalidad: 'Temporalidad', activo: 'Activo'}[t.kind] || 'IA')}</span><b>${esc(t.title)}</b>${ignRec(b, t) ? '<span class="bl-tip-back">Volvió: sigue fallando en esto</span>' : ''}</div><p>${esc(t.why)}</p><div class="bl-tip-b"><button class="bl-btn" data-a="tip" data-k="${k}">Probar este consejo</button><button class="bl-btn ghost" data-a="tipIgnore" data-k="${k}" title="Quitar este consejo para que salgan otros">Ignorar consejo</button></div></div>`;
@@ -823,7 +823,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
         ${dropped && !checking ? `<small class="bl-dim">${dropped} consejo(s) revisado(s) no le sirven a este bot y no se muestran.</small>` : ''}
         <div class="bl-actions">${run ? `<button class="bl-btn ghost" data-a="coachAi" ${b.coachBusy ? 'disabled' : ''}>${b.coachBusy ? 'La IA está analizando…' : ai ? 'Pedir más consejos a la IA' : 'Analizar a fondo con IA'}</button>` : `<button class="bl-btn" data-a="quickRun">Probar para recibir consejos</button>`}${run && !b.sweeps ? `<button class="bl-btn ghost" data-a="sweep">¿En qué monedas funciona mejor?</button>` : ''}</div>
         ${b.coachErr ? note('⚠ ' + b.coachErr, 'warn') : ''}</div>`;
-    if (run && CO && LLM && !ai && !b.coachBusy && b.coachTried !== b.mainV) { b.coachTried = b.mainV; coachAi(b, true); }
+    if (run && CO && LLM && !ai && !b.coachBusy && b.coachTried !== b.mainV + ':g2') { b.coachTried = b.mainV + ':g2'; coachAi(b, true); }
   }
   /* ───────── Probar antes de aplicar ─────────
      1) Vuelve a correr la versión actual con las velas de hoy (si su prueba es vieja) para comparar en los MISMOS datos.
@@ -942,7 +942,7 @@ Máximo 3 tips. "patch" es un fragmento de la especificación con el MISMO esque
       const raw = (/```json\s*([\s\S]*?)```/.exec(r.text) || [null, r.text])[1], j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
       const GEN = /^(a[ñn]ade|pon(le)?|usa|agrega) (un )?(stop|rsi|ema|filtro de tendencia)|opera a favor de la tendencia|baja el riesgo|diversifica|gesti[oó]n de riesgo/i, lock = p => p && typeof p === 'object' && ['symbol', 'basket', 'interval', 'intervals'].some(k => k in p) || (p && p.risk && ('capital' in p.risk || 'riskPct' in p.risk || 'size' in p.risk));
       const triedT = new Set(tried.map(x => x.split(' → ')[0].toLowerCase()));
-      b.coach = {runId: run.id, v: b.mainV, at: Date.now(), text: String(j.resumen || '').slice(0, 1200), tips: (j.tips || []).filter(t => t && t.patch && /\d/.test(String(t.por_que || '') + String(t.evidencia || '')) && !GEN.test(String(t.titulo || '')) && !lock(t.patch) && !triedT.has(String(t.titulo || '').toLowerCase())).slice(0, 3)
+      b.coach = {g2: true, runId: run.id, v: b.mainV, at: Date.now(), text: String(j.resumen || '').slice(0, 1200), tips: (j.tips || []).filter(t => t && t.patch && /\d/.test(String(t.por_que || '') + String(t.evidencia || '')) && !GEN.test(String(t.titulo || '')) && !lock(t.patch) && !triedT.has(String(t.titulo || '').toLowerCase())).slice(0, 3)
         .map(t => ({kind: 'ia', title: String(t.titulo || 'Consejo de la IA').slice(0, 90), why: (String(t.por_que || '') + (t.evidencia ? ' (' + String(t.evidencia) + ')' : '')).slice(0, 420), patch: t.patch}))}; // sin consejos de manual, sin cambiar moneda/temporalidad/riesgo y sin repetir lo ya probado
       log(b, 'consejo', 'La IA analizó el bot y dejó ' + b.coach.tips.length + ' sugerencia(s).');
     } catch (e) { b.coachErr = quiet ? '' : 'La IA no respondió (' + (LLM.friendly ? LLM.friendly(e) : e.message) + '). Los consejos de arriba se calculan sin IA con tus datos.'; }
