@@ -22,6 +22,18 @@ const fs = require('fs'), N = require('../news.js');
         if (r.ok) { const j = await r.json(); if (Array.isArray(j)) for (const e of j) { const t = Date.parse(e.date); if (Number.isFinite(t) && e.title) evs.push({t, title: String(e.title), country: String(e.country || ''), impact: String(e.impact || ''), forecast: e.forecast || '', previous: e.previous || '', actual: e.actual || ''}); } status['cal_' + f] = 'ok'; } else status['cal_' + f] = 'HTTP ' + r.status;
       } catch (e) { status['cal_' + f] = 'error: ' + e.message; }
     }
+    // Semanas siguientes: ForexFactory solo publica «nextweek» casi al final de la semana (antes daba 404 y el widget decía «sin eventos»).
+    // Se completan las próximas 3 semanas con el calendario público de TradingView (sin duplicar lo que ya trae ForexFactory).
+    if (!fast) try {
+      const CUR = {US: 'USD', EU: 'EUR', GB: 'GBP', JP: 'JPY', CN: 'CNY', CA: 'CAD', AU: 'AUD', CH: 'CHF', NZ: 'NZD', DE: 'EUR', FR: 'EUR', IT: 'EUR', ES: 'EUR'};
+      const from = new Date(now - 2 * 864e5).toISOString(), to = new Date(now + 22 * 864e5).toISOString();
+      const r = await fetch(`https://economic-calendar.tradingview.com/events?from=${from}&to=${to}&countries=US,EU,GB,JP,CN,CA,AU,CH,NZ`, {headers: {'user-agent': 'Mozilla/5.0 (compatible; CCTNews/1.0)', origin: 'https://www.tradingview.com', referer: 'https://www.tradingview.com/'}, signal: AbortSignal.timeout(20000)});
+      if (r.ok) { const j = await r.json(), list = Array.isArray(j) ? j : (j && j.result) || []; const lastFF = evs.length ? Math.max(...evs.map(e => e.t)) : now; let n = 0;
+        for (const e of list) { const t = Date.parse(e.date); if (!Number.isFinite(t) || t <= lastFF || !e.title) continue; const cur = e.currency || CUR[e.country] || ''; if (!cur) continue;
+          evs.push({t, title: String(e.title), country: cur, impact: e.importance >= 1 ? 'High' : e.importance === 0 ? 'Medium' : 'Low', forecast: e.forecast == null ? '' : String(e.forecast) + (e.unit || ''), previous: e.previous == null ? '' : String(e.previous) + (e.unit || ''), actual: e.actual == null ? '' : String(e.actual) + (e.unit || ''), src: 'tv'}); n++; }
+        status.cal_tv = 'ok ' + n; } else status.cal_tv = 'HTTP ' + r.status;
+    } catch (e) { status.cal_tv = 'error: ' + e.message; }
+    if (!fast && cal && evs.length) { const lastNew = Math.max(...evs.map(e => e.t)); for (const e of cal.events || []) if (e.t > lastNew) evs.push(e); } // nunca se pierden eventos futuros que ya se tenían
     if (fast && evs.length) { const k = e => e.t + '|' + e.country + '|' + e.title, m = new Map((cal.events || []).map(e => [k(e), e])); for (const e of evs) m.set(k(e), e); evs.length = 0; evs.push(...m.values()); }
     if (evs.length) { evs.sort((a, b) => a.t - b.t); fs.writeFileSync(__dirname + '/../calendar-data.json', JSON.stringify({at: now, events: evs})); }
   }
