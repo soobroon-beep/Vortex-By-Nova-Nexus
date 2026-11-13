@@ -2589,8 +2589,8 @@ function openRisk(d, priceHint) {
 }
 function renderSelBar() {
   let bar = $('#selBar'); const d = curDraw(), show = !!d || isBrushTool(drawTool);
-  if (!show) { if (bar) bar.remove(); closePop(); return; }
-  if (!bar) { bar = document.createElement('div'); bar.id = 'selBar'; bar.className = 'pbar'; $('#chartArea').appendChild(bar); }
+  if (!show) { if (bar) { bar.removeAttribute('id'); bar.classList.add('pbar-out'); bar.style.pointerEvents = 'none'; setTimeout(() => bar.remove(), 170); } closePop(); return; } // se desvanece al soltar el dibujo
+  if (!bar) { bar = document.createElement('div'); bar.id = 'selBar'; bar.className = 'pbar pbar-in'; $('#chartArea').appendChild(bar); setTimeout(() => bar.classList.remove('pbar-in'), 320); } // aparece con animación
   const brush = sbBrushMode(d), col = d ? d.col || sbDefCol() : state.brush.c, lw = d ? (d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw || 2) : state.brush.w;
   const line = d && !brush && !SB_NOSTYLE.has(d.type) && !SB_TEXT.has(d.type), canText = d && !brush && !SB_NOSTYLE.has(d.type);
   const b = (k, ic, tip, extra = '') => `<button data-sb="${k}" title="${tip}" aria-label="${tip}" class="${selPop === k ? 'open' : ''}">${extra || ic}</button>`;

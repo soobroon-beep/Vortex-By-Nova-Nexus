@@ -19,6 +19,7 @@
   const toast = m => { const t = $('#toast'); if (!t) return; t.textContent = m; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => { t.style.display = 'none'; }, 2600); };
 
   function row() { // fila en Configuración (solo para ti)
+    const z = $('#devZone'), dev = !!(window.CCTPlans && CCTPlans.owner); if (z) z.hidden = !dev; // zona de desarrollador: Vigía y Vista de membresía, solo para el creador
     const r = $('#setVigia'); if (!r) return; const own = isOwner(); r.hidden = !own; if (!own) return;
     const n = (doc && doc.items || []).filter(o => o.status === 'nuevo').length, b = $('.vg-count', r);
     if (b) { b.textContent = n; b.hidden = !n; }

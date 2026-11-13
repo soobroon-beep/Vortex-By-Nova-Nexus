@@ -1937,11 +1937,11 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 @media (prefers-reduced-motion:reduce){.pbar-pop,.rail-fly,.row-menu,.tag-pop,.pop-menu,.rk-dlg{animation:none}}
 .cp-acts .cp-add,.pp-mine-add{width:26px;height:24px;padding:0;display:grid;place-items:center;font:700 16px/1 system-ui;border-radius:8px}
 /* Vigía de VORTEX en Configuración: solo lo ve el creador → fila «galaxia» con borde arcoíris que gira y estrellas */
-#setVigia{position:relative;overflow:hidden;isolation:isolate;border-radius:14px!important;margin:4px;width:calc(100% - 8px);border:1px solid transparent!important;
+#setVigia,.dev-glow{position:relative;overflow:hidden;isolation:isolate;border-radius:14px!important;margin:4px;width:calc(100% - 8px);border:1px solid transparent!important;
   background:radial-gradient(70% 140% at 12% 0%,rgba(124,77,255,.28),transparent 60%) padding-box,radial-gradient(60% 140% at 100% 100%,rgba(40,140,255,.22),transparent 62%) padding-box,linear-gradient(135deg,#080917,#0d0c22 55%,#081022) padding-box,
   conic-gradient(from var(--vg-a,0deg),#ff5f6d,#ffc371,#47e891,#40c4ff,#7c4dff,#ff5fd2,#ff5f6d) border-box!important;animation:vgSpin 6s linear infinite}
 #setVigia+.sg-row{border-top:0}
-#setVigia::before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:radial-gradient(1px 1px at 12% 30%,#fff,transparent 70%),radial-gradient(1px 1px at 28% 72%,rgba(255,255,255,.7),transparent 70%),radial-gradient(1.3px 1.3px at 47% 22%,#fff,transparent 70%),radial-gradient(1px 1px at 63% 64%,rgba(214,204,255,.8),transparent 70%),radial-gradient(1px 1px at 78% 30%,#fff,transparent 70%),radial-gradient(1.2px 1.2px at 90% 76%,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 37% 48%,rgba(196,212,255,.7),transparent 70%);background-size:220px 60px;animation:vgStars 14s linear infinite,vgTw 2.6s ease-in-out infinite}
+#setVigia::before,.dev-glow::before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:radial-gradient(1px 1px at 12% 30%,#fff,transparent 70%),radial-gradient(1px 1px at 28% 72%,rgba(255,255,255,.7),transparent 70%),radial-gradient(1.3px 1.3px at 47% 22%,#fff,transparent 70%),radial-gradient(1px 1px at 63% 64%,rgba(214,204,255,.8),transparent 70%),radial-gradient(1px 1px at 78% 30%,#fff,transparent 70%),radial-gradient(1.2px 1.2px at 90% 76%,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 37% 48%,rgba(196,212,255,.7),transparent 70%);background-size:220px 60px;animation:vgStars 14s linear infinite,vgTw 2.6s ease-in-out infinite}
 #setVigia .sg-t b{background:linear-gradient(90deg,#fff,#d9ccff 40%,#a8e6ff 70%,#fff) 0 0/200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:vgShine 4s linear infinite}
 #setVigia .sg-t small{color:#b9acf5}
 #setVigia .sg-ic{background:linear-gradient(135deg,#7c4dff,#40c4ff)!important;color:#fff!important;box-shadow:0 0 14px rgba(124,77,255,.55)}
@@ -1952,5 +1952,22 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 @keyframes vgStars{to{background-position:-220px 0}}
 @keyframes vgTw{0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes vgShine{to{background-position:-200% 0}}
-@media (prefers-reduced-motion:reduce){#setVigia,#setVigia::before,#setVigia .sg-t b{animation:none}}
+@media (prefers-reduced-motion:reduce){#setVigia,#setVigia::before,#setVigia .sg-t b,.dev-glow,.dev-glow::before{animation:none}}
 .vw-logo{border-radius:0!important;box-shadow:none!important;object-fit:contain;filter:drop-shadow(0 0 14px rgba(255,255,255,.3))}
+
+/* Barra de edición del dibujo (color, texto, grosor, estilo, ajustes, candado, borrar…): aparece y se desvanece.
+   Usa translate/scale (no transform) para no mover la barra de donde la dejaste. */
+@keyframes pbarIn{from{opacity:0;translate:0 10px;scale:.94}to{opacity:1;translate:0 0;scale:1}}
+.pbar.pbar-in{animation:pbarIn .26s cubic-bezier(.2,.9,.25,1.1) both}
+.pbar.pbar-out{transition:opacity .16s ease,translate .16s ease,scale .16s ease;opacity:0;translate:0 8px;scale:.96}
+@media (prefers-reduced-motion:reduce){.pbar.pbar-in{animation:none}}
+
+/* Zona de desarrollador (solo la cuenta del creador): Vigía y Vista de membresía */
+#devZone .dev-label{display:flex;align-items:center;gap:8px}
+#devZone .dev-label em{font-style:normal;letter-spacing:.4px;text-transform:none;font-weight:650;font-size:10.5px;padding:2px 8px;border-radius:999px;color:#fff;background:linear-gradient(90deg,#7c4dff,#40c4ff)}
+#devZone .sg{background:none;border:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;padding:0}
+#devZone .pv-box.dev-glow{display:block;margin:10px 4px 4px;padding:13px 14px;width:auto}
+#devZone .pv-box.dev-glow b.pv-t{display:block;margin-bottom:3px;font-size:14px;background:linear-gradient(90deg,#fff,#d9ccff 40%,#a8e6ff 70%,#fff) 0 0/200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:vgShine 4s linear infinite}
+#devZone .pv-box.dev-glow small{color:#b9acf5}
+#devZone .pv-box.dev-glow .seg{margin-top:10px;background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.12)}
+#devZone .pv-box.dev-glow .seg button{white-space:nowrap}
