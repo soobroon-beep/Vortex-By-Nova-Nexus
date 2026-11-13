@@ -106,7 +106,7 @@
     /* Límite total y límite de SILENCIO: antes, si el servidor empezaba a responder y luego se quedaba callado, la app esperaba para siempre
        (el celular se quedaba «trabado»). Ahora se corta y se prueba otro modelo o se usa el análisis local. */
     const body = {model, messages, temperature: o.temperature == null ? .4 : o.temperature, max_tokens: o.maxTokens || 1600, stream: !!o.onToken};
-    if (o.newParams) { body.max_completion_tokens = body.max_tokens; delete body.max_tokens; if (/^(o\d|gpt-5)/i.test(model)) delete body.temperature; } // OpenAI: modelos nuevos
+    if (o.newParams) { body.max_completion_tokens = body.max_tokens; delete body.max_tokens; if (/^(o\d|gpt-5)/i.test(model)) delete body.temperature; } if (o.own && /^(o\d|gpt-5|gemini-2\.5|gemini-3)/i.test(model)) { body.reasoning_effort = 'low'; const k = body.max_completion_tokens ? 'max_completion_tokens' : 'max_tokens'; body[k] = Math.round(body[k] * 1.3); } // modelos que «piensan»: sin esto gastaban los tokens pensando y no respondían // OpenAI: modelos nuevos
     if (o.task && /vortex-push/.test(url)) body.task = o.task; // tu servidor elige la IA open source según el uso: chat, vision o code
     const headers = {'content-type': 'application/json'}; if (key) headers.authorization = 'Bearer ' + key;
     const ctl = new AbortController(), kill = () => ctl.abort(); let idle = 0; const total = setTimeout(kill, o.timeout || 60000), bump = () => { clearTimeout(idle); idle = setTimeout(kill, o.idle || 25000); };
@@ -280,10 +280,18 @@
     const conv = (m) => ({role: m.role === 'assistant' ? 'assistant' : 'user', content: typeof m.content === 'string' ? m.content : (m.content || []).map(p => { if (p.type === 'text') return {type: 'text', text: p.text}; const u = (p.image_url && (p.image_url.url || p.image_url)) || ''; const d = /^data:(image\/[\w+.-]+);base64,(.*)$/.exec(u); return d ? {type: 'image', source: {type: 'base64', media_type: d[1], data: d[2]}} : {type: 'image', source: {type: 'url', url: u}}; })});
     const msgs = messages.filter(m => m.role !== 'system').map(conv); if (!msgs.length || msgs[0].role !== 'user') msgs.unshift({role: 'user', content: '.'});
     const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), o.timeout || 90000); if (o.signal) o.signal.addEventListener('abort', () => ctl.abort(), {once: true});
+    /* Los Claude nuevos piensan antes de responder y ese «pensamiento» se come el límite de tokens: con 1.000 tokens no dejaban texto
+       («Tu IA no devolvió texto»). Con esfuerzo bajo responden directo, igual de bien para esto y gastando menos. */
+    const sysP = sys ? (sys.length > 3500 ? [{type: 'text', text: sys, cache_control: {type: 'ephemeral'}}] : sys) : undefined, old = /^claude-(?:3|instant)/.test(c.model || '');
+    const body = extra => JSON.stringify(Object.assign({model: c.model || OWN.anthropic.model, max_tokens: Math.round((o.maxTokens || 1600) * 1.3), system: sysP, messages: msgs}, old ? {temperature: o.temperature == null ? .4 : o.temperature} : {}, extra));
+    const send = async extra => { try { return await fetch(String(c.url || OWN.anthropic.url).replace(/\/+$/, '') + '/messages', {method: 'POST', signal: ctl.signal, headers: {'content-type': 'application/json', 'x-api-key': c.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'}, body: body(extra)}); } catch (e) { throw new LLMError(ctl.signal.aborted ? 'Tiempo agotado' : 'Sin conexión', ctl.signal.aborted ? 'abort' : 'network'); } };
     try {
-      let r; try { r = await fetch(String(c.url || OWN.anthropic.url).replace(/\/+$/, '') + '/messages', {method: 'POST', signal: ctl.signal, headers: {'content-type': 'application/json', 'x-api-key': c.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'}, body: JSON.stringify(Object.assign({model: c.model || OWN.anthropic.model, max_tokens: o.maxTokens || 1600, system: sys ? (sys.length > 3500 ? [{type: 'text', text: sys, cache_control: {type: 'ephemeral'}}] : sys) : undefined, messages: msgs}, /^claude-(?:3|instant)/.test(c.model || '') ? {temperature: o.temperature == null ? .4 : o.temperature} : {}))}); } /* los Claude nuevos (4.7+, 5.x) rechazan «temperature» («temperature is deprecated for this model») */ catch (e) { throw new LLMError(ctl.signal.aborted ? 'Tiempo agotado' : 'Sin conexión', ctl.signal.aborted ? 'abort' : 'network'); }
-      if (!r.ok) { let m = ''; try { const j = await r.json(); m = (j.error && j.error.message) || ''; } catch {} throw new LLMError(String(m || 'Error ' + r.status).slice(0, 200), kindOf(r.status), r.status); }
-      const j = await r.json(), text = (j.content || []).filter(x => x.type === 'text').map(x => x.text).join('').trim(); if (!text) throw new LLMError('Tu IA no devolvió texto.', 'server'); if (o.onToken) o.onToken(text); return text;
+      let r = await send(old ? {} : {output_config: {effort: 'low'}}), err = '';
+      if (!r.ok) { try { const jj = await r.json(); err = (jj.error && jj.error.message) || ''; } catch {} if (!old && r.status === 400 && /output_config|effort/i.test(err)) { r = await send({}); err = ''; } } // modelo que no acepta «effort»: se pide normal
+      if (!r.ok) { if (!err) { try { const jj = await r.json(); err = (jj.error && jj.error.message) || ''; } catch {} } throw new LLMError(String(err || 'Error ' + r.status).slice(0, 200), kindOf(r.status), r.status); }
+      const j = await r.json(), text = (j.content || []).filter(x => x.type === 'text').map(x => x.text).join('').trim();
+      if (!text) throw new LLMError(j.stop_reason === 'max_tokens' ? 'Tu IA usó todos sus tokens pensando y no alcanzó a responder.' : 'Tu IA no devolvió texto.', 'server');
+      if (o.onToken) o.onToken(text); return text;
     } finally { clearTimeout(tm); }
   }
   /* ───────── Ahorro de tokens con TU IA (tu clave la pagas tú) ─────────
@@ -310,7 +318,7 @@
     const msgs = await slim(img && !vis ? stripImages(messages) : messages), oo = Object.assign({}, o, {maxTokens: o.maxTokens || 1200});
     const ck = img ? '' : c.provider + '|' + c.model + '|' + JSON.stringify(msgs) + '|' + oo.maxTokens, hit = ck && ownCache.get(ck);
     if (hit && Date.now() - hit.at < OWN_TTL) { if (o.onToken) o.onToken(hit.text); return {text: hit.text, model: c.model + ' · tu IA (misma respuesta, sin costo)', image: false, own: true}; }
-    const text = P.native === 'anthropic' ? await anthropicCall(c, msgs, oo) : await openaiCall(String(c.url || P.url).replace(/\/+$/, '') + '/chat/completions', c.key, c.model, msgs, Object.assign({}, oo, {newParams: !!P.newParams, idle: Math.max(o.idle || 0, 45000)}));
+    const text = P.native === 'anthropic' ? await anthropicCall(c, msgs, oo) : await openaiCall(String(c.url || P.url).replace(/\/+$/, '') + '/chat/completions', c.key, c.model, msgs, Object.assign({}, oo, {own: true, newParams: !!P.newParams, idle: Math.max(o.idle || 0, 45000)}));
     if (ck) { ownCache.set(ck, {text, at: Date.now()}); if (ownCache.size > 30) ownCache.delete(ownCache.keys().next().value); }
     return {text, model: c.model + ' · tu IA (' + P.name.replace(/\s*\(.*\)$/, '') + ')', image: img && vis, own: true};
   }
