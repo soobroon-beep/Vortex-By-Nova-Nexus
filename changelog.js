@@ -1,5 +1,11 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.31', d: '12 nov 2026', t: '15 indicadores gratis nuevos', items: [
+    'Tendencia: Cinta de EMAs 9/21/50/200, UT Bot (compra/venta), Chandelier Exit y Canal de regresión lineal.',
+    'Osciladores: Squeeze Momentum, WaveTrend, RSI con divergencias, Vortex Indicator (VI) y Aroon.',
+    'Estructura: Máximo y mínimo del día y semana anterior, Soportes y resistencias automáticos, ZigZag y Fractales de Williams.',
+    'Volumen y volatilidad: Volumen relativo (RVOL) e Índice de Choppiness. Todos en Indicadores › Gratuitos, con sus ajustes en el engrane.'
+  ]},
   {v: '3.30', d: '12 nov 2026', t: 'Tu paleta de colores en toda la app', items: [
     'Cualquier cuadro de color (indicadores, Nova Nexus, scripts Pine, Aspecto del gráfico, alertas…) abre la misma paleta que las herramientas de dibujo.',
     'Mis colores: guarda hasta 20 colores con «+ Guardar»; quedan en tu cuenta y salen en todas las paletas, también en la de los dibujos. Con «Editar» quitas los que ya no uses.',
