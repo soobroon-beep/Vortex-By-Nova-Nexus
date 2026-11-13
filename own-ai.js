@@ -12,7 +12,7 @@
     const box = $('#ownAiBox'); if (!box || !L()) return; box.hidden = !open; sub(); if (!open) return;
     const O = L().OWN, saved = L().ownLoad(), c = draft || Object.assign({}, saved), P = O[c.provider] || null;
     box.innerHTML = `<div class="oa-h"><b>Tu IA</b><small>${saved.on ? `Ahora todo lo de IA usa <b>${esc(O[saved.provider].name)}</b> (${esc(saved.model)}).` : 'Conéctala para que todo lo de IA responda mejor.'}</small></div>
-      <p class="oa-p">Conecta tu propia IA con tu clave (API key): Nexus Pixel, el briefing, los consejos de los bots, Analizar gráfico y el Laboratorio la usan y te responden mucho mejor. Tu clave se guarda <b>solo en este dispositivo</b> y va directo a tu proveedor.</p>
+      <p class="oa-p">Conecta tu propia IA con tu clave (API key): Nexus Pixel, el briefing, los consejos de los bots, Analizar gráfico y el Laboratorio la usan y te responden mucho mejor. Tu clave se guarda en <b>tu cuenta (privada)</b>, así sale en tu PC y tu celular, y va directo a tu proveedor.</p>
       <label class="oa-f"><span>IA</span><select id="oaProv"><option value="">Elige tu IA…</option>${Object.entries(O).map(([k, v]) => `<option value="${k}" ${c.provider === k ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>
       ${P ? `${c.provider === 'custom' ? `<label class="oa-f"><span>URL del servidor</span><input id="oaUrl" type="url" placeholder="https://…/v1" value="${esc(c.url)}"></label>` : ''}
       <label class="oa-f"><span>Clave (API key)${P.site ? ` · consíguela en <a href="https://${esc(P.site)}" target="_blank" rel="noopener">${esc(P.site)}</a>` : ''}</span><input id="oaKey" type="password" autocomplete="off" placeholder="${esc(P.keyHint)}" value="${esc(c.key)}"></label>
@@ -25,15 +25,28 @@
   document.addEventListener('click', async e => {
     if (e.target.closest('#setOwnAI')) { open = !open; draft = null; models = []; msg = {t: '', c: ''}; paint(); if (open) $('#ownAiBox').scrollIntoView({block: 'nearest', behavior: 'smooth'}); return; }
     const b = e.target.closest('[data-oa]'); if (!b || !L()) return; const a = b.dataset.oa;
-    if (a === 'off') { L().ownSave(null); draft = null; models = []; msg = {t: 'Listo: se quitó tu IA de este dispositivo.', c: 'ok'}; paint(); return; }
+    if (a === 'off') { L().ownSave(null); document.dispatchEvent(new CustomEvent('vx-ownai', {detail: null})); draft = null; models = []; msg = {t: 'Listo: se quitó tu IA de este dispositivo.', c: 'ok'}; paint(); return; }
     const d = read(); draft = d; if (!d.key) { msg = {t: 'Pega tu clave (API key) primero.', c: 'err'}; paint(); return; } if (d.provider === 'custom' && !/^https?:\/\//.test(d.url)) { msg = {t: 'Escribe la URL del servidor (termina en /v1).', c: 'err'}; paint(); return; }
     busy = true; msg = {t: a === 'models' ? 'Buscando tus modelos…' : 'Probando tu IA…', c: ''}; paint();
     try {
       if (a === 'models') { models = await L().ownModels(d); msg = {t: models.length ? 'Elige el modelo que quieras usar.' : 'Tu clave funciona, pero no devolvió la lista: escribe el nombre del modelo.', c: 'ok'}; if (!models.length) models = []; }
-      else { const r = await L().ownTest(d); L().ownSave({on: true, provider: d.provider, key: d.key, model: d.model, url: d.url}); draft = null; msg = {t: `Conectada. Tu IA respondió «${String(r).slice(0, 40)}». Desde ahora todo lo de IA la usa.`, c: 'ok'}; }
+      else { const r = await L().ownTest(d); L().ownSave({on: true, provider: d.provider, key: d.key, model: d.model, url: d.url}); document.dispatchEvent(new CustomEvent('vx-ownai', {detail: {on: true, provider: d.provider, key: d.key, model: d.model, url: d.url}})); draft = null; msg = {t: `Conectada. Tu IA respondió «${String(r).slice(0, 40)}». Desde ahora todo lo de IA la usa.`, c: 'ok'}; }
     } catch (er) { msg = {t: 'No funcionó: ' + String(er && er.message || er).slice(0, 180) + '. Revisa la clave y el modelo.', c: 'err'}; }
     busy = false; paint();
   });
   document.addEventListener('change', e => { if (e.target && e.target.id === 'oaProv') { const O = L().OWN, p = e.target.value; draft = Object.assign(read(), {provider: p, key: '', model: p ? O[p].model : '', url: p ? O[p].url : ''}); models = []; msg = {t: '', c: ''}; paint(); } });
+  /* Tu IA en tu cuenta: la guardas en un dispositivo y aparece en los demás donde inicies sesión (documento privado users/<tú>/data/ownai). */
+  const C = () => window.CCTCloudPriv; let pulled = false;
+  async function push(c) { try { if (C() && C().ready()) await C().set('ownai', c && c.on ? {on: true, provider: c.provider, key: c.key, model: c.model, url: c.url || '', at: Date.now()} : {on: false, at: Date.now()}); } catch {} }
+  async function pull() {
+    if (pulled || !C() || !C().ready() || !L()) return; pulled = true;
+    try { const d = await C().get('ownai'), loc = L().ownLoad(), lat = +(localStorage.getItem('cct_ownai_at') || 0);
+      if (d && (d.at || 0) > lat) { if (d.on && d.key && L().OWN[d.provider]) L().ownSave({on: true, provider: d.provider, key: d.key, model: d.model, url: d.url}); else if (!d.on) L().ownSave(null); try { localStorage.setItem('cct_ownai_at', String(d.at || Date.now())); } catch {} sub(); paint(); }
+      else if (!d && loc.on) push(loc); // ya la tenías en este dispositivo: se sube a tu cuenta
+    } catch { pulled = false; }
+  }
+  const stamp = () => { try { localStorage.setItem('cct_ownai_at', String(Date.now())); } catch {} };
+  document.addEventListener('vx-ownai', e => { stamp(); push(e.detail); });
+  setInterval(pull, 3000);
   document.addEventListener('DOMContentLoaded', sub); setTimeout(sub, 800);
 })();

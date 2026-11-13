@@ -247,13 +247,17 @@ async function run() {
       const [cct, scripts, botlab, botlabServer, claudioServer, journal, vigia] = await Promise.all(['cct_mobile', 'scripts', 'botlab', 'botlab_server', 'claudio_server', 'journal', 'vigia'].map(g));
       items = vortexItems({ state: vortexState(cct), scripts, botlab, botlabServer, claudioServer, journal, vigia });
       const bp = parseJSON(unpack(botlab && botlab.items)), bots = list(Array.isArray(bp) ? bp : bp && bp.bots), linkSt = {};
+      // Un cerebro queda ligado a su bot por el ID del bot, no por el nombre ni la temporalidad: si los cambias, sigue conectado.
+      const botBrains = (await uref.collection('brains').where('kind', '==', 'bot').get()).docs.map(d => ({ ref: d.ref, d: d.data() }));
+      for (const b of botBrains) { const cur = b.d.bot && bots.find(x => x && x.id === b.d.bot.id); if (cur && cur.name && cur.name !== b.d.bot.name) await b.ref.set({ bot: Object.assign({}, b.d.bot, { name: cur.name }) }, { merge: true }); } // el nombre nuevo también se ve en Neural Brain
       for (const link of loadLinks()) { // crea el cerebro del bot si todavía no existe (no toca uno que ya tengas)
-        const bot = matchBot(link, bots);
+        const had = botBrains.find(b => (b.d.link === link.label || b.d.name === link.brain) && b.d.bot && bots.some(x => x && x.id === b.d.bot.id && x.status !== 'archived'));
+        const bot = had ? bots.find(x => x.id === had.d.bot.id) : matchBot(link, bots);
         if (!bot) { linkSt[link.label || 'bot'] = 'no encontrado'; const hits = list(link.name).map(x => bots.filter(b => b && new RegExp(x, 'i').test(nrm(b.name))).length); console.log(`Vínculo de bot sin encontrar: ${bots.length} bots en la cuenta · coincidencias por parte del nombre: ${hits.join('/')} · bots en ${link.interval || '-'}: ${bots.filter(b => { const v = list(b && b.versions).find(x => x && x.v === b.mainV) || {}; return v.spec && v.spec.interval === link.interval; }).length}`); continue; }
         console.log('Vínculo de bot encontrado.');
         const bref = uref.collection('brains').doc('bot-' + bot.id); linkSt[link.label || bot.name] = bot.name;
-        if ((await bref.get()).exists) continue;
-        await bref.set({ name: link.brain || 'Bot · ' + bot.name, kind: 'bot', bot: { id: bot.id, name: bot.name, auto: true }, icon: 'bot', color: link.color || '#9a7bff', desc: link.desc || `Cerebro del bot «${bot.name}» de Nova Bot Lab: aprende de cada experimento y lo mejora solo cada noche.`, sources: ['vortex'], toVortex: false, autoLearn: true, order: 0.5, owner: '', createdAt: now });
+        if ((await bref.get()).exists) { if (!had || had.d.link !== link.label) await bref.set({ link: link.label || '' }, { merge: true }); continue; } // se marca de qué vínculo es (aunque le cambies el nombre al cerebro)
+        await bref.set({ link: link.label || '', name: link.brain || 'Bot · ' + bot.name, kind: 'bot', bot: { id: bot.id, name: bot.name, auto: true }, icon: 'bot', color: link.color || '#9a7bff', desc: link.desc || `Cerebro del bot «${bot.name}» de Nova Bot Lab: aprende de cada experimento y lo mejora solo cada noche.`, sources: ['vortex'], toVortex: false, autoLearn: true, order: 0.5, owner: '', createdAt: now });
         for (const [i, n] of list(link.notes).entries()) await bref.collection('notes').doc('seed' + i).set({ id: 'seed' + i, text: n.text, kind: n.kind || 'regla', master: !!n.master, author: '', tags: ['bot'], createdAt: now, updatedAt: now });
       }
       if (Object.keys(linkSt).length) await uref.collection('settings').doc('status').set({ botLinks: linkSt }, { merge: true });

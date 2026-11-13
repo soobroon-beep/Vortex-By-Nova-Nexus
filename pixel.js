@@ -421,7 +421,7 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     let ctx = null; try { ctx = window.CCT_getAIContext && window.CCT_getAIContext(); } catch {} const R = W.read(ctx); if (!R) return null;
     watchAt = now; watchKey = key; if (!force && R.sig === watchSig && now - watchSaid < 60 * 6e4) return null; // nada cambió: no repite lo mismo (como mucho, un recordatorio por hora)
     watchBusy = true; let text = '';
-    try { const L = LLM(); if (L && L.chat) { const r = await Promise.race([L.chat([{role: 'system', content: W.SYS + profile()}, {role: 'user', content: W.prompt(R, coin, h.interval(), ctx)}], {purpose: 'text', maxTokens: 150}), sleep(25000).then(() => { throw new Error('tarde'); })]); text = W.clean(r && r.text); } } catch {}
+    try { const L = LLM(); if (L && L.chat) { const r = await Promise.race([L.chat([{role: 'system', content: W.SYS + profile()}, {role: 'user', content: W.prompt(R, coin, h.interval(), ctx)}], Object.assign({purpose: 'text', maxTokens: 150}, force ? {} : {noOwn: true})), sleep(25000).then(() => { throw new Error('tarde'); })]); text = W.clean(r && r.text); } } catch {}
     watchBusy = false; if (!text) text = W.local(R, coin, h.interval(), c);
     if (h.symbol() + '|' + h.interval() !== key || (busy && !force)) return null; // cambiaste de gráfico mientras pensaba
     watchSig = R.sig; watchSaid = Date.now(); showWatch(text); return text;

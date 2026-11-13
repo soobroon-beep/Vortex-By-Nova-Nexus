@@ -281,14 +281,37 @@
     const msgs = messages.filter(m => m.role !== 'system').map(conv); if (!msgs.length || msgs[0].role !== 'user') msgs.unshift({role: 'user', content: '.'});
     const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), o.timeout || 90000); if (o.signal) o.signal.addEventListener('abort', () => ctl.abort(), {once: true});
     try {
-      let r; try { r = await fetch(String(c.url || OWN.anthropic.url).replace(/\/+$/, '') + '/messages', {method: 'POST', signal: ctl.signal, headers: {'content-type': 'application/json', 'x-api-key': c.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'}, body: JSON.stringify(Object.assign({model: c.model || OWN.anthropic.model, max_tokens: o.maxTokens || 1600, system: sys || undefined, messages: msgs}, /^claude-(?:3|instant)/.test(c.model || '') ? {temperature: o.temperature == null ? .4 : o.temperature} : {}))}); } /* los Claude nuevos (4.7+, 5.x) rechazan «temperature» («temperature is deprecated for this model») */ catch (e) { throw new LLMError(ctl.signal.aborted ? 'Tiempo agotado' : 'Sin conexión', ctl.signal.aborted ? 'abort' : 'network'); }
+      let r; try { r = await fetch(String(c.url || OWN.anthropic.url).replace(/\/+$/, '') + '/messages', {method: 'POST', signal: ctl.signal, headers: {'content-type': 'application/json', 'x-api-key': c.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'}, body: JSON.stringify(Object.assign({model: c.model || OWN.anthropic.model, max_tokens: o.maxTokens || 1600, system: sys ? (sys.length > 3500 ? [{type: 'text', text: sys, cache_control: {type: 'ephemeral'}}] : sys) : undefined, messages: msgs}, /^claude-(?:3|instant)/.test(c.model || '') ? {temperature: o.temperature == null ? .4 : o.temperature} : {}))}); } /* los Claude nuevos (4.7+, 5.x) rechazan «temperature» («temperature is deprecated for this model») */ catch (e) { throw new LLMError(ctl.signal.aborted ? 'Tiempo agotado' : 'Sin conexión', ctl.signal.aborted ? 'abort' : 'network'); }
       if (!r.ok) { let m = ''; try { const j = await r.json(); m = (j.error && j.error.message) || ''; } catch {} throw new LLMError(String(m || 'Error ' + r.status).slice(0, 200), kindOf(r.status), r.status); }
       const j = await r.json(), text = (j.content || []).filter(x => x.type === 'text').map(x => x.text).join('').trim(); if (!text) throw new LLMError('Tu IA no devolvió texto.', 'server'); if (o.onToken) o.onToken(text); return text;
     } finally { clearTimeout(tm); }
   }
+  /* ───────── Ahorro de tokens con TU IA (tu clave la pagas tú) ─────────
+     · se mandan solo los últimos 8 mensajes de la conversación y sin espacios de sobra
+     · los datos muy largos (velas, JSON del gráfico) se recortan por en medio: se queda lo más reciente y el inicio
+     · la captura del gráfico se achica a 1024 px (cuesta ~la mitad y se ve igual de bien)
+     · la misma pregunta en 5 min no se vuelve a cobrar (se reutiliza la respuesta)
+     · con Claude, las instrucciones del sistema se guardan en caché (las siguientes preguntas cuestan ~10 % de esa parte)
+     · lo automático (Pixel asomándose, radar, consejos en segundo plano) usa la IA gratis de VORTEX, no tu clave */
+  const ownCache = new Map(), OWN_TTL = 5 * 6e4, CAP = 12000;
+  const tidyTxt = t => { t = String(t).replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim(); return t.length > CAP ? t.slice(0, 8000) + '\n…(datos recortados para ahorrar)…\n' + t.slice(-(CAP - 8000)) : t; };
+  async function smallImg(url) { // data:image → máx. 1024 px de ancho (JPEG)
+    if (typeof document === 'undefined' || !/^data:image\//.test(url)) return url;
+    try { const im = new Image(); await new Promise((ok, ko) => { im.onload = ok; im.onerror = ko; im.src = url; }); const k = Math.min(1, 1024 / Math.max(im.width, im.height)); if (k >= 1 && url.length < 400000) return url;
+      const cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); return cv.toDataURL('image/jpeg', .82); } catch { return url; }
+  }
+  async function slim(messages) {
+    const sys = messages.filter(m => m.role === 'system'), rest = messages.filter(m => m.role !== 'system').slice(-8), out = [];
+    for (const m of sys.concat(rest)) out.push(typeof m.content === 'string' ? {role: m.role, content: tidyTxt(m.content)} : {role: m.role, content: await Promise.all((m.content || []).map(async p => p.type === 'text' ? {type: 'text', text: tidyTxt(p.text)} : p.type === 'image_url' ? {type: 'image_url', image_url: {url: await smallImg((p.image_url && (p.image_url.url || p.image_url)) || '')}} : p))});
+    return out;
+  }
   async function chatOwn(messages, o, c) {
-    const P = OWN[c.provider], img = hasImage(messages), vis = P.vision || VISION.test(c.model), msgs = img && !vis ? stripImages(messages) : messages;
-    const text = P.native === 'anthropic' ? await anthropicCall(c, msgs, o) : await openaiCall(String(c.url || P.url).replace(/\/+$/, '') + '/chat/completions', c.key, c.model, msgs, Object.assign({}, o, {newParams: !!P.newParams, idle: Math.max(o.idle || 0, 45000)}));
+    const P = OWN[c.provider], img = hasImage(messages), vis = P.vision || VISION.test(c.model);
+    const msgs = await slim(img && !vis ? stripImages(messages) : messages), oo = Object.assign({}, o, {maxTokens: o.maxTokens || 1200});
+    const ck = img ? '' : c.provider + '|' + c.model + '|' + JSON.stringify(msgs) + '|' + oo.maxTokens, hit = ck && ownCache.get(ck);
+    if (hit && Date.now() - hit.at < OWN_TTL) { if (o.onToken) o.onToken(hit.text); return {text: hit.text, model: c.model + ' · tu IA (misma respuesta, sin costo)', image: false, own: true}; }
+    const text = P.native === 'anthropic' ? await anthropicCall(c, msgs, oo) : await openaiCall(String(c.url || P.url).replace(/\/+$/, '') + '/chat/completions', c.key, c.model, msgs, Object.assign({}, oo, {newParams: !!P.newParams, idle: Math.max(o.idle || 0, 45000)}));
+    if (ck) { ownCache.set(ck, {text, at: Date.now()}); if (ownCache.size > 30) ownCache.delete(ownCache.keys().next().value); }
     return {text, model: c.model + ' · tu IA (' + P.name.replace(/\s*\(.*\)$/, '') + ')', image: img && vis, own: true};
   }
   async function ownTest(c) { const r = await chatOwn([{role: 'user', content: 'Responde solo: OK'}], {maxTokens: 20, timeout: 30000}, c); return r.text; }

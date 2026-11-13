@@ -311,6 +311,7 @@ const PINE_MAX = 6;
 let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null, multi = [];
 let paneMan = {}, paneHit = []; // escala vertical manual por panel (oscilador, RSI…) y su zona táctil; se llena al dibujar
 let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
+let lastBfTop = '';
 let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0, wsPing = 0, dataSrc = 'binance', dataSym = '';
 const lastShown = {};
 
@@ -1123,15 +1124,24 @@ function renderFrames() {
   };
   /* posición de la barra flotante: la mueves con la agarradera y se queda donde la dejaste (se guarda en este celular) */
   const PK = 'cct_pill_pos_v1'; let PP = (() => { try { const v = JSON.parse(localStorage.getItem(PK) || 'null'); return v && Number.isFinite(v.x) && Number.isFinite(v.y) ? v : null; } catch { return null; } })();
+  /* Celular · «Fija»: toda la cápsula (temporalidad, estrella, favoritos, menú) va en vertical arriba del logo VORTEX y se abre hacia arriba.
+     «Flotante»: la cápsula horizontal de siempre, que mueves con la agarradera a donde quieras. Se elige en Configuración › Personalización. */
+  const pillFixed = () => !isDesktop() && (window.__favMode || ((state.ui || {}).favBar || {}).mode || 'fija') !== 'flotante';
   function pillPos() {
-    if (isDesktop()) { tb.style.left = tb.style.top = ''; return; }
+    if (isDesktop()) { tb.style.left = tb.style.top = ''; view.classList.remove('pill-fixed'); return; }
+    const fixed = pillFixed(); view.classList.toggle('pill-fixed', fixed);
     const W = view.clientWidth, Hh = view.clientHeight, w = tb.offsetWidth || 150, h = tb.offsetHeight || 40; if (!W || !Hh) return;
-    const x = PP ? PP.x * Math.max(0, W - w) : (window.__favStack !== false ? 48 : 10), y = PP ? PP.y * Math.max(0, Hh - h) : Hh - h - 34;
+    if (fixed) { // centrada sobre el logo VORTEX (el logo sube o baja según los paneles de abajo)
+      const bf = document.querySelector('#chartArea .brand-fab'), vr = view.getBoundingClientRect(), br = bf && bf.getClientRects().length ? bf.getBoundingClientRect() : null;
+      const cx = br ? br.left - vr.left + br.width / 2 : 22, top = br ? br.top - vr.top - h - 8 : Hh - h - 70;
+      tb.style.left = clamp(cx - w / 2, 2, Math.max(2, W - w)) + 'px'; tb.style.top = clamp(top, 4, Math.max(4, Hh - h)) + 'px'; return;
+    }
+    const x = PP ? PP.x * Math.max(0, W - w) : 10, y = PP ? PP.y * Math.max(0, Hh - h) : Hh - h - 34;
     tb.style.left = clamp(x, 0, Math.max(0, W - w)) + 'px'; tb.style.top = clamp(y, 0, Math.max(0, Hh - h)) + 'px';
   }
   const grip = $('#pillGrip');
   if (grip) grip.addEventListener('pointerdown', e => {
-    if (isDesktop()) return; e.preventDefault(); e.stopPropagation(); close(); if (fbOpen) setFbOpen(false);
+    if (isDesktop() || pillFixed()) return; e.preventDefault(); e.stopPropagation(); close(); if (fbOpen) setFbOpen(false);
     const r = tb.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top; tb.classList.add('dragging'); try { grip.setPointerCapture(e.pointerId); } catch {}
     const mv = ev => { const vr = view.getBoundingClientRect(), W = vr.width - tb.offsetWidth, Hh = vr.height - tb.offsetHeight;
       PP = {x: W > 0 ? clamp((ev.clientX - vr.left - ox) / W, 0, 1) : 0, y: Hh > 0 ? clamp((ev.clientY - vr.top - oy) / Hh, 0, 1) : 0}; pillPos(); };
@@ -2764,10 +2774,11 @@ const FAB = 44, FAB_GAP = 8;
 const favStack = () => FB.mode !== 'flotante'; // celular (prueba): favoritos como estrella fija arriba del logo VORTEX que se despliega hacia arriba · false = vuelve a la estrella de la píldora
 function placeFab() { // coloca el botón estrella (fracciones mx,my) y abre la barra al lado donde cabe
   const bar = $('#favBar'), fab = $('#favFab'), ar = $('#chartArea'); if (!bar || !ar) return;
-  if (fab && fab.classList.contains('fav-stack')) { // celular (prueba): estrella fija arriba del logo VORTEX; la barra se despliega hacia arriba, en columna
-    const bw = bar.offsetWidth || 46, bh = bar.offsetHeight || 46, fx = fab.offsetLeft, fy = fab.offsetTop, fw = fab.offsetWidth || 36;
-    bar.style.left = clamp(fx + fw / 2 - bw / 2, 4, Math.max(4, ar.clientWidth - bw - 4)) + 'px'; bar.style.bottom = 'auto';
-    bar.style.top = Math.max(8, fy - bh - 8) + 'px'; bar.style.maxHeight = Math.max(80, fy - 16) + 'px';
+  if (!fab && favStack()) { // celular · Fija: las favoritas salen en columna arriba de la cápsula vertical
+    const tb = document.querySelector('#chartView .chart-toolbar'), ab = ar.getBoundingClientRect(), r = tb ? tb.getBoundingClientRect() : null, bw = bar.offsetWidth || 46, bh = bar.offsetHeight || 46;
+    const cx = r ? r.left - ab.left + r.width / 2 : 22, top = r ? r.top - ab.top : ar.clientHeight - 80;
+    bar.style.left = clamp(cx - bw / 2, 2, Math.max(2, ar.clientWidth - bw - 2)) + 'px'; bar.style.bottom = 'auto';
+    bar.style.maxHeight = Math.max(80, top - 16) + 'px'; bar.style.top = Math.max(8, top - Math.min(bh, Math.max(80, top - 16)) - 8) + 'px';
     bar.style.transformOrigin = 'center bottom'; bar.style.setProperty('--fb-from', '0px'); return;
   }
   if (!fab) { // celular: la barra sale justo arriba de la píldora
@@ -2809,19 +2820,17 @@ function wireFab(fab) { // mantener presionado = el botón se "agarra" y se pued
 function renderFavBar() {
   const ar = $('#chartArea'); if (!ar) return; let bar = $('#favBar'), fab = $('#favFab');
   const mob = !deskMQ.matches, on = !PANE && (FB.show || (mob && favStack()));
-  { const pb = $('#favPillBtn'); if (pb) pb.hidden = mob && favStack(); window.__favStack = favStack(); } // con la estrella arriba del logo, la de la píldora sobra
+  window.__favMode = FB.mode || 'fija'; { const pb = $('#favPillBtn'); if (pb) pb.hidden = false; } // la estrella siempre vive en la cápsula
   if (!on) { if (bar) bar.remove(); if (fab) fab.remove(); return; }
   if (!bar) { bar = document.createElement('div'); bar.id = 'favBar'; bar.className = 'favbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Herramientas favoritas'); ar.appendChild(bar); }
-  if (fab && (!mob || !favStack()) && fab.classList.contains('fav-stack')) { fab.remove(); fab = null; } // celular: la estrella vive en la píldora de abajo (#favPillBtn)
-  if (mob && favStack() && !fab) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab fav-stack'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 18); ar.appendChild(fab);
-    fab.addEventListener('click', e => { e.stopPropagation(); setFbOpen(!fbOpen); placeFab(); }); fab.addEventListener('contextmenu', e => e.preventDefault()); }
+  if (fab && mob) { fab.remove(); fab = null; } // celular: la estrella vive en la cápsula (#favPillBtn)
   if (false) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 22); ar.appendChild(fab); wireFab(fab); }
   if (!mob && fab) { fab.remove(); fab = null; }
   bar.classList.toggle('fb-mobile', mob); bar.classList.toggle('fb-stack', mob && favStack()); if (!(mob && favStack())) bar.style.maxHeight = '';
   const tools = favTools();
   bar.innerHTML = (mob ? '' : '<span class="fb-grip" title="Arrastra para mover · clic derecho: ocultar" aria-label="Mover barra"><svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></g></svg></span>')
     + (tools.length ? tools.map(t => `<button type="button" class="fb-btn${drawTool === t[0] ? ' on' : ''}" data-fav-tool="${t[0]}" title="${esc(t[1])}" aria-label="${esc(t[1])}">${SV(t[3], 22)}</button>`).join('') : '<span class="fb-empty">Marca ★ en las herramientas para tenerlas aquí</span>')
-    + (mob && favStack() ? `<span class="fb-sep" aria-hidden="true"></span><button type="button" class="fb-btn fb-x" data-fav-x="undo" title="Deshacer" aria-label="Deshacer">${SV('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', 20)}</button><button type="button" class="fb-btn fb-x" data-fav-x="tools" title="Todas las herramientas" aria-label="Todas las herramientas">${SV('<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>', 20)}</button>` : '');
+    ;
   if (mob) { setFbOpen(fbOpen); if (fab) fab.classList.toggle('active', !!drawTool); const pb = $('#favPillBtn'); if (pb) pb.classList.toggle('active', !!drawTool); placeFab(); } else { bar.classList.remove('open'); bar.inert = false; }
   placeFavBar();
 }
@@ -3437,7 +3446,7 @@ function renderCore() {
   const botY = posOf(botOrd, plotTop + plotH + volH), topY = posOf(topOrd, top0);
   paneLayout = {bot: botOrd.map(k => ({key: k, h: hMap[k]})), top: topOrd.map(k => ({key: k, h: hMap[k]}))};
   geo = {w, h, left, right, gutter, vpOn, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: rsiH ? botY.rsi : plotTop + plotH + volH, extraTop: plotTop + plotH + volH};
-  { const bf = document.querySelector('.brand-fab'); if (bf && volH > 0) { bf.style.bottom = 'auto'; bf.style.top = Math.max(plotTop, plotTop + plotH + volH - 40) + 'px'; } else if (bf) { bf.style.bottom = 'auto'; bf.style.top = (plotTop + plotH - 42) + 'px'; } } // logo abajo a la izquierda, a la altura del panel de volumen
+  { const bf = document.querySelector('.brand-fab'); if (bf && volH > 0) { bf.style.bottom = 'auto'; bf.style.top = Math.max(plotTop, plotTop + plotH + volH - 40) + 'px'; } else if (bf) { bf.style.bottom = 'auto'; bf.style.top = (plotTop + plotH - 42) + 'px'; } if (bf && bf.style.top !== lastBfTop) { lastBfTop = bf.style.top; if (window.CCT_pillPos) CCT_pillPos(); if (typeof fbOpen !== 'undefined' && fbOpen) placeFab(); } } // logo abajo a la izquierda, a la altura del panel de volumen
 
   // VPVR: perfil de volumen de las velas que se ven ahora mismo (índices cuyo centro cae dentro del área de precios); se recalcula en cada dibujo, así sigue al desplazar y al hacer zoom
   const vpvr = stdOn('vpvr') && window.CCTIndicators ? CCTIndicators.visibleRangeProfile(candles, Math.ceil(start - .5), Math.floor(end - .5 + (vpOn ? 0 : gutter) / step), {rows: sp('vpvr', 'rows'), valueArea: sp('vpvr', 'va')}) : null;
@@ -4904,7 +4913,7 @@ function renderCustom() {
     + `<div class="pref-row">${ic('#f5a623', state.light ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>' : '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>')}<div class="pref-l"><b>Tema claro</b><small>${state.light ? 'Activo · apágalo para el tema oscuro' : 'Ahora usas el tema oscuro'}</small></div><div class="pref-c"><button type="button" class="toggle${state.light ? ' on' : ''}" data-cu="theme" role="switch" aria-checked="${!!state.light}" aria-label="Tema claro"></button></div></div>`
     + `<button type="button" class="pref-row pref-link" data-cu="style">${ic('#548fff', '<path d="M6 20V10M12 20V4M18 20v-7"/>')}<div class="pref-l"><b>Aspecto del gráfico</b><small>Colores de velas, fondo, cuadrícula, cursor y línea de alertas</small></div><div class="pref-c">${chev}</div></button>`
     + `<div class="pref-row">${ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>')}<div class="pref-l"><b>Barra de herramientas favoritas</b><small>Tus herramientas de dibujo con estrella, siempre a la mano</small></div><div class="pref-c"><button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button></div></div>`
-    + `<div class="pref-row fb-mode-row"><span class="sg-ic" style="--c:transparent"></span><div class="pref-l"><b>En el celular</b><small>${FB.mode === 'flotante' ? 'Flotante: la estrella va en la barra que mueves a donde quieras' : 'Fija: arriba del logo VORTEX y se despliega hacia arriba'}</small></div><div class="pref-c"><div class="seg-mini" role="radiogroup" aria-label="Estilo de la barra de favoritos en el celular">${[['fija', 'Fija'], ['flotante', 'Flotante']].map(([v, n]) => `<button type="button" role="radio" aria-checked="${(FB.mode || 'fija') === v}" class="${(FB.mode || 'fija') === v ? 'on' : ''}" data-cu="favmode" data-v="${v}">${n}</button>`).join('')}</div></div></div>`;
+    + `<div class="pref-row fb-mode-row"><span class="sg-ic" style="--c:transparent"></span><div class="pref-l"><b>Cápsula del gráfico en el celular</b><small>${FB.mode === 'flotante' ? 'Flotante: la cápsula (temporalidad, estrella y menú) se mueve a donde quieras' : 'Fija: la cápsula va en vertical arriba del logo VORTEX y se abre hacia arriba'}</small></div><div class="pref-c"><div class="seg-mini" role="radiogroup" aria-label="Estilo de la barra de favoritos en el celular">${[['fija', 'Fija'], ['flotante', 'Flotante']].map(([v, n]) => `<button type="button" role="radio" aria-checked="${(FB.mode || 'fija') === v}" class="${(FB.mode || 'fija') === v ? 'on' : ''}" data-cu="favmode" data-v="${v}">${n}</button>`).join('')}</div></div></div>`;
 }
 {
   const cv = $('#customView');
@@ -4913,7 +4922,7 @@ function renderCustom() {
     if (k === 'theme') { state.light = !state.light; save(); theme(); renderCustom(); }
     else if (k === 'style') openChartStyle();
     else if (k === 'fav') { setFavBar(!FB.show); renderCustom(); }
-    else if (k === 'favmode') { const v = b.dataset.v === 'flotante' ? 'flotante' : 'fija'; if (FB.mode !== v) { FB.mode = v; if (v === 'fija') FB.show = true; setFbOpen(false); syncUi(); renderFavBar(); if (window.CCT_pillPos) CCT_pillPos(); toast(v === 'fija' ? 'Barra fija: la estrella queda arriba del logo VORTEX' : 'Barra flotante: la estrella va en la barra que mueves a donde quieras'); } renderCustom(); }
+    else if (k === 'favmode') { const v = b.dataset.v === 'flotante' ? 'flotante' : 'fija'; if (FB.mode !== v) { FB.mode = v; if (v === 'fija') FB.show = true; setFbOpen(false); syncUi(); renderFavBar(); if (window.CCT_pillPos) CCT_pillPos(); toast(v === 'fija' ? 'Fija: la cápsula queda en vertical arriba del logo VORTEX' : 'Flotante: la cápsula vuelve a moverse a donde quieras'); } renderCustom(); }
   });
 }
 /* ───────── Sesiones de las bolsas: barra de estado abajo a la derecha del gráfico; al pasar el cursor (o tocar) sale la ventana con Nueva York, Londres, Tokio… ───────── */
@@ -5357,7 +5366,8 @@ function pineSection() {
 async function fetchKlinesPaged(sym, itv, count) { // hasta 10 000 velas, de 1000 en 1000 hacia atrás
   let out = [], end = null; count = Math.min(10000, count);
   while (out.length < count) {
-    const raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${itv}&limit=1000${end ? '&endTime=' + end : ''}`);
+    let raw; try { raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${itv}&limit=1000${end ? '&endTime=' + end : ''}`); }
+    catch (e) { if (out.length || !window.CCTMarkets) throw e; return (await CCTMarkets.klinesAny(sym, itv, Math.min(1000, count), {closedOnly: false})).slice(-count); }
     if (!raw.length) break; out = raw.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})).concat(out); end = raw[0][0] - 1; if (raw.length < 1000) break;
   }
   return out.slice(-count);
@@ -6028,7 +6038,9 @@ window.CCT_bot = {
   async history(sym, itv, count) { // velas CERRADAS de Binance Spot, paginadas hacia atrás (máx. 6000)
     const want = Math.min(6000, Math.max(100, count | 0)), out = []; let end = Date.now();
     while (out.length < want) {
-      const raw = await getJSON(`${API}/klines?symbol=${encodeURIComponent(sym)}&interval=${itv}&limit=1000&endTime=${end}`); if (!raw.length) break;
+      let raw; try { raw = await getJSON(`${API}/klines?symbol=${encodeURIComponent(sym)}&interval=${itv}&limit=1000&endTime=${end}`); }
+      catch (e) { if (out.length || !window.CCTMarkets) throw e; return (await CCTMarkets.klinesAny(sym, itv, Math.min(1000, want))).slice(-want); } // Binance no responde: velas de VORTEX u otro exchange
+      if (!raw.length) break;
       out.unshift(...raw.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5], ct: d[6]}))); end = raw[0][0] - 1; if (raw.length < 1000) break;
     }
     return out.filter(c => c.ct < Date.now()).slice(-want).map(({ct, ...c}) => c); // se descarta la vela en formación

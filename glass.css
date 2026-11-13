@@ -2280,22 +2280,25 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 .pv-mini.prob .pv-mdot{background:#ff9f43;box-shadow:0 0 6px #ff9f43}.pv-mini.prob .pv-mlab{color:#ffc48a}.pv-mini.off .pv-mdot{background:#f06b79;opacity:.7}
 .bl-tg:not(.on)::after,.bl-tg:not(.on) i{background:#8a5560!important}
 
-/* Favoritos en el celular (prueba): estrella fija arriba del logo VORTEX; la barra se despliega hacia arriba en columna (liquid glass oscuro) */
-#chartArea .fav-fab.fav-stack{left:4px;top:auto!important;bottom:64px;width:36px;height:36px;z-index:8;touch-action:manipulation;
-  background:rgba(9,12,20,.32);border:1px solid rgba(255,255,255,.14);-webkit-backdrop-filter:blur(24px) saturate(1.6);backdrop-filter:blur(24px) saturate(1.6);box-shadow:0 6px 18px rgba(0,0,0,.3);color:rgba(237,243,252,.86)}
-#chartArea .fav-fab.fav-stack.open{background:rgba(255,255,255,.12)}
-#chartArea .fav-fab.fav-stack.active:not(.open){color:#cfe0ff;border-color:rgba(84,143,255,.5)}
+/* Celular · cápsula «Fija»: vertical, arriba del logo VORTEX; menús y favoritas se abren hacia arriba (liquid glass oscuro) */
+@media(max-width:1023px){
+  #chartView.pill-fixed .chart-toolbar{flex-direction:column!important;align-items:center!important;gap:4px!important;padding:6px 4px!important;width:auto!important;max-width:none!important;border-radius:24px!important;transition:top .25s ease,left .25s ease}
+  #chartView.pill-fixed .chart-toolbar .pill-grip{display:none!important}
+  #chartView.pill-fixed .chart-toolbar>button{width:38px!important;min-width:38px!important;height:38px!important;padding:0!important;justify-content:center}
+  #chartView.pill-fixed #tfBtn{font-size:12px!important;letter-spacing:-.2px}
+  #chartView.pill-fixed .chart-toolbar .pill-favs{flex-direction:column}
+  #chartView.pill-fixed #moreBtn svg{transition:transform .25s}
+  #chartView.pill-fixed.more-open #moreBtn svg{transform:rotate(180deg)}
+}
 #chartArea .favbar.fb-mobile.fb-stack{flex-direction:column;height:auto;width:46px;max-width:none;padding:6px 4px;gap:4px;border-radius:23px;overflow-y:auto;overflow-x:hidden;
   background:rgba(9,12,20,.34);border:1px solid rgba(255,255,255,.14);-webkit-backdrop-filter:blur(30px) saturate(1.8);backdrop-filter:blur(30px) saturate(1.8);box-shadow:0 10px 26px rgba(0,0,0,.34);
   transform:translateY(14px) scale(.85)}
 #chartArea .favbar.fb-mobile.fb-stack.open{transform:none}
 #chartArea .favbar.fb-stack .fb-btn{width:36px;height:36px;flex:none}
-#chartArea .favbar.fb-stack .fb-sep{width:22px;height:1px;flex:none;background:rgba(255,255,255,.14);margin:2px 0}
 #chartArea .favbar.fb-stack .fb-empty{white-space:normal;writing-mode:vertical-rl;transform:rotate(180deg);font-size:11px;padding:6px 0}
 #chartArea .favbar.fb-stack.open .fb-btn{animation:fbUp .26s cubic-bezier(.3,1.3,.5,1) both}
-#chartArea .favbar.fb-stack.open .fb-btn:nth-last-child(2){animation-delay:.03s}#chartArea .favbar.fb-stack.open .fb-btn:nth-last-child(3){animation-delay:.06s}#chartArea .favbar.fb-stack.open .fb-btn:nth-last-child(n+4){animation-delay:.09s}
 @keyframes fbUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-.light #chartArea .fav-fab.fav-stack,.light #chartArea .favbar.fb-mobile.fb-stack{background:rgba(255,255,255,.55);border-color:rgba(0,0,0,.1);color:#182234}
+.light #chartArea .favbar.fb-mobile.fb-stack{background:rgba(255,255,255,.55);border-color:rgba(0,0,0,.1)}
 @media (prefers-reduced-motion:reduce){#chartArea .favbar.fb-stack.open .fb-btn{animation:none}}
 /* Configuración › Personalización: elegir barra de favoritos fija o flotante (celular) */
 .seg-mini{display:inline-flex;padding:3px;gap:2px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}

@@ -73,7 +73,7 @@ Aprendizaje previo: ${lessons(st)}`};
   }
   async function askAI(c) {
     const L = root.CCTLLM; if (!L) return null; const P = buildPrompt(c, S);
-    try { const r = await L.chat([{role: 'system', content: P.sys}, {role: 'user', content: P.user}], {purpose: 'radar', temperature: .2, maxTokens: 300}); return parseAI(r && r.text); } catch { return null; }
+    try { const r = await L.chat([{role: 'system', content: P.sys}, {role: 'user', content: P.user}], {purpose: 'radar', temperature: .2, maxTokens: 300, noOwn: true}); return parseAI(r && r.text); } catch { return null; }
   }
   function parseAI(t) { const m = String(t || '').match(/\{[\s\S]*\}/); if (!m) return null; try { const o = JSON.parse(m[0]), v = String(o.veredicto || o.verdict || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); return {v: ['fuerte', 'buena', 'debil', 'descartar'].includes(v) ? v : 'debil', conf: Math.max(0, Math.min(100, +o.confianza || 0)), entry: +o.entrada || null, stop: +o.stop || null, target: +o.objetivo || null, why: String(o.razon || '').slice(0, 240)}; } catch { return null; } }
 

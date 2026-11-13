@@ -76,7 +76,7 @@
   const raw = async url => { const r = await fetch(url); if (!r.ok) throw Error('HTTP ' + r.status); return r.json(); };
   const smart = async url => {
     let h = ''; try { h = new URL(url).host; } catch {}
-    if (browser && viaProxy.has(h)) return raw(PROXY + encodeURIComponent(url));
+    if (browser && viaProxy.has(h)) { try { return await raw(PROXY + encodeURIComponent(url)); } catch (e) { return raw(url); } } // si el servidor de VORTEX tampoco responde, se intenta directo
     try { return await raw(url); } catch (e) { if (!browser || !(e instanceof TypeError)) throw e; viaProxy.add(h); return raw(PROXY + encodeURIComponent(url)); } // TypeError = bloqueo CORS / red
   };
   let get = smart;
