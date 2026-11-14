@@ -284,10 +284,16 @@ function aiAllowed(ip, now = Date.now()) { const h = (aiHits.get(ip) || []).filt
    Cada uso tiene su modelo: chat (Nexus Pixel, briefing), vision (Analizar gráfico con captura) y code (Laboratorio de Pine).
    Workers AI usa el cupo diario gratis de tu cuenta de Cloudflare (enlace «AI» del Worker). Groq se usa si existe el secreto GROQ_KEY (cuenta gratis). */
 export const OPEN_AI = {
-  chat: {wai: ['@cf/openai/gpt-oss-120b', '@cf/meta/llama-4-scout-17b-16e-instruct'], groq: ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile']},
-  vision: {wai: ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/mistralai/mistral-small-3.1-24b-instruct'], groq: ['meta-llama/llama-4-scout-17b-16e-instruct']},
-  code: {wai: ['@cf/qwen/qwen2.5-coder-32b-instruct', '@cf/openai/gpt-oss-120b'], groq: ['openai/gpt-oss-120b', 'qwen/qwen3-32b']}
+  chat: {wai: ['@cf/openai/gpt-oss-120b', '@cf/meta/llama-4-scout-17b-16e-instruct'], groq: ['openai/gpt-oss-120b', 'qwen/qwen3.6-27b']},
+  vision: {wai: ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/google/gemma-4-26b-a4b-it'], groq: []},
+  code: {wai: ['@cf/qwen/qwen2.5-coder-32b-instruct', '@cf/openai/gpt-oss-120b'], groq: ['openai/gpt-oss-120b', 'qwen/qwen3.6-27b']},
+  /* Nexus Pixel (el avatar del gráfico): la IA open source y gratis MÁS lista que hay hoy para razonar con tus indicadores,
+     tu posición y la estructura del mercado. Qwen 3.6 27B (razona, Groq gratis) → GPT-OSS 120B (razona) → GLM 4.7 Flash → Gemma 4.
+     «see» = sus ojos: un modelo con visión describe la captura del gráfico y luego el modelo que razona decide. */
+  pixel: {groq: ['qwen/qwen3.6-27b', 'openai/gpt-oss-120b'], wai: ['@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', '@cf/google/gemma-4-26b-a4b-it'], json: true, cap: 38000, budget: 68000},
+  see: {wai: ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/google/gemma-4-26b-a4b-it', '@cf/mistralai/mistral-small-3.1-24b-instruct'], groq: [], cap: 22000, budget: 30000}
 };
+export const AI_TASKS = Object.keys(OPEN_AI);
 const OPEN_NAME = m => m.replace(/^@cf\/[^/]+\//, '').replace(/^(openai|meta-llama|qwen)\//, '');
 export const hasImg = msgs => (msgs || []).some(m => Array.isArray(m.content) && m.content.some(p => p && p.type === 'image_url'));
 export const noImg = msgs => (msgs || []).map(m => Array.isArray(m.content) ? {role: m.role, content: m.content.filter(p => p && p.type === 'text').map(p => p.text).join('\n') + '\n(La captura no se pudo analizar: usa los datos numéricos del gráfico.)'} : m);
@@ -300,23 +306,34 @@ export function aiText(j) { // respuesta de Workers AI o de una API tipo OpenAI 
   return '';
 }
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error('tiempo')), ms))]);
+/* Parámetros propios de cada modelo de Groq: los que razonan esconden su razonamiento (solo llega la respuesta) */
+export function groqExtra(m, task) {
+  if (/^qwen\//.test(m)) return {reasoning_format: 'hidden'};
+  if (/gpt-oss/.test(m)) return {reasoning_effort: task === 'pixel' || task === 'code' ? 'medium' : 'low', include_reasoning: false};
+  return {};
+}
 export async function openChain(env, task, messages, opts = {}, fetchFn = fetch) {
   const T = OPEN_AI[task] || OPEN_AI.chat, max_tokens = Math.min(+opts.max_tokens || 1600, AI_MAX_TOKENS), temperature = Number.isFinite(+opts.temperature) ? +opts.temperature : .4, tried = [];
-  const clean = t => String(t || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  const end = Date.now() + (T.budget || 120000), left = () => end - Date.now(), cap = ms => Math.max(4000, Math.min(T.cap || ms, ms, left()));
+  const clean = t => String(t || '').replace(/<think>[\s\S]*?<\/think>/g, '').replace(/^[\s\S]*?<\/think>/, '').trim();
   const viaGroq = async (m, msgs) => {
-    const r = await fetchFn('https://api.groq.com/openai/v1/chat/completions', {method: 'POST', headers: {'content-type': 'application/json', authorization: 'Bearer ' + env.GROQ_KEY}, body: JSON.stringify({model: m, messages: msgs, max_tokens, temperature}), signal: AbortSignal.timeout(45000)});
+    const base = {model: m, messages: msgs, max_tokens, temperature, ...groqExtra(m, task)}, json = T.json && opts.json ? {response_format: {type: 'json_object'}} : {};
+    const go = b => fetchFn('https://api.groq.com/openai/v1/chat/completions', {method: 'POST', headers: {'content-type': 'application/json', authorization: 'Bearer ' + env.GROQ_KEY}, body: JSON.stringify(b), signal: AbortSignal.timeout(cap(45000))});
+    let r = await go({...base, ...json});
+    if (!r.ok && r.status === 400) r = await go(base); // el modelo no acepta algún parámetro (modo JSON o de razonamiento): se pide normal
     if (!r.ok) throw new Error('groq ' + r.status); return clean(aiText(await r.json()));
   };
-  const viaWai = async (m, msgs) => clean(aiText(await withTimeout(env.AI.run(m, {messages: msgs, max_tokens, temperature}), 55000)));
-  const routes = []; const add = (who, list, fn) => { for (const m of list) routes.push([who, m, fn]); };
+  const viaWai = async (m, msgs) => clean(aiText(await withTimeout(env.AI.run(m, {messages: msgs, max_tokens, temperature}), cap(55000))));
+  const routes = []; const add = (who, list, fn) => { for (const m of list || []) routes.push([who, m, fn]); };
   if (env.GROQ_KEY) add('Groq', T.groq, viaGroq); // Groq primero si tienes clave: es el más rápido
   if (env.AI) add('Cloudflare', T.wai, viaWai);
   for (const [who, m, fn] of routes) {
+    if (left() < 4000) break;
     try { const text = await fn(m, messages); if (text && text.length > 1) return {text, model: OPEN_NAME(m) + ' · ' + who}; tried.push(m + ': vacío'); }
     catch (e) { tried.push(m + ': ' + String(e && e.message || e).slice(0, 60)); }
   }
-  if (task === 'vision' && hasImg(messages)) { const r = await openChain(env, 'chat', noImg(messages), opts, fetchFn); if (r) return Object.assign(r, {image: false}); } // sin visión disponible: analiza con los datos
-  return tried.length ? null : null;
+  if ((task === 'vision' || task === 'pixel') && hasImg(messages) && left() > 6000) { const r = await openChain(env, task === 'pixel' ? 'pixel' : 'chat', noImg(messages), opts, fetchFn); if (r) return Object.assign(r, {image: false}); } // sin visión disponible: analiza con los datos
+  return null;
 }
 async function aiKey(env) { return env.POLLEN_KEY || (await env.KV.get('ai:pollen')) || POLLEN_KEY; }
 async function aiRoute(req, env, path, json, cors) {
@@ -334,8 +351,9 @@ async function aiRoute(req, env, path, json, cors) {
     let b; try { b = JSON.parse(raw); } catch { return json({error: 'JSON inválido'}, 400); }
     const want = String(b.model || 'openai'), model = AI_MODELS_OK.includes(want) ? want : 'openai'; // solo modelos de chat (nunca filtros tipo qwen3guard)
     if (model !== 'openai-audio' && (env.AI || env.GROQ_KEY)) { // IA open source y gratis primero (Workers AI / Groq); si no contesta, sigue con Pollinations
-      const msgs = Array.isArray(b.messages) ? b.messages.slice(-16) : [], task = ['chat', 'vision', 'code'].includes(b.task) ? b.task : hasImg(msgs) ? 'vision' : 'chat';
+      const msgs = Array.isArray(b.messages) ? b.messages.slice(-16) : [], task = AI_TASKS.includes(b.task) ? b.task : hasImg(msgs) ? 'vision' : 'chat';
       try { const r = await openChain(env, task === 'chat' && hasImg(msgs) ? 'vision' : task, msgs, b); if (r) return json({object: 'chat.completion', model: r.model, image: r.image !== false && hasImg(msgs), choices: [{index: 0, message: {role: 'assistant', content: r.text}, finish_reason: 'stop'}]}); } catch {}
+      if (task === 'pixel' || task === 'see') return json({error: 'La IA gratis no respondió', kind: 'busy'}, 502); // Pixel: no gastar créditos de Pollinations; la app reintenta por su lado
     }
     const body = {model, messages: Array.isArray(b.messages) ? b.messages.slice(-16) : [], temperature: Number.isFinite(+b.temperature) ? +b.temperature : .4, max_tokens: Math.min(+b.max_tokens || 1200, AI_MAX_TOKENS), stream: !!b.stream};
     if (model === 'openai-audio') body.modalities = ['text']; // dictado: solo queremos el texto, no una respuesta hablada

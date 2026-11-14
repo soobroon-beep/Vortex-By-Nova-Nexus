@@ -1,5 +1,13 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.36', d: '13 nov 2026', t: 'Nexus Pixel mucho más listo', items: [
+    'Pixel ahora LEE tu gráfico completo: tendencia (EMA 20/50/200), RSI, MACD, volatilidad, estructura de mercado (máximos y mínimos, quiebres), niveles clave con su distancia y TODOS tus indicadores tal como los tienes (Nova Nexus: nube, oscilador, flujo, ADX y última señal; tus scripts Pine y los comunes).',
+    'Conoce tu posición: la real de tu exchange, la de la cuenta demo y tus dibujos Long/Short. Pregúntale «¿cierro mi long?» o «¿long o short?» y te da su veredicto, las razones con números y el plan (stop, objetivos y qué confirmación esperar).',
+    'Ya no dibuja soportes y resistencias cuando solo le preguntas algo: dibuja solo cuando se lo pides (y te ofrece «Dibújame el plan»).',
+    'Dibuja lo que le pidas: rectángulos/zonas («caja entre 64 000 y 65 000» sale al instante), flechas, texto, líneas verticales, Fibonacci entre dos puntos, canales, triángulos, patrones (ABCD, HCH, ondas) y posiciones Long/Short con entrada, stop y objetivo.',
+    'Tiene ojos: si le preguntas «¿cómo ves mi gráfico?», una IA con visión mira la captura y otra que razona decide.',
+    'Usa siempre la IA gratis y open source más potente para esto (Qwen 3.6 y GPT-OSS 120B que razonan, con respaldo en Cloudflare), nunca tu IA de pago.'
+  ]},
   {v: '3.35', d: '13 nov 2026', t: 'Bots de señales iA v2.7 reactivados', items: [
     'Se arregló el servidor que mueve tus bots con la app cerrada: al guardar una operación abierta fallaba y los bots dejaban de avanzar y de avisar. Ya guarda bien.',
     'Los bots Nova Nexus · iA Signals v2.7 se vuelven a encender solos (simulación en vivo) y los errores de «tu indicador ya no produce la señal» se limpian solos.',

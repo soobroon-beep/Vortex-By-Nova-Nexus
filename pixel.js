@@ -40,7 +40,7 @@
   const bub = document.createElement('div'); bub.className = 'px-bub'; bub.hidden = true; bub.setAttribute('role', 'dialog'); bub.setAttribute('aria-label', 'Nexus Pixel');
   bub.innerHTML = `<div class="px-hd" title="Arrastra para moverlo"><span class="px-dot"></span><b>Nexus Pixel</b><small class="px-st">IA de VORTEX</small><button type="button" class="px-x" data-px="close" aria-label="Despedir a Nexus Pixel">&times;</button></div>
     <div class="px-msg" aria-live="polite"></div>
-    <div class="px-chips">${[['Canal', 'Dibújame el canal'], ['Rango', 'Marca el rango'], ['Soportes y resistencias', 'Marca soportes y resistencias'], ['Tendencia', 'Traza la línea de tendencia'], ['Fibonacci', 'Pon Fibonacci'], ['Análisis completo', 'Análisis completo'], ['Borrar lo mío', 'Borra lo que dibujaste']].map(([t, q]) => `<button type="button" data-q="${esc(q)}">${t}</button>`).join('')}</div>
+    <div class="px-chips">${[['¿Cómo lo ves?', '¿Cómo ves mi gráfico? Léeme mis indicadores'], ['¿Long o short?', '¿Debería entrar en long, en short o esperar?'], ['Canal', 'Dibújame el canal'], ['Fibonacci', 'Pon Fibonacci']].map(([t, q]) => `<button type="button" data-q="${esc(q)}">${t}</button>`).join('')}</div>
     <form class="px-in"><input type="text" placeholder="Pídeme algo: «dibuja el canal»…" autocomplete="off" enterkeyhint="send" aria-label="Escríbele a Nexus Pixel"><button type="button" class="px-mic" aria-label="Hablarle a Nexus Pixel" title="Háblale"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button><button type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></form>`;
   const layer = document.createElement('div'); layer.className = 'px-layer'; layer.append(av, bub, fab); (document.getElementById('app') || document.body).appendChild(layer); area.appendChild(ink); // capa sobre toda la app; la tinta sigue dentro del gráfico
   const tip = document.createElement('button'); tip.type = 'button'; tip.className = 'px-tip'; tip.hidden = true; layer.appendChild(tip);
@@ -109,10 +109,16 @@
     if (d.type === 'rect') { const c1 = {t: d.b.t, p: d.a.p}, c2 = {t: d.a.t, p: d.b.p}; return [[S(d.a), S(c1)], [S(c1), S(d.b)], [S(d.b), S(c2)], [S(c2), S(d.a)]]; }
     if (d.type === 'channel') { const off = d.c.p - (d.a.p + (d.b.p - d.a.p) * (d.c.t - d.a.t) / ((d.b.t - d.a.t) || 1)); return [[S(d.a), S(d.b)], [S({t: d.a.t, p: d.a.p + off}), S({t: d.b.t, p: d.b.p + off})]]; }
     if (d.type === 'fib') { const out = [[S(d.a), S(d.b)]]; for (const lv of [0, .236, .382, .5, .618, .786, 1]) { const p = d.b.p - (d.b.p - d.a.p) * lv, t = Math.min(d.a.t, d.b.t); out.push([() => ({x: H().toScreen({t, p}).x, y: H().toScreen({t, p}).y}), () => ({x: pl().right, y: H().toScreen({t, p}).y})]); } return out; }
+    if (d.type === 'long' || d.type === 'short') { const t1 = d.a.t, t2 = d.b.t, row = p => [S({t: t1, p}), S({t: t2, p})]; return [row(d.a.p), row(d.b.p), row(d.sp), [S({t: t1, p: d.sp}), S({t: t1, p: d.b.p})]]; }
+    if (d.type === 'hray') return [[S(d.a), () => ({x: pl().right, y: H().toScreen(d.a).y})]];
+    if (d.type === 'vertical') return [[() => ({x: H().toScreen(d.a).x, y: pl().top}), () => ({x: H().toScreen(d.a).x, y: pl().top + pl().h})]];
+    if (d.type === 'ellipse') { const out = [], k = 18; for (let i = 0; i < k; i++) { const f = j => () => { const A = H().toScreen(d.a), B = H().toScreen(d.b), cx = (A.x + B.x) / 2, cy = (A.y + B.y) / 2, rx = Math.abs(B.x - A.x) / 2, ry = Math.abs(B.y - A.y) / 2, an = j / k * Math.PI * 2; return {x: cx + rx * Math.cos(an), y: cy + ry * Math.sin(an)}; }; out.push([f(i), f(i + 1)]); } return out; }
+    { const P = (d.pts || [d.a, d.b, d.c]).filter(Boolean); if (P.length >= 2) { const out = []; for (let i = 1; i < P.length; i++) out.push([S(P[i - 1]), S(P[i])]); if (['triangle'].includes(d.type)) out.push([S(P[P.length - 1]), S(P[0])]); return out; } }
     return [];
   }
   async function drawAnimated(d) {
-    const segs = segsOf(d); if (!segs.length || !H()) return;
+    if (!H()) return; const segs = segsOf(d);
+    if (!segs.length) { if (open && d.a) { const q = H().toScreen(d.a); if (q) { const s = AV(), f = V2(q), hd = M ? M.handScreen() : {x: s.w * .8, y: s.h * .55}; mood('focused', 'point'); await flyTo(f.x - hd.x, f.y - hd.y); } } H().add([d]); await sleep(REDUCED ? 0 : 220); return; }
     const col = d.col || '#a78bfa', s = AV(); sizeInk(); if (!open) { H().add([d]); return; }
     const first = segs[0][0](), hand0 = M ? M.handScreen() : {x: s.w * .8, y: s.h * .55};
     mood('focused', 'point'); { const f = V2(first); await flyTo(f.x - hand0.x, f.y - hand0.y); } mood('focused', 'draw');
@@ -140,12 +146,15 @@
     let h = H(); if (h && !onChart()) { say('Vamos al gráfico…', {busy: true}); h.go('chartView'); await sleep(900); const hm = home(); await flyTo(hm.x, hm.y, 500); }
     h = H(); if (!h || !h.ready()) { say('Abre el gráfico y espera a que carguen las velas; luego te dibujo lo que quieras.'); return; }
     if (acts.some(a => ['style', 'remove', 'move'].includes(a.do))) { await editDrawings(acts.filter(a => ['style', 'remove', 'move'].includes(a.do)), intro); return; }
-    if (acts.some(a => a.do === 'clear')) { mood('wink', 'fly'); bub.hidden = true; const p = h.plot(); await flyTo(V2({x: p.left, y: 0}).x, pos.y, 700); const n = h.clearMine(); await flyTo(home().x, home().y); mood('happy', 'thumbs'); say(n ? `Listo, borré ${n} dibujo${n === 1 ? '' : 's'} mío${n === 1 ? '' : 's'}. Los tuyos siguen ahí.` : 'No tenía dibujos míos en este gráfico.'); setTimeout(() => mood('neutral', 'idle'), 1800); return; }
-    const cs = h.visible(); if (cs.length < 20) { mood('thinking', 'think'); say('Veo muy pocas velas en pantalla. Aleja un poco el gráfico (pellizca o usa la rueda) y vuelvo a intentarlo.'); return; }
+    if (acts.some(a => a.do === 'clear')) { mood('wink', 'fly'); bub.hidden = true; const p = h.plot(); await flyTo(V2({x: p.left, y: 0}).x, pos.y, 700); const n = h.clearMine(); acts = acts.filter(a => a.do !== 'clear'); if (!acts.length) { await flyTo(home().x, home().y); mood('happy', 'thumbs'); say(n ? `Listo, borré ${n} dibujo${n === 1 ? '' : 's'} mío${n === 1 ? '' : 's'}. Los tuyos siguen ahí.` : 'No tenía dibujos míos en este gráfico.'); setTimeout(() => mood('neutral', 'idle'), 1800); return; } } // «borra lo tuyo y dibuja…»: sigue con lo demás
+    const cs = h.visible(); if (cs.length < 20 && !acts.every(a => a.do === 'draw')) { mood('thinking', 'think'); say('Veo muy pocas velas en pantalla. Aleja un poco el gráfico (pellizca o usa la rueda) y vuelvo a intentarlo.'); return; }
     mood('analyzing', 'think'); say(intro ? intro : 'Analizando tus velas…', {busy: true}); await sleep(REDUCED ? 0 : 750);
     bub.hidden = true; const texts = [];
     const C = CFG(); acts = acts.flatMap(a => a.do === 'full' ? (C.completo && C.completo.length ? C.completo : ['sr', 'trend', 'channel']).map(k => ({do: k})) : [a]);
-    for (const a of acts.slice(0, 5)) { const r = D.build(a.do, cs, a.price, {sr: C.sr}), grp = a.do + ':' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); texts.push(r.text); for (const d of r.drawings) { d.grp = grp; if (/^Soporte/.test(d.label || '') && C.colSup) d.col = C.colSup; if (/^Resistencia/.test(d.label || '') && C.colRes) d.col = C.colRes; await drawAnimated(d); } }
+    const all = (H().candles && H().candles()) || cs, snap = BR && all.length >= 30 ? BR.snapshot(all, {visible: cs}) : null, errs = [];
+    for (const a of acts.filter(a => a.do === 'draw').slice(0, 8)) { const r = BR.toDrawings(a, all, snap && snap.st), grp = 'draw:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); if (!r.drawings.length) { errs.push(r.err); continue; } for (const d of r.drawings) { d.grp = grp; await drawAnimated(d); } }
+    if (errs.length && !acts.some(a => a.do !== 'draw')) texts.push(acts.filter(a => a.do === 'draw').length === errs.length ? `No pude dibujar eso (${errs[0]}). Dime los precios o en qué velas y lo intento otra vez.` : '');
+    for (const a of acts.filter(a => a.do !== 'draw').slice(0, 5)) { const r = D.build(a.do, cs, a.price, {sr: C.sr}), grp = a.do + ':' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); texts.push(r.text); for (const d of r.drawings) { d.grp = grp; if (/^Soporte/.test(d.label || '') && C.colSup) d.col = C.colSup; if (/^Resistencia/.test(d.label || '') && C.colRes) d.col = C.colRes; await drawAnimated(d); } }
     const hm = home(); await flyTo(hm.x, hm.y); mood('happy', 'thumbs');
     say(((intro ? intro + ' ' : '') + texts.filter(Boolean).join(' ')).trim() || 'Listo.'); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2200);
   }
@@ -171,7 +180,8 @@
     say(((intro ? intro + ' ' : '') + out.join(' ')).trim()); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2000);
   }
   function setCfgSafe(o) { try { const h = H(); if (h && h.setCfg) h.setCfg({...CFG(), ...o}); } catch {} } // que los próximos soportes/resistencias salgan del color que pediste
-  const SYS = `Eres NEXUS PIXEL, el avatar asistente de trading de VORTEX (by Nova Nexus): un robot amable que flota sobre el gráfico del usuario y puede dibujar en él.
+  const BR = window.NexusPixelBrain;
+  const SYS_OLD = `Eres NEXUS PIXEL, el avatar asistente de trading de VORTEX (by Nova Nexus): un robot amable que flota sobre el gráfico del usuario y puede dibujar en él.
 Habla en español, breve (máximo 3 frases), claro y con buena onda, sin prometer ganancias (no es asesoría financiera).
 Responde SOLO con un objeto JSON: {"reply":"tu respuesta","actions":[...]}
 Acciones posibles (úsalas cuando el usuario pida dibujar o cuando un dibujo ayude a explicar): {"do":"channel"} canal, {"do":"range"} rango/consolidación, {"do":"sr"} soportes y resistencias, {"do":"trend"} línea de tendencia, {"do":"fib"} Fibonacci, {"do":"hline","price":NUMERO} línea horizontal en un precio, {"do":"clear"} borrar tus dibujos.
@@ -196,38 +206,92 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     if (c.tono) out.push(`Háblale ${c.tono === 'corto y directo' ? 'corto y directo (máximo 3 frases)' : 'explicando paso a paso (máximo 6 frases)'}, en tono ${c.trato}.`);
     return out.length ? '\nPERFIL DEL USUARIO:\n' + out.join('\n') : '';
   }
-  async function llmAsk(text) {
-    const L = LLM(); if (!L || !L.chat) throw new Error('sin IA');
-    const msgs = [{role: 'system', content: SYS + profile()}, ...hist.slice(-6), {role: 'user', content: `${text}\n\nDATOS DEL GRÁFICO (JSON): ${JSON.stringify(context())}`}];
-    const r = await Promise.race([L.chat(msgs, {purpose: 'text', maxTokens: 380, noOwn: true}), sleep(28000).then(() => { throw new Error('La IA tardó demasiado'); })]);
-    const raw = String(r && r.text || ''), m = raw.match(/\{[\s\S]*\}/); let j = null; try { j = m ? JSON.parse(m[0]) : null; } catch {}
-    const reply = j && typeof j.reply === 'string' ? j.reply : raw.replace(/```[\s\S]*?```/g, '').trim();
-    const ok = ['channel', 'range', 'sr', 'trend', 'fib', 'hline', 'clear', 'style', 'remove', 'move'], TG = ['channel', 'sup', 'res', 'trend', 'fib', 'range', 'hline', 'line', 'last'], hx = c => /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : (D.COLORS[String(c || '').toLowerCase()] || undefined);
-    const actions = (j && Array.isArray(j.actions) ? j.actions : []).filter(a => a && ok.includes(a.do) && ((a.do !== 'hline' && a.do !== 'move') || (Number.isFinite(+a.price) && +a.price > 0)) && (!['style', 'remove', 'move'].includes(a.do) || TG.includes(a.target)))
-      .map(a => a.do === 'hline' ? {do: 'hline', price: +a.price} : a.do === 'move' ? {do: 'move', target: a.target, price: +a.price} : a.do === 'remove' ? {do: 'remove', target: a.target} : a.do === 'style' ? {do: 'style', target: a.target, col: hx(a.col), lw: [1, 2, 3].includes(+a.lw) ? +a.lw : undefined, ds: ['dot', 'dash', ''].includes(a.ds) ? a.ds : undefined} : {do: a.do})
+  /* Todo lo que Pixel «ve»: velas, estructura, niveles, TUS indicadores, tu posición y tus dibujos (pixel-brain.js) */
+  function posSrc() {
+    const o = {real: [], demo: [], draws: []};
+    try { const x = window.CCTExchange && CCTExchange.connected() && CCTExchange.snap(); if (x && Array.isArray(x.positions)) o.real = x.positions; } catch {}
+    try { const a = window.CCTTrade && CCTTrade.acct(); if (a && Array.isArray(a.pos)) o.demo = a.pos; } catch {}
+    try { o.draws = H().list(); } catch {}
+    return o;
+  }
+  function brainData(seen) {
+    const h = H(); if (!h || !BR) return {text: JSON.stringify(context()), snap: null};
+    const all = (h.candles && h.candles()) || [], vis = h.visible(); let ind = null; try { ind = window.CCT_getAIContext && window.CCT_getAIContext(); } catch {}
+    const snap = all.length >= 30 ? BR.snapshot(all, {visible: vis}) : null, src = posSrc();
+    let chg24 = null; try { chg24 = ind && ind.change24h; } catch {}
+    const extra = {sym: h.symbol(), tf: h.interval(), exchange: h.exchange ? h.exchange() : '', chg24, ind, pos: snap ? BR.positions(src, h.symbol(), snap.px) : [], draws: src.draws.filter(d => !d.hide), seen};
+    let text = BR.brief(snap, extra);
+    try { if (h.desktop() && section() !== 'chartView') text += '\nPANEL DERECHO ABIERTO: ' + (NAMES[section()] || section()) + ': ' + screenText(section()).slice(0, 400); } catch {}
+    return {text, snap, pos: extra.pos};
+  }
+  /* Sus ojos: un modelo con visión describe la captura del gráfico (lo que tú ves: dibujos, figuras, nubes…) y luego el que razona decide */
+  async function look() {
+    const L = LLM(); if (!L || !L.pixelChat) return ''; let cap = null; try { cap = window.CCT_ai && window.CCT_ai.capture(1000); } catch {} if (!cap || !cap.url) return '';
+    try { const r = await L.pixelChat([{role: 'system', content: BR.SEE}, L.imageMessage(`Gráfico de ${cap.symbol} en ${cap.interval}. Describe lo que se ve.`, cap.url)], {task: 'see', maxTokens: 450, timeout: 30000}); return r && r.image !== false ? String(r.text || '').slice(0, 1400) : ''; } catch { return ''; }
+  }
+  const OK_ACTS = ['channel', 'range', 'sr', 'trend', 'fib', 'hline', 'clear', 'style', 'remove', 'move', 'draw'], TG = ['channel', 'sup', 'res', 'trend', 'fib', 'range', 'hline', 'line', 'last'];
+  function cleanActs(list) {
+    const hx = c => /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : (D.COLORS[String(c || '').toLowerCase()] || undefined);
+    return (list || []).filter(a => a && OK_ACTS.includes(a.do) && ((a.do !== 'hline' && a.do !== 'move') || (Number.isFinite(+a.price) && +a.price > 0)) && (!['style', 'remove', 'move'].includes(a.do) || TG.includes(a.target)))
+      .map(a => a.do === 'draw' ? a : a.do === 'hline' ? {do: 'hline', price: +a.price} : a.do === 'move' ? {do: 'move', target: a.target, price: +a.price} : a.do === 'remove' ? {do: 'remove', target: a.target} : a.do === 'style' ? {do: 'style', target: a.target, col: hx(a.col), lw: [1, 2, 3].includes(+a.lw) ? +a.lw : undefined, ds: ['dot', 'dash', ''].includes(a.ds) ? a.ds : undefined} : {do: a.do})
       .filter(a => a.do !== 'style' || a.col || a.lw || a.ds !== undefined);
-    hist.push({role: 'user', content: text}, {role: 'assistant', content: reply}); if (hist.length > 12) hist.splice(0, hist.length - 12);
-    return {reply: reply.slice(0, 600), actions};
+  }
+  async function llmAsk(text, it) {
+    const L = LLM(); if (!L || !L.chat) throw new Error('sin IA'); it = it || (BR ? BR.intent(text) : {});
+    let seen = ''; if (it.see && BR) { status('mirando tu gráfico…'); say('Déjame mirar tu gráfico…', {busy: true}); seen = await look(); }
+    status('pensando…'); if (it.decide) say('Revisando tu posición, tus indicadores y la estructura…', {busy: true}); else if (!it.see) say('Déjame pensarlo…', {busy: true});
+    const data = brainData(seen), sys = (BR ? BR.SYS : SYS_OLD) + profile() + (it.draw ? '\nEl usuario SÍ pidió dibujar: incluye las acciones necesarias.' : '\nEl usuario NO pidió dibujar: "actions" debe ir vacío salvo que edite dibujos existentes.');
+    const msgs = [{role: 'system', content: sys}, ...hist.slice(-6), {role: 'user', content: `${text}\n\nDATOS DEL GRÁFICO (en vivo):\n${data.text}`}];
+    const call = L.pixelChat ? L.pixelChat(msgs, {json: true, maxTokens: 1800}) : L.chat(msgs, {purpose: 'text', maxTokens: 900, noOwn: true});
+    const r = await Promise.race([call, sleep(90000).then(() => { throw new Error('La IA tardó demasiado'); })]);
+    const pr = BR ? BR.parseReply(r && r.text) : {reply: String(r && r.text || ''), actions: []};
+    let actions = cleanActs(pr.actions); if (!it.draw && !it.edit) actions = actions.filter(a => ['style', 'remove', 'move', 'clear'].includes(a.do)); // solo preguntaste: no te llena el gráfico de dibujos
+    const reply = (pr.reply || '').slice(0, 1400);
+    hist.push({role: 'user', content: text}, {role: 'assistant', content: reply + (actions.length ? '\n[dibujé: ' + actions.map(a => a.shape || a.do).join(', ') + ']' : '')}); if (hist.length > 12) hist.splice(0, hist.length - 12);
+    try { status(String(r && r.model || 'IA gratis').replace(/ · .*$/, '').slice(0, 26)); } catch {}
+    return {reply, actions, data};
   }
   async function ask(text) {
     text = String(text || '').trim(); if (!text || busy) return; busy = true; wake(); input.value = ''; bub.classList.add('working'); big(false);
     try {
       if (await routeApp(text)) return;
-      const acts = D.parse(text);
-      if (acts.length) await perform(acts);
-      else {
-        mood('thinking', 'think'); say('Déjame pensarlo…', {busy: true}); status('pensando…');
-        try { const r = await llmAsk(text); status('IA de VORTEX'); if (r.actions.length) await perform(r.actions, r.reply); else { mood('happy', 'idle'); say(r.reply || 'Mmm, no tengo una respuesta clara. ¿Quieres que te dibuje soportes, el canal o el rango?'); } }
-        catch { status('sin conexión a la IA'); mood('surprised', 'idle'); say('No pude hablar con la IA ahorita, pero sí puedo dibujarte: canal, rango, soportes y resistencias, tendencia, Fibonacci o una línea en el precio que me digas.'); }
+      const it = BR ? BR.intent(text) : {draw: true}, edits = D.parseEdit(text).length ? D.parse(text) : [], h = H();
+      if (/^\s*(si|sí|dale|va|ok|claro|hazlo|adelante)\b/i.test(text) && hist.length && /dibuj/i.test(hist[hist.length - 1].content || '')) it.draw = true; // «sí» a «¿te lo dibujo?»
+      it.edit = !!edits.length;
+      /* 1) editar lo que ya está dibujado (color, grosor, borrar, mover): al instante */
+      if (edits.length && !it.ask) { await perform(edits); setChips(); return; }
+      /* 2) zona/rectángulo con precios («caja entre 64 000 y 65 000»): al instante */
+      if (BR && it.draw && !it.decide && h && h.ready()) { const cs = h.visible(), z = cs.length ? BR.parseZone(text, {lo: Math.min(...cs.map(c => c.l)), hi: Math.max(...cs.map(c => c.h)), visN: cs.length}) : null; if (z) { await perform(z, 'Te marco esa zona.'); setChips(); return; } }
+      /* 3) órdenes de dibujo sencillas («dibuja el canal», «pon Fibonacci», «línea en 65000»): el motor local, sin esperar a la IA */
+      const local = D.parse(text);
+      if (local.length && (it.draw || !it.ask) && !it.decide && !(BR && BR.needsAI(text))) { await perform(local); setChips(); return; }
+      /* 4) todo lo demás (preguntas, decisiones, dibujos libres): la IA lee tu gráfico completo */
+      mood('thinking', 'think');
+      try {
+        const r = await llmAsk(text, it); big(r.reply.length > 220);
+        if (r.actions.length) await perform(r.actions, r.reply);
+        else { mood(it.decide ? 'focused' : 'happy', 'idle'); say(r.reply || 'Mmm, no tengo una respuesta clara. ¿Quieres que te marque los niveles clave?'); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2600); }
+        if (!it.decide && !it.ask) setChips(); else setChipsCustom([['Dibújame el plan', 'Sí, dibújame en el gráfico el plan que me dijiste: zona de entrada o salida, stop e invalidación y objetivos'], ['¿Por qué?', 'Explícame más a detalle por qué, indicador por indicador'], ['¿Y en otra temporalidad?', '¿Qué cambiaría si lo veo en una temporalidad mayor?']]);
+      } catch (e) {
+        console.warn('Nexus Pixel IA', e); status('sin conexión a la IA');
+        if (local.length && !it.decide) { await perform(local, 'La IA no respondió, pero esto sí te lo dibujo:'); return; }
+        mood('surprised', 'idle'); say(it.decide || it.ask ? localRead() : 'No pude hablar con la IA ahorita, pero sí puedo dibujarte: canal, rango, soportes y resistencias, tendencia, Fibonacci, una zona «entre X y Y» o una línea en el precio que me digas.');
       }
     } catch (e) { console.warn('Nexus Pixel', e); try { inkCtx && inkCtx.clearRect(0, 0, IW(), IH()); } catch {} mood('surprised', 'idle'); const h = home(); place(h.x, h.y); say('Uy, algo falló mientras dibujaba. Inténtalo otra vez.'); } finally { busy = false; bub.classList.remove('working'); lastAct = Date.now(); }
+  }
+  /* Sin IA: una lectura rápida con los números (para no dejarte sin respuesta) */
+  function localRead() {
+    try { const d = brainData(''), s = d.snap; if (!s) throw 0; big(true);
+      const e = s.emas.find(x => x.name === 'EMA 200') || s.emas[s.emas.length - 1], r = s.levels.res[0], sp = s.levels.sup[0], p = d.pos && d.pos[0];
+      return `La IA no respondió, te dejo mi lectura rápida con los números:\n· Estructura ${s.st.bias}.\n· ${e ? `Precio ${e.dist >= 0 ? 'arriba' : 'abajo'} de la ${e.name} (${Math.abs(e.dist).toFixed(2)}%).` : ''} RSI ${Math.round(s.rsi.v)}.\n· Resistencia cercana ${r ? H().fmt(r.p) + ' (' + r.d.toFixed(2) + '%)' : '—'}, soporte ${sp ? H().fmt(sp.p) + ' (' + sp.d.toFixed(2) + '%)' : '—'}.${p ? `\n· Tu ${p.side} va ${p.move >= 0 ? '+' : ''}${(p.move || 0).toFixed(2)}%${p.sl ? '' : ' y no tiene stop: ponle uno'}.` : ''}\nNo es asesoría financiera.`; }
+    catch { return 'No pude hablar con la IA ahorita. Inténtalo en un momento.'; }
   }
 
   /* ════════ Pixel en toda la app: habilidades por sección ════════ */
   const NAMES = {chartView: 'Gráfico', watchView: 'Mi seguimiento', newsView: 'Noticias', screenerView: 'Screener', alertsView: 'Alertas', aiView: 'IA', lensView: 'Nexus Lens', botLabView: 'Nova Bot Lab', discordView: 'Discord', settingsView: 'Configuración'};
   const nrm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const CHIPS = {
-    chartView: [['Canal', 'Dibújame el canal'], ['Rango', 'Marca el rango'], ['Soportes y resistencias', 'Marca soportes y resistencias'], ['Tendencia', 'Traza la línea de tendencia'], ['Fibonacci', 'Pon Fibonacci'], ['Análisis completo', 'Análisis completo'], ['Borrar lo mío', 'Borra lo que dibujaste']],
+    chartView: [['¿Cómo lo ves?', '¿Cómo ves mi gráfico? Léeme mis indicadores'], ['¿Long o short?', '¿Debería entrar en long, en short o esperar?'], ['¿Cierro mi posición?', '¿Debería cerrar mi posición o la mantengo?'], ['Zona clave', 'Dibuja con un rectángulo la zona más importante donde podría reaccionar el precio'], ['Soportes y resistencias', 'Marca soportes y resistencias'], ['Canal', 'Dibújame el canal'], ['Fibonacci', 'Pon Fibonacci'], ['Borrar lo mío', 'Borra lo que dibujaste']],
     newsView: [['Resume las noticias', 'Resume las noticias'], ['¿Qué mueve al mercado?', '¿Qué está moviendo al mercado hoy?'], ['¿Algo de BTC?', '¿Hay noticias importantes de Bitcoin?']],
     screenerView: [['Mejor entrada', '¿Cuál tiene la mejor entrada del screener?'], ['Mejores LONG', '¿Cuáles son las mejores señales LONG del screener?'], ['Mejores SHORT', '¿Cuáles son las mejores señales SHORT del screener?'], ['Más confluencias', '¿Cuál tiene más confluencias para entrar?']],
     alertsView: [['Crear una alerta', 'Quiero crear una alerta'], ['Mis alertas', '¿Qué alertas tengo activas?'], ['¿Cómo funcionan?', '¿Cómo funcionan las alertas?']],
