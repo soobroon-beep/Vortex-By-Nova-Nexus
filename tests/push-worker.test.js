@@ -179,7 +179,7 @@ test('plan Infinity: comprueba el referido de BingX con la API de afiliado (firm
 
 test('IA open source: cada uso con su modelo, Groq primero si hay clave, Cloudflare de respaldo y captura → datos si no hay visión', async () => {
   const W = await import('../worker/push-alerts.mjs'), runs = [];
-  const AI = {run: async (m, i) => { runs.push(m); if (/llama-4-scout|mistral-small/.test(m)) throw new Error('sin visión hoy'); return {response: 'respuesta de ' + m}; }};
+  const AI = {run: async (m, i) => { runs.push(m); if (/llama-4-scout|mistral-small|gemma-4/.test(m)) throw new Error('sin visión hoy'); return {response: 'respuesta de ' + m}; }};
   const chat = await W.openChain({AI}, 'chat', [{role: 'user', content: 'hola'}]);
   assert.match(chat.text, /gpt-oss-120b/); assert.match(chat.model, /Cloudflare/);
   const code = await W.openChain({AI}, 'code', [{role: 'user', content: 'pine'}]); assert.match(code.text, /qwen2.5-coder/);
@@ -187,7 +187,15 @@ test('IA open source: cada uso con su modelo, Groq primero si hay clave, Cloudfl
   const v = await W.openChain({AI}, 'vision', img); assert.equal(v.image, false); assert.match(v.text, /gpt-oss/);
   let gUrl = ''; const g = await W.openChain({AI, GROQ_KEY: 'gk'}, 'chat', [{role: 'user', content: 'hola'}], {}, async (u) => { gUrl = u; return {ok: true, json: async () => ({choices: [{message: {content: 'desde groq'}}]})}; });
   assert.equal(g.text, 'desde groq'); assert.match(g.model, /Groq/); assert.match(gUrl, /api\.groq\.com/);
-  assert.equal(W.aiText({result: {choices: [{message: {content: 'x'}}]}}), 'x'); assert.equal(W.aiText({output: [{type: 'message', content: [{text: 'y'}]}]}), 'y');
+  assert.equal(W.aiText({result: {choices: [{message: {content: 'x'}}]}}), 'x');
+  // Nexus Pixel: su propia cadena (la que razona), modo JSON en Groq y, si Groq rechaza un parámetro (400), se repite sin él
+  const bodies = []; const px = await W.openChain({AI, GROQ_KEY: 'gk'}, 'pixel', [{role: 'user', content: '¿cierro mi long?'}], {json: true}, async (u, init) => { const b = JSON.parse(init.body); bodies.push(b); return b.response_format ? {ok: false, status: 400, json: async () => ({})} : {ok: true, json: async () => ({choices: [{message: {content: '<think>mmm</think>{"reply":"ok"}'}}]})}; });
+  assert.equal(px.text, '{"reply":"ok"}'); assert.match(px.model, /qwen3\.6-27b · Groq/); assert.equal(bodies[0].reasoning_format, 'hidden'); assert.ok(bodies[0].response_format); assert.ok(!bodies[1].response_format);
+  const pxw = await W.openChain({AI}, 'pixel', [{role: 'user', content: 'hola'}]); assert.match(pxw.text, /gpt-oss-120b/);
+  assert.deepEqual(W.groqExtra('openai/gpt-oss-120b', 'pixel'), {reasoning_effort: 'medium', include_reasoning: false});
+  const AI2 = {run: async m => { if (/llama-4-scout/.test(m)) throw new Error('x'); return {response: 'veo ' + m}; }};
+  const see = await W.openChain({AI: AI2}, 'see', img); assert.match(see.text, /gemma-4/);
+  assert.ok(W.AI_TASKS.includes('pixel') && W.AI_TASKS.includes('see')); assert.equal(W.aiText({output: [{type: 'message', content: [{text: 'y'}]}]}), 'y');
 });
 
 test('ronda programada: sigue tus trades abiertos con la app cerrada', async () => {

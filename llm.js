@@ -226,6 +226,23 @@
     }
     throw errs.find(e => e.kind === 'network') || errs[errs.length - 1] || new LLMError('La IA no respondió a tiempo.', 'abort');
   }
+  /* ───────── Nexus Pixel: SIEMPRE la IA gratis y open source (nunca «Tu IA») ─────────
+     Va directo a tu servidor VORTEX con su propia cadena de modelos que razonan (task «pixel»: Qwen 3.6 → GPT-OSS 120B → GLM → Gemma)
+     y, para «ver» la captura del gráfico, un modelo con visión (task «see»). Si el servidor no contesta, usa la ruta gratis de siempre. */
+  async function pixelChat(messages, o) {
+    o = o || {}; const task = o.task === 'see' ? 'see' : 'pixel', tm = o.timeout || (task === 'see' ? 32000 : 72000);
+    try {
+      const body = {model: 'openai', task, messages, temperature: o.temperature == null ? .35 : o.temperature, max_tokens: o.maxTokens || (task === 'see' ? 500 : 1800), json: !!o.json};
+      const r = await fetchT(VX + '/ai', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body)}, tm, o.signal);
+      if (!r.ok) { let m = ''; try { const j = await r.json(); m = j.error || ''; } catch {} throw new LLMError(String(m || 'Error ' + r.status), kindOf(r.status), r.status); }
+      const j = await r.json(), text = String(textOf(j) || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      if (!text || noCredit(text) || looksBad(text)) throw new LLMError('La IA gratis no devolvió texto', 'server');
+      return {text, model: String(j.model || 'IA gratis'), image: !!j.image};
+    } catch (e) {
+      if ((o.signal && o.signal.aborted) || task === 'see') throw e;
+      return chat(messages, Object.assign({}, o, {noOwn: true, purpose: 'text', task: undefined}));
+    }
+  }
   async function serverStatus() { try { const r = await fetchT(VX + '/ai/status', {}, 7000); return r.ok ? await r.json() : {ready: false}; } catch { return {ready: false, offline: true}; } }
   async function serverSetKey(key) { const r = await fetchT(VX + '/ai/key', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({key})}, 10000); let j = {}; try { j = await r.json(); } catch {} if (!r.ok) throw new LLMError(j.error || 'Error ' + r.status, 'auth', r.status); vxDown = 0; vxModels = null; return j; }
 
@@ -389,7 +406,7 @@ FORMATO DE RESPUESTA: primero 2-4 líneas en español explicando qué hace y có
 
   // Libera el espacio del modelo de navegador (cientos de MB) que se descargaba antes por defecto, si no lo elegiste tú
   try { if (typeof caches !== 'undefined' && typeof document !== 'undefined' && !load().webllmOptIn) setTimeout(() => caches.keys().then(ks => ks.filter(k => /^webllm\//.test(k)).forEach(k => caches.delete(k))).catch(() => {}), 4000); } catch {}
-  const api = {OWN, ownLoad, ownSave, ownModels, ownTest, pickVx, looksBad, serverStatus, serverSetKey, resetCache: () => { freeCache = null; }, LLMError, load, save, chat, freeModels, pickFree, supportsVision, imageMessage, hasImage, stripImages, extractCode, stripCode, applyPatch, friendly, providerLabel, PINE_GUIDE, signalMetrics, WEBLLM_MODELS, FREE_URL};
+  const api = {pixelChat, OWN, ownLoad, ownSave, ownModels, ownTest, pickVx, looksBad, serverStatus, serverSetKey, resetCache: () => { freeCache = null; }, LLMError, load, save, chat, freeModels, pickFree, supportsVision, imageMessage, hasImage, stripImages, extractCode, stripCode, applyPatch, friendly, providerLabel, PINE_GUIDE, signalMetrics, WEBLLM_MODELS, FREE_URL};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTLLM = api;
 })(typeof self !== 'undefined' ? self : this);
