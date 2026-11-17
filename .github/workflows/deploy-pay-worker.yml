@@ -1,0 +1,45 @@
+name: Publicar servidor de pagos (vortex-pay)
+# Publica worker/pay.mjs como el Worker «vortex-pay» (cobro de Plus e Infinity con Stripe).
+# Secretos de GitHub (Settings → Secrets and variables → Actions):
+#   STRIPE_SECRET_KEY  → tu clave secreta de Stripe (sk_test_… para probar, sk_live_… para cobrar de verdad). Sin ella la app muestra «pagos muy pronto».
+#   CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID → los mismos de los otros Workers.
+# Además crea solo el aviso (webhook) de Stripe hacia el Worker y guarda su secreto: no hay nada que configurar en Stripe.
+on:
+  push:
+    branches: [main, dev]
+    paths: ['worker/pay.mjs', 'worker/wrangler-pay.toml', '.github/workflows/deploy-pay-worker.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: deploy-pay-worker, cancel-in-progress: false}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Pruebas
+        run: node --test tests/pay-worker.test.js
+      - name: Publicar en Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "Falta CLOUDFLARE_API_TOKEN: no se publica."; exit 0; fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
+          OUT=$(npx --yes wrangler@4 deploy --config worker/wrangler-pay.toml 2>&1); echo "$OUT"
+          URL=$(echo "$OUT" | grep -oE 'https://vortex-pay\.[a-z0-9-]+\.workers\.dev' | head -1); [ -z "$URL" ] && URL="https://vortex-pay.soobroon.workers.dev"
+          if [ -z "$STRIPE_SECRET_KEY" ]; then echo "Falta STRIPE_SECRET_KEY: el servidor queda publicado pero aún no cobra."; exit 0; fi
+          printf '%s' "$STRIPE_SECRET_KEY" | npx --yes wrangler@4 secret put STRIPE_SECRET_KEY --config worker/wrangler-pay.toml
+          # aviso (webhook) de Stripe → $URL/pay/webhook: se borra el anterior y se crea uno nuevo para obtener su secreto
+          HOOK="$URL/pay/webhook"; A="Authorization: Bearer $STRIPE_SECRET_KEY"
+          for id in $(curl -s -H "$A" "https://api.stripe.com/v1/webhook_endpoints?limit=100" | jq -r --arg u "$HOOK" '.data[] | select(.url==$u) | .id'); do curl -s -X DELETE -H "$A" "https://api.stripe.com/v1/webhook_endpoints/$id" >/dev/null; done
+          R=$(curl -s -H "$A" https://api.stripe.com/v1/webhook_endpoints -d url="$HOOK" -d api_version=2024-06-20 -d description="VORTEX planes" \
+            -d 'enabled_events[]=checkout.session.completed' -d 'enabled_events[]=customer.subscription.created' -d 'enabled_events[]=customer.subscription.updated' \
+            -d 'enabled_events[]=customer.subscription.deleted' -d 'enabled_events[]=invoice.paid' -d 'enabled_events[]=invoice.payment_failed')
+          SEC=$(echo "$R" | jq -r '.secret // empty')
+          if [ -n "$SEC" ]; then printf '%s' "$SEC" | npx --yes wrangler@4 secret put STRIPE_WEBHOOK_SECRET --config worker/wrangler-pay.toml; echo "Webhook de Stripe listo: $HOOK"; else echo "No se pudo crear el webhook: $(echo "$R" | jq -c '.error.message // .')"; fi
+          echo "Modo: $(case "$STRIPE_SECRET_KEY" in sk_live_*|rk_live_*) echo 'COBRO REAL';; *) echo 'PRUEBAS (tarjeta 4242 4242 4242 4242)';; esac)"

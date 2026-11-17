@@ -1228,6 +1228,21 @@ body.rp-picking #chartArea{cursor:crosshair}
 .pl-uid input{flex:1;min-width:0;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);border-radius:11px;padding:9px 11px;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
 .pl-uid .pl-btn{width:auto}
 .pl-msg{min-height:0}.pl-msg.bad{color:var(--red)!important}
+.pl-price{display:flex;align-items:baseline;gap:7px;position:relative}
+.pl-price b{font-size:26px;font-weight:850;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+.pl-price span{font-size:11.5px;color:var(--muted)}
+.pl-col.plus .pl-price b{color:#ff8a6b}
+.pl-col.inf .pl-price b{background:linear-gradient(90deg,#f5c451,#c69bff,#7fb3ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.pl-act{display:flex;flex-direction:column;gap:6px;position:relative}
+.pl-note{font-size:11px;line-height:1.4;color:var(--muted);text-align:center}
+.pl-or{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--muted);position:relative}
+.pl-or:before,.pl-or:after{content:'';flex:1;height:1px;background:rgba(255,255,255,.1)}
+.pl-col.inf .pl-act+.pl-or+.pl-steps{margin-top:0}
+.pl-manage{margin-top:auto;display:flex;flex-direction:column;gap:9px;padding:12px;border-radius:13px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);position:relative}
+.pl-manage p{margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px}
+.pl-manage p svg{color:var(--green)}
+.pl-row{display:flex;gap:8px}.pl-row .pl-btn{font-size:12px;min-height:36px;padding:8px 10px}
+.light .pl-manage{background:rgba(0,0,0,.025);border-color:rgba(0,0,0,.08)}.light .pl-or:before,.light .pl-or:after{background:rgba(0,0,0,.1)}
 .light .pl-box{background:#fff;border-color:rgba(0,0,0,.08)}
 .light .pl-col{background:rgba(0,0,0,.015);border-color:rgba(0,0,0,.08)}
 .light .pl-steps li{background:rgba(0,0,0,.025);border-color:rgba(0,0,0,.06)}

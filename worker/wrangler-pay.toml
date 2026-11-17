@@ -1,0 +1,16 @@
+# Worker de pagos de VORTEX (planes Plus e Infinity con Stripe). Lo publica .github/workflows/deploy-pay-worker.yml.
+name = "vortex-pay"
+main = "pay.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# Mismo KV de VORTEX (las llaves de pagos empiezan con «pay:»)
+[[kv_namespaces]]
+binding = "KV"
+id = "c6d98896a2a3496b89228e7994cedda2"
+
+[vars]
+ALLOWED_ORIGIN = "https://vortex-nexus.pages.dev,https://dev.vortex-nexus.pages.dev,https://soobroon-beep.github.io"
+# Precios en pesos mexicanos al mes. Si los cambias, se crea solo el precio nuevo en Stripe (quien ya paga sigue con su precio).
+PRICE_PLUS = "99"
+PRICE_INFINITY = "249"
