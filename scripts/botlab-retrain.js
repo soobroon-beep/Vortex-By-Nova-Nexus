@@ -2,11 +2,13 @@
 /* NOVA BOT LAB · reentrenamiento programado (GitHub Actions, sin depender de tu navegador).
    Para cada bot con «ciclo automático» activado: descarga velas cerradas, re-evalúa la versión principal con datos recientes (monitoreo)
    y corre el optimizador walk-forward (ajusta solo con entrenamiento y valida en tramos que no vio).
-   · NUNCA cambia la versión principal ni toca tus bots: solo escribe sus resultados en users/<uid>/data/botlab_server.
-   · La app te muestra la propuesta (si hay) y tú decides.
+   · Con la «mejora automática» (encendida por defecto) la versión que gana fuera de muestra pasa a ser la principal y queda A PRUEBA
+     en la simulación en vivo. El vigilante (botlab-guard.js) la compara contra la anterior: si rinde peor, regresa sola a la que sí
+     funcionaba y anota qué cambio falló para probar otra variante de ese mismo filtro; si rinde igual o mejor, la confirma.
+   · Nunca envía órdenes reales: todo es simulación (paper trading).
    · Sin la variable FIREBASE_SERVICE_ACCOUNT no hace nada (sale sin error). Nunca imprime secretos ni datos de usuarios. */
 'use strict';
-const BR = require('../botlab-brain.js'), NT = require('../botlab-notify.js'), B = require('../botlab-engine.js'), O = require('../botlab-optimizer.js'), P = require('../botlab-paper.js'), RK = require('../botlab-risk.js');
+const G = require('../botlab-guard.js'), BR = require('../botlab-brain.js'), NT = require('../botlab-notify.js'), B = require('../botlab-engine.js'), O = require('../botlab-optimizer.js'), P = require('../botlab-paper.js'), RK = require('../botlab-risk.js');
 try { require('../nova-nexus.js'); } catch {}
 let Pine = null; try { Pine = require('../pine.js'); } catch {}
 /* Indicadores incluidos en la app (catálogo: Nova Nexus, Señales iA 2.7…): los bots los usan como 'cat:<id>' y no viven en data/scripts */
@@ -89,7 +91,7 @@ async function retrainBot(bot, scripts, getCandles, now, brainCtx) {
     // aprende con TODAS las monedas que opera el bot (su cesta), no solo con la principal: así junta suficientes operaciones para comprobar una mejora
     const syms = learnSyms(spec), series = [{sym: spec.symbol, C: candles, user: ropts.user}];
     for (const sym of syms.slice(1)) { try { const C = await getCandles(sym, spec.interval, bars); if (C.length >= 1200) { const u = userSeries(Object.assign({}, spec, {symbol: sym}), C, scripts); series.push({sym, C, user: Object.keys(u).length ? u : null}); } } catch {} }
-    const opt = await O.optimize(candles, spec, {seed: O.hash(bot.id + new Date(now).toISOString().slice(0, 10)), budget: cyc.budget || 60, ropts, series});
+    const opt = await O.optimize(candles, spec, {avoid: bot.avoid || null, seed: O.hash(bot.id + new Date(now).toISOString().slice(0, 10)), budget: cyc.budget || 60, ropts, series});
     let focus = null; if (opt.decision !== 'propuesta') { try { focus = focusBasket(spec, series, ropts); } catch {} }
     if (focus && focus.ok) { opt.decision = 'propuesta'; opt.candidate = focus.candidate; opt.changes = [{path: 'monedas', from: spec.basket.map(base).join(', '), to: focus.keep.map(base).join(', ')}]; opt.oos = {folds: 1, winsVsBase: 1, cand: {n: focus.hold.cand.n, net: focus.hold.cand.net}, base: {n: focus.hold.base.n, net: focus.hold.base.net}}; opt.reasons = [`Se enfoca en ${focus.keep.map(base).join(', ')}: ${focus.dropped.map(base).join(', ')} le restaban.`]; opt.focus = true; }
     let br = null; // bot conectado a un cerebro de Neural Brain: además prueba las ideas del cerebro y elige la mejor que gane fuera de muestra
@@ -126,16 +128,26 @@ const learnSyms = spec => Array.isArray(spec.basket) && spec.basket.length ? [..
 /* Mejora automática en el servidor: si la candidata ganó fuera de muestra y el bot tiene la mejora automática, pasa a ser la principal
    SIN esperar a que abras la app (antes solo se aplicaba al abrir Nova Bot Lab). La simulación en vivo sigue con la versión nueva.
    La anterior queda en Versiones («anterior») para regresar con un clic. Devuelve el número de la versión nueva o 0. */
+const specKey = sp => String(O.hash(JSON.stringify(B.normalizeSpec(sp))));
 function promote(bot, r, now, manual) {
   if (!r || r.decision !== 'propuesta' || !r.candidate || (!manual && cycOf(bot).auto === false) || bot.status === 'archived') return 0;
   const sp = B.normalizeSpec(r.candidate); if (!B.validateSpec(sp).ok) return 0;
-  const vs = bot.versions || (bot.versions = []), nv = Math.max(0, ...vs.map(x => x.v || 0)) + 1, prev = bot.mainV, chg = (r.changes || []).map(c => `${c.path} ${c.from}→${c.to}`).join('; ');
+  const vs = bot.versions || (bot.versions = []), cur = vs.find(x => x.v === bot.mainV);
+  if (!manual && cur && cur.probation) { r.decision = 'sin_mejora'; (r.reasons = r.reasons || []).push(`La v${cur.v} sigue a prueba en vivo: esta idea espera a que se confirme o se descarte (un cambio a la vez).`); r.held = true; return 0; }
+  if (!manual && (bot.failedSpecs || []).includes(specKey(sp))) { r.decision = 'sin_mejora'; (r.reasons = r.reasons || []).push('Esta misma versión ya falló en vivo: se descarta para no repetirla.'); return 0; }
+  const nv = Math.max(0, ...vs.map(x => x.v || 0)) + 1, prev = bot.mainV, chg = (r.changes || []).map(c => `${c.path} ${c.from}→${c.to}`).join('; ');
   vs.forEach(x => { if (x.v === prev) x.state = 'anterior'; });
-  vs.push({v: nv, spec: sp, at: now, note: String(r.note || ('Reentrenamiento: ' + chg)).slice(0, 200), origin: 'servidor' + (r.note ? ' (cerebro)' : ' (reentrenamiento)'), state: 'principal', auto: true});
+  vs.push(Object.assign({v: nv, spec: sp, at: now, note: String(r.note || ('Reentrenamiento: ' + chg)).slice(0, 200), origin: 'servidor' + (r.note ? ' (cerebro)' : ' (reentrenamiento)'), state: 'principal', auto: true},
+    manual ? {} : {probation: {since: now, prevV: prev, changes: (r.changes || []).map(c => ({path: c.path, from: c.from, to: c.to})), expectDD: r.holdout && r.holdout.cand ? r.holdout.cand.maxDDPct : null}}));
   bot.mainV = nv; const j = bot.journal || (bot.journal = []);
   const why = r.oos ? ` Fuera de muestra la nueva ganó ${Math.round(r.oos.cand.net)} contra ${Math.round(r.oos.base.net)} de la anterior (${r.oos.cand.n} operaciones${r.coins > 1 ? ` en ${r.coins} monedas` : ''}).` : '';
-  j.push({t: now, kind: 'versión', text: manual ? `v${nv}: ${r.note} (antes v${prev}; en Versiones puedes regresar).` : `Mejora automática (servidor): la v${nv} pasó a ser la principal en lugar de la v${prev}.${why} Si no te convence, en Versiones puedes regresar a la v${prev}.`});
-  const run = (bot.paper || []).filter(x => x.status === 'running');
+  j.push({t: now, kind: 'versión', text: manual ? `v${nv}: ${r.note} (antes v${prev}; en Versiones puedes regresar).` : `Mejora automática (servidor): la v${nv} pasó a ser la principal en lugar de la v${prev}.${why} Queda a prueba en la simulación en vivo: si rinde peor que la v${prev}, regresa sola.`});
+  restartPaper(bot, sp, nv, prev, now, manual);
+  if (j.length > 300) j.splice(0, j.length - 300); bot.updatedAt = now; return nv;
+}
+/* La simulación en vivo continúa con la versión nueva, en las mismas monedas y temporalidades */
+function restartPaper(bot, sp, nv, prev, now, manual) {
+  const j = bot.journal || (bot.journal = []), run = (bot.paper || []).filter(x => x.status === 'running');
   if (run.length) { // la simulación en vivo continúa con la versión nueva, en las mismas monedas y temporalidades
     const cap = run.reduce((a, x) => a + (+x.capital || 0), 0) || sp.risk.capital, grp = now.toString(36) + 'g';
     for (const x of run) { x.status = 'stopped'; x.pausedAt = now; }
@@ -144,7 +156,23 @@ function promote(bot, r, now, manual) {
     for (const x of targets) { const s2 = JSON.parse(JSON.stringify(sp)); s2.symbol = x.spec.symbol; s2.interval = x.spec.interval; delete s2.basket; delete s2.intervals; const ns = P.newSession({id: now.toString(36) + Math.random().toString(36).slice(2, 6), v: nv, spec: s2, capital: cap / targets.length, startT: now}); ns.grp = grp; bot.paper.push(ns); }
     j.push({t: now, kind: 'paper', text: `La simulación en vivo se reinició con la v${nv}.`});
   }
-  if (j.length > 300) j.splice(0, j.length - 300); bot.updatedAt = now; return nv;
+}
+/* Vigilante: la versión a prueba rindió peor en vivo → vuelve la anterior y se anota lo que falló (no se repite; se prueba otra variante) */
+function rollback(bot, ev, now) {
+  const vs = bot.versions || [], cur = vs.find(x => x.v === bot.mainV), pr = cur && cur.probation, pv = pr && vs.find(x => x.v === pr.prevV);
+  if (!cur || !pr) return 0; if (!pv) { delete cur.probation; return 0; }
+  bot.failedSpecs = [...new Set([...(bot.failedSpecs || []), specKey(cur.spec)])].slice(-30);
+  const avoid = G.avoidFrom(pr.changes); bot.avoid = G.mergeAvoid(bot.avoid, avoid);
+  cur.state = 'descartada'; cur.failed = {at: now, why: ev.why}; delete cur.probation; pv.state = 'principal'; const from = cur.v; bot.mainV = pv.v;
+  const j = bot.journal || (bot.journal = []);
+  j.push({t: now, kind: 'versión', text: `Regreso automático: la v${from} ${ev.why}. Volvió la v${pv.v}, que sí funcionaba.${avoid.length ? ' No se repetirá: ' + avoid.map(a => `${a.path} = ${a.value}`).join(', ') + '; el optimizador probará otras variantes de ese mismo parámetro.' : ' Esa versión no se repetirá.'}`});
+  restartPaper(bot, B.normalizeSpec(pv.spec), pv.v, from, now, false);
+  if (j.length > 300) j.splice(0, j.length - 300); bot.updatedAt = now; return pv.v;
+}
+function confirmV(bot, ev, now) {
+  const cur = (bot.versions || []).find(x => x.v === bot.mainV); if (!cur || !cur.probation) return 0;
+  delete cur.probation; cur.confirmedAt = now; const j = bot.journal || (bot.journal = []);
+  j.push({t: now, kind: 'versión', text: `Mejora confirmada en vivo: la v${cur.v} ${ev.why}. Se queda como principal.`}); bot.updatedAt = now; return cur.v;
 }
 /* Una sola vez: el bot de Señales iA 2.7 opera también en las 8 monedas principales (lo pediste para que aprenda y opere con más muestra). */
 function widen(bot, now) {
@@ -174,7 +202,7 @@ async function main() {
   admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); const db = admin.firestore(), now = Date.now(); try { require('../markets.js').setStore(require('./candle-store.js').reader(db)); } catch {}
   const force = process.env.FORCE === '1', cache = new Map();
   const getCandles = async (s, i, n) => { const k = s + '|' + i + '|' + n; if (!cache.has(k)) cache.set(k, await history(s, i, n)); return cache.get(k); };
-  const users = await db.collection('users').listDocuments(); let nb = 0, nr = 0, np = 0, nps = 0, nbr = 0;
+  const users = await db.collection('users').listDocuments(); let nb = 0, nr = 0, np = 0, nps = 0, nbr = 0, rG = 0, cG = 0;
   for (const u of users) {
     const bd = await u.collection('data').doc('botlab').get(); if (!bd.exists) continue; let S; try { S = JSON.parse(bd.data().items || '{}'); } catch { continue; }
     let links = {}; try { const bb = await u.collection('data').doc('brain_bots').get(); links = (bb.exists && bb.data().bots) || {}; } catch {} const linked = b => links[b.id] && links[b.id].auto !== false;
@@ -182,7 +210,12 @@ async function main() {
     const sd = await u.collection('data').doc('botlab_server').get(), prev = sd.exists ? sd.data() : {}, results = Object.assign({}, prev.results || {}), paper = Object.assign({}, prev.paper || {}), brainMem = Object.assign({}, prev.brainMem || {}); let scripts = null, changed = false, botsChanged = false;
     const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(unpackStr(s.data().items || '[]')) : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } scripts = scripts.concat(catalogScripts().filter(c => c.code && !scripts.some(x => x.id === c.id))); try { const pro = await db.collection('pro').get(); for (const d of pro.docs) if (!scripts.some(x => x.id === 'cat:' + d.id)) scripts.push({id: 'cat:' + d.id, name: d.id, code: d.data().code, builtin: true}); } catch {} }; // los Nova Nexus PRO ya no están en el repo: se leen de Firestore
     for (const b of all) if (b && b.id && widen(b, now)) { botsChanged = true; console.log('· el bot de Señales 2.7 ahora opera en 8 monedas'); }
-    const improved = [];
+    const improved = [], guarded = [];
+    for (const b of cyc) { // vigilante: juzga en vivo la versión que está a prueba (regresa o confirma)
+      adoptServer(b, (prev.paper || {})[b.id]); const ev = G.evaluate(b, now);
+      if (ev.action === 'rollback') { const v = rollback(b, ev, now); if (v) { botsChanged = true; guarded.push({b, ev, v, kind: 'rollback'}); console.log(`· vigilante: un bot regresó a su versión anterior (${ev.live.n} operaciones en vivo)`); } }
+      else if (ev.action === 'confirm') { if (confirmV(b, ev, now)) { botsChanged = true; guarded.push({b, ev, v: b.mainV, kind: 'confirm'}); console.log(`· vigilante: mejora confirmada en vivo (${ev.live.n} operaciones)`); } }
+    }
     for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force, linked(b))) continue; await loadScripts(); const bc = linked(b) ? {link: links[b.id], memory: brainMem[b.id] || []} : null; const r = await retrainBot(b, scripts, getCandles, now, bc); if (bc && bc.out) { brainMem[b.id] = JSON.parse(JSON.stringify(bc.out.memory || [])); nbr++; } const nv = promote(b, r, now); if (nv) { r.applied = {v: nv, at: now}; botsChanged = true; improved.push({b, nv, r}); }
       if (r.status === 'ok') { const pa = (results[b.id] || {}).analysis; if (force || !pa || now - (pa.at || 0) > 20 * 36e5 || pa.v !== b.mainV) { try { const mv = b.versions.find(x => x.v === b.mainV); r.analysis = await analyzeBot(b, B.normalizeSpec(mv.spec), scripts, getCandles, now); if (r.analysis) console.log(`  análisis: ${r.analysis.best[0] ? 'mejor ' + r.analysis.best[0].sym + ' ' + r.analysis.best[0].iv : 'sin datos'}`); } catch (e) { console.log('  análisis: ' + String(e.message || e).slice(0, 100)); } } else r.analysis = pa; } results[b.id] = JSON.parse(JSON.stringify(r)); changed = true; nr++; console.log(`· bot ${nr}${bc ? ' (con cerebro)' : ''}: ${r.status}${r.status === 'error' ? ' · ' + String(r.reason || '').slice(0, 120) : ' · ' + r.decision + (r.brain ? ` · ideas probadas: ${(r.brain.tried || []).length}` : '')}`); if (r.decision === 'propuesta') np++; }
     if (botsChanged) { // la versión nueva también queda en tus bots (tu cuenta) aunque no abras la app
@@ -202,12 +235,19 @@ async function main() {
       const HK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\//, own = !S.dcOff && b.dcDest === 'own' && HK.test(b.dcHook || '') ? b.dcHook : null, dUrl = S.dcOff ? null : own || (S.notify && S.notify.url && S.notify.bots !== false && HK.test(S.notify.url) ? S.notify.url : null);
       if (dUrl) await postDiscord(dUrl, [{title: `🚀 ${b.name} mejoró solo · v${nv}`, description: `La nueva versión ${how}.${what ? '\n**Cambió:** ' + what : ''}\nLa simulación en vivo ya sigue con la v${nv}. En Versiones puedes regresar a la anterior.`, color: 0x20bf9f, timestamp: new Date(now).toISOString()}]);
     }
+    for (const {b, ev, v, kind} of guarded) {
+      const t = kind === 'rollback' ? `↩️ ${b.name} regresó a la v${v}` : `✅ ${b.name}: mejora confirmada (v${v})`, body = kind === 'rollback' ? `La versión nueva ${ev.why}. Volvió la que sí funcionaba y probará otra variante.` : `La versión nueva ${ev.why}. Se queda.`;
+      pushOut.push({title: t, body, tag: 'bot-guard-' + b.id});
+      const HK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\//, own = !S.dcOff && b.dcDest === 'own' && HK.test(b.dcHook || '') ? b.dcHook : null, dUrl = S.dcOff ? null : own || (S.notify && S.notify.url && S.notify.bots !== false && HK.test(S.notify.url) ? S.notify.url : null);
+      if (dUrl) await postDiscord(dUrl, [{title: t, description: body, color: kind === 'rollback' ? 0xf2a33a : 0x20bf9f, timestamp: new Date(now).toISOString()}]);
+    }
+    if (guarded.length) { rG += guarded.filter(x => x.kind === 'rollback').length; cG += guarded.filter(x => x.kind === 'confirm').length; }
     for (const b of pap) { await loadScripts(); adoptServer(b, (prev.paper || {})[b.id]); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.dcOff ? false : S.notify, pushOut); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
     if (pushOut.length) await botPush(u.id, pushOut);
     if (changed) { for (const id of Object.keys(results)) if (!all.some(b => b.id === id)) delete results[id]; for (const id of Object.keys(paper)) if (!all.some(b => b.id === id)) delete paper[id]; for (const id of Object.keys(brainMem)) if (!all.some(b => b.id === id)) delete brainMem[id]; const clean = o => JSON.parse(JSON.stringify(o || {})); // Firestore no acepta «undefined» (p. ej. ctx de una posición abierta): antes el guardado fallaba y los bots no avanzaban
       await u.collection('data').doc('botlab_server').set({results: clean(results), paper: clean(paper), brainMem: clean(brainMem), updatedAt: admin.firestore.FieldValue.serverTimestamp()}); }
   }
-  console.log(`Modo ${MODE} · ciclos: ${nb} · reentrenados: ${nr} · con cerebro: ${nbr} · con propuesta: ${np} · sesiones paper avanzadas: ${nps}`);
+  console.log(`Modo ${MODE} · ciclos: ${nb} · reentrenados: ${nr} · con cerebro: ${nbr} · con propuesta: ${np} · sesiones paper avanzadas: ${nps} · regresos: ${rG} · confirmadas: ${cG}`);
 }
 if (require.main === module) main().catch(e => { console.error('Error:', String(e.message || e).slice(0, 200)); process.exit(1); });
-module.exports = {retrainBot, paperBot, due, history, userSeries};
+module.exports = {retrainBot, paperBot, due, history, userSeries, promote, rollback, confirmV};

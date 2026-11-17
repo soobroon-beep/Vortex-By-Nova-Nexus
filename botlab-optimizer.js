@@ -100,10 +100,15 @@
   }
   /* ───────── Walk-forward ───────── */
   async function optimize(candles, spec, opts) {
-    opts = Object.assign({budget: 60, seed: 1, trainFrac: .5, testFrac: .1, holdFrac: .15, minOosTrades: 30, onProgress: null, yield: null, ropts: {}, series: null}, opts || {});
+    opts = Object.assign({avoid: null, budget: 60, seed: 1, trainFrac: .5, testFrac: .1, holdFrac: .15, minOosTrades: 30, onProgress: null, yield: null, ropts: {}, series: null}, opts || {});
     const S = Array.isArray(opts.series) && opts.series.length ? opts.series.filter(x => x && x.C && x.C.length) : [{sym: spec.symbol, C: candles, user: opts.ropts && opts.ropts.user}];
     const C0 = S[0].C, N = Math.min(...S.map(x => x.C.length)), cap = spec.risk.capital, out = {tuned: null, at: Date.now(), bars: N, coins: S.length, from: C0.length ? C0[0].t : null, to: C0.length ? C0[C0.length - 1].t : null, folds: [], oos: null, holdout: null, candidate: null, changes: [], decision: 'sin_mejora', reasons: [], dims: 0};
-    const dims = space(spec); out.dims = dims.length; if (!dims.length) { out.decision = 'no_aplica'; out.reasons.push('La estrategia no tiene parámetros numéricos ajustables (periodos, stop loss o take profit).'); return out; }
+    let dims = space(spec);
+    if (Array.isArray(opts.avoid) && opts.avoid.length) { // valores que ya fallaron EN VIVO (vigilante de mejoras): se prueban otras variantes de ese mismo parámetro
+      for (const d of dims) d.values = d.values.filter(v => v === d.base || !opts.avoid.some(a => a.path === d.path && Math.abs(+a.value - v) < 1e-9));
+      dims = dims.filter(d => d.values.length > 1);
+    }
+    out.dims = dims.length; if (!dims.length) { out.decision = 'no_aplica'; out.reasons.push('La estrategia no tiene parámetros numéricos ajustables (periodos, stop loss o take profit).'); return out; }
     if (N < 1200) { out.decision = 'no_aplica'; out.reasons.push(`Solo hay ${N} velas: se necesitan al menos 1.200 para validar sin mirar al futuro.`); return out; }
     const budget = Math.max(opts.budget, Math.min(140, dims.length * 7)), tuneMargin = .02 * (1 + Math.max(0, dims.length - 4) / 8); // cuantos más parámetros se ajustan, más ventaja se exige (más riesgo de sobreajuste)
     const TR = opts.trainFrac, TE = opts.testFrac, H0 = 1 - opts.holdFrac, ropts = opts.ropts, tAt = f => C0[Math.min(C0.length - 1, Math.floor(f * C0.length))].t;

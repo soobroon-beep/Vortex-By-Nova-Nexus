@@ -771,7 +771,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const T = $('#blTab'), main = runOf(b), vs = b.versions.filter(v => v.state !== 'prueba');
     const sc = v => { const r = runOf(b, v.v); return r && r.metrics.n >= 5 ? oosOf(r) : null; }, scored = vs.map(v => [v, sc(v)]).filter(x => x[1] != null), best = scored.length > 1 ? scored.reduce((a2, x) => x[1] > a2[1] + .5 ? x : a2, scored.find(x => x[0].v === b.mainV) || scored[0])[0] : null; // empate: se queda la que está en uso
     const diff = v => { const prev = b.versions.filter(x => x.v < v.v && x.state !== 'prueba').slice(-1)[0]; if (!prev) return null; const A = specLines(prev.spec), Z = specLines(v.spec); return {add: Z.filter(x => !A.includes(x)).slice(0, 6), del: A.filter(x => !Z.includes(x)).slice(0, 6), from: prev.v}; };
-    const stLab = v => v.v === b.mainV ? 'en uso' : {candidata: 'probada, sin aplicar', descartada: 'descartada', anterior: 'anterior'}[v.state] || v.state;
+    const stLab = v => v.v === b.mainV ? (v.probation ? 'en uso · a prueba en vivo' : 'en uso') : v.state === 'descartada' && v.failed ? 'descartada: rindió peor en vivo' : {candidata: 'probada, sin aplicar', descartada: 'descartada', anterior: 'anterior'}[v.state] || v.state;
     T.innerHTML = `<div class="bl-box vb-top">${best ? `<div class="vb-best"><span class="vb-crown"><svg viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg></span><div><b>La mejor hasta ahora: v${best.v}</b><small>${best.v === b.mainV ? 'Es la que está en uso.' : 'No es la que está en uso: puedes restaurarla.'} Se mide con lo que ganó en los datos que no vio (validación + prueba).</small></div>${best.v !== b.mainV ? `<button class="bl-mini pri" data-a="vmain" data-v="${best.v}">Restaurar v${best.v}</button>` : ''}</div>` : note('Cuando tenga dos o más versiones probadas, aquí verás cuál ha sido la mejor.')}</div>` +
       vs.slice().reverse().map(v => { const r = runOf(b, v.v), isMain = v.v === b.mainV, d = diff(v), s0 = sc(v), sm = main ? oosOf(main) : null;
         return `<div class="bl-box vb ${isMain ? 'main' : ''} ${best && best.v === v.v ? 'best' : ''} s-${v.state}"><div class="vb-h"><b class="vb-v">v${v.v}</b><span class="vb-st">${stLab(v)}</span>${best && best.v === v.v ? '<span class="vb-badge">la mejor</span>' : ''}<small>${dt(v.at)}</small></div>
@@ -1138,8 +1138,9 @@ Máximo 3 tips. "patch" es un fragmento de la especificación con el MISMO esque
   function autoPromote(b, nv, r, who) {
     const c = cyc(b), v = ver(b, nv); if (c.auto === false || !v || v.state !== 'candidata' || b.status === 'archived') return;
     const prev = b.mainV; b.versions.forEach(x => { if (x.v === prev) x.state = 'anterior'; }); v.state = 'principal'; v.auto = true; b.mainV = nv;
+    v.probation = {since: Date.now(), prevV: prev, changes: (r.changes || []).map(c => ({path: c.path, from: c.from, to: c.to}))}; // el vigilante del servidor la juzga en vivo (regresa sola si rinde peor)
     const why = r.oos ? ` En los tramos que no vio, la nueva ganó ${money(r.oos.cand.net)} contra ${money(r.oos.base.net)} de la anterior.` : '';
-    log(b, 'versión', `Mejora automática: la v${nv} (propuesta por el ${who}) pasó a ser la principal en lugar de la v${prev}.${why} Si no te convence, en Versiones puedes regresar a la v${prev}.`);
+    log(b, 'versión', `Mejora automática: la v${nv} (propuesta por el ${who}) pasó a ser la principal en lugar de la v${prev}.${why} Queda a prueba en vivo: si rinde peor que la v${prev}, regresa sola.`);
     relive(b); touch(b);
     if (window.CCT_botNotify) window.CCT_botNotify(`VORTEX · ${b.name} aprendió`, `La v${nv} es ahora la principal (mejor que la v${prev} en datos que no vio).${why}`, 'bot-learn-' + b.id + '-' + nv);
   }
