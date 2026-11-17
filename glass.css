@@ -2340,3 +2340,33 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 @keyframes fromPill{from{opacity:0;transform:translateY(8px) scale(.94)}to{opacity:1;transform:none}}
 body:not(.light) :is(.acct-pop,.ec-pop){background:rgba(9,12,20,.62)!important;border:1px solid rgba(255,255,255,.12)!important;-webkit-backdrop-filter:blur(30px) saturate(1.8)!important;backdrop-filter:blur(30px) saturate(1.8)!important;box-shadow:0 18px 44px rgba(0,0,0,.45)!important;border-radius:18px!important}
 body:not(.light) .acct-pop input:not([type=checkbox]){background:rgba(255,255,255,.06)!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:11px!important}
+/* Discord: botoncito en la barra de abajo del gráfico (junto a los widgets), ya no en la barra derecha */
+.st-dc{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:26px;height:22px;margin-left:auto;padding:0;border-radius:7px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;transition:color .15s,border-color .15s,background .15s}
+.st-econ:not([hidden])+.st-dc{margin-left:0}
+.st-dc svg{fill:currentColor;stroke:none;display:block}
+.st-dc:hover,body[data-side="discordView"] .st-dc{color:#8b95ff;border-color:color-mix(in srgb,#7c87ff 55%,transparent);background:color-mix(in srgb,#7c87ff 12%,transparent)}
+.st-dc.dc-on{color:#8b95ff}
+#discordView .dc-link{display:flex;align-items:center;gap:10px;width:100%;text-align:left;color:var(--text);cursor:pointer;font:inherit}
+#discordView .dc-link span{flex:1;display:flex;flex-direction:column;gap:3px}
+#discordView .dc-link small{color:var(--muted);font-size:11.5px;line-height:1.4}
+#discordView .dc-link:hover{border-color:color-mix(in srgb,#7c87ff 50%,var(--line))}
+.pref-btn{height:26px;padding:0 11px;margin-left:6px;border-radius:8px;border:1px solid var(--line);background:var(--raised);color:var(--text);font-family:inherit;font-weight:600;font-size:12px;line-height:1;cursor:pointer}
+.pref-btn:hover{border-color:var(--accent)}
+/* Configuración › Cuenta: tarjeta de perfil con la etiqueta del plan (Gratis / Plus / Infinity) */
+.prof-card{display:flex;align-items:center;gap:12px;width:100%;margin:0 0 10px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(145deg,rgba(255,255,255,.05),rgba(255,255,255,.01)),var(--surface);color:var(--text);text-align:left;font:inherit;cursor:pointer;transition:border-color .15s,background .15s}
+.prof-card.off{cursor:default}
+button.prof-card:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.prof-av{width:42px;height:42px;flex:0 0 42px;border-radius:50%;object-fit:cover;display:inline-flex;align-items:center;justify-content:center;background:var(--raised);color:var(--muted);border:1px solid var(--line)}
+.prof-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.prof-t b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prof-t small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prof-tag:empty{display:none}
+@media(min-width:1024px){.fb-mode-row{display:none!important}} /* la cápsula solo existe en el celular */
+/* Configuración: todas las opciones de desarrollador dentro de un solo botón «Desarrollador» */
+#devZone .dev-entry{margin-top:10px}
+#devZone .dev-tag{font-style:normal;margin-left:6px;font-size:10px;font-weight:650;padding:1px 7px;border-radius:999px;color:#fff;background:linear-gradient(90deg,#7c4dff,#40c4ff);vertical-align:1px}
+#devZone .dev-chev{margin-left:auto;flex:0 0 auto;color:var(--muted);transition:transform .2s}
+#devZone #devOpen[aria-expanded=true] .dev-chev{transform:rotate(90deg)}
+#devZone #devInner{margin:2px 0 0 14px;padding-left:10px;border-left:1px solid color-mix(in srgb,#9b7bff 35%,transparent)}
+#devZone.pv-on .dev-entry{display:none!important}
+#devZone.pv-on #devInner{display:block!important;margin-left:0;padding-left:0;border-left:0}

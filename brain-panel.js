@@ -25,13 +25,17 @@
     const [sync, learn, brain, bots] = await Promise.all([lastRun('brain-sync.yml'), lastRun('brain-learn.yml'), C().get('brain').catch(e => ({err: String(e.message || e)})), C().get('brain_bots').catch(e => ({err: String(e.message || e)}))]);
     st = {sync, learn, brain: brain || {}, bots: bots || {}, at: Date.now()}; busy = false; paint(); row();
   }
+  /* GitHub corre los flujos programados cuando quiere (a veces cada 5–9 h aunque digan «cada 30 min») y su API pública limita las consultas.
+     Por eso la prueba principal es la de tu propia cuenta: cada envío correcto del conector deja la hora en data/brain. */
+  const OK_H = 12, syncAt = () => Math.max(st && st.sync && st.sync.ok ? st.sync.at : 0, st ? ms(st.brain.at) : 0);
   function level() {
     if (!st) return ['', 'Revisando…'];
-    const s = st.sync, bAt = ms(st.brain.at), fresh = s.ok && Date.now() - s.at < 3 * 3600e3;
-    if (s.err || s.ok === false) return ['bad', s.err ? 'No pude revisar el conector' : 'El último envío a tu cerebro falló'];
-    if (!fresh) return ['warn', 'El conector no ha corrido en las últimas 3 horas'];
-    if (!bAt || Date.now() - bAt > 6 * 3600e3) return ['warn', 'Se manda tu actividad, pero tu cerebro no ha devuelto lo aprendido recientemente'];
-    return ['ok', 'Todo conectado: tus datos llegan y lo aprendido regresa'];
+    const s = st.sync, at = syncAt(), age = Date.now() - at;
+    if (st.brain.err && !(s.ok && Date.now() - s.at < OK_H * 3600e3)) return ['bad', 'No pude leer lo que tu cerebro deja en tu cuenta'];
+    if (!at) return s.ok === false ? ['bad', 'El último envío a tu cerebro falló'] : ['warn', 'Todavía no hay ningún envío a tu cerebro'];
+    if (age < OK_H * 3600e3) return ['ok', 'Todo conectado: tus datos llegan y lo aprendido regresa'];
+    if (s.ok === false) return ['bad', 'El último envío a tu cerebro falló'];
+    return ['warn', `Conectado, pero el último envío fue ${when(at)} (GitHub lo retrasó)`];
   }
   function row() {
     const r = $('#setBrain'); if (!r) return; const own = isOwner(); r.hidden = !own; if (!own) return;
@@ -43,8 +47,8 @@
     if (!st) { body.innerHTML = '<div class="vg-empty">Revisando la conexión con tu cerebro…</div>'; return; }
     const [lv, txt] = level(), s = st.sync, l = st.learn, br = st.brain, bb = st.bots, bAt = ms(br.at), names = Array.isArray(br.brains) ? br.brains : [], nb = bb.bots ? Object.keys(bb.bots).length : 0;
     body.innerHTML = `<div class="br-top ${lv}"><span class="br-big"></span><div><b>${esc(txt)}</b><small>Revisado ${when(st.at)}</small></div></div>
-      ${item(s.err ? false : s.ok, 'VORTEX → Neural Brain', s.err ? esc(s.err) : `Último envío ${when(s.at)} · ${s.ok ? 'sin errores' : 'con error'}${s.running ? ' · corriendo ahora' : ''}${s.fails ? ` · ${s.fails} fallo(s) en los últimos 6` : ''} · corre cada 30 min${s.url ? ` · <a href="${esc(s.url)}" target="_blank" rel="noopener">ver</a>` : ''}`)}
-      ${item(br.err ? false : bAt && Date.now() - bAt < 6 * 3600e3 ? true : null, 'Neural Brain → VORTEX', br.err ? esc(br.err) : bAt ? `Lo aprendido llegó ${when(bAt)}${names.length ? ` · cerebros: ${names.map(esc).join(', ')}` : ''}${br.text ? ` · ${String(br.text).length.toLocaleString('es-MX')} caracteres para la IA` : ''}` : 'Todavía no ha llegado nada de tus cerebros')}
+      ${item(s.err ? (syncAt() ? (Date.now() - syncAt() < OK_H * 3600e3 ? true : null) : false) : s.ok, 'VORTEX → Neural Brain', s.err ? (syncAt() ? `Último envío ${when(syncAt())} (dato de tu cuenta; GitHub no respondió: ${esc(s.err)})` : esc(s.err)) : `Último envío ${when(Math.max(s.at, ms(st.brain.at)))} · ${s.ok ? 'sin errores' : 'con error'}${s.running ? ' · corriendo ahora' : ''}${s.fails ? ` · ${s.fails} fallo(s) en los últimos 6` : ''} · cada 30 min (o cuando GitHub lo deja)${s.url ? ` · <a href="${esc(s.url)}" target="_blank" rel="noopener">ver</a>` : ''}`)}
+      ${item(br.err ? false : bAt && Date.now() - bAt < OK_H * 3600e3 ? true : null, 'Neural Brain → VORTEX', br.err ? esc(br.err) : bAt ? `Lo aprendido llegó ${when(bAt)}${names.length ? ` · cerebros: ${names.map(esc).join(', ')}` : ''}${br.text ? ` · ${String(br.text).length.toLocaleString('es-MX')} caracteres para la IA` : ''}` : 'Todavía no ha llegado nada de tus cerebros')}
       ${item(bb.err ? false : nb ? true : null, 'Bots conectados a un cerebro', bb.err ? esc(bb.err) : nb ? `${nb} bot(s) · actualizado ${when(ms(bb.at))}` : 'Ningún bot está conectado a un cerebro todavía')}
       ${item(l.err ? false : l.ok, 'Aprendizaje nocturno', l.err ? esc(l.err) : l.at ? `Última vez ${when(l.at)} · ${l.ok ? 'sin errores' : 'con error'}` : 'Aún no ha corrido')}
       <div class="vg-acts"><button type="button" class="vg-btn ok" data-br-check ${busy ? 'disabled' : ''}>${busy ? 'Revisando…' : 'Revisar otra vez'}</button></div>`;

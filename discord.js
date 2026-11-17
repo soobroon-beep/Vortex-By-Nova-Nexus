@@ -57,7 +57,7 @@
   function paint() {
     const box = $('#discordBox'); if (!box) return; const D = get(), has = !!D.url; if (box.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') { const st = $('.dc-st', box); if (st) { st.textContent = status.t; st.className = 'dc-st ' + status.cls; } return; }
     box.innerHTML = `
-      <button class="dc-back" id="dcBack" type="button">‹ ${window.CCT_dcBack === 'notifView' ? 'Avisos' : window.CCT_dcBack === 'botLabView' ? 'Nova Bot Lab' : 'Configuración'}</button>
+      ${window.CCT_dcBack === 'bottom' ? '' : `<button class="dc-back" id="dcBack" type="button">‹ ${window.CCT_dcBack === 'notifView' ? 'Avisos' : window.CCT_dcBack === 'botLabView' ? 'Nova Bot Lab' : 'Configuración'}</button>`}
       <div class="dc-card"><h3>Únete al servidor Nova Nexus</h3><p>Entra a la comunidad. Las señales del Screener de Nova Nexus (LONG, SHORT y RANGO) llegan solas al canal <b>#vortex</b> cada hora y cada 4 horas, aunque no tengas la app abierta.</p>
         <div class="dc-row"><a class="dc-btn pri" href="${esc(D.invite || DEFAULT_INVITE)}" target="_blank" rel="noopener">Unirme a Nova Nexus</a><a class="dc-btn" href="https://discord.com/login" target="_blank" rel="noopener">Iniciar sesión en Discord</a></div></div>
       <div class="dc-card"><h3>Mis avisos en mi propio Discord <small>(opcional)</small></h3>
@@ -66,25 +66,25 @@
         <div class="dc-row"><button class="dc-btn pri" id="dcSave" type="button">Guardar</button><button class="dc-btn" id="dcTest" type="button" ${has ? '' : 'disabled'}>Enviar prueba</button>${has ? '<button class="dc-btn" id="dcDel" type="button">Desconectar</button>' : ''}</div>
         <div class="dc-st ${status.cls}">${esc(status.t || (has ? 'Conectado' : 'Sin conectar'))}</div>
         <small>La URL es como una llave del canal: quien la tenga puede escribir ahí. Se guarda solo en tu cuenta y en este dispositivo; no la compartas ni subas tu exportación JSON.</small></div>
-      <div class="dc-card"><h3>Qué enviar a mi canal</h3>${SW.map(([k, n, d]) => `<div class="dc-sw"><div><b>${n}</b><small>${d}</small></div><button class="toggle ${(D.on || {})[k] !== false ? 'on' : ''}" data-dc="${k}" type="button" role="switch" aria-checked="${(D.on || {})[k] !== false}" aria-label="${n}"></button></div>`).join('')}
-        <div class="dc-row"><button class="dc-btn" id="dcNow1" type="button" ${has ? '' : 'disabled'}>Enviar señales 1h ahora</button><button class="dc-btn" id="dcNow4" type="button" ${has ? '' : 'disabled'}>Enviar señales 4h ahora</button></div></div>`;
+      <button type="button" class="dc-card dc-link" id="dcToNotif"><span><b>Qué avisos te llegan</b><small>Movimientos bruscos, alertas, bots y señales: se eligen en Configuración › Notificaciones</small></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>`;
   }
-  const flash = (t, cls) => { status = {t, cls}; paint(); };
+  const flash = (t, cls) => { status = {t, cls}; paint(); if (!$('#discordBox') || !$('#discordBox').offsetParent) { try { window.CCT_toast && CCT_toast(t); } catch {} } };
   document.addEventListener('click', async e => {
     const id = (e.target.closest('button') || {}).id;
     if (id === 'dcSave') {
       const url = ($('#dcHook') || {}).value.trim();
       if (url && !HOOK.test(url)) { flash('Esa URL no parece un webhook de Discord (debe empezar con https://discord.com/api/webhooks/…)', 'err'); return; }
-      store().set({url}); flash(url ? 'Guardado · usa «Enviar prueba»' : 'Guardado', 'ok');
+      store().set({url}); flash(url ? 'Guardado · usa «Enviar prueba». Elige qué te llega en Configuración › Notificaciones' : 'Guardado', 'ok');
     } else if (id === 'dcTest') { flash('Enviando…', ''); const r = await send([{title: '✅ VORTEX conectado', description: 'Aquí llegarán tus movimientos bruscos, alertas y señales del Screener.', color: COL.info, timestamp: new Date().toISOString(), footer: {text: 'Nova Nexus · VORTEX'}}]); if (r.ok) flash('Prueba enviada: revisa #vortex', 'ok'); }
     else if (id === 'dcDel') { store().set({url: ''}); flash('Desconectado', ''); }
     else if (id === 'dcNow1' || id === 'dcNow4') { const tf = id === 'dcNow1' ? '1h' : '4h'; flash(`Calculando señales ${tf}… (unos segundos)`, ''); const r = await sendSignals(tf); if (r && r.ok) flash(r.none ? `Ahora no hay señales ${tf}: no se envió nada` : `Señales ${tf} enviadas`, 'ok'); }
+    else if (e.target.closest('#dcToNotif')) { if (window.CCT_switchView) CCT_switchView('notifView'); }
     else if (id === 'dcBack') { if (window.CCT_switchView) CCT_switchView(window.CCT_dcBack || 'settingsView'); window.CCT_dcBack = ''; }
-    else if (e.target.closest('#dcOpenFromSettings')) { if (window.CCT_switchView) CCT_switchView('discordView'); paint(); }
+    else if (e.target.closest('#dcOpenFromSettings')) { window.CCT_dcBack = ''; if (window.CCT_switchView) CCT_switchView('discordView'); paint(); }
   });
   document.addEventListener('click', e => { const t = e.target.closest('[data-dc]'); if (!t || !store()) return; const k = t.dataset.dc, on = !t.classList.contains('on'); store().set({on: {[k]: on}}); t.classList.toggle('on', on); t.setAttribute('aria-checked', on); try { window.CCTBotLabSave && CCTBotLabSave(); } catch {} try { window.CCTPushSync && CCTPushSync(); } catch {} });
   document.addEventListener('click', e => { if (e.target.closest('#rrDiscord, [data-view=discordView]')) setTimeout(paint, 0); });
-  window.CCTDiscord = {alert, sendSignals, send, sendTo, paint, signalEmbeds, HOOK};
+  window.CCTDiscord = {alert, sendSignals, send, sendTo, paint, signalEmbeds, HOOK, SW};
   /* Enlace de configuración personal: abrir …/#dcwebhook=<url> guarda el webhook en esta cuenta (el # nunca viaja al servidor) y borra el enlace de la barra */
   function fromLink() {
     const m = /[#&]dcwebhook=([^&]+)/.exec(location.hash || ''); if (!m) return;

@@ -96,3 +96,5 @@
   setInterval(() => { if (isOwner() && !ov) load().then(row); }, 30 * 60e3);
   window.CCTVigia = {open: openPanel};
 })();
+/* Botón «Desarrollador» en Configuración: abre/cierra sus opciones (Vigía, Neural Brain, vista de membresía) */
+document.addEventListener('click', e => { const b = e.target.closest('#devOpen'); if (!b) return; const box = document.getElementById('devInner'); if (!box) return; const open = box.hidden; box.hidden = !open; b.setAttribute('aria-expanded', String(open)); });

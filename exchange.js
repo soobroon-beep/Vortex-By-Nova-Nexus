@@ -246,5 +246,5 @@
   document.addEventListener('click', e => { if (e.target.closest('[data-ex-open]')) { e.preventDefault(); open(); } });
   if (cfg) { startPoll(); setTimeout(checkPerms, 1500); }
 
-  root.CCTExchange = {open, close, refresh, refreshSoon, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, protections, setTpSl, removeTpSl, baseOf, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
+  root.CCTExchange = {open, close, refresh, refreshSoon, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, protections, setTpSl, removeTpSl, baseOf, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, lensKeys: () => cfg && cfg.id === 'bingx' && cfg.apiKey && cfg.secret ? {k: cfg.apiKey, s: cfg.secret} : null, /* Nexus Lens (mismo sitio) entra solo con tu BingX */ snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
 })(typeof self !== 'undefined' ? self : this);

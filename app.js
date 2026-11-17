@@ -72,7 +72,9 @@ function sanDiscord(a) { // Discord: webhook del canal #vortex, invitación al s
 const CTYPES = [['candles', 'Velas', 'c_candles'], ['hollow', 'Velas huecas', 'c_hollow'], ['ha', 'Heikin Ashi', 'c_ha'], ['bars', 'Barras OHLC', 'c_bars'], ['hlc', 'Barras HLC', 'c_hlc'], ['line', 'Línea', 'c_line'], ['area', 'Área', 'c_area'], ['step', 'Línea escalonada', 'c_step']];
 const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', bybitf: 'Bybit Perpetuos', okx: 'OKX Spot', okxf: 'OKX Perpetuos', coinbase: 'Coinbase', bingx: 'BingX Spot', bingxf: 'BingX Perpetuos', kucoin: 'KuCoin', gate: 'Gate.io', mexc: 'MEXC', bitget: 'Bitget', htx: 'HTX', kraken: 'Kraken', dom: 'Dominancia USDT/BTC'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
 const CURSOR_MODES = ['Cruz', 'Flecha', 'Estrella']; // tipo de puntero sobre el gráfico (la estrella deja estela al mantener presionado: star-cursor.js)
-const CHART_DEF = {bg: '#07090e', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1, cursor: 'Cruz', alertCol: '', alertA: 28, alertS: 'Puntos', alertW: 1};
+const CHART_DEF = {bg: '#07090e', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1, cursor: 'Cruz', alertCol: '', alertA: 28, alertS: 'Puntos', alertW: 1,
+  posCol: '', posA: 90, posS: 'Sólida', posW: 1, tpCol: '#20bf9f', tpA: 90, tpS: 'Guiones', tpW: 1, slCol: '#f06b79', slA: 90, slS: 'Guiones', slW: 1, liqCol: '#f0b90b', liqA: 55, liqS: 'Puntos', liqW: 1, ordCol: '#548fff', ordA: 90, ordS: 'Guiones', ordW: 1}; // líneas de tus operaciones (entrada, TP, SL, liquidación y órdenes)
+const TL_KINDS = ['pos', 'tp', 'sl', 'liq', 'ord'], TL_DASH = {'Sólida': [], Guiones: [6, 4], Puntos: [2, 4]};
 function sanChartStyle(c) {
   const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
   for (const k of ['bg', 'grid', 'up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick', 'cross', 'alertCol']) if (typeof c[k] === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(c[k])) o[k] = c[k];
@@ -84,6 +86,12 @@ function sanChartStyle(c) {
   if (Number.isFinite(+c.alertA) && c.alertA !== '') o.alertA = Math.max(5, Math.min(100, Math.round(+c.alertA)));
   if (Number.isFinite(+c.alertW) && c.alertW !== '') o.alertW = Math.max(1, Math.min(4, Math.round(+c.alertW)));
   if (['Guiones', 'Sólida', 'Puntos'].includes(c.alertS)) o.alertS = c.alertS;
+  for (const k of TL_KINDS) { // líneas de entrada, TP, SL, liquidación y órdenes
+    if (typeof c[k + 'Col'] === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(c[k + 'Col'])) o[k + 'Col'] = c[k + 'Col'];
+    if (Number.isFinite(+c[k + 'A']) && c[k + 'A'] !== '') o[k + 'A'] = Math.max(5, Math.min(100, Math.round(+c[k + 'A'])));
+    if (Number.isFinite(+c[k + 'W']) && c[k + 'W'] !== '') o[k + 'W'] = Math.max(1, Math.min(5, Math.round(+c[k + 'W'])));
+    if (['Guiones', 'Sólida', 'Puntos'].includes(c[k + 'S'])) o[k + 'S'] = c[k + 'S'];
+  }
   return o;
 }
 const STD_SCHEMA_BASE = {
@@ -150,6 +158,7 @@ const stdName = k => isCopy(k) ? (baseOf(k) === 'bollinger' ? `Bollinger ${sp(k,
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
 const OLD_BG = /^#(0d1019|101725|090e19)$/i; // fondos por defecto anteriores: pasan al tema nuevo más oscuro
+const tlSty = k => { const c = cstyle(); return {col: c[k + 'Col'] || CHART_DEF[k + 'Col'] || '', a: (+c[k + 'A'] || CHART_DEF[k + 'A'] || 90) / 100, w: +c[k + 'W'] || 1, d: TL_DASH[c[k + 'S']] || TL_DASH[CHART_DEF[k + 'S']] || []}; }; // estilo de cada línea de tus operaciones (Aspecto del gráfico)
 const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle || {}); if (OLD_BG.test(o.bg || '')) o.bg = CHART_DEF.bg; if (!(state.chartStyle && state.chartStyle.bg) && document.body.classList.contains('light')) o.bg = ''; return o; }; // fondo por defecto #07090e (el tema claro conserva el suyo)
 /* Preferencias de interfaz que también viajan a la cuenta: altura de paneles, tamaño de paneles, opciones del dibujo (imán, bloquear…) y color/ícono de la app */
 function sanUi(u) {
@@ -281,8 +290,14 @@ let remoteRev = 0; // versión (rev) más reciente que se sabe que hay en la nub
    antes se usaba siempre el orden de la nube, y si otro dispositivo guardaba al mismo tiempo, el orden que acababas de arrastrar se deshacía. */
 const listSigOf = st => JSON.stringify([st.symbols, st.groups, st.symGroup, st.symColor]);
 let listSig = listSigOf(state);
+/* kAt: cuándo cambió por última vez cada parte de tu configuración (Nexus Pixel, aspecto, IA, avisos…). Al mezclar dos dispositivos que guardaron
+   a la vez gana la parte más reciente de cada lado; antes mandaba siempre la nube y, por ejemplo, la personalización de Pixel recién guardada se perdía. */
+const K_SKIP = new Set(['rev', 'listRev', 'kAt', 'symbols', 'groups', 'symGroup', 'symColor', 'drawings', 'designs', 'tabs', 'tab', 'tabRev', 'alerts', 'layout']);
+const kSigOf = v => { let x; try { x = JSON.stringify(v); } catch { return ''; } return x && x.length > 4000 ? x.length + ':' + x.slice(0, 1500) + x.slice(-1500) : x; };
+let kSig = {}; const kBase = () => { kSig = {}; for (const k of Object.keys(state)) if (!K_SKIP.has(k)) kSig[k] = kSigOf(state[k]); }; kBase();
+const kTouch = () => { const now = Date.now(); if (!state.kAt || typeof state.kAt !== 'object' || Array.isArray(state.kAt)) state.kAt = {}; for (const k of Object.keys(state)) { if (K_SKIP.has(k)) continue; const g = kSigOf(state[k]); if (kSig[k] !== g) { kSig[k] = g; state.kAt[k] = now; } } };
 let cfgLive = false; // vista previa de una ventana de ajustes: se ve en el gráfico pero no se guarda hasta «Aceptar»
-const save = () => { if (cfgLive) return; tabTouch(); const ls = listSigOf(state); if (ls !== listSig) { listSig = ls; state.listRev = Date.now(); } state.rev = Math.max(Date.now(), (+state.rev || 0) + 1, (+remoteRev || 0) + 1); try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
+const save = () => { if (cfgLive) return; tabTouch(); try { kTouch(); } catch {} const ls = listSigOf(state); if (ls !== listSig) { listSig = ls; state.listRev = Date.now(); } state.rev = Math.max(Date.now(), (+state.rev || 0) + 1, (+remoteRev || 0) + 1); try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
 
 /* ───────── Utilidades ───────── */
 const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','A'],UNI:['Uniswap','U'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
@@ -347,6 +362,15 @@ function switchView(id) {
 }
 $$('.bottom-nav button').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
 $('#settingsBtn').onclick = () => switchView('settingsView');
+/* Discord en Configuración › Notificaciones: qué avisos llegan a TU canal y enviar señales ahora (el botón de Discord solo conecta tu canal o te une a Nova Nexus) */
+function dcPrefRows(irow) {
+  const D = (() => { try { return (window.CCT_discordStore && CCT_discordStore.get()) || {}; } catch { return {}; } })(), SW = (window.CCTDiscord && CCTDiscord.SW) || [], has = !!D.url, on = D.on || {};
+  const sub = '<span class="sg-ic pref-ind" aria-hidden="true"></span>';
+  if (!has) return irow(sub, 'Tu canal de Discord', 'Conéctalo con el botón de Discord para elegir aquí qué avisos te llegan', '<button type="button" class="pref-btn" id="alDiscord2">Conectar</button>', 'pref-sub');
+  return SW.map(([k, n, d]) => irow(sub, n, d, `<button type="button" class="toggle ${on[k] !== false ? 'on' : ''}" data-dc="${k}" role="switch" aria-checked="${on[k] !== false}" aria-label="${n}"></button>`, 'pref-sub')).join('')
+    + irow(sub, 'Enviar señales ahora', 'Manda a tu canal las señales del Screener en este momento', '<button type="button" class="pref-btn" id="dcNow1">1h</button><button type="button" class="pref-btn" id="dcNow4">4h</button>', 'pref-sub');
+}
+document.addEventListener('click', e => { if (!e.target.closest('#alDiscord2')) return; window.CCT_dcBack = 'notifView'; switchView('discordView'); if (window.CCTDiscord) setTimeout(() => CCTDiscord.paint(), 0); });
 /* Centro de avisos: todo en la vista Alertas, en tres pestañas (Mis alertas · Cómo te aviso · Movimientos bruscos) */
 let alTab = 'list';
 function setAlTab(t) {
@@ -359,6 +383,7 @@ function openAlerts(t) { switchView('alertsView'); setAlTab(t || alTab); }
 $$('#alertsView [data-altab]').forEach(b => b.addEventListener('click', () => setAlTab(b.dataset.altab)));
 { const bk = $('#alBack'); if (bk) bk.onclick = () => switchView(alBackTo && alBackTo !== 'alertsView' ? alBackTo : (isDesktop() ? 'watchView' : 'chartView')); } // ‹ regresa a donde estabas antes de abrir Alertas
 { const bk = $('#cuBack'); if (bk) bk.onclick = () => switchView('settingsView'); const sc = $('#setCustom'); if (sc) sc.onclick = () => switchView('customView'); }
+document.addEventListener('click', e => { if (!e.target.closest('#rrDiscord')) return; window.CCT_dcBack = 'bottom'; if (window.CCT_sideShow) CCT_sideShow(); switchView('discordView'); }); // botoncito de Discord en la barra de abajo del gráfico (PC)
 document.addEventListener('click', e => { if (!e.target.closest('#alDiscord')) return; window.CCT_dcBack = 'notifView'; switchView('discordView'); if (window.CCTDiscord) setTimeout(() => CCTDiscord.paint(), 0); }); // el botón se vuelve a dibujar con los avisos
 { const s2 = $('#setAlerts'); if (s2) s2.onclick = () => switchView('notifView'); const nb = $('#ntBack'); if (nb) nb.onclick = () => switchView('settingsView'); } // Avisos viven en Configuración; Alertas = solo Mis alertas e Historial
 { const ta = $('#topAlertsBtn'); if (ta) ta.onclick = () => switchView('alertsView'); }
@@ -3309,8 +3334,11 @@ function openChartStyle() {
     P('upWick', 'Alcista · mecha', 'color', cs.upWick || cs.up, 'VELAS'), P('downWick', 'Bajista · mecha', 'color', cs.downWick || cs.down, 'VELAS'),
     P('hollow', 'Velas alcistas huecas', 'bool', false, 'VELAS'),
     P('cursor', 'Tipo de cursor', 'string', 'Cruz', 'CURSOR', {options: CURSOR_MODES}), P('cross', 'Color del cursor (cruz)', 'color', document.body.classList.contains('light') ? '#0b1220' : '#edf3fc', 'CURSOR'), P('crossA', 'Opacidad del cursor (%)', 'int', 55, 'CURSOR', {min: 5, max: 100}), P('crossS', 'Estilo de línea', 'string', 'Guiones', 'CURSOR', {options: ['Guiones', 'Sólida', 'Puntos']}), P('crossW', 'Grosor (px)', 'int', 1, 'CURSOR', {min: 1, max: 4}),
-    P('alertCol', 'Color de la línea', 'color', document.body.classList.contains('light') ? '#5b6678' : '#8a96a8', 'LÍNEA DE ALERTA'), P('alertA', 'Opacidad (%)', 'int', 28, 'LÍNEA DE ALERTA', {min: 5, max: 100}), P('alertS', 'Estilo de línea', 'string', 'Puntos', 'LÍNEA DE ALERTA', {options: ['Puntos', 'Guiones', 'Sólida']}), P('alertW', 'Grosor (px)', 'int', 1, 'LÍNEA DE ALERTA', {min: 1, max: 4}), {key: 'reset', title: 'Restablecer todo a los valores por defecto', type: 'bool', def: false, value: false, group: 'RESTABLECER'}];
-  CCTSettings.open(liveCfg({title: 'Aspecto del gráfico', tabs: ['in'], note: 'Colores, cuadrícula, cursor y línea de las alertas. Se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
+    P('alertCol', 'Color de la línea', 'color', document.body.classList.contains('light') ? '#5b6678' : '#8a96a8', 'LÍNEA DE ALERTA'), P('alertA', 'Opacidad (%)', 'int', 28, 'LÍNEA DE ALERTA', {min: 5, max: 100}), P('alertS', 'Estilo de línea', 'string', 'Puntos', 'LÍNEA DE ALERTA', {options: ['Puntos', 'Guiones', 'Sólida']}), P('alertW', 'Grosor (px)', 'int', 1, 'LÍNEA DE ALERTA', {min: 1, max: 4}),
+    ...[['pos', 'ENTRADA (tu posición)', 'Color (vacío = verde/rojo según el lado)', document.body.classList.contains('light') ? '#5b6678' : '#c3cad6'], ['tp', 'TAKE PROFIT', 'Color', CHART_DEF.tpCol], ['sl', 'STOP LOSS', 'Color', CHART_DEF.slCol], ['liq', 'LIQUIDACIÓN', 'Color', CHART_DEF.liqCol], ['ord', 'ÓRDENES PENDIENTES', 'Color', CHART_DEF.ordCol]].flatMap(([k, g, ct, cd]) => [
+      P(k + 'Col', ct, 'color', cd, g), P(k + 'A', 'Opacidad (%)', 'int', CHART_DEF[k + 'A'], g, {min: 5, max: 100}), P(k + 'S', 'Estilo de línea', 'string', CHART_DEF[k + 'S'], g, {options: ['Sólida', 'Guiones', 'Puntos']}), P(k + 'W', 'Grosor (px)', 'int', CHART_DEF[k + 'W'], g, {min: 1, max: 5})]),
+    {key: 'reset', title: 'Restablecer todo a los valores por defecto', type: 'bool', def: false, value: false, group: 'RESTABLECER'}];
+  CCTSettings.open(liveCfg({title: 'Aspecto del gráfico', tabs: ['in'], note: 'Colores, cuadrícula, cursor, línea de las alertas y líneas de tus operaciones (entrada, TP, SL, liquidación y órdenes). Se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
     const v = res.inputs, o = {};
     if (!v.reset) for (const i of inputs) { if (i.key === 'reset') continue; const x = v[i.key]; if (x === undefined) continue; const dflt = i.key === 'bg' ? bgDef : i.key === 'grid' ? lineDef : (i.key === 'upBorder' ? (v.up || CHART_DEF.up) : i.key === 'downBorder' ? (v.down || CHART_DEF.down) : i.key === 'upWick' ? (v.up || CHART_DEF.up) : i.key === 'downWick' ? (v.down || CHART_DEF.down) : i.def); if (x !== dflt) o[i.key] = x; }
     state.chartStyle = sanChartStyle(o); save(); scheduleRender(); toast(v.reset ? 'Aspecto restablecido' : 'Aspecto aplicado');
@@ -3603,7 +3631,7 @@ function renderCore() {
       const ii = Math.round(idxOfTime(t.entryT)), xi = X(ii), ie = t.open ? n - 1 : Math.round(idxOfTime(t.exitT)), xe = t.open ? w - right : X(ie); if (xe < left - 60 || xi > w - right + 60 || ii < 0 || ii > n - 1) continue;
       const buy = t.side === 'long', c = candles[ii];
       g.lineWidth = 1; // niveles mientras la operación estuvo abierta
-      for (const [p, col, dash, lab] of [[t.entry, 'rgba(154,161,173,.7)', [4, 3], ''], [t.sl, '#f06b79', [], 'SL'], [t.tp, '#20bf9f', [], 'TP']]) { if (p == null || !isFinite(p)) continue; const yy = Y(p); g.strokeStyle = col; g.setLineDash(dash); g.globalAlpha = t.open ? 1 : .55; g.beginPath(); g.moveTo(xi, yy); g.lineTo(xe, yy); g.stroke();
+      for (const [p, k, lab] of [[t.entry, 'pos', ''], [t.sl, 'sl', 'SL'], [t.tp, 'tp', 'TP']]) { if (p == null || !isFinite(p)) continue; const yy = Y(p), ts = tlSty(k), col = ts.col || 'rgba(154,161,173,.7)'; g.strokeStyle = col; g.lineWidth = ts.w; g.setLineDash(ts.d); g.globalAlpha = (t.open ? 1 : .55) * Math.max(.3, ts.a); g.beginPath(); g.moveTo(xi, yy); g.lineTo(xe, yy); g.stroke();
         if (lab && t.open) { g.setLineDash([]); g.globalAlpha = 1; g.font = 'bold 9px system-ui'; const tw = 22; g.fillStyle = col; roundRect(xe - tw - 2, yy - 7, tw, 14, 3); g.fill(); g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(lab, xe - tw / 2 - 2, yy + .5); g.textBaseline = 'alphabetic'; } }
       g.setLineDash([]); g.globalAlpha = 1;
       const txt = buy ? 'COMPRA' : 'VENTA'; g.font = `bold ${small ? 8 : 9}px system-ui`; g.textAlign = 'center'; const tw = g.measureText(txt).width + 10, th = 15, ar = 5, col = buy ? '#20bf9f' : '#f06b79';
@@ -3641,8 +3669,8 @@ function renderCore() {
     for (const L of TL) {
       const dragNow = trDrag && trDrag.id === L.id && trDrag.kind === L.kind, price = dragNow && trDrag.p != null ? trDrag.p : L.price, yy = Math.round(Y(price)) + .5;
       if (!(yy > plotTop && yy < plotTop + plotH)) continue;
-      const col = L.kind === 'pos' ? (L.side > 0 ? up : down) : COL[L.kind];
-      g.globalAlpha = L.kind === 'liq' ? .55 : L.pend ? .6 : .9; g.strokeStyle = col; g.lineWidth = L.kind === 'pos' ? 1.4 : 1; g.setLineDash(L.kind === 'pos' ? [] : L.kind === 'liq' ? [2, 4] : [6, 4]);
+      const ts = tlSty(L.kind === 'pos' ? 'pos' : COL[L.kind] !== undefined ? L.kind : 'ord'), col = L.kind === 'pos' ? (ts.col || (L.side > 0 ? up : down)) : ts.col;
+      g.globalAlpha = ts.a * (L.pend ? .67 : 1); g.strokeStyle = col; g.lineWidth = ts.w; g.setLineDash(ts.d);
       g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
       // etiqueta a la izquierda: texto · PnL · ×  (en posición también +TP / +SL)
       const parts = L.kind === 'pos' || L.kind === 'liq' ? [] : [{t: L.txt, k: 'lbl'}]; /* minimalista: la posición solo muestra PnL y botones; la liquidación solo su línea y el precio en la escala */ if (Number.isFinite(L.pnl)) parts.push({t: uFmt(L.pnl) + (L.sub ? ' ' + L.sub : ''), k: 'pnl', c: L.pnl >= 0 ? up : down});
@@ -4884,6 +4912,7 @@ function renderPrefs() {
     + `</div><div class="sg-label">Discord</div><div class="pref-list">`
     + `<button type="button" class="pref-row pref-link" id="alDiscord">${ico('#7c87ff', '<path d="M8 8.5c2.5-1 5.5-1 8 0M7.5 16c3 1.2 6 1.2 9 0"/><circle cx="9.5" cy="12.5" r="1"/><circle cx="14.5" cy="12.5" r="1"/>')}<div class="pref-l"><b>Servidor Nova Nexus</b><small>Unirte y elegir tu canal</small></div><div class="pref-c"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></div></button>`
     + irow(ico('#7c87ff', '<path d="M4 12h12M12 6l6 6-6 6"/>'), 'Enviar avisos a Discord', 'También llegan al canal #vortex de Nova Nexus', tg('discord', PR.n.discord, 'Enviar avisos a Discord'))
+    + dcPrefRows(irow)
     + `</div>`;
   const cl = window.CCT_CHANGELOG || [], cur = cl[0] || {v: '—', d: ''};
   ab.innerHTML = `<div class="about-card"><img data-app-icon class="about-ic" width="52" height="52" alt=""><div class="about-t"><svg class="brand-word wm-sm" viewBox="0 -1 160 45" role="img" aria-label="VORTEX"><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-back" d="M8 22A72 9 0 0 1 152 22"/></g><text x="80" y="29" text-anchor="middle">VORTEX</text><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-gap" d="M152 22A72 9 0 0 1 8 22"/><path class="ring-front" d="M152 22A72 9 0 0 1 8 22"/></g><path class="ring-star" d="M80 .6l1.55 3.75 3.75 1.55-3.75 1.55L80 11.2l-1.55-3.75-3.75-1.55 3.75-1.55z"/></svg><small>Powered by Nova Nexus</small><span class="about-v">Versión ${esc(cur.v)} <span id="buildNo"></span></span></div></div>`
@@ -4914,7 +4943,7 @@ function renderCustom() {
     + `<div class="pref-row">${ic('#f5a623', state.light ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>' : '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>')}<div class="pref-l"><b>Tema claro</b><small>${state.light ? 'Activo · apágalo para el tema oscuro' : 'Ahora usas el tema oscuro'}</small></div><div class="pref-c"><button type="button" class="toggle${state.light ? ' on' : ''}" data-cu="theme" role="switch" aria-checked="${!!state.light}" aria-label="Tema claro"></button></div></div>`
     + `<button type="button" class="pref-row pref-link" data-cu="style">${ic('#548fff', '<path d="M6 20V10M12 20V4M18 20v-7"/>')}<div class="pref-l"><b>Aspecto del gráfico</b><small>Colores de velas, fondo, cuadrícula, cursor y línea de alertas</small></div><div class="pref-c">${chev}</div></button>`
     + `<div class="pref-row">${ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>')}<div class="pref-l"><b>Barra de herramientas favoritas</b><small>Tus herramientas de dibujo con estrella, siempre a la mano</small></div><div class="pref-c"><button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button></div></div>`
-    + `<div class="pref-row fb-mode-row"><span class="sg-ic" style="--c:transparent"></span><div class="pref-l"><b>Cápsula del gráfico en el celular</b><small>${FB.mode === 'flotante' ? 'Flotante: la cápsula (temporalidad, estrella y menú) se mueve a donde quieras' : 'Fija: la cápsula va en vertical arriba del logo VORTEX y se abre hacia arriba'}</small></div><div class="pref-c"><div class="seg-mini" role="radiogroup" aria-label="Estilo de la barra de favoritos en el celular">${[['fija', 'Fija'], ['flotante', 'Flotante']].map(([v, n]) => `<button type="button" role="radio" aria-checked="${(FB.mode || 'fija') === v}" class="${(FB.mode || 'fija') === v ? 'on' : ''}" data-cu="favmode" data-v="${v}">${n}</button>`).join('')}</div></div></div>`;
+    + (isDesktop() ? '' : `<div class="pref-row fb-mode-row"><span class="sg-ic" style="--c:transparent"></span><div class="pref-l"><b>Cápsula del gráfico en el celular</b><small>${FB.mode === 'flotante' ? 'Flotante: la cápsula (temporalidad, estrella y menú) se mueve a donde quieras' : 'Fija: la cápsula va en vertical arriba del logo VORTEX y se abre hacia arriba'}</small></div><div class="pref-c"><div class="seg-mini" role="radiogroup" aria-label="Estilo de la barra de favoritos en el celular">${[['fija', 'Fija'], ['flotante', 'Flotante']].map(([v, n]) => `<button type="button" role="radio" aria-checked="${(FB.mode || 'fija') === v}" class="${(FB.mode || 'fija') === v ? 'on' : ''}" data-cu="favmode" data-v="${v}">${n}</button>`).join('')}</div></div></div>`);
 }
 {
   const cv = $('#customView');
@@ -5563,7 +5592,7 @@ function applyState(data, soft = false) {
   if (sameChart && (gest || pinch)) { clearTimeout(applyState.t); applyState.t = setTimeout(() => applyState(data, soft), 350); return; }
   const next = merge(withLocalLayout(data));
   if (sameChart && JSON.stringify(next) === JSON.stringify(state)) return;
-  const prevSource = state.source; state = next; listSig = listSigOf(state); applyUi(); if (typeof renderTabs === 'function') renderTabs(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource();
+  const prevSource = state.source; state = next; listSig = listSigOf(state); kBase(); applyUi(); if (typeof renderTabs === 'function') renderTabs(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource();
   if (sameChart) { drawHist.u.length = drawHist.r.length = 0; updateDrawUI(); } else clearTransient(); // mismo gráfico: se conserva la escala manual, la retícula y lo que se esté dibujando
   if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader(); renderAcct(); renderMoveAlerts();
   if (!sameChart || prevSource !== state.source) { closeWS(); candles = []; ind = {}; loadCandles(); }
@@ -5677,13 +5706,14 @@ function renderAccount() {
   }
   if (fbUser) { // la tarjeta de la cuenta y «Cerrar sesión» viven en el botón de la cuenta (foto), no en Configuración
     top.hidden = false; top.innerHTML = fbUser.photoURL ? `<img src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : I('user', 18); top.title = 'Cuenta';
-    box.innerHTML = '';
+    box.innerHTML = `<button type="button" class="prof-card" id="profBtn" aria-label="Tu perfil">${fbUser.photoURL ? `<img class="prof-av" src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : `<span class="prof-av">${I('user', 22)}</span>`}<span class="prof-t"><b>${esc(fbUser.displayName || 'Tu perfil')}</b><small>${esc(fbUser.email || '')}</small></span><span class="prof-tag" data-plan-tag></span></button>`;
+    { const pb = $('#profBtn'); if (pb) pb.onclick = () => toggleAcctMenu(pb); } if (window.CCTPlans && CCTPlans.badge) CCTPlans.badge();
     queueMicrotask(() => { const r = $('#rrAccount'); if (r) r.innerHTML = fbUser.photoURL ? `<img class="rr-avatar" src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : RR_USER; });
     if (acctMenu) paintAcctMenu();
   } else {
     top.hidden = false; top.textContent = 'Iniciar sesión'; top.title = 'Iniciar sesión con Google';
-    box.innerHTML = `<div class="setting-row"><div><b>Guarda todo en tu cuenta</b><small>${esc(syncStatus) || 'Inicia sesión con Google para conservar tu seguimiento, indicadores y dibujos en cualquier dispositivo.'}</small></div></div><button class="google-btn" id="signInBtn"><span class="g">G</span> Iniciar sesión con Google</button>`;
-    $('#signInBtn').onclick = signIn;
+    box.innerHTML = `<div class="prof-card off"><span class="prof-av">${I('user', 22)}</span><span class="prof-t"><b>Sin sesión</b><small>Usas VORTEX como invitado</small></span><span class="prof-tag" data-plan-tag></span></div><div class="setting-row"><div><b>Guarda todo en tu cuenta</b><small>${esc(syncStatus) || 'Inicia sesión con Google para conservar tu seguimiento, indicadores y dibujos en cualquier dispositivo.'}</small></div></div><button class="google-btn" id="signInBtn"><span class="g">G</span> Iniciar sesión con Google</button>`;
+    $('#signInBtn').onclick = signIn; if (window.CCTPlans && CCTPlans.badge) CCTPlans.badge();
     queueMicrotask(() => { const r = $('#rrAccount'); if (r) r.innerHTML = RR_USER; });
     closeAcctMenu();
   }
@@ -5873,6 +5903,8 @@ function reconcile(local, remote) { // mezcla de dos dispositivos que cambiaron 
   if (Array.isArray(L.designs)) { out.designs = Array.isArray(out.designs) ? out.designs : []; for (const d of L.designs) if (d && !out.designs.some(x => x.id === d.id)) out.designs.push(d); }
   if (Array.isArray(L.tabs) && L.tabs.length && (+L.tabRev || 0) > (+remote.tabRev || 0)) { out.tabs = L.tabs; out.tab = L.tab; out.tabRev = +L.tabRev; } // pestañas de gráficos: las que se cambiaron más recientemente mandan
   if (Array.isArray(L.alerts)) { out.alerts = Array.isArray(out.alerts) ? out.alerts : []; for (const a of L.alerts) if (a && !out.alerts.some(x => x.id === a.id)) out.alerts.push(a); }
+  { const lk = L.kAt && typeof L.kAt === 'object' ? L.kAt : {}, rk = remote.kAt && typeof remote.kAt === 'object' ? remote.kAt : {}; out.kAt = {...rk};
+    for (const k of Object.keys(lk)) { if (K_SKIP.has(k) || !(+lk[k] > (+rk[k] || 0))) continue; if (k in L) out[k] = JSON.parse(JSON.stringify(L[k])); out.kAt[k] = +lk[k]; } } // cada parte: gana el lado que la cambió más recientemente
   out.rev = Math.max(Date.now(), (+L.rev || 0), (+remote.rev || 0)) + 1;
   return out;
 }
@@ -5995,6 +6027,7 @@ async function initCloud() {
     el.querySelector('.split-btn').addEventListener('click', toggle);
   };
   bind('splitR', 'side');
+  window.CCT_sideShow = () => { if (L.sideOff) { L.sideOff = false; store(); apply(); } }; // botones fuera de la barra derecha (Discord, abajo) también muestran el panel
   // al cambiar de panel derecho (indicadores / alertas / ajustes) se mantiene el ancho; si estaba oculto, se muestra al elegir una pestaña
   document.querySelectorAll('.right-rail [data-side]').forEach(b => b.addEventListener('click', () => { if (L.sideOff) L.sideOff = false; else if (prevSide === b.dataset.side) L.sideOff = true; else return; store(); apply(); })); // si estaba oculto se muestra; tocar el icono del panel abierto lo oculta
   window.addEventListener('resize', () => { if (isDesktop()) apply(); });

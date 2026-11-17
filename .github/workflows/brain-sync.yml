@@ -6,6 +6,8 @@ name: Cerebro · conector de VORTEX
 on:
   schedule: [{cron: '*/30 * * * *'}]
   push: {branches: [main]}
+  # GitHub atrasa los programados (a veces 8 h): también corre detrás de «Actualizar noticias», que se lanza cada ~15 min.
+  workflow_run: {workflows: ['Actualizar noticias'], types: [completed]}
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,6 +16,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success')
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 400}

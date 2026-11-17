@@ -45,5 +45,13 @@
     const unreal = s.open ? s.open.unreal : 0, eq = s.cash + unreal, st = B.tradeStats(s.ledger.map(t => ({net: t.net, fees: t.fees})), s.capital); let pk = -Infinity, dd = 0; for (const p of s.curve) { if (p[1] > pk) pk = p[1]; const d = (pk - p[1]) / pk * 100; if (d > dd) dd = d; } if (s.open) { const d = (Math.max(pk, s.cash) - eq) / Math.max(pk, s.cash) * 100; if (d > dd) dd = d; }
     return Object.assign(st, {equity: eq, net: eq - s.capital, retPct: (eq - s.capital) / s.capital * 100, maxDDPct: dd, unreal, days: Math.max(0, ((s.last ? s.last.t : s.startT) - s.startT) / 864e5), nClosed: s.ledger.length});
   }
-  return {newSession, step, stats, verify, fnv};
+  /* Cierra la posición abierta al último precio conocido y la anota en el libro (con su hash): al pausar/apagar un bot no se pierde la operación. */
+  function closeOpen(s, now, why) {
+    if (!s || !s.open || !s.last || !(s.last.c > 0)) { if (s) s.open = null; return null; }
+    const o = s.open, net = typeof o.unreal === 'number' && isFinite(o.unreal) ? o.unreal : (o.side === 'short' ? (o.entry - s.last.c) : (s.last.c - o.entry)) * o.qty, exitT = Math.max(s.last.t, o.entryT);
+    const t = {side: o.side, entryT: o.entryT, exitT, entry: o.entry, exit: s.last.c, qty: o.qty, sl: o.sl, tp: o.tp, net, fees: 0, r: null, bars: null, why: why || 'Pausa', reasonIn: o.reasonIn, ctx: o.ctx};
+    const h = fnv((s.ledger.length ? s.ledger[s.ledger.length - 1].h : '0') + core(t)); s.ledger.push(Object.assign({n: s.ledger.length + 1}, t, {h})); s.cash += net; if (s.cash > s.peak) s.peak = s.cash;
+    s.open = null; s.curve.push([Math.max(exitT, (s.curve[s.curve.length - 1] || [0])[0]), Math.round(s.cash * 100) / 100]); (s.notes = s.notes || []).push({t: now || Date.now(), text: 'Posición cerrada al pausar (' + (why || 'pausa') + ') al último precio: queda en el historial'}); return t;
+  }
+  return {newSession, step, stats, verify, fnv, closeOpen};
 });

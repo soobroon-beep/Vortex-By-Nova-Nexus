@@ -35,8 +35,8 @@
 
   /* Qué botón necesita qué función: [lo que se bloquea al tocar, función, lo que lleva el fondo de galaxia (si es otro)].
      Bloqueado = fondo de galaxia (clase gx-lock) y al tocarlo se abren los planes. Desbloqueado = se ve normal. */
-  const GATE = [['#liqBtn', 'liq'], ['[data-side="screenerView"], .bottom-nav [data-view="screenerView"], #scrOpen', 'screener'], ['#rrDiscord, #dcOpenFromSettings, #alDiscord', 'discord'],
-    ['[data-side="lensView"], .bottom-nav [data-view="lensView"]', 'lens'], ['#rrBotLab', 'botlab'], ['[data-side="aiView"], .bottom-nav [data-view="aiView"]', 'aiChart'], ['#layoutBtn', 'layouts'],
+  const GATE = [['#liqBtn', 'liq'], ['button[data-side="screenerView"], .bottom-nav [data-view="screenerView"], #scrOpen', 'screener'], ['#rrDiscord, #dcOpenFromSettings, #alDiscord', 'discord'],
+    ['button[data-side="lensView"], .bottom-nav [data-view="lensView"]', 'lens'], ['#rrBotLab', 'botlab'], ['button[data-side="aiView"], .bottom-nav [data-view="aiView"]', 'aiChart'], ['#layoutBtn', 'layouts'],
     ['.ib-card[data-pl="plus"] .ib-act', 'proInd', '.ib-card[data-pl="plus"]'],
     ['[data-feat="novaNexus"] .script-btns, .nova-card:has(.prem-tag) .script-btns, .ib-card:has(.prem-tag) .ib-act', 'novaNexus', '[data-feat="novaNexus"], .nova-card:has(.prem-tag), .ib-card:has(.prem-tag)']];
   const below = k => Object.keys(RANK).filter(t => RANK[t] < RANK[k]);
@@ -87,6 +87,7 @@
     applyTier();
     const t = TIERS[current()];
     const pv = pvOn(), dev = owner && !!user && !pv; document.querySelectorAll('[data-plan-badge]').forEach(el => { el.className = 'pl-badge ' + (dev ? 'dev' : t.c); el.innerHTML = dev ? svg(DEV_IC, 13) + 'Desarrollador' : svg(t.ic, 13) + esc(t.n); });
+    document.querySelectorAll('[data-plan-tag]').forEach(el => { const k = pvOn() || real(), tt = TIERS[k] || TIERS.free; el.className = 'prof-tag pl-badge ' + tt.c; el.innerHTML = svg(tt.ic, 13) + 'Plan ' + esc(tt.n); el.title = owner && user && !pv ? 'Plan ' + tt.n + ' · eres el desarrollador' : 'Tu plan de VORTEX'; }); // perfil (Configuración › Cuenta): siempre el plan, sin «Desarrollador»
     document.querySelectorAll('[data-plan-sub]').forEach(el => { el.innerHTML = pv ? 'Vista previa de ' + tx(pv) + ' · Salir en Vista de membresía' : owner && user ? '<span class="pl-tx dev">Desarrollador</span> · acceso total' : !user ? 'Inicia sesión con Google para ver tu plan' : real() !== 'free' ? 'Plan ' + tx(real()) + ' verificado' : st.bx ? 'UID de BingX pendiente de verificar' : 'Gratis, Plus o Infinity'; });
   }
 
@@ -249,5 +250,5 @@
   }
   document.addEventListener('click', e => { if (e.target.closest('[data-plans-open]')) open(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', badge); else badge();
-  root.CCTPlans = {open, close, current, real, can, setPreview, importSaved, verifyYouTube, get user() { return user; }, get owner() { return owner && !!user; }, get dev() { return owner && !!user && !pv; }, get previewOn() { return pvOn(); }, /* dev: herramientas de desarrollador (no en la vista previa de Gratis/Plus/Infinity) */ get preview() { return pvOn(); }, FEATURES, setUser, TIERS, links: {youtube: YT, bingx: BX, code: BX_CODE}};
+  root.CCTPlans = {badge, open, close, current, real, can, setPreview, importSaved, verifyYouTube, get user() { return user; }, get owner() { return owner && !!user; }, get dev() { return owner && !!user && !pv; }, get previewOn() { return pvOn(); }, /* dev: herramientas de desarrollador (no en la vista previa de Gratis/Plus/Infinity) */ get preview() { return pvOn(); }, FEATURES, setUser, TIERS, links: {youtube: YT, bingx: BX, code: BX_CODE}};
 })(typeof self !== 'undefined' ? self : this);

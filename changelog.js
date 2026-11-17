@@ -1,5 +1,14 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.37', d: '17 nov 2026', t: 'Bots que no pierden su historial y ajustes más ordenados', items: [
+    'Apagar o pausar un bot ya no borra nada: al volver a encenderlo sigue con sus mismas operaciones, su curva y su capital (si tenía una posición abierta, se cierra al último precio y queda en el historial).',
+    'Nexus Lens se configura solo con el exchange que conectaste en VORTEX (BingX), y su Coach usa tu IA o, si no tienes, la IA gratis de VORTEX: ya no pide clave.',
+    'Discord: botoncito en la barra de abajo del gráfico. Ahí solo te unes a Nova Nexus o conectas tu canal; qué avisos te llegan se elige en Configuración › Notificaciones.',
+    'Configuración › Cuenta: tu perfil con la etiqueta de tu plan (Gratis, Plus o Infinity).',
+    'Aspecto del gráfico: color, grosor, opacidad y estilo de las líneas de entrada, take profit, stop loss, liquidación y órdenes.',
+    'La personalización de Nexus Pixel (y el resto de tus ajustes) ya no se pierde cuando tu PC y tu celular guardan al mismo tiempo.',
+    'Las opciones de la cápsula solo salen en el celular; las de desarrollador viven dentro de un solo botón.'
+  ]},
   {v: '3.36', d: '13 nov 2026', t: 'Nexus Pixel mucho más listo', items: [
     'Pixel ahora LEE tu gráfico completo: tendencia (EMA 20/50/200), RSI, MACD, volatilidad, estructura de mercado (máximos y mínimos, quiebres), niveles clave con su distancia y TODOS tus indicadores tal como los tienes (Nova Nexus: nube, oscilador, flujo, ADX y última señal; tus scripts Pine y los comunes).',
     'Conoce tu posición: la real de tu exchange, la de la cuenta demo y tus dibujos Long/Short. Pregúntale «¿cierro mi long?» o «¿long o short?» y te da su veredicto, las razones con números y el plan (stop, objetivos y qué confirmación esperar).',

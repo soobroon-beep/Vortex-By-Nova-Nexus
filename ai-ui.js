@@ -320,7 +320,9 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
   function pixelSave() {
     const B = window.CCT_pixel; if (!B) return; const on = k => [...root.querySelectorAll(`[data-pxk="${k}"].on`)].map(b => b.dataset.v), one = k => on(k)[0];
     const c = B.setCfg({nombre: $('#pxNombre').value.trim(), estilo: one('estilo'), riesgo: one('riesgo'), tono: one('tono'), trato: one('trato'), color: one('color'), tfs: on('tfs'), completo: on('completo'), reglas: $('#pxReglas').value.trim(), notas: $('#pxNotas').value.trim(), sr: +$('#pxSr').value, colSup: $('#pxColSup').value, colRes: $('#pxColRes').value, tips: one('tips') !== 'off', vigia: +one('vigia')});
-    const m = $('#pxMsg'); if (m) { m.textContent = `✓ Guardado. Pixel ya te conoce${c.nombre ? ', ' + c.nombre : ''}.`; m.className = 'aiv-dim ok'; }
+    const ok = `Guardado. Pixel ya te conoce${c.nombre ? ', ' + c.nombre : ''}.`; try { window.CCT_toast && window.CCT_toast(ok); } catch {}
+    const btn = root.querySelector('[data-act="pxsave"]'); if (btn) { btn.textContent = '✓ Guardado'; btn.classList.add('ok'); setTimeout(() => { if (btn.isConnected) { btn.textContent = 'Guardar'; btn.classList.remove('ok'); } }, 1800); }
+    const m = $('#pxMsg'); if (m) { m.textContent = '✓ ' + ok + ' Se guardó en tu cuenta (PC y celular).'; m.className = 'aiv-dim ok'; }
   }
 
   /* ───────── Ajustes ───────── */

@@ -866,6 +866,7 @@ const cv=NNT.cv,rgbaOf=NNT.rgba;
       </div>
       <h2>Conecta tu cuenta</h2>
       <p>Solo lectura — ninguna operación se ejecutará.</p>
+      <p id="vx-ex-note" style="display:none;font-size:.62rem;line-height:1.5;color:var(--acc2);margin:-4px 0 12px"></p>
       <div class="field">
         <label>API Key</label>
         <input type="text" id="inp-key" placeholder="Tu API Key de BingX" autocomplete="off" spellcheck="false">
@@ -1131,7 +1132,7 @@ const cv=NNT.cv,rgbaOf=NNT.rgba;
 
         <!-- Cambiar API key -->
         <div style="text-align:center;margin-top:6px">
-          <button class="hdr-btn" onclick="resetClaudeKey()">Cambiar API Key de Claude</button>
+          <small style="display:block;color:var(--txt3);font-size:.6rem;margin-bottom:6px">Coach con <b id="ai-engine">IA de VORTEX</b> · se cambia en VORTEX › Configuración › Cuenta › Tu IA</small><button class="hdr-btn" id="ai-reset-key" onclick="resetClaudeKey()">Cambiar API Key de Claude</button>
         </div>
       </div>
 
@@ -1816,11 +1817,28 @@ async function dbDel(key){const db=await openDB();return new Promise((res,rej)=>
 let CLAUDE_KEY = '';
 let chatHistory = [];
 let aiThinking = false;
+/* Dentro de VORTEX el Coach usa la IA de la app: «Tu IA» si la configuraste (Configuración › Cuenta) y, si no o si falla, la IA gratis de VORTEX.
+   Ya no hace falta poner una clave aquí. Solo la APK/versión suelta sin VORTEX sigue pudiendo usar una clave de Claude. */
+function vxLLM(){try{const P=window.parent;return P&&P!==window&&P.CCTLLM&&P.CCTLLM.chat?P.CCTLLM:null}catch(e){return null}}
+const aiReady=()=>!!(vxLLM()||CLAUDE_KEY);
+function aiName(){try{const L=vxLLM();if(!L)return 'Claude';const o=L.ownLoad&&L.ownLoad();return o&&o.on&&L.OWN&&L.OWN[o.provider]?'Tu IA · '+L.OWN[o.provider].name:'IA gratis de VORTEX'}catch(e){return 'IA de VORTEX'}}
+/* Misma forma que la respuesta en streaming de Anthropic, para no cambiar cómo se pinta el texto */
+async function aiFetch(url,init){
+  const L=vxLLM();if(!L)return fetch(url,init);
+  let b={};try{b=JSON.parse(init.body)}catch(e){}
+  const msgs=[{role:'system',content:String(b.system||'')}].concat((b.messages||[]).map(m=>({role:m.role==='assistant'?'assistant':'user',content:String(m.content||'')})));
+  let text='';
+  try{const r=await L.chat(msgs,{maxTokens:Math.max(400,b.max_tokens||800),timeout:90000});text=String(r&&r.text||'').trim()}
+  catch(e){const m=String(e&&e.message||e);return{ok:false,status:500,json:async()=>({error:{message:m}})}}
+  const line='data: '+JSON.stringify({type:'content_block_delta',delta:{text}})+'\n\n',enc=new TextEncoder();let sent=false;
+  return{ok:true,status:200,body:{getReader:()=>({read:async()=>sent?{done:true}:(sent=true,{done:false,value:enc.encode(line)})})}};
+}
 
 // ── Setup / persistencia de API key ──
 async function initAI() {
   try { CLAUDE_KEY = await dbGet('claude_key') || ''; } catch(e) {}
-  if (CLAUDE_KEY) {
+  { const rb=document.getElementById('ai-reset-key'); if(rb) rb.style.display=vxLLM()?'none':''; const nm=document.getElementById('ai-engine'); if(nm) nm.textContent=aiName(); }
+  if (aiReady()) {
     document.getElementById('ai-setup-wrap').style.display = 'none';
     document.getElementById('ai-main-wrap').style.display = 'block';
   } else {
@@ -1898,7 +1916,7 @@ function buildTradingContext() {
 
 // ── Llamada a la API de Claude con streaming ──
 async function callClaude(systemPrompt, userMessage, outputEl, statusEl) {
-  if (!CLAUDE_KEY) { alert('Configura tu API key de Claude primero.'); return; }
+  if (!aiReady()) { alert('Abre Nexus Lens dentro de VORTEX para usar su IA (o configura una clave de Claude).'); return; }
   if (aiThinking) return;
   aiThinking = true;
 
@@ -1908,7 +1926,7 @@ async function callClaude(systemPrompt, userMessage, outputEl, statusEl) {
   if (outputEl) { outputEl.className = 'ai-output streaming'; outputEl.textContent = ''; }
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await aiFetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2092,7 +2110,7 @@ ${ctx}
 Pregunta: ${msg}` });
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await aiFetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2198,7 +2216,7 @@ async function renderAIPositions() {
 }
 
 async function analyzePosition(sym, side, pnl, entry, outputId) {
-  if (!CLAUDE_KEY) return;
+  if (!aiReady()) return;
   const M = window.METRICS || {};
   const ctx = buildTradingContext();
   const el = document.getElementById(outputId);
@@ -2225,7 +2243,7 @@ Responde SOLO sobre esta posición específica. Máximo 4 líneas:
   if (status) status.textContent = `Analizando ${sym}...`;
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await aiFetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2293,7 +2311,12 @@ window.addEventListener('load',async()=>{
   loadSavedTheme();
   try{
     if(DEFAULT_PROXY||(window.Capacitor&&window.Capacitor.isNativePlatform())){const f=document.getElementById('fld-proxy');if(f)f.style.display='none';} // con proxy fijo o en la APK no se pide
-    const k=await dbGet('bx_k'),s=await dbGet('bx_s'),px=await dbGet('bx_proxy');
+    let k=await dbGet('bx_k'),s=await dbGet('bx_s');const px=await dbGet('bx_proxy');
+    try{const X=window.parent!==window&&window.parent.CCTExchange,lk=X&&X.lensKeys&&X.lensKeys(); // el exchange que conectaste en VORTEX (una sola vez para toda la app)
+      if(lk&&lk.k&&lk.s&&(lk.k!==k||lk.s!==s)){k=lk.k;s=lk.s;await dbSet('bx_k',k);await dbSet('bx_s',s);}
+      else if(!k&&X&&X.info&&X.info()){const n=document.getElementById('vx-ex-note');if(n){n.style.display='block';n.textContent='Conectaste '+X.info().name+' en VORTEX. Nexus Lens por ahora lee cuentas de BingX: conecta BingX en VORTEX › Configuración › Exchange y aquí aparece solo.';}}
+      else if(!k&&X){const n=document.getElementById('vx-ex-note');if(n){n.style.display='block';n.innerHTML='Conecta tu exchange una sola vez en VORTEX (Configuración › Exchange) y Nexus Lens se configura solo. <button type="button" class="hdr-btn" onclick="try{parent.CCTExchange.open()}catch(e){}">Conectar exchange</button>';}}
+    }catch(e){}
     if(k&&s){
       API_KEY=k;SECRET_KEY=s;PROXY_URL=DEFAULT_PROXY||px||'';
       document.getElementById('inp-key').value=k;
