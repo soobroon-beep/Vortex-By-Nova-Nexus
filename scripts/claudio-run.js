@@ -19,7 +19,7 @@ function makeFeed(fx, now) {
   const cache = new Map();
   return {
     candles: async (sym, n) => { const k = sym + n; if (!cache.has(k)) { const raw = await get(`/klines?symbol=${encodeURIComponent(sym)}&interval=1h&limit=${Math.min(1000, Math.max(100, n | 0))}`, fx); cache.set(k, raw.filter(d => d[6] < (now || Date.now())).map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}))); } return cache.get(k); },
-    book: async sym => { const d = await get(`/depth?symbol=${encodeURIComponent(sym)}&limit=20`, fx); return {t: Date.now(), bids: d.bids.map(x => [+x[0], +x[1]]), asks: d.asks.map(x => [+x[0], +x[1]])}; }
+    book: async sym => { const d = await get(`/depth?symbol=${encodeURIComponent(sym)}&limit=20`, fx); return {t: now || Date.now(), bids: d.bids.map(x => [+x[0], +x[1]]), asks: d.asks.map(x => [+x[0], +x[1]])}; }
   };
 }
 function compact(s) { // mantiene el documento bajo el tope de Firestore (1 MiB) sin tocar el libro de operaciones
