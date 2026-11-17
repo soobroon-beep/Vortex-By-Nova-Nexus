@@ -1,5 +1,11 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.38', d: '17 nov 2026', t: 'Felipe, el hermano de Claudio', items: [
+    'Nuevo agente autónomo Felipe en Nova Bot Lab: cazador de rupturas (máximo/mínimo de 20 velas con volumen y a favor de la tendencia) en 10 monedas, con sus propios límites de riesgo.',
+    'Felipe aprende de sí mismo: cada noche recalibra su confianza, elige su propio umbral de entrada con sus resultados y deja de operar las monedas donde predice mal (las retoma si mejora).',
+    'Claudio y Felipe mandan cada noche su revisión a su propio cerebro en Neural Brain.',
+    'El registro del Motor ahora dice por qué cada agente está esperando (confianza baja, calidad, régimen…).'
+  ]},
   {v: '3.37', d: '17 nov 2026', t: 'Bots que no pierden su historial y ajustes más ordenados', items: [
     'Apagar o pausar un bot ya no borra nada: al volver a encenderlo sigue con sus mismas operaciones, su curva y su capital (si tenía una posición abierta, se cierra al último precio y queda en el historial).',
     'Nexus Lens se configura solo con el exchange que conectaste en VORTEX (BingX), y su Coach usa tu IA o, si no tienes, la IA gratis de VORTEX: ya no pide clave.',

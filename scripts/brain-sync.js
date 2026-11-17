@@ -83,6 +83,18 @@ function novahubItems(d) {
   return out;
 }
 
+/* Revisión de un agente autónomo (Claudio/Felipe) en texto para su cerebro: resultado, operaciones y la última revisión nocturna */
+function agentReport(name, srv) {
+  if (!srv || !srv.s) return null; let s = null; try { s = typeof srv.s === 'string' ? JSON.parse(srv.s) : srv.s; } catch { return null; } if (!s) return null;
+  const sm = srv.summary || {}, n = Array.isArray(s.nightly) ? s.nightly[s.nightly.length - 1] : null, led = Array.isArray(s.ledger) ? s.ledger : [], w = led.filter(t => t.net > 0).length;
+  const by = {}; for (const t of led) { const k = t.sym || '?'; (by[k] = by[k] || { n: 0, net: 0 }); by[k].n++; by[k].net += +t.net || 0; }
+  const best = Object.entries(by).sort((a, b) => b[1].net - a[1].net), fmt = x => (x >= 0 ? '+' : '') + (+x).toFixed(2);
+  const lines = [`${name} · agente autónomo (simulación) · patrimonio ${(+sm.equity || 0).toFixed(2)} USDT (${fmt(sm.retPct || 0)} %) · ${led.length} operaciones · aciertos ${led.length ? Math.round(w / led.length * 100) : 0} %`,
+    best.length ? `Mejores monedas: ${best.slice(0, 3).map(([k, v]) => `${k} ${fmt(v.net)} (${v.n})`).join(', ')}. Peores: ${best.slice(-3).reverse().map(([k, v]) => `${k} ${fmt(v.net)} (${v.n})`).join(', ')}.` : 'Aún sin operaciones cerradas.',
+    n ? `Última revisión nocturna: ${n.note || ''} Brier ${n.brier == null ? '—' : n.brier} con ${n.n} predicciones (azar = 0,25).${n.adapt && n.adapt.note ? ' Aprendió: ' + n.adapt.note : ''}` : 'Sin revisión nocturna todavía.',
+    s.adapt ? `Umbral de confianza actual ${Math.round(s.adapt.minConf * 100)} %${Object.keys(s.adapt.muted || {}).length ? ' · evita ' + Object.keys(s.adapt.muted).join(', ') : ''}.` : `Calibración v${s.calib ? s.calib.v : 1}.`];
+  return { text: lines.join('\n'), at: n ? n.t : (s.lastT || 0) };
+}
 /* ───────── VORTEX: estado (cct_mobile), scripts, bots, Claudio, diario ───────── */
 function unpack(v) { // 'gz1:<base64>' o {stateZ}
   if (typeof v !== 'string') return v;
@@ -160,6 +172,7 @@ function vortexItems(x) {
   for (const b of bots) if (b && b.id) out.push(...botBits(b));
   const res = parseJSON(unpack(x.botlabServer && x.botlabServer.results)) || (x.botlabServer && x.botlabServer.results) || {};
   if (res && typeof res === 'object') for (const [id, r] of Object.entries(res)) { const t = resultText(bname(id), r); if (t) out.push({ key: 'br:' + id, type: 'resultado de bot', title: bname(id), text: t, sig: t, verbs: { c: 'obtuvo', u: 'actualizó' } }); const ex = experimentText(bname(id), r); if (ex) out.push({ key: `bx:${id}:${r.at}`, type: 'experimento del bot', title: `${bname(id)} · ${r.brain.best ? 'propuesta: ' + r.brain.best.title : 'sin mejora esta noche'}`, text: ex, verbs: { c: 'probó' }, at: r.at }); }
+  if (x.felipeServer && x.felipeServer.summary) { const t = clip(typeof x.felipeServer.summary === 'string' ? x.felipeServer.summary : JSON.stringify(x.felipeServer.summary), 900); out.push({ key: 'fe:summary', type: 'resumen de Felipe', title: 'Felipe (bot autónomo, rupturas)', text: t, verbs: { c: 'recibió', u: 'recibió' } }); }
   if (x.claudioServer && x.claudioServer.summary) { const t = clip(typeof x.claudioServer.summary === 'string' ? x.claudioServer.summary : JSON.stringify(x.claudioServer.summary), 900); out.push({ key: 'cl:summary', type: 'resumen de Claudio', title: 'Claudio (bot autónomo)', text: t, verbs: { c: 'recibió', u: 'recibió' } }); }
   const jr = list(parseJSON(unpack(x.journal && x.journal.items)));
   for (const j of jr) if (j && j.id) out.push({ key: 'j:' + j.id, type: 'operación', title: `${String(j.side || '').toUpperCase()} ${symName(j.sym)} · ${num(j.pnl)} USD`, text: journalText(j), at: toMs(j.tClose || j.tOpen), verbs: { c: 'cerró', u: 'anotó en' } });
@@ -239,14 +252,14 @@ async function run() {
     if (conn[APP] === false) return false;
     let su; try { su = await src.auth().getUserByEmail(nbUser.email); } catch { return false; }
     const now = Date.now();
-    let items;
+    let items, claudioSrv = null, felipeSrv = null;
     if (APP === 'novahub') {
       const d = (await sdb.collection('users').doc(su.uid).get()).data();
       if (!d) return false; items = novahubItems(d);
     } else {
       const base = sdb.collection('users').doc(su.uid).collection('data'), g = async id => (await base.doc(id).get()).data() || null;
-      const [cct, scripts, botlab, botlabServer, claudioServer, journal, vigia] = await Promise.all(['cct_mobile', 'scripts', 'botlab', 'botlab_server', 'claudio_server', 'journal', 'vigia'].map(g));
-      items = vortexItems({ state: vortexState(cct), scripts, botlab, botlabServer, claudioServer, journal, vigia });
+      const [cct, scripts, botlab, botlabServer, claudioServer, journal, vigia, felipeServer] = await Promise.all(['cct_mobile', 'scripts', 'botlab', 'botlab_server', 'claudio_server', 'journal', 'vigia', 'felipe_server'].map(g));
+      items = vortexItems({ state: vortexState(cct), scripts, botlab, botlabServer, claudioServer, journal, vigia, felipeServer }); claudioSrv = claudioServer; felipeSrv = felipeServer;
       const bp = parseJSON(unpack(botlab && botlab.items)), bots = list(Array.isArray(bp) ? bp : bp && bp.bots), linkSt = {};
       // Un cerebro queda ligado a su bot por el ID del bot, no por el nombre ni la temporalidad: si los cambias, sigue conectado.
       const botBrains = (await uref.collection('brains').where('kind', '==', 'bot').get()).docs.map(d => ({ ref: d.ref, d: d.data() }));
@@ -276,6 +289,16 @@ async function run() {
         const day = new Date(an.at).toISOString().slice(0, 10); await bref.collection('notes').doc('analisis-' + day).set({ id: 'analisis-' + day, text: clip(an.text, 4000), kind: 'estrategia', master: false, author: '', tags: ['bot', 'análisis', day], at: an.at, createdAt: now, updatedAt: now });
         const hist = (await bref.collection('notes').get()).docs.filter(d => /^analisis-\d{4}/.test(d.id)).map(d => d.id).sort(); for (const id of hist.slice(0, Math.max(0, hist.length - 7))) await bref.collection('notes').doc(id).delete();
         console.log('Análisis del bot enviado a su cerebro.');
+      }
+    }
+    if (APP === 'vortex') { // Claudio y Felipe (agentes autónomos): su revisión nocturna va a su propio cerebro de bot, como los demás bots
+      for (const [key, name, srv] of [['claudio', 'Claudio', claudioSrv], ['felipe', 'Felipe', felipeSrv]]) {
+        try { const t = agentReport(name, srv); if (!t) continue; const bref = uref.collection('brains').doc('bot-' + key), snap = await bref.get();
+          if (!snap.exists) await bref.set({ name: 'Bot · ' + name, kind: 'bot', bot: { id: key, name, auto: true }, icon: 'bot', color: key === 'felipe' ? '#ff8a3d' : '#7c5cff', desc: `Cerebro de ${name}, agente autónomo de Nova Bot Lab: recibe cada noche su revisión (calibración, aciertos y lo que aprendió).`, autoLearn: true, createdAt: now, updatedAt: now });
+          const nref = bref.collection('notes').doc('analisis'), old = (await nref.get()).data(); if (old && old.text === t.text) continue;
+          await nref.set({ id: 'analisis', text: clip(t.text, 4000), kind: 'estrategia', master: false, author: '', tags: ['bot', 'análisis', 'automático', key], at: t.at, createdAt: (old && old.createdAt) || now, updatedAt: now });
+          console.log(`Revisión de ${name} enviada a su cerebro.`);
+        } catch (e) { console.log(`No se pudo mandar la revisión de ${name}: ` + String(e.message || e).slice(0, 120)); }
       }
     }
     const sref = uref.collection('sync').doc(APP), prevDoc = (await sref.get()).data() || null;
@@ -311,4 +334,4 @@ async function run() {
 }
 
 if (require.main === module) run().catch(e => { console.error('Error del conector:', String(e.message || e).slice(0, 300)); process.exit(1); });
-module.exports = { matchBot, botBits, experimentText, diff, novahubItems, vortexItems, vortexState, vortexContext, commitsSince, hash, clip, toMs, dayOf };
+module.exports = { agentReport, matchBot, botBits, experimentText, diff, novahubItems, vortexItems, vortexState, vortexContext, commitsSince, hash, clip, toMs, dayOf };

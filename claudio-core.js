@@ -14,9 +14,13 @@
   if (typeof module === 'object' && module.exports) module.exports = factory(); else root.CCTClaudio = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
+  /* El mismo núcleo sirve para varios agentes autónomos: Claudio (perfil por defecto) y Felipe (otro estilo y otros números).
+     P = {name, style, limits (se mezclan con los de Claudio), calibA (calibración inicial), adaptive (Felipe: aprende su propio umbral y qué monedas evitar)} */
+  function build(P) {
+  P = P || {}; const NAME = P.name || 'Claudio';
   const VERSION = '1.0.0', IV = 36e5, TF = '1h';
   /* ───────── Límites de riesgo (código, no modelo) ───────── */
-  const LIMITS = Object.freeze({
+  const LIMITS = Object.freeze(Object.assign({
     maxDrawdownPct: 15,     // drawdown máximo de la cuenta: al tocarlo se cierran posiciones y se bloquean entradas
     maxPositionPct: 20,     // valor nocional máximo por posición (% del patrimonio)
     maxDailyLossPct: 3,     // pérdida máxima por día UTC: sin entradas nuevas hasta el día siguiente
@@ -28,7 +32,7 @@
     maxToxic: 0.5,          // probabilidad máxima de flujo tóxico
     feePct: 0.1, slipPct: 0.05, slAtr: 1.5, tpAtr: 3, maxBars: 48,
     maxStateTokens: 400     // presupuesto del estado por candidato y vela
-  });
+  }, P.limits || {}));
   const CALIB_BOUNDS = Object.freeze({aMin: 0.3, aMax: 3, bMin: -1, bMax: 1});
   const REGIMES = ['trending', 'mean_reverting', 'high_vol', 'crisis'], DIRS = ['long', 'short', 'neutral'], RISK = ['safe', 'near_limit', 'reduce'];
   const isNum = x => typeof x === 'number' && Number.isFinite(x), clamp = (x, a, b) => Math.max(a, Math.min(b, x)), r = (x, d = 2) => isNum(x) ? Math.round(x * 10 ** d) / 10 ** d : null;
@@ -104,6 +108,7 @@
 
   /* ───────── Evaluador local «jev-local» (respaldo determinista sin clave de API; mismo esquema y mismas reglas) ───────── */
   function localEval(states, portfolio, calib) {
+    if (P.style === 'breakout') return breakoutEval(states, portfolio, calib);
     const c = Object.assign({a: 1.2, b: 0}, calib || {}), out = {};
     for (const s of states) {
       const f = s.f, crisis = (f.r24 < -7) || (f.atrRel > 2.5 && f.r24 < -3) || (f.dd200 < -25 && f.atrRel > 1.8), hv = f.atrRel > 1.6, tr = Math.abs(f.ema) > 0.35 && Math.abs(f.r24) > 1.2 * f.atr;
@@ -118,6 +123,26 @@
       const agree = sgn === 0 ? 0 : [Math.sign(f.ema) === sgn, Math.sign(f.r4) === sgn, isNum(f.imb5) ? Math.sign(f.imb5) === sgn : false, f.vol >= 1, sgn > 0 ? f.rsi < 72 : f.rsi > 28].filter(Boolean).length;
       const quality = clamp(Math.round(agree * 3 / 5), 0, 3);
       const toxic = clamp((isNum(f.spr) ? sig((f.spr - 8) / 3) : 0.2) + (sgn && isNum(f.imb5) && f.imb5 * sgn < -0.5 ? 0.5 : 0), 0, 1);
+      const riskState = portfolio.ddPct >= 0.8 * LIMITS.maxDrawdownPct || portfolio.dayPct <= -0.8 * LIMITS.maxDailyLossPct ? 'reduce' : portfolio.ddPct >= 0.5 * LIMITS.maxDrawdownPct || portfolio.dayPct <= -0.5 * LIMITS.maxDailyLossPct ? 'near_limit' : 'safe';
+      out[s.sym] = {regime, regimeConf: r(regimeConf, 3), direction, dirConf: r(dirConf, 4), toxic: r(toxic, 3), quality, riskState, z: r(z, 4), pUp: r(pUp, 4)};
+    }
+    return out;
+  }
+  /* Felipe · «cazador de rupturas»: compra cuando el precio rompe el máximo de 20 velas con volumen y a favor de la tendencia (y vende la ruptura
+     del mínimo). Opera también en alta volatilidad (ahí viven las rupturas), nunca en crisis. Mismo esquema de salida que Jev (régimen, dirección, calidad…). */
+  function breakoutEval(states, portfolio, calib) {
+    const c = Object.assign({a: P.calibA || 1.4, b: 0}, calib || {}), out = {};
+    for (const s of states) {
+      const f = s.f, crisis = (f.r24 < -8) || (f.atrRel > 2.8 && f.r24 < -4), hv = f.atrRel > 1.6, tr = Math.abs(f.ema) > 0.3 && Math.abs(f.r24) > f.atr;
+      const regime = crisis ? 'crisis' : hv ? 'high_vol' : tr ? 'trending' : 'mean_reverting';
+      const regimeConf = crisis ? clamp(0.6 + Math.abs(f.r24) / 40, 0.6, 0.95) : hv ? clamp(0.5 + (f.atrRel - 1.6) / 3, 0.5, 0.9) : tr ? clamp(0.5 + Math.abs(f.ema) / 2, 0.5, 0.9) : 0.55;
+      const imb = isNum(f.imb5) ? f.imb5 : 0, upB = f.hi20 > -0.35, dnB = f.lo20 < 0.35, brk = (upB ? 1 : 0) - (dnB ? 1 : 0), vx = Math.tanh((f.vol - 1) / 0.8);
+      const z = 1.1 * brk + 0.6 * Math.tanh(f.ema / 0.5) + 0.4 * Math.tanh(f.r4 / 1.5) + 0.35 * vx * (brk || Math.sign(f.ema)) + 0.3 * imb - (regime === 'mean_reverting' ? 0.4 * Math.sign(brk) : 0);
+      const pUp = sig(c.a * z + c.b), edge = Math.abs(2 * pUp - 1), direction = edge < 0.1 ? 'neutral' : pUp > 0.5 ? 'long' : 'short', dirConf = direction === 'neutral' ? 1 - edge : Math.max(pUp, 1 - pUp);
+      const sgn = direction === 'long' ? 1 : direction === 'short' ? -1 : 0;
+      const agree = sgn === 0 ? 0 : [sgn > 0 ? upB : dnB, Math.sign(f.ema) === sgn, Math.sign(f.r4) === sgn, f.vol >= 1.3, sgn > 0 ? f.rsi < 78 : f.rsi > 22].filter(Boolean).length;
+      const quality = clamp(Math.round(agree * 3 / 5), 0, 3);
+      const toxic = clamp((isNum(f.spr) ? sig((f.spr - 10) / 3) : 0.2) + (sgn && isNum(f.imb5) && f.imb5 * sgn < -0.6 ? 0.5 : 0), 0, 1);
       const riskState = portfolio.ddPct >= 0.8 * LIMITS.maxDrawdownPct || portfolio.dayPct <= -0.8 * LIMITS.maxDailyLossPct ? 'reduce' : portfolio.ddPct >= 0.5 * LIMITS.maxDrawdownPct || portfolio.dayPct <= -0.5 * LIMITS.maxDailyLossPct ? 'near_limit' : 'safe';
       out[s.sym] = {regime, regimeConf: r(regimeConf, 3), direction, dirConf: r(dirConf, 4), toxic: r(toxic, 3), quality, riskState, z: r(z, 4), pUp: r(pUp, 4)};
     }
@@ -175,9 +200,12 @@
       return Object.assign(out, {why: 'Mantener posición'});
     }
     if (ctx.escalated) return Object.assign(out, {why: 'Escalado a revisión profunda: sin entradas'});
+    if (ctx.muted) return Object.assign(out, {why: `Aprendió a evitar ${sym} (sus predicciones aquí fallan más de la cuenta)`});
     if (e.direction === 'neutral') return Object.assign(out, {why: 'Dirección neutral'});
     if (e.quality < LIMITS.minQuality) return Object.assign(out, {why: `setup_quality ${r(e.quality, 1)} < ${LIMITS.minQuality}`});
-    if (!(e.dirConf > LIMITS.minDirConf)) return Object.assign(out, {why: `confianza ${r(e.dirConf * 100, 0)} % ≤ ${LIMITS.minDirConf * 100} %`});
+    const minC = isNum(ctx.minConf) ? ctx.minConf : LIMITS.minDirConf;
+    if (!(e.dirConf > minC)) return Object.assign(out, {why: `confianza ${r(e.dirConf * 100, 0)} % ≤ ${r(minC * 100, 0)} %`});
+    if (e.regime === 'high_vol' && !LIMITS.tradeHighVol && P.style === 'breakout') return Object.assign(out, {why: 'Alta volatilidad'});
     if (e.riskState !== 'safe') return Object.assign(out, {why: 'risk_state = ' + e.riskState});
     if (e.toxic > LIMITS.maxToxic) return Object.assign(out, {why: 'Flujo tóxico'});
     if (e.regime === 'crisis') return Object.assign(out, {why: 'Régimen de crisis'});
@@ -189,7 +217,7 @@
   function newSession(o) {
     o = o || {}; const cap = o.capital || 10000;
     return {v: 1, core: VERSION, startT: o.startT, lastT: o.startT, capital: cap, cash: cap, peak: cap, dayKey: day(o.startT || 0), dayStart: cap, positions: {}, pending: {}, ledger: [], preds: [], decisions: {}, events: [], escalations: {}, nightly: [], curve: [[o.startT, cap]],
-      calib: {a: 1.2, b: 0, v: 1, at: o.startT}, kill: false, halted: false, symbols: (o.symbols || []).slice(), lastBy: null, stats: {calls: 0, ms: 0, fallbacks: 0}};
+      calib: {a: P.calibA || 1.2, b: 0, v: 1, at: o.startT}, adapt: P.adaptive ? {minConf: LIMITS.minDirConf, muted: {}, v: 1, at: o.startT} : null, agent: NAME, kill: false, halted: false, symbols: (o.symbols || []).slice(), lastBy: null, stats: {calls: 0, ms: 0, fallbacks: 0}};
   }
   const ev = (s, t, kind, text, extra) => { s.events.push(Object.assign({t, kind, text}, extra || {})); if (s.events.length > 400) s.events.splice(0, s.events.length - 400); };
   const core = t => `${t.sym}|${t.side}|${t.entryT}|${t.exitT}|${t.entry}|${t.exit}|${Math.round(t.net * 1e6)}`;
@@ -254,7 +282,7 @@
           if (e && isNum(e.pUp)) { s.preds.push({t: closeT, sym: st.sym, pUp: e.pUp, z: e.z, regime: e.regime, q: e.quality, dir: e.direction, conf: e.dirConf, px: st.f.px, atr: st.f.atr, act: null, o: null}); }
           // escalada: confianza baja + cambio de régimen a crisis ⇒ revisión profunda (Opus) y sin entradas en ese símbolo
           if (e && e.dirConf < LIMITS.escalateBelow && e.regime === 'crisis' && prevReg && prevReg !== 'crisis' && !s.escalations[st.sym]) { s.escalations[st.sym] = {t: closeT, from: prevReg, conf: e.dirConf, open: true}; ev(s, closeT, 'escalada', `${st.sym}: confianza ${r(e.dirConf * 100, 0)} % y régimen ${prevReg} → crisis. Se escala a revisión profunda (Opus 5.5); sin entradas hasta que se revise.`); }
-          const d = s.kill || s.halted ? {sym: st.sym, action: 'hold', why: s.kill ? 'Interruptor de emergencia' : 'Detenido por drawdown'} : decide(st.sym, e, st, {pos: s.positions[st.sym], equity: pf.equity, escalated: !!(s.escalations[st.sym] && s.escalations[st.sym].open)});
+          const d = s.kill || s.halted ? {sym: st.sym, action: 'hold', why: s.kill ? 'Interruptor de emergencia' : 'Detenido por drawdown'} : decide(st.sym, e, st, {pos: s.positions[st.sym], equity: pf.equity, escalated: !!(s.escalations[st.sym] && s.escalations[st.sym].open), minConf: P.adaptive && s.adapt ? s.adapt.minConf : null, muted: !!(P.adaptive && s.adapt && s.adapt.muted && s.adapt.muted[st.sym])});
           if (s.preds.length && s.preds[s.preds.length - 1].sym === st.sym && s.preds[s.preds.length - 1].t === closeT) s.preds[s.preds.length - 1].act = d.action;
           s.decisions[st.sym] = Object.assign({t: closeT, by: res.by, px: st.f.px, tokens: st.tokens, book: st.book, state: st.text}, e || {}, {action: d.action, why: d.why});
           if (d.action === 'enter') s.pending[st.sym] = {type: 'enter', sym: st.sym, side: d.side, qty: d.qty, slD: d.slD, why: d.why};
@@ -293,14 +321,33 @@
       if (bNew < bOld - 5e-4) { s.calib = {a: r(cand.a, 4), b: r(cand.b, 4), v: s.calib.v + 1, at: now}; rep.changed = true; rep.note = `Esquema de Jev v${s.calib.v} desplegado: calibración a=${s.calib.a}, b=${s.calib.b} (Brier fuera de muestra ${r(bOld, 4)} → ${r(bNew, 4)}).`; }
       else rep.note = 'La recalibración no mejoró fuera de muestra: se mantiene la versión actual.';
     } else rep.note = `Muestra insuficiente para recalibrar (${done.length}/150 predicciones resueltas).`;
+    if (P.adaptive) rep.adapt = adaptLearn(s, done, now);
     for (const [sym, x] of Object.entries(s.escalations)) if (x.open && now - x.t > 864e5) { x.open = false; x.closedAt = now; ev(s, now, 'escalada', `${sym}: la escalada se cerró tras la revisión nocturna (24 h sin reactivar).`); }
     rep.calibAfter = Object.assign({}, s.calib); s.nightly.push(rep); if (s.nightly.length > 30) s.nightly.splice(0, s.nightly.length - 30); ev(s, now, 'nocturno', rep.note);
     return rep;
   }
+  /* Aprendizaje propio de Felipe (además de la calibración): 1) su umbral de confianza: entre 0,62 y 0,85 elige el que habría dado el mejor
+     resultado medio por operación en el 30 % más reciente (validación temporal; solo cambia si mejora y con ≥ 12 señales); 2) monedas a evitar:
+     si en una moneda su puntuación de Brier es peor que tirar una moneda al aire (> 0,27 con ≥ 40 predicciones) deja de operarla, y la retoma si mejora. */
+  function adaptLearn(s, done, now) {
+    const A = s.adapt || (s.adapt = {minConf: LIMITS.minDirConf, muted: {}, v: 1, at: now}), out = {before: A.minConf, after: A.minConf, muted: [], unmuted: [], note: ''};
+    const bySym = {}; for (const p of done) (bySym[p.sym] = bySym[p.sym] || []).push(p);
+    for (const [sym, a] of Object.entries(bySym)) { if (a.length < 40) continue; const b = brier(a.slice(-120)); if (b > 0.27 && !A.muted[sym]) { A.muted[sym] = now; out.muted.push(sym); } else if (b < 0.25 && A.muted[sym]) { delete A.muted[sym]; out.unmuted.push(sym); } }
+    const signed = p => { const conf = Math.max(p.pUp, 1 - p.pUp), dir = p.pUp > 0.5 ? 1 : -1; return {conf, ret: dir * p.ret - 2 * (LIMITS.feePct + LIMITS.slipPct)}; };
+    const rows = done.filter(p => isNum(p.ret) && !A.muted[p.sym]).sort((x, y) => x.t - y.t).map(p => Object.assign(signed(p), {q: p.q, t: p.t})).filter(x => x.q >= LIMITS.minQuality);
+    if (rows.length >= 60) {
+      const ho = rows.slice(Math.floor(rows.length * 0.7)), score = th => { const a = ho.filter(x => x.conf > th); return a.length >= 12 ? a.reduce((m, x) => m + x.ret, 0) / a.length : null; };
+      const cur = score(A.minConf); let best = A.minConf, bestS = cur;
+      for (let th = 0.62; th <= 0.8501; th += 0.01) { const v = score(th); if (v != null && (bestS == null || v > bestS + 0.02)) { best = r(th, 2); bestS = v; } }
+      if (best !== A.minConf && bestS != null && bestS > 0) { out.after = best; A.minConf = best; A.v++; A.at = now; out.note = `Umbral de confianza ${r(out.before * 100, 0)} % → ${r(best * 100, 0)} % (resultado medio por señal fuera de muestra ${r(cur, 3)} → ${r(bestS, 3)} %).`; }
+    }
+    if (out.muted.length) out.note += ` Deja de operar ${out.muted.join(', ')} (predice mal ahí).`; if (out.unmuted.length) out.note += ` Retoma ${out.unmuted.join(', ')}.`;
+    if (out.note) ev(s, now, 'aprendizaje', out.note.trim()); return out;
+  }
   /* Aplica la configuración del operador (encendido, reinicio, interruptor, reanudar) sobre la sesión. Igual en la app y en el servidor. */
   function prepare(cfg, prev, now, symbols) {
     cfg = cfg || {}; let s = prev;
-    if (!s || (cfg.resetAt && cfg.resetAt > (s.createdAt || 0))) { s = newSession({startT: now, capital: +cfg.capital > 0 ? +cfg.capital : 10000, symbols}); s.createdAt = now; s.events.push({t: now, kind: 'inicio', text: `Claudio encendido con ${s.capital} USDT virtuales · universo: ${s.symbols.join(', ')}`}); }
+    if (!s || (cfg.resetAt && cfg.resetAt > (s.createdAt || 0))) { s = newSession({startT: now, capital: +cfg.capital > 0 ? +cfg.capital : 10000, symbols}); s.createdAt = now; s.events.push({t: now, kind: 'inicio', text: `${NAME} encendido con ${s.capital} USDT virtuales · universo: ${s.symbols.join(', ')}`}); }
     if (!!cfg.kill !== !!s.kill) { s.kill = !!cfg.kill; s.events.push({t: now, kind: 'riesgo', text: s.kill ? 'Interruptor de emergencia ACTIVADO: se cierran posiciones y no hay entradas.' : 'Interruptor de emergencia desactivado.'}); }
     if (cfg.resume && s.halted && cfg.resume > (s.resumedAt || 0)) { s.halted = false; s.resumedAt = cfg.resume; s.peak = portfolioOf(s).equity; s.events.push({t: now, kind: 'riesgo', text: 'Reanudado por el operador tras el límite de drawdown (nuevo pico = patrimonio actual).'}); }
     return s;
@@ -309,5 +356,11 @@
   function slim(s) { if (!s) return s; const o = Object.assign({}, s); o.preds = s.preds.slice(-700); o.events = s.events.slice(-150); o.curve = thin(s.curve.slice(), 300); return o; }
   /* Elige la sesión más avanzada entre dos copias (la del navegador y la del servidor) */
   function newer(a, b) { if (!a) return b || null; if (!b) return a; if ((a.createdAt || 0) !== (b.createdAt || 0)) return (a.createdAt || 0) > (b.createdAt || 0) ? a : b; return (b.lastT || 0) > (a.lastT || 0) ? b : a; }
-  return {prepare, slim, newer, VERSION, TF, IV, LIMITS, CALIB_BOUNDS, REGIMES, buildState, bookFeatures, jevSchema, jevRequest, parseJev, localEval, jevEvaluator, kelly, sizeOrder, decide, preOrderCheck, portfolioOf, newSession, step, stats, nightly, verify, estTokens};
+  return {NAME, P, prepare, slim, newer, VERSION, TF, IV, LIMITS, CALIB_BOUNDS, REGIMES, buildState, bookFeatures, jevSchema, jevRequest, parseJev, localEval, jevEvaluator, kelly, sizeOrder, decide, preOrderCheck, portfolioOf, newSession, step, stats, nightly, verify, estTokens, adaptLearn};
+  }
+  /* Felipe: hermano de Claudio con otra estrategia (rupturas con volumen) y otros números; además aprende su umbral y qué monedas evitar */
+  const FELIPE = {name: 'Felipe', style: 'breakout', calibA: 1.4, adaptive: true, symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'DOGEUSDT', 'LINKUSDT', 'AVAXUSDT', 'SUIUSDT', 'ADAUSDT'],
+    limits: {maxDrawdownPct: 12, maxPositionPct: 15, maxDailyLossPct: 2.5, maxOpen: 4, kellyFraction: 0.2, minQuality: 2, minDirConf: 0.72, maxToxic: 0.45, slAtr: 2, tpAtr: 4.5, maxBars: 36, tradeHighVol: true}};
+  const API = build({}); API.make = build; API.felipe = build(FELIPE); API.FELIPE = FELIPE;
+  return API;
 });

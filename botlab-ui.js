@@ -24,8 +24,8 @@
   function merge(a, b) { // une dos copias: gana la versión más reciente de cada bot; los borrados se respetan
     const del = Object.assign({}, a.deleted, b.deleted), map = new Map(); for (const x of [...a.bots, ...b.bots]) { const y = map.get(x.id); if (!y) { map.set(x.id, x); continue; } let win = (x.updatedAt || 0) > (y.updatedAt || 0) ? x : y; const lose = win === x ? y : x; if (promoAt(lose) > mainAt(win)) win = lose; map.set(x.id, win); } /* una mejora automática del servidor más nueva que la versión principal de la otra copia gana (antes la app la pisaba) */
     const ra = a.risk, rb = b.risk, risk = !ra ? rb : !rb ? ra : ((rb.updatedAt || 0) > (ra.updatedAt || 0) ? rb : ra);
-    const ca = a.claudio, cb = b.claudio, CK = window.CCTClaudio, claudio = !ca ? cb : !cb ? ca : {cfg: ((cb.cfg || {}).at || 0) > ((ca.cfg || {}).at || 0) ? cb.cfg : ca.cfg, s: CK ? CK.newer(ca.s, cb.s) : ca.s};
-    return dedupe({v: 1, bots: [...map.values()].filter(x => !(del[x.id] >= (x.updatedAt || 0))), deleted: del, risk: risk || null, claudio: claudio || null, seeded: Object.assign({}, a.seeded, b.seeded)});
+    const CK = window.CCTClaudio, mergeAg = (ca, cb) => !ca ? cb : !cb ? ca : {cfg: ((cb.cfg || {}).at || 0) > ((ca.cfg || {}).at || 0) ? cb.cfg : ca.cfg, s: CK ? CK.newer(ca.s, cb.s) : ca.s}, claudio = mergeAg(a.claudio, b.claudio), felipe = mergeAg(a.felipe, b.felipe);
+    return dedupe({v: 1, bots: [...map.values()].filter(x => !(del[x.id] >= (x.updatedAt || 0))), deleted: del, risk: risk || null, claudio: claudio || null, felipe: felipe || null, seeded: Object.assign({}, a.seeded, b.seeded)});
   }
   /* Bots repetidos: los bots que crea Nova Bot Lab (Seguro, Nova v2.7, Lucas…) se creaban otra vez cuando un dispositivo los sembraba antes de recibir los de tu cuenta.
      Se queda UNO por plantilla (el que más ha operado en simulado; si empatan, el más antiguo) y los demás se marcan como borrados en todos tus dispositivos. */
@@ -44,7 +44,8 @@
   }
   /* Copia ligera para tu cuenta: guarda TODO lo que importa (versiones, ediciones, consejos aplicados, simulaciones, apariencia, historial) y recorta lo que se puede recalcular (detalle de backtests viejos). */
   function cloudCopy() {
-    const lite = (lvl) => JSON.stringify(Object.assign({}, S, {bots: S.bots.map(b => { const main = runOf(b); return Object.assign({}, b, {chat: (b.chat || []).slice(-30), journal: (b.journal || []).slice(-150),
+    const agL = (a, lvl) => a && a.s && lvl ? Object.assign({}, a, {s: Object.assign({}, a.s, {preds: (a.s.preds || []).slice(-(lvl > 1 ? 80 : 250)), events: (a.s.events || []).slice(-60)})}) : a; // Claudio y Felipe: el servidor guarda su sesión completa
+    const lite = (lvl) => JSON.stringify(Object.assign({}, S, {claudio: agL(S.claudio, lvl), felipe: agL(S.felipe, lvl), bots: S.bots.map(b => { const main = runOf(b); return Object.assign({}, b, {chat: (b.chat || []).slice(-30), journal: (b.journal || []).slice(-150),
       runs: (b.runs || []).slice(-6).map(r => r === main && lvl < 2 ? Object.assign({}, r, {trades: r.trades.slice(-(lvl ? 120 : 400)), avoid: (r.avoid || []).slice(-(lvl ? 40 : 300))}) : Object.assign({}, r, {trades: [], avoid: [], bh: [], equity: r === main ? r.equity : []})),
       paper: (b.paper || []).map(x => Object.assign({}, x, {ledger: x.ledger.slice(-(lvl ? 150 : 400)), curve: x.curve.slice(-(lvl ? 200 : 400))}))}); })}));
     let str = lite(0); if (str.length > 900000) str = lite(1); if (str.length > 900000) str = lite(2); return str;
@@ -138,7 +139,7 @@
   const desk = () => matchMedia('(min-width:1024px)').matches; // Nova Bot Lab es solo para la versión de PC
   function render() {
     if (!root || !desk()) return; stopReplayIf(); const keep = root.scrollTop; document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches); // antes de dibujar: las gráficas del dashboard usan el ancho real
-    if (view === 'lib') libView(); else if (view === 'new') newView(); else if (view === 'edit') editView(); else if (view === 'bot') botView(); else if (view === 'tourn') tournView(); else if (view === 'cmp') cmpView(); else if (view === 'risk') riskView(); else if (view === 'claudio' && window.CCTClaudioUI) window.CCTClaudioUI.view(root, head);
+    if (view === 'lib') libView(); else if (view === 'new') newView(); else if (view === 'edit') editView(); else if (view === 'bot') botView(); else if (view === 'tourn') tournView(); else if (view === 'cmp') cmpView(); else if (view === 'risk') riskView(); else if (view === 'claudio' && window.CCTClaudioUI) window.CCTClaudioUI.view(root, head); else if (view === 'felipe' && window.CCTFelipeUI) window.CCTFelipeUI.view(root, head);
     root.scrollTop = view === 'lib' ? keep : root.scrollTop; document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches);
   }
   const stopReplayIf = () => { if (replay.timer && view !== 'bot') { clearInterval(replay.timer); replay.timer = 0; replay.on = false; } };
@@ -236,7 +237,7 @@
   /* ───────── Torneo: todos los bots encendidos (incluido Claudio) compitiendo en vivo desde que se encendieron ───────── */
   function tournRows() {
     const rows = S.bots.filter(b => b.status !== 'archived').map(b => { const lv = liveOf(b); return lv ? {id: b.id, name: b.name, av: avOf(b, 30), col: lookOf(b).color, ret: lv.retPct, n: lv.nClosed, win: lv.winRate, since: lv.startT, curve: lv.curve.map(p => [p[0], (p[1] / lv.capital - 1) * 100]), open: 'open'} : null; }).filter(Boolean);
-    const C = window.CCTClaudioUI && window.CCTClaudioUI.liveRow && window.CCTClaudioUI.liveRow(); if (C) rows.push(C);
+    for (const U of [window.CCTClaudioUI, window.CCTFelipeUI].filter(Boolean)) { const C = U.liveRow && U.liveRow(); if (C) rows.push(C); } // Claudio y Felipe
     return rows.sort((a, c) => c.ret - a.ret);
   }
   function tournView() {
@@ -367,8 +368,8 @@
     root.innerHTML = head('NOVA BOT LAB', 'Crea, prueba y simula bots sin dinero real') + `<div class="bl-actions bl-acts4"><button class="bl-btn" data-a="new">${IC.plus}Crear nuevo bot</button><button class="bl-btn ghost" data-a="import">Importar</button><button class="bl-btn ghost" data-a="risk">Panel de riesgo</button><button class="bl-btn ghost ${pick ? 'on' : ''}" data-a="cmp" ${S.bots.length >= 2 ? '' : 'disabled'}>${pick ? (sel.size >= 2 ? `Comparar ${sel.size} ›` : `Elige ${2 - Math.min(2, sel.size)} más`) : 'Comparar'}</button></div>
       ${pick ? '<p class="bl-dim bl-pickhint">Marca los bots que quieres comparar. <a href="#" data-a="cmpCancel">Cancelar</a></p>' : ''}
       ${(() => { const tr = tournRows(); return `<button type="button" class="tn-ban" data-a="tourn"><span class="tn-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20h7M10 17h4"/></svg></span><span><b>Torneo de bots</b><small>${tr.length ? `${tr.length} compitiendo · va ganando ${esc(tr[0].name)} (${pct(tr[0].ret)})` : 'Enciende varios bots para que compitan en vivo'}</small></span><span class="bl-row-go">›</span></button>`; })()}
-      <div class="bl-list"><div class="bl-list-h"><span>Tus bots</span><small>${act.filter(isLive).length + (window.CCTClaudioUI && window.CCTClaudioUI.isOn() ? 1 : 0)} encendidos</small></div>
-      ${(() => { const rows = list.map(botRow), cl = window.CCTClaudioUI ? window.CCTClaudioUI.card() : ''; if (cl) rows.splice(window.CCTClaudioUI.isOn() ? list.filter(isLive).length : list.filter(isLive).length, 0, cl); return rows.join(''); })()}
+      <div class="bl-list"><div class="bl-list-h"><span>Tus bots</span><small>${act.filter(isLive).length + [window.CCTClaudioUI, window.CCTFelipeUI].filter(Boolean).filter(U => U.isOn()).length} encendidos</small></div>
+      ${(() => { const rows = list.map(botRow), ag = [window.CCTClaudioUI, window.CCTFelipeUI].filter(Boolean).map(U => U.card()).filter(Boolean); rows.splice(list.filter(isLive).length, 0, ...ag); return rows.join(''); })()}
       ${list.length || window.CCTClaudioUI ? '' : `<div class="bl-empty0">${IC.robot}<p>Aún no tienes bots.</p><button class="bl-btn" data-a="new">${IC.plus}Crear mi primer bot</button></div>`}</div>
       ${arch.length ? `<button type="button" class="bl-link" data-a="toggleArch">${showArch ? 'Ocultar archivados' : `Ver archivados (${arch.length})`}</button>` : ''}
       <p class="bl-foot">Simulación y datos históricos: no se ejecutan órdenes reales.</p>`;
@@ -1258,7 +1259,7 @@ Máximo 3 tips. "patch" es un fragmento de la especificación con el MISMO esque
 
   /* ----- Eventos ----- */
   const ACT = {
-    claudio() { view = 'claudio'; render(); }, tcSym(el) { tcSym = el.dataset.k; render(); }, tourn() { view = 'tourn'; render(); },
+    claudio() { view = 'claudio'; render(); }, felipe() { view = 'felipe'; render(); }, tcSym(el) { tcSym = el.dataset.k; render(); }, tourn() { view = 'tourn'; render(); },
     toChart() { const b = bot(); if (!b) return; const on = !!b.sigOn;
       if (on) { b.sigOn = false; for (const k of [...sigCache.keys()]) if (k.startsWith(b.id + '|')) sigCache.delete(k); sigPush(); touch(b); render(); return toast('Se quitaron las señales de «' + b.name + '» del gráfico.'); }
       let pine = null; try { if (window.CCTBotPine) pine = window.CCTBotPine.toPine(mainSpec(b)); } catch (e) { pine = null; }
@@ -1346,7 +1347,7 @@ Máximo 3 tips. "patch" es un fragmento de la especificación con el MISMO esque
     const rb = $('#rrBotLab'); rb && rb.addEventListener('click', open);
     paperTick(); setInterval(() => { if (!document.hidden) paperTick(); }, 60000);
     setTimeout(pullCloud, 2500);
-    window.CCTBotLabUI = {nl: text => { view = 'nl'; nlView(); setTimeout(() => nlSend(text), 50); }, mergeServer, mergePaper, state: () => S, open: id => ACT.open({dataset: {id}}), runBot, newBot, store: s => { S = s; save(); render(); }, claudio: o => { if (o === undefined) return S.claudio || null; S.claudio = o; save(); return o; }};
+    window.CCTBotLabUI = {nl: text => { view = 'nl'; nlView(); setTimeout(() => nlSend(text), 50); }, mergeServer, mergePaper, state: () => S, open: id => ACT.open({dataset: {id}}), runBot, newBot, store: s => { S = s; save(); render(); }, claudio: o => { if (o === undefined) return S.claudio || null; S.claudio = o; save(); return o; }, felipe: o => { if (o === undefined) return S.felipe || null; S.felipe = o; save(); return o; }};
   }
   // La vista de lista usa las vistas «nl» como subvista de «new»
   const _render = render; render = function () { if (view === 'ind') { stopReplayIf(); indView(); document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches); return; } if (view === 'nl') { stopReplayIf(); nlView(); document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches); return; } _render(); };

@@ -26,7 +26,9 @@ function compact(s) { // mantiene el documento bajo el tope de Firestore (1 MiB)
   let str = JSON.stringify(s); while (str.length > MAX_DOC && s.preds.length > 300) { s.preds.splice(0, Math.ceil(s.preds.length / 4)); str = JSON.stringify(s); }
   return str;
 }
-function summary(s) { const st = K.stats(s); return {equity: st.equity, retPct: st.retPct, ddPct: st.ddPct, open: st.open, trades: st.n, lastT: s.lastT, by: s.lastBy, kill: !!s.kill, halted: !!s.halted, calibV: s.calib.v}; }
+function summary(s, KK) { const st = (KK || K).stats(s); return {equity: st.equity, retPct: st.retPct, ddPct: st.ddPct, open: st.open, trades: st.n, lastT: s.lastT, by: s.lastBy, kill: !!s.kill, halted: !!s.halted, calibV: s.calib.v, minConf: s.adapt ? s.adapt.minConf : null, muted: s.adapt ? Object.keys(s.adapt.muted || {}) : []}; }
+/* Por qué no entra: el motivo más común de la última decisión de cada moneda (para leerlo en el registro del Motor) */
+function waitWhy(s) { const d = Object.entries(s.decisions || {}); if (!d.length) return 'sin decisiones todavía'; const c = {}; for (const [, x] of d) { const k = String(x.action === 'hold' ? x.why || 'espera' : x.action).replace(/\d+(\.\d+)? %/g, 'N %').replace(/[\d.]+ < /, 'N < '); c[k] = (c[k] || 0) + 1; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${v}× ${k}`).join(' · '); }
 /* Una sesión: cfg = documento «claudio» de la app; prev = sesión anterior (o null). Devuelve la sesión avanzada. */
 async function runOne(cfg, prev, mode, deps) {
   const now = deps.now || Date.now(), s = K.prepare(cfg, prev, now, R.symbols());
@@ -41,20 +43,31 @@ async function main() {
   admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); const db = admin.firestore(), now = Date.now();
   const feed = makeFeed(null, now), evaluate = K.jevEvaluator({apiKey: process.env.JEV_API_KEY || '', model: process.env.JEV_MODEL || 'jev-latest'});
   let n = 0;
+  /* Agentes autónomos: Claudio y Felipe (mismo núcleo, otra estrategia y otros números). Cada uno tiene su configuración en tu documento «botlab»
+     (botlab.claudio / botlab.felipe) y su sesión en data/<agente>_server. Felipe arranca encendido solo si Claudio está encendido y nunca se configuró. */
+  const AGENTS = [{key: 'claudio', K, syms: R.symbols()}, {key: 'felipe', K: K.felipe, syms: K.FELIPE.symbols}];
   for (const u of await db.collection('users').listDocuments()) {
-    // La configuración y la copia del navegador viajan dentro de tu documento «botlab» (botlab.claudio); el documento «claudio» se mantiene por compatibilidad.
-    let app = null; try { const bd = await u.collection('data').doc('botlab').get(); if (bd.exists) app = (JSON.parse(bd.data().items || '{}') || {}).claudio || null; } catch {}
-    let legacy = null; try { const cd = await u.collection('data').doc('claudio').get(); if (cd.exists) legacy = cd.data(); } catch {}
-    const cfg = app && app.cfg && (!legacy || (app.cfg.at || 0) >= (legacy.at || 0)) ? app.cfg : (legacy || {}); if (!cfg.enabled) continue;
-    const sd = await u.collection('data').doc('claudio_server').get(); let prev = null; if (sd.exists) { try { prev = JSON.parse(sd.data().s || 'null'); } catch {} }
-    prev = K.newer(prev, app && app.s);
-    try {
-      const s = await runOne(cfg, prev, MODE, {feed, evaluate, now}), str = compact(s);
-      await u.collection('data').doc('claudio_server').set({s: str, summary: summary(s), updatedAt: admin.firestore.FieldValue.serverTimestamp()}); n++;
-      const sm = summary(s); console.log(`Sesión ${n}: ${MODE} · patrimonio ${sm.equity.toFixed(2)} · ${sm.trades} operaciones · ${sm.open} abiertas · evaluador ${sm.by || '—'}${sm.kill ? ' · KILL' : ''}${sm.halted ? ' · DETENIDO' : ''}`);
-    } catch (e) { console.log('Error en una sesión: ' + e.message); }
+    let items = null; try { const bd = await u.collection('data').doc('botlab').get(); if (bd.exists) items = JSON.parse(bd.data().items || '{}') || {}; } catch {}
+    let claudioOn = false;
+    for (const A of AGENTS) {
+      const app = items ? items[A.key] || null : null;
+      let legacy = null; if (A.key === 'claudio') { try { const cd = await u.collection('data').doc('claudio').get(); if (cd.exists) legacy = cd.data(); } catch {} }
+      let cfg = app && app.cfg && (!legacy || (app.cfg.at || 0) >= (legacy.at || 0)) ? app.cfg : (legacy || null);
+      if (A.key === 'claudio') claudioOn = !!(cfg && cfg.enabled);
+      if (A.key === 'felipe' && !cfg && claudioOn) cfg = {enabled: true, capital: 10000, at: 0, auto: true};
+      if (!cfg || !cfg.enabled) continue;
+      const sd = await u.collection('data').doc(A.key + '_server').get(); let prev = null; if (sd.exists) { try { prev = JSON.parse(sd.data().s || 'null'); } catch {} }
+      prev = A.K.newer(prev, app && app.s);
+      try {
+        const now2 = now, s = A.K.prepare(cfg, prev, now2, A.syms);
+        if (MODE === 'nightly') A.K.nightly(s, now2); else await A.K.step(s, feed, evaluate, now2);
+        await u.collection('data').doc(A.key + '_server').set({s: compact(s), summary: summary(s, A.K), updatedAt: admin.firestore.FieldValue.serverTimestamp()}); n++;
+        const sm = summary(s, A.K); console.log(`${A.K.NAME}: ${MODE} · patrimonio ${sm.equity.toFixed(2)} · ${sm.trades} operaciones · ${sm.open} abiertas · evaluador ${sm.by || '—'}${sm.kill ? ' · KILL' : ''}${sm.halted ? ' · DETENIDO' : ''}${sm.minConf ? ' · umbral ' + Math.round(sm.minConf * 100) + ' %' : ''}`);
+        console.log(`  ${A.K.NAME} esperando/decidiendo: ${waitWhy(s)}`);
+      } catch (e) { console.log(`Error en ${A.K.NAME}: ` + e.message); }
+    }
   }
-  console.log(`Claudio ${MODE}: ${n} sesión(es) actualizada(s).`);
+  console.log(`Agentes ${MODE}: ${n} sesión(es) actualizada(s).`);
 }
 if (require.main === module) main().catch(e => { console.error(e.message); process.exit(1); });
-module.exports = {makeFeed, runOne, compact, summary};
+module.exports = {makeFeed, runOne, compact, summary, waitWhy};
