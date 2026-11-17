@@ -1,0 +1,28 @@
+name: Limpieza única de ramas viejas
+# Corre una sola vez: guarda los respaldos como etiquetas archivo/* y borra las ramas viejas (todo su trabajo ya está en main).
+# main y dev no se tocan. Después de correr, este archivo se borra.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/limpiar-ramas.yml']
+permissions:
+  contents: write
+jobs:
+  limpiar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Etiquetar respaldos y borrar ramas
+        run: |
+          set -u
+          ARCHIVO="backup/vortex-pre-botlab backup/vortex-pre-ia vortex-backup-pre-ia-2026-11-06 vortex-respaldo-antes-publicar-ia-2026-11-06 ajustes-por-herramienta dominancia-puntual glass-en-todos-los-menus pixel-vigia-y-pildora prueba-macro"
+          for b in $ARCHIVO; do
+            t="archivo/${b#backup/}"
+            git rev-parse -q --verify "origin/$b" >/dev/null && git tag -f "$t" "origin/$b" && git push -f origin "refs/tags/$t" && echo "Etiqueta $t"
+          done
+          for b in $(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin); do
+            case "$b" in main|dev|HEAD) continue;; esac
+            git push origin --delete "$b" && echo "Borrada $b"
+          done
