@@ -1,0 +1,34 @@
+name: Respaldo cifrado de Firestore (diario)
+# Copia completa de la base de VORTEX (cuentas, bots, ajustes, planes…), CIFRADA con AES-256-GCM, guardada como artefacto
+# de GitHub por 90 días. Aunque el repositorio sea público, sin la llave nadie puede leerla.
+# Llave: el secreto BACKUP_KEY si lo agregas; si no, se deriva de FIREBASE_SERVICE_ACCOUNT.
+# Restaurar: descarga el artefacto y corre  node scripts/backup-restore.js <archivo> --dry-run  (luego --write).
+on:
+  schedule:
+    - cron: '41 9 * * *'   # 03:41 hora de Ciudad de México
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: backup-firestore, cancel-in-progress: false}
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12
+      - name: Exportar y cifrar
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          BACKUP_KEY: ${{ secrets.BACKUP_KEY }}
+          EXCLUDE: candles          # velas públicas: el Motor las vuelve a generar solo
+          MAX_READS: '40000'
+        run: node scripts/backup-export.js respaldo
+      - uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-vortex-${{ github.run_number }}
+          path: respaldo/*.vxbak
+          retention-days: 90
+          if-no-files-found: error

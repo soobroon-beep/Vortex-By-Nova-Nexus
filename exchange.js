@@ -5,7 +5,7 @@
    Las claves se guardan en este dispositivo y, si iniciaste sesión, en tu cuenta (documento privado que solo tú puedes leer). */
 (function (root) {
   'use strict';
-  const CCXT_URL = 'https://cdn.jsdelivr.net/npm/ccxt@4.5.92/dist/ccxt.browser.min.js';
+  const CCXT_URL = 'https://cdn.jsdelivr.net/npm/ccxt@4.5.92/dist/ccxt.browser.min.js', CCXT_SRI = 'sha384-2qLEK13w5drVOXd88x7GvW3NQtGJ20u3FIIOTHGxuqPbrPnzO9s/Nkdy04r6mYio'; // huella del archivo oficial: si el CDN lo cambiara, el navegador NO lo ejecuta (tus claves pasan por aquí)
   const PROXY = 'https://vortex-exchange.soobroon.workers.dev/?';
   const LS = 'cct_exchange_v1', DOC = 'exchanges';
   const FEATURED = [['bingx', 'BingX'], ['binance', 'Binance'], ['bybit', 'Bybit'], ['okx', 'OKX'], ['bitget', 'Bitget'], ['kucoin', 'KuCoin'], ['gate', 'Gate'], ['mexc', 'MEXC'], ['htx', 'HTX'], ['kraken', 'Kraken'], ['coinbase', 'Coinbase'], ['bitmart', 'BitMart'], ['cryptocom', 'Crypto.com'], ['bitfinex', 'Bitfinex'], ['phemex', 'Phemex'], ['hyperliquid', 'Hyperliquid'], ['woo', 'WOO X'], ['deribit', 'Deribit'], ['blofin', 'BloFin'], ['lbank', 'LBank']];
@@ -13,15 +13,51 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const toast = m => { if (root.CCT_toast) root.CCT_toast(m); };
   const svg = (p, s = 18) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
-  const load = () => { try { const o = JSON.parse(localStorage.getItem(LS) || 'null'); return o && o.id && o.apiKey ? o : null; } catch { return null; } };
+  const load = () => { try { const o = JSON.parse(localStorage.getItem(LS) || 'null'); return o && o.id && o.apiKey ? o : null; } catch { return null; } }; // (solo la forma vieja sin cifrar; la cifrada se abre en unlockLocal)
+  /* ───────── Claves protegidas ─────────
+     · En este dispositivo: cifradas con AES-256 con una llave que el navegador guarda como NO exportable (nadie puede sacarla,
+       solo usarla aquí). En el almacenamiento ya no queda tu Secret en texto plano.
+     · En tu cuenta: cifradas por el servidor de VORTEX (bóveda atada a tu sesión de Google). Firestore ya no guarda la clave legible. */
+  const VAULT_SRV = 'https://vortex-push.soobroon.workers.dev';
+  let lkP = null;
+  function localKey() {
+    if (lkP) return lkP;
+    lkP = new Promise((res, rej) => {
+      if (!root.indexedDB || !root.crypto || !crypto.subtle) return rej(new Error('sin IndexedDB'));
+      const rq = indexedDB.open('vortex_vault', 1); rq.onupgradeneeded = e => e.target.result.createObjectStore('k');
+      rq.onerror = () => rej(rq.error);
+      rq.onsuccess = e => {
+        const db = e.target.result, get = db.transaction('k').objectStore('k').get('aes');
+        get.onerror = () => rej(get.error);
+        get.onsuccess = async () => {
+          if (get.result) return res(get.result);
+          try { const k = await crypto.subtle.generateKey({name: 'AES-GCM', length: 256}, false, ['encrypt', 'decrypt']); const tx = db.transaction('k', 'readwrite'); tx.objectStore('k').put(k, 'aes'); tx.oncomplete = () => res(k); tx.onerror = () => rej(tx.error); } catch (err) { rej(err); }
+        };
+      };
+    });
+    lkP.catch(() => { lkP = null; }); return lkP;
+  }
+  const b64 = u8 => btoa(String.fromCharCode(...new Uint8Array(u8))), unb64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+  async function encLocal(o) { const k = await localKey(), iv = crypto.getRandomValues(new Uint8Array(12)), ct = await crypto.subtle.encrypt({name: 'AES-GCM', iv}, k, new TextEncoder().encode(JSON.stringify(o))); return {v: 'enc1', iv: b64(iv), ct: b64(ct)}; }
+  async function decLocal(o) { const k = await localKey(), pt = await crypto.subtle.decrypt({name: 'AES-GCM', iv: unb64(o.iv)}, k, unb64(o.ct)); return JSON.parse(new TextDecoder().decode(pt)); }
+  async function vault(path, body) {
+    const C = root.CCTCloudPriv, idToken = C && C.token ? await C.token() : ''; if (!idToken) throw new Error('sin sesión');
+    const r = await fetch(VAULT_SRV + path, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(Object.assign({idToken}, body))}), j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j;
+  }
   let cfg = load(), ex = null, ccxtP = null, snap = {equity: NaN, free: NaN, positions: [], orders: [], at: 0, err: ''}, subs = [], pollT = 0, busy = false, busyAt = 0, soonT = 0, soonAt = 0, cloudUid = '';
-  const storeLocal = () => { try { if (cfg) localStorage.setItem(LS, JSON.stringify(cfg)); else localStorage.removeItem(LS); } catch {} };
+  let storeSeq = 0;
+  const storeLocal = () => { // cifrado; si el navegador no deja (modo privado muy estricto), se guarda como antes para no perder la conexión
+    const my = ++storeSeq, c = cfg;
+    if (!c) { try { localStorage.removeItem(LS); } catch {} return; }
+    encLocal(c).then(box => { if (my === storeSeq) localStorage.setItem(LS, JSON.stringify(box)); }).catch(() => { try { if (my === storeSeq) localStorage.setItem(LS, JSON.stringify(c)); } catch {} });
+  };
   const nameOf = id => NAME[id] || (ex && ex.id === id && ex.name) || (root.ccxt && root.ccxt[id] && (root.ccxt[id].prototype && root.ccxt[id].prototype.name)) || (id.charAt(0).toUpperCase() + id.slice(1));
 
   function loadCcxt() {
     if (root.ccxt) return Promise.resolve(root.ccxt);
     if (ccxtP) return ccxtP;
-    ccxtP = new Promise((res, rej) => { const s = document.createElement('script'); s.src = CCXT_URL; s.async = true; s.onload = () => root.ccxt ? res(root.ccxt) : rej(new Error('CCXT no cargó')); s.onerror = () => { ccxtP = null; rej(new Error('No se pudo descargar el conector de exchanges (¿sin internet o bloqueador?)')); }; document.head.appendChild(s); });
+    ccxtP = new Promise((res, rej) => { const s = document.createElement('script'); s.src = CCXT_URL; s.integrity = CCXT_SRI; s.crossOrigin = 'anonymous'; s.referrerPolicy = 'no-referrer'; s.async = true; s.onload = () => root.ccxt ? res(root.ccxt) : rej(new Error('CCXT no cargó')); s.onerror = () => { ccxtP = null; rej(new Error('No se pudo descargar el conector de exchanges (¿sin internet o bloqueador?)')); }; document.head.appendChild(s); });
     return ccxtP;
   }
   async function make(c) {
@@ -137,13 +173,23 @@
   const canTrade = () => !!(cfg && cfg.trade);
 
   /* ───────── Guardado: dispositivo + cuenta ───────── */
-  async function cloudSave() { const C = root.CCTCloudPriv; if (!C || !C.ready()) return false; try { await C.set(DOC, cfg ? {cfg: JSON.stringify(cfg), at: Date.now()} : {cfg: '', at: Date.now()}); return true; } catch { return false; } }
+  async function cloudSave() { // en tu cuenta solo va la caja cifrada por el servidor (nunca la clave legible)
+    const C = root.CCTCloudPriv; if (!C || !C.ready()) return false;
+    try {
+      if (!cfg) { await C.set(DOC, {cfg: '', box: '', at: Date.now()}); return true; }
+      const {box} = await vault('/vault/seal', {data: JSON.stringify(cfg)});
+      await C.set(DOC, {box, v: 2, at: cfg.at || Date.now()}); return true;
+    } catch { return false; }
+  }
   async function cloudSync(uid) { // al iniciar sesión: si tu cuenta ya tiene un exchange guardado, se usa aquí sin volver a pedirlo
     const C = root.CCTCloudPriv; if (!C || !C.ready() || !uid || cloudUid === uid) return; cloudUid = uid;
     try {
-      const d = await C.get(DOC); let rc = null; try { rc = d && d.cfg ? JSON.parse(d.cfg) : null; } catch {}
-      if (rc && rc.id && rc.apiKey && (!cfg || (rc.at || 0) >= (cfg.at || 0))) { const same = cfg && cfg.id === rc.id && cfg.apiKey === rc.apiKey; cfg = rc; storeLocal(); ex = null; if (!same) { lensLink(); toast(`${nameOf(cfg.id)} conectado desde tu cuenta`); } startPoll(); paint(); }
-      else if (cfg && (!rc || (cfg.at || 0) > (rc.at || 0))) cloudSave();
+      await unlocked; // primero se abre la copia cifrada de este dispositivo (para comparar fechas)
+      const d = await C.get(DOC); let rc = null, legacy = false;
+      if (d && d.box) { try { rc = JSON.parse((await vault('/vault/open', {box: d.box})).data); } catch { rc = null; } }
+      else if (d && d.cfg) { try { rc = JSON.parse(d.cfg); legacy = true; } catch {} } // forma vieja en texto plano: se usa y se reemplaza por la cifrada
+      if (rc && rc.id && rc.apiKey && (!cfg || (rc.at || 0) >= (cfg.at || 0))) { const same = cfg && cfg.id === rc.id && cfg.apiKey === rc.apiKey; cfg = rc; storeLocal(); ex = null; if (!same) { lensLink(); toast(`${nameOf(cfg.id)} conectado desde tu cuenta`); } startPoll(); paint(); if (legacy) cloudSave(); }
+      else if (cfg && (!rc || legacy || (cfg.at || 0) > (rc.at || 0))) cloudSave();
     } catch {}
   }
   /* Nexus Lens (BingX) usa la misma clave: se le escribe en su almacenamiento y se recarga si estaba abierto */
@@ -244,6 +290,13 @@
     }
   }
   document.addEventListener('click', e => { if (e.target.closest('[data-ex-open]')) { e.preventDefault(); open(); } });
+  /* Al abrir: la clave cifrada de este dispositivo se abre con la llave del navegador; la forma vieja (texto plano) se cifra en ese momento */
+  const unlocked = (async () => {
+    if (cfg) { storeLocal(); return; }
+    let o = null; try { o = JSON.parse(localStorage.getItem(LS) || 'null'); } catch {}
+    if (!o || o.v !== 'enc1') return;
+    try { const c = await decLocal(o); if (c && c.id && c.apiKey && !cfg) { cfg = c; startPoll(); setTimeout(checkPerms, 1500); emit(); } } catch {}
+  })();
   if (cfg) { startPoll(); setTimeout(checkPerms, 1500); }
 
   root.CCTExchange = {open, close, refresh, refreshSoon, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, protections, setTpSl, removeTpSl, baseOf, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, lensKeys: () => cfg && cfg.id === 'bingx' && cfg.apiKey && cfg.secret ? {k: cfg.apiKey, s: cfg.secret} : null, /* Nexus Lens (mismo sitio) entra solo con tu BingX */ snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};

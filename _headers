@@ -1,8 +1,10 @@
 # Cabeceras de seguridad para Cloudflare Pages (vortex-nexus.pages.dev)
+# script-src: solo se ejecuta código de VORTEX y de los pocos servicios que usa (CCXT con huella, inicio de sesión de Google,
+# calendario de TradingView). Un script inyectado desde cualquier otro sitio no corre aunque alguien lograra meterlo.
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Content-Security-Policy: frame-ancestors 'self'; base-uri 'self'; object-src 'none'
+  Content-Security-Policy: frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net https://s3.tradingview.com https://apis.google.com https://www.gstatic.com https://*.firebaseapp.com; worker-src 'self' blob:
   Permissions-Policy: camera=(), geolocation=(), payment=(), usb=(), microphone=(self)
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   Cross-Origin-Opener-Policy: same-origin-allow-popups

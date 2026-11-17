@@ -108,7 +108,7 @@ test('ronda programada: avisa una vez, guarda el estado y borra suscripciones ve
   };
   try {
     const r = await w.tick(env, 1e12);
-    assert.deepStrictEqual(r, {devices: 2, sent: 1, gone: 1}); // sent = avisos aceptados por el servicio push
+    assert.deepStrictEqual({devices: r.devices, sent: r.sent, gone: r.gone, errors: r.errors}, {devices: 2, sent: 1, gone: 1, errors: 0}); // sent = avisos aceptados por el servicio push
     const p = pushes.find(x => x.url.endsWith('/abc'));
     assert.strictEqual(p.init.headers['content-encoding'], 'aes128gcm'); assert.match(p.init.headers.authorization, /^vapid t=/);
     const msg = JSON.parse(await decrypt(new Uint8Array(p.init.body), f.kp, f.auth));
@@ -226,8 +226,14 @@ test('ronda programada: sigue tus trades abiertos con la app cerrada', async () 
 test('/bot-push: avisos de tus bots solo a los celulares de tu cuenta y con la llave correcta', async () => {
   const w = await W(), KV = memKV(), env = {KV, BOT_PUSH_KEY: 'k'.repeat(64)}, f = await fakeBrowserSub(w.b64u), g = await fakeBrowserSub(w.b64u);
   const sync = body => w.default.fetch(new Request('https://x.workers.dev/sync', {method: 'POST', headers: {origin: 'https://soobroon-beep.github.io'}, body: JSON.stringify(body)}), env);
-  await sync({id: 'dev_uuuuuuuuuuuuuuuuuuuu', sub: f.sub, move: {on: false}, uid: 'UserAbc1234567'});
-  await sync({id: 'dev_vvvvvvvvvvvvvvvvvvvv', sub: {...g.sub, endpoint: 'https://fcm.googleapis.com/fcm/send/otro'}, move: {on: false}, uid: 'OtraCuenta98765'});
+  const FB = require('./fb-token-helper.js'), realFetch0 = globalThis.fetch; globalThis.fetch = FB.withJwks(() => { throw new Error('sin red'); });
+  try {
+    await sync({id: 'dev_uuuuuuuuuuuuuuuuuuuu', sub: f.sub, move: {on: false}, uid: 'UserAbc1234567', idToken: await FB.mint('UserAbc1234567')});
+    await sync({id: 'dev_vvvvvvvvvvvvvvvvvvvv', sub: {...g.sub, endpoint: 'https://fcm.googleapis.com/fcm/send/otro'}, move: {on: false}, uid: 'OtraCuenta98765', idToken: await FB.mint('OtraCuenta98765')});
+    // alguien que solo DICE ser UserAbc1234567 (sin token verificado) no recibe sus avisos
+    await sync({id: 'dev_wwwwwwwwwwwwwwwwwwww', sub: {...g.sub, endpoint: 'https://fcm.googleapis.com/fcm/send/intruso'}, move: {on: false}, uid: 'UserAbc1234567'});
+    await sync({id: 'dev_xxxxxxxxxxxxxxxxxxxx', sub: {...g.sub, endpoint: 'https://fcm.googleapis.com/fcm/send/intruso2'}, move: {on: false}, uid: 'UserAbc1234567', idToken: await FB.mint('UserAbc1234567', {project: 'otro-proyecto'})});
+  } finally { globalThis.fetch = realFetch0; }
   const pushes = [], realFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => { url = String(url); if (url.includes('fcm.googleapis.com')) { pushes.push({url, msg: JSON.parse(await decrypt(new Uint8Array(init.body), url.endsWith('/abc') ? f.kp : g.kp, url.endsWith('/abc') ? f.auth : g.auth))}); return new Response('', {status: 201}); } throw new Error('fetch inesperado ' + url); };
   const call = body => w.default.fetch(new Request('https://x.workers.dev/bot-push', {method: 'POST', body: JSON.stringify(body)}), env).then(async r => ({status: r.status, j: await r.json()}));

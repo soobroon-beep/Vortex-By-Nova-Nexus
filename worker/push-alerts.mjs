@@ -7,6 +7,8 @@
 // Se publica solo con .github/workflows/deploy-push-worker.yml (configuración en worker/wrangler-push.toml). Secretos opcionales: BINGX_AGENT_KEY / BINGX_AGENT_SECRET (plan Infinity) y GROQ_KEY (IA gratis de respaldo).
 
 import {memRoute} from './memoria.mjs'; // Memoria compartida entre Claude, ChatGPT y Gemini (/mem/<llave>/…)
+import {storeOf, MAX_PER_UID, MAX_NEW_PER_IP_DAY} from './devstore.mjs'; // celulares registrados: base D1 (miles) o KV de respaldo
+import {verifyIdToken, saOf, fsGet, fsMerge} from './fbauth.mjs'; // sesión de Firebase verificada y Firestore con la cuenta de servicio
 import * as SCR from './screener.mjs';
 import {radarInternal, loadState as radarState} from './radar-server.mjs';
 import DOM from '../dominance-core.js';
@@ -17,7 +19,8 @@ const DEFAULT_ORIGINS = 'https://soobroon-beep.github.io,https://vortex-nexus.pa
 const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com', 'https://api1.binance.com'];
 const MOVE_TOP = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT'];
 const MOVE_WIN = [[5, '5 min', 1], [60, '1 h', 2.5]], MOVE_COOL = 15 * 60000;
-const MAX_ALERTS = 50, MAX_DEVICES = 20, APP_URL = 'https://vortex-nexus.pages.dev/';
+const MAX_ALERTS = 50, APP_URL = 'https://vortex-nexus.pages.dev/';
+const TICK_BATCH = 10, PUSH_BATCH = 10, FAN_DIRECT = 25; // dispositivos por llamada interna (cada llamada tiene su propio límite de CPU y de subpeticiones)
 
 /* ───────── Plan Infinity: comprobar el referido de BingX ─────────
    Usa la API de afiliado (agente) de BingX con TU llave: secretos BINGX_AGENT_KEY y BINGX_AGENT_SECRET del Worker (solo lectura).
@@ -82,8 +85,11 @@ export function mergeInd(incoming, server, since = 0) {
 }
 export function sanScr(x) { const q = x && typeof x === 'object' ? x : {}; return {on: q.on === true, h1: q.h1 !== false, h4: q.h4 !== false}; }
 export function sanMove(m) { const q = m && typeof m === 'object' ? m : {}; return {on: q.on !== false, pct: Math.max(0.5, Math.min(25, +q.pct || 2))}; }
-function sanSub(s) {
+/* Solo servicios push reales (Chrome/Android, Firefox, Edge/Windows, Safari/iPhone): el servidor nunca le manda nada a otra dirección */
+export const PUSH_HOSTS = /^(fcm\.googleapis\.com|android\.googleapis\.com|updates\.push\.services\.mozilla\.com|push\.services\.mozilla\.com|[a-z0-9-]+\.notify\.windows\.com|web\.push\.apple\.com|[a-z0-9-]+\.push\.apple\.com)$/;
+export function sanSub(s) {
   if (!s || typeof s.endpoint !== 'string' || !/^https:\/\//.test(s.endpoint) || s.endpoint.length > 1000) return null;
+  try { const u = new URL(s.endpoint); if (u.protocol !== 'https:' || u.port || u.username || !PUSH_HOSTS.test(u.hostname)) return null; } catch { return null; }
   const k = s.keys || {}; if (typeof k.p256dh !== 'string' || typeof k.auth !== 'string' || k.p256dh.length > 200 || k.auth.length > 60) return null;
   return {endpoint: s.endpoint, keys: {p256dh: k.p256dh, auth: k.auth}};
 }
@@ -135,14 +141,16 @@ export function moveCheck(sym, closes, pct, last, now = Date.now()) {
 }
 
 /* ───────── Web Push: VAPID (RFC 8292) + cifrado aes128gcm (RFC 8291) ───────── */
+let vapidMem = null; // en memoria: no se lee el KV en cada aviso
 async function vapidKeys(env) {
+  if (vapidMem && vapidMem.kv === env.KV) return vapidMem.v;
   let v = await env.KV.get('vapid', 'json');
   if (!v) {
     const kp = await crypto.subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify']);
     v = {pub: b64u(await crypto.subtle.exportKey('raw', kp.publicKey)), jwk: await crypto.subtle.exportKey('jwk', kp.privateKey)};
     await env.KV.put('vapid', JSON.stringify(v));
   }
-  return v;
+  vapidMem = {kv: env.KV, v}; return v;
 }
 export async function vapidHeader(endpoint, v, now = Date.now()) {
   const key = await crypto.subtle.importKey('jwk', v.jwk, {name: 'ECDSA', namedCurve: 'P-256'}, false, ['sign']);
@@ -229,47 +237,61 @@ export async function otherPrices(keys) { // keys: ['HYPEUSDT@binancef', …] �
 }
 async function closes1m(sym) { const d = await getJSON(`/api/v3/klines?symbol=${sym}&interval=1m&limit=61`); return d.map(k => +k[4]); }
 
-/* ───────── ronda programada ───────── */
+/* ───────── ronda programada (cada minuto) ─────────
+   1) Se leen solo los dispositivos con algo encendido (id + monedas), se piden los precios UNA vez.
+   2) Se reparten en tandas pequeñas (/int/tickbatch), cada una en su propia llamada: así aguanta miles de celulares
+      sin pasar el límite de CPU ni de subpeticiones de cada llamada del plan gratis. */
+const chunkArr = (a, n) => { const o = []; for (let i = 0; i < a.length; i += n) o.push(a.slice(i, i + n)); return o; };
 async function tick(env, now = Date.now()) {
-  const ids = (await env.KV.get('devs', 'json')) || []; if (!ids.length) return {devices: 0};
-  const devs = (await Promise.all(ids.map(id => env.KV.get('dev:' + id, 'json').then(d => d && d.sub ? [id, d] : null)))).filter(Boolean);
-  if (!devs.length) return {devices: 0};
+  const S = storeOf(env), rows = await S.activeRows();
+  { const hb = (await env.KV.get('hb', 'json')) || {}; if (now - (hb.at || 0) > 15 * 6e4) await env.KV.put('hb', JSON.stringify({at: now, devices: rows.length, store: S.kind})); } // latido: la app puede ver que el servidor sí está revisando
+  if (!rows.length) return {devices: 0, batches: 0, sent: 0, gone: 0, errors: 0};
+  const keys = [...new Set(rows.flatMap(r => r.syms))], spot = keys.filter(k => !k.includes('@')), other = keys.filter(k => k.includes('@'));
+  const prices = spot.length ? await spotPrices(spot).catch(() => ({})) : {};
+  if (other.length) Object.assign(prices, await otherPrices(other).catch(() => ({})));
+  const moves = {}; if (rows.some(r => r.mv)) await Promise.all(MOVE_TOP.map(s => closes1m(s).then(c => { moves[s] = c; }).catch(() => {})));
+  const job = list => { const p = {}; for (const r of list) for (const k of r.syms) if (k in prices) p[k] = prices[k]; return {ids: list.map(r => r.id), prices: p, moves: list.some(r => r.mv) ? moves : {}, now}; };
+  const batches = chunkArr(rows, TICK_BATCH);
+  const res = batches.length <= FAN_DIRECT
+    ? await pool(batches, 6, b => self(env, '/int/tickbatch', job(b)))
+    : (await pool(chunkArr(rows, TICK_BATCH * 20), 6, g => self(env, '/int/tickgroup', job(g)))).flatMap(r => r && r.res ? r.res : [r]);
+  const sum = k => res.reduce((a, r) => a + (r && +r[k] || 0), 0);
+  return {devices: rows.length, batches: batches.length, sent: sum('sent'), gone: sum('gone'), errors: res.filter(r => r && r.error).length};
+}
+/* Una tanda de la ronda: evalúa las alertas, movimientos y trades de unos pocos dispositivos y manda sus avisos */
+async function tickBatch(env, b) {
+  const S = storeOf(env), now = +b.now || Date.now(), prices = b.prices || {}, moves = b.moves || {};
+  const devs = (await S.getMany((b.ids || []).slice(0, 40))).filter(([, d]) => d && d.sub);
   const liveTrades = d => (d.trades || []).filter(t => !(t.m && t.m.done)).length && now - (d.syncAt || 0) < TRADE_TTL ? d.trades.filter(t => !(t.m && t.m.done)) : [];
-  const tradeKeys = [...new Set(devs.flatMap(([, d]) => liveTrades(d).map(t => t.k)))];
-  const needPrices = devs.some(([, d]) => (d.alerts || []).some(a => a.on)), needMoves = devs.some(([, d]) => d.move && d.move.on);
-  const spot = [...new Set(devs.flatMap(([, d]) => (d.alerts || []).filter(a => a.on && !a.symbol.includes('@')).map(a => a.symbol)))];
-  const prices = needPrices ? await spotPrices(spot).catch(() => ({})) : {};
-  if (needPrices) { const other = [...new Set(devs.flatMap(([, d]) => (d.alerts || []).filter(a => a.on && a.symbol.includes('@')).map(a => a.symbol)))]; if (other.length) Object.assign(prices, await otherPrices(other).catch(() => ({}))); }
-  if (tradeKeys.length) { // precios de las monedas en las que tienes un trade abierto (del mismo exchange si se puede)
-    const sp = tradeKeys.filter(k => !k.includes('@') && !(k in prices)), ot = tradeKeys.filter(k => k.includes('@') && !(k in prices));
-    if (sp.length) Object.assign(prices, await spotPrices(sp).catch(() => ({})));
-    if (ot.length) Object.assign(prices, await otherPrices(ot).catch(() => ({})));
-  }
-  const moves = {}; if (needMoves) await Promise.all(MOVE_TOP.map(s => closes1m(s).then(c => { moves[s] = c; }).catch(() => {})));
-  let sent = 0, gone = [];
-  { const hb = (await env.KV.get('hb', 'json')) || {}; if (now - (hb.at || 0) > 15 * 6e4) await env.KV.put('hb', JSON.stringify({at: now, devices: devs.length})); } // latido: la app puede ver que el servidor sí está revisando
+  let sent = 0; const gone = [], changedList = [];
   for (const [id, d] of devs) {
     const msgs = [], r = evalAlerts(d.alerts || [], prices, now, d.priceOn !== false); msgs.push(...r.fired); let changed = r.changed;
-    if (r.dc.length && dcAllow(d, 'price')) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of r.dc.slice(0, 5)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta de precio', description: m, color: 0x548fff}]})}); } catch (e) { console.warn('discord', e.message); } } }
+    if (r.dc.length && dcAllow(d, 'price')) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of r.dc.slice(0, 2)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta de precio', description: m, color: 0x548fff}]})}); } catch (e) { console.warn('discord', e.message); } } }
     if (d.move && d.move.on) { d.moveLast = d.moveLast || {}; for (const s of MOVE_TOP) if (moves[s]) { const m = moveCheck(s, moves[s], d.move.pct, d.moveLast, now); if (m.length) { msgs.push(...m); changed = true; } } }
     for (const t of liveTrades(d)) { // tus trades abiertos: escalones de ganancia/pérdida, cerca de TP/SL/liquidación, breakeven y tus niveles
-      t.m = t.m || {}; const r = TW.evalTrade(t, prices[t.k], t.m, now, {step: d.tradeStep, fmt, url: APP_URL});
-      if (r.changed) changed = true; msgs.push(...r.msgs);
+      t.m = t.m || {}; const r2 = TW.evalTrade(t, prices[t.k], t.m, now, {step: d.tradeStep, fmt, url: APP_URL});
+      if (r2.changed) changed = true; msgs.push(...r2.msgs);
     }
     if (d.testAt) { msgs.push({title: 'VORTEX · Prueba con la app cerrada', body: 'Si ves esto con VORTEX cerrada, tus avisos funcionan ✅', tag: 'test2', url: APP_URL + '#alerts'}); delete d.testAt; changed = true; }
     if (msgs.length) { // el cifrado de cada aviso corre en su propia llamada interna
-      let sts = []; try { sts = (await self(env, '/int/push', {id, msgs: msgs.slice(0, 8)})).sts || []; } catch (e) { sts = ['err: ' + String(e.message).slice(0, 60)]; }
+      let sts = []; try { sts = (await self(env, '/int/push', {id, sub: d.sub, msgs: msgs.slice(0, 8)})).sts || []; } catch (e) { sts = ['err: ' + String(e.message).slice(0, 60)]; }
       sent += sts.filter(x => x >= 200 && x < 300).length; if (sts.some(x => x === 404 || x === 410)) gone.push(id);
       d.lastPush = {at: now, st: sts[sts.length - 1], n: msgs.length, title: String(msgs[0].title || '').slice(0, 60)}; changed = true;
     }
-    if (changed) { d.updated = now; await env.KV.put('dev:' + id, JSON.stringify(d)); }
+    if (changed && !gone.includes(id)) { d.updated = now; changedList.push([id, d]); }
   }
-  if (gone.length) { // suscripción vencida (se desinstaló la app o se quitó el permiso)
-    for (const id of gone) await env.KV.delete('dev:' + id);
-    await env.KV.put('devs', JSON.stringify(ids.filter(x => !gone.includes(x))));
-  }
+  if (changedList.length) await S.putMany(changedList);
+  if (gone.length) await S.delMany(gone); // suscripción vencida (se desinstaló la app o se quitó el permiso)
   return {devices: devs.length, sent, gone: gone.length};
 }
+/* Reparte una lista de dispositivos en llamadas internas de «size» (y, si son muchísimos, en grupos que a su vez reparten) */
+const FAN_PATHS = new Set(['/int/pushmany', '/int/tickbatch', '/int/indbatch']);
+async function fanout(env, ids, size, path, extra = {}) {
+  const batches = chunkArr(ids, size);
+  if (batches.length <= FAN_DIRECT) return pool(batches, 6, b => self(env, path, {...extra, ids: b}));
+  return (await pool(chunkArr(ids, size * 20), 6, g => self(env, '/int/fan', {ids: g, size, path, extra}))).flatMap(r => r && r.res ? r.res : [r]);
+}
+const sumOf = (res, k) => (res || []).reduce((a, r) => a + (r && +r[k] || 0), 0);
 
 /* ───────── IA de VORTEX (Pollinations con TU clave secreta) ─────────
    La clave de Pollinations (producto gratuito) va aquí fija: cualquier persona usa la IA sin escribir claves ni datos.
@@ -444,38 +466,52 @@ export default {
       } catch (e) { return json({error: 'Exchange sin respuesta'}, 502); }
     }
     if (req.method === 'GET' && path === '/vapid') return json({key: (await vapidKeys(env)).pub});
-    if (req.method === 'POST' && path === '/plan/bingx') { // plan Infinity: ¿este UID abrió su cuenta de BingX con tu código? (API de afiliado; la llave nunca sale del servidor)
-      let b; try { b = JSON.parse((await req.text()).slice(0, 400)); } catch { return json({error: 'JSON inválido'}, 400); }
-      const r = await bingxInvite(env, b && b.uid); return json(r, r.error ? 400 : 200);
-    }
     if (req.method !== 'POST') return json({error: 'Método no permitido'}, 405);
     const raw = await req.text(); if (raw.length > 60000) return json({error: 'Demasiado grande'}, 413);
     let b; try { b = JSON.parse(raw); } catch { return json({error: 'JSON inválido'}, 400); }
+    if (!b || typeof b !== 'object') return json({error: 'JSON inválido'}, 400);
+    if (path === '/plan/bingx' || path === '/plan/youtube') return planRoute(req, env, path, b, json);
+    if (path === '/vault/seal' || path === '/vault/open') return vaultRoute(env, path, b, json);
     const id = String(b.id || ''); if (!/^[A-Za-z0-9_-]{16,64}$/.test(id)) return json({error: 'id inválido'}, 400); // id aleatorio del dispositivo (hace de contraseña)
-    const ids = (await env.KV.get('devs', 'json')) || [];
+    const S = storeOf(env);
     if (path === '/sync') {
-      if (b.off) { await env.KV.delete('dev:' + id); if (ids.includes(id)) await env.KV.put('devs', JSON.stringify(ids.filter(x => x !== id))); return json({ok: true, off: true}); }
-      const cur = (await env.KV.get('dev:' + id, 'json')) || {};
+      if (b.off) { await S.del(id); return json({ok: true, off: true}); }
+      const prev = await S.get(id), cur = prev || {}, now = Date.now();
       const sub = sanSub(b.sub) || cur.sub; if (!sub) return json({error: 'Falta la suscripción push'}, 400);
-      if (b.subOnly) { if (!cur.sub) return json({ok: false, error: 'Dispositivo sin registrar'}, 404); cur.sub = sub; cur.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(cur)); if (!ids.includes(id)) await env.KV.put('devs', JSON.stringify([...ids, id])); return json({ok: true}); } // el celular renovó su suscripción: se conservan alertas y ajustes
+      /* La cuenta del dispositivo SOLO se toma de un token de sesión verificado (antes cualquiera podía decir «soy tal uid»).
+         Sin token se conserva la que ya estaba verificada, y si la app dice otra cuenta o que cerraste sesión, se quita. */
+      const who = typeof b.idToken === 'string' && b.idToken ? await verifyIdToken(b.idToken) : null;
+      let uid = typeof cur.uid === 'string' ? cur.uid : '';
+      if (who) uid = who.uid; else if (typeof b.uid === 'string' && b.uid !== uid) uid = '';
+      if (b.subOnly) { if (!prev || !prev.sub) return json({ok: false, error: 'Dispositivo sin registrar'}, 404); cur.sub = sub; cur.uid = uid; cur.updated = now; await S.put(id, cur); return json({ok: true}); } // el celular renovó su suscripción: se conservan alertas y ajustes
+      let iph = '';
+      if (!prev) { // dispositivo nuevo: límites para que nadie llene el servidor con registros falsos
+        if (await S.count() >= S.max) return json({error: 'El servidor de avisos está lleno por ahora; inténtalo más tarde'}, 503);
+        iph = (await sha256('vx-ip:' + (req.headers.get('cf-connecting-ip') || ''))).slice(0, 24);
+        if (await S.newFromIp(iph, now - 864e5) >= MAX_NEW_PER_IP_DAY) return json({error: 'Demasiados registros nuevos desde tu red hoy; inténtalo mañana'}, 429);
+      }
+      if (uid && uid !== cur.uid) { // tope de dispositivos por cuenta: se suelta el más viejo (cambiaste de celular o de navegador)
+        const mine = (await S.ids('uid', uid)).filter(x => x !== id); if (mine.length >= MAX_PER_UID) await S.delMany(mine.slice(0, mine.length - MAX_PER_UID + 1));
+      }
       const incoming = (Array.isArray(b.alerts) ? b.alerts : []).map(sanAlert).filter(Boolean).slice(0, MAX_ALERTS);
       const m = mergeAlerts(incoming, cur.alerts, b.since);
       const d = {sub, lastPush: cur.lastPush, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dc: sanDc(b.dc, b.dcUrl), dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now(),
-        uid: typeof b.uid === 'string' && /^[A-Za-z0-9]{10,64}$/.test(b.uid) ? b.uid : (b.uid === '' ? '' : cur.uid || ''), bots: b.bots == null ? cur.bots !== false : b.bots !== false,
+        uid, bots: b.bots == null ? cur.bots !== false : b.bots !== false,
         trades: TW.merge(b.trades, cur.trades), indOn: b.indOn == null ? cur.indOn !== false : b.indOn !== false, tradeStep: TW.STEPS.includes(+b.tradeStep) ? +b.tradeStep : TW.DEF_STEP, syncAt: cur.syncAt || 0};
+      if (cur.testAt) d.testAt = cur.testAt; // una prueba «con la app cerrada» pendiente no se pierde al sincronizar
       const mi = b.ind === undefined ? {ind: cur.ind || [], back: []} : mergeInd(b.ind, cur.ind, b.since); d.ind = mi.ind;
-      if (d.trades.length && Date.now() - d.syncAt > 12 * 3600e3) d.syncAt = Date.now(); // la app sigue viendo esos trades abiertos (se renueva cada 12 h para no gastar escrituras)
+      if (d.trades.length && now - d.syncAt > 12 * 3600e3) d.syncAt = now; // la app sigue viendo esos trades abiertos (se renueva cada 12 h para no gastar escrituras)
       const noBar = x => ({...x, updated: 0, ind: (x.ind || []).map(a => ({...a, lastBar: 0}))}), barMoved = (d.ind || []).some(a => { const c = (cur.ind || []).find(y => y.id === a.id); return !c || a.lastBar - (c.lastBar || 0) > 6 * 3600e3; });
-      const same = !barMoved && JSON.stringify(noBar(d)) === JSON.stringify(noBar(cur)); // la vela revisada de las alertas con indicador cambia a cada rato: solo se guarda si cambió algo más (pocas escrituras)
-      if (!same) { d.updated = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(d)); } // sin cambios no se escribe (el plan gratis permite 1000 escrituras al día)
-      if (!ids.includes(id)) { if (ids.length >= MAX_DEVICES) return json({error: 'Demasiados dispositivos'}, 429); await env.KV.put('devs', JSON.stringify([...ids, id])); }
+      const same = prev && !barMoved && JSON.stringify(noBar(d)) === JSON.stringify(noBar(cur)); // la vela revisada de las alertas con indicador cambia a cada rato: solo se guarda si cambió algo más
+      if (!same) { d.updated = now; await S.put(id, d, {iph}); if (!prev && S.noteIp) S.noteIp(iph); }
       const hb = (await env.KV.get('hb', 'json')) || {};
-      return json({ok: true, back: m.back, backInd: mi.back, now: Date.now(), srv: {hb: hb.at || 0, lastPush: cur.lastPush || null}});
+      return json({ok: true, back: m.back, backInd: mi.back, now, verified: !!who, srv: {hb: hb.at || 0, lastPush: cur.lastPush || null}});
     }
-    if (path === '/pull') { const cur = await env.KV.get('dev:' + id, 'json'); return json({ok: true, active: !!cur, alerts: cur ? cur.alerts : [], now: Date.now()}); }
+    if (path === '/pull') { const cur = await S.get(id); return json({ok: true, active: !!cur, alerts: cur ? cur.alerts : [], now: Date.now()}); }
     if (path === '/test') {
-      const cur = await env.KV.get('dev:' + id, 'json'); if (!cur || !cur.sub) return json({error: 'Este dispositivo no está registrado'}, 404);
-      if (b.later) { cur.testAt = Date.now(); await env.KV.put('dev:' + id, JSON.stringify(cur)); return json({ok: true, later: true}); } // la manda la próxima revisión del servidor (≤1 min): da tiempo de cerrar la app
+      const cur = await S.get(id); if (!cur || !cur.sub) return json({error: 'Este dispositivo no está registrado'}, 404);
+      if (b.later) { cur.testAt = Date.now(); await S.put(id, cur); return json({ok: true, later: true}); } // la manda la próxima revisión del servidor (≤1 min): da tiempo de cerrar la app
+      if (!testAllowed(id)) return json({error: 'Espera un momento antes de otra prueba'}, 429);
       const st = await sendPush(cur.sub, {title: 'VORTEX · Prueba', body: 'Las notificaciones con la app cerrada funcionan ✅', tag: 'test', url: APP_URL + '#alerts'}, await vapidKeys(env));
       return json({ok: st >= 200 && st < 300, status: st});
     }
@@ -486,9 +522,10 @@ export default {
     ctx.waitUntil(tick(env, now).then(r => console.log('ronda', JSON.stringify(r))).catch(e => console.error('ronda', e.message)));
     ctx.waitUntil(scrKick(env, now).catch(e => console.error('screener', e.message)));
     ctx.waitUntil(domKick(env, now).catch(e => console.error('dominancia', e.message)));
+    if (new Date(now).getUTCHours() === 9 && new Date(now).getUTCMinutes() === 17) ctx.waitUntil(storeOf(env).prune(now - 60 * 864e5).then(n => console.log('limpieza', n)).catch(e => console.error('limpieza', e.message))); // una vez al día: registros abandonados (60 días sin abrir la app y sin nada encendido)
   }
 };
-export {tick, domKick, domRun};
+export {tick, tickBatch, domKick, domRun};
 
 /* ───────── Dominancia puntual cada 15 min (USDT.D, BTC.D) ─────────
    GitHub corre «Actualizar dominancia» cuando quiere (a veces cada 5–9 h), así que la muestra de cada cuarto de hora se toma aquí,
@@ -509,6 +546,77 @@ async function domRun(env, now = Date.now()) {
   return {ok: true, usdt: +cur.usdt.toFixed(4), btc: +cur.btc.toFixed(4)};
 }
 
+/* ───────── Planes verificados en el servidor ─────────
+   El plan ya no lo decide la app: el servidor comprueba tu sesión (token de Firebase), verifica con BingX o YouTube
+   y escribe el resultado en plans/{uid} de Firestore (las reglas no dejan que nadie más lo escriba).
+   Con ese plan Firestore deja leer el código de los indicadores Nova Nexus PRO, y la app lo lee para desbloquear lo demás. */
+const RANKS = {free: 0, plus: 1, infinity: 2};
+const hitsMem = new Map(); // límites por cuenta/IP en memoria (no gastan escrituras)
+function allowHit(key, max, winMs, now = Date.now()) { const h = (hitsMem.get(key) || []).filter(t => now - t < winMs); if (h.length >= max) { hitsMem.set(key, h); return false; } h.push(now); hitsMem.set(key, h); if (hitsMem.size > 20000) hitsMem.clear(); return true; }
+const testAllowed = id => allowHit('test:' + id, 3, 60e3);
+export async function planUpgrade(sa, uid, tier, extra, fetchFn = fetch) {
+  const cur = (await fsGet(sa, 'plans/' + uid, fetchFn)) || {}, keep = RANKS[cur.tier] > RANKS[tier] ? cur.tier : tier;
+  await fsMerge(sa, 'plans/' + uid, Object.assign({}, extra, {tier: keep, at: Date.now()}), fetchFn);
+  return keep;
+}
+export async function planRoute(req, env, path, b, json, fetchFn = fetch) {
+  const who = await verifyIdToken(b.idToken, {fetchFn}); if (!who) return json({ok: false, error: 'Inicia sesión con Google para verificar tu plan', login: true}, 401);
+  if (!allowHit('plan:' + who.uid, 6, 60e3)) return json({ok: false, error: 'Demasiados intentos; espera un minuto'}, 429);
+  const sa = saOf(env); if (!sa) return json({ok: false, setup: true, error: 'El servidor aún no puede guardar planes'}, 503);
+  const S = storeOf(env);
+  if (path === '/plan/bingx') {
+    const bx = String(b.uid == null ? '' : b.uid).replace(/\D/g, ''); if (!/^\d{6,14}$/.test(bx)) return json({ok: false, error: 'UID inválido'}, 400);
+    const claim = await S.mget('bx:' + bx); if (claim && claim.uid && claim.uid !== who.uid) return json({ok: false, invited: false, taken: true, error: 'Ese UID de BingX ya activó Infinity en otra cuenta'}, 409);
+    const r = await bingxInvite(env, bx, fetchFn); if (r.error) return json({ok: false, error: r.error}, 400);
+    if (!r.ok || !r.invited) return json(r);
+    await S.mset('bx:' + bx, {uid: who.uid, at: Date.now()});
+    const tier = await planUpgrade(sa, who.uid, 'infinity', {bx, bxOk: Date.now()}, fetchFn);
+    return json({ok: true, invited: true, tier});
+  }
+  // /plan/youtube: el token de YouTube (solo lectura) que dio Google en tu dispositivo; el servidor pregunta a YouTube si estás suscrito
+  const yt = String(b.ytToken || ''); if (!yt || yt.length > 4096) return json({ok: false, error: 'Falta el permiso de YouTube'}, 400);
+  try {
+    const ti = await (await fetchFn('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(yt))).json();
+    if (!ti || ti.error || !String(ti.scope || '').includes('youtube')) return json({ok: false, error: 'Google no dio permiso para ver tus suscripciones'}, 400);
+    if (ti.email && who.email && String(ti.email).toLowerCase() !== who.email.toLowerCase()) return json({ok: false, error: 'Usa la misma cuenta de Google con la que iniciaste sesión'}, 400);
+    const call = async u => { const r = await fetchFn('https://www.googleapis.com/youtube/v3/' + u, {headers: {authorization: 'Bearer ' + yt}}); const j = await r.json(); if (!r.ok) throw Error((j.error && j.error.message) || 'YouTube no respondió'); return j; };
+    let ch = await S.mget('ytch'); if (!ch) { const c = await call('channels?part=id&forHandle=' + YT_HANDLE); ch = c.items && c.items[0] && c.items[0].id; if (!ch) throw Error('No se encontró el canal'); await S.mset('ytch', ch); }
+    const sub = await call(`subscriptions?part=id&mine=true&forChannelId=${encodeURIComponent(ch)}`);
+    if (!(sub.items && sub.items.length)) return json({ok: true, subscribed: false});
+    const tier = await planUpgrade(sa, who.uid, 'plus', {yt: Date.now()}, fetchFn);
+    return json({ok: true, subscribed: true, tier});
+  } catch (e) { return json({ok: false, error: 'No se pudo verificar: ' + String(e && e.message || e).slice(0, 120)}, 502); }
+}
+const YT_HANDLE = 'CriptoChaman';
+
+/* ───────── Bóveda de claves de exchange ─────────
+   Tu API Key y Secret se guardan en tu cuenta CIFRADOS (AES-256-GCM) con una llave que solo vive en este servidor y atados a tu uid:
+   en Firestore ya no queda la clave en texto plano (ni la ven los procesos automáticos ni nadie que viera la base).
+   Para abrirlos hay que tener tu sesión de Google verificada. */
+let vaultMem = null;
+function vaultKey(env) {
+  if (vaultMem && vaultMem.kv === env.KV) return vaultMem.p;
+  const p = (async () => {
+    let raw = env.VAULT_KEY || await env.KV.get('vault');
+    if (!raw) { raw = b64u(crypto.getRandomValues(new Uint8Array(32))); await env.KV.put('vault', raw); }
+    return crypto.subtle.importKey('raw', unb64u(raw), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  })();
+  vaultMem = {kv: env.KV, p}; p.catch(() => { if (vaultMem && vaultMem.p === p) vaultMem = null; }); return p;
+}
+export async function vaultRoute(env, path, b, json, fetchFn = fetch) {
+  const who = await verifyIdToken(b.idToken, {fetchFn}); if (!who) return json({ok: false, error: 'Sesión no válida', login: true}, 401);
+  if (!allowHit('vault:' + who.uid, 20, 60e3)) return json({ok: false, error: 'Demasiadas consultas; espera un minuto'}, 429);
+  const key = await vaultKey(env), aad = enc.encode('vortex-vault-v1:' + who.uid);
+  if (path === '/vault/seal') {
+    const data = typeof b.data === 'string' ? b.data : ''; if (!data || data.length > 8000) return json({ok: false, error: 'Datos inválidos'}, 400);
+    const iv = crypto.getRandomValues(new Uint8Array(12)), ct = await crypto.subtle.encrypt({name: 'AES-GCM', iv, additionalData: aad}, key, enc.encode(data));
+    return json({ok: true, box: 'v1.' + b64u(iv) + '.' + b64u(ct)});
+  }
+  const m = /^v1\.([\w-]{16})\.([\w-]{20,12000})$/.exec(String(b.box || '')); if (!m) return json({ok: false, error: 'Caja inválida'}, 400);
+  try { const pt = await crypto.subtle.decrypt({name: 'AES-GCM', iv: unb64u(m[1]), additionalData: aad}, key, unb64u(m[2])); return json({ok: true, data: new TextDecoder().decode(pt)}); }
+  catch { return json({ok: false, error: 'No se pudo abrir (¿otra cuenta?)'}, 403); }
+}
+
 /* ───────── Nova Bot Lab: avisos de tus bots con la app cerrada ─────────
    El paper trading de tus bots corre cada hora en GitHub Actions (scripts/botlab-retrain.js). Cuando un bot compra, vende o cierra,
    el script llama aquí con la llave BOT_PUSH_KEY (secreto del Worker que se deriva de FIREBASE_SERVICE_ACCOUNT al publicarlo)
@@ -520,10 +628,10 @@ async function botPush(req, env) {
   const uid = String(b.uid || ''); if (!/^[A-Za-z0-9]{10,64}$/.test(uid)) return J({error: 'uid inválido'}, 400);
   const msgs = (Array.isArray(b.msgs) ? b.msgs : []).slice(0, 6).map(m => ({title: String(m.title || 'VORTEX').slice(0, 80), body: String(m.body || '').slice(0, 300), tag: String(m.tag || 'bot').slice(0, 80), url: APP_URL + '#bots'})).filter(m => m.body);
   if (!msgs.length) return J({ok: true, sent: 0});
-  const ids = (await env.KV.get('devs', 'json')) || []; let sent = 0, devices = 0;
-  for (const id of ids) {
-    const d = await env.KV.get('dev:' + id, 'json'); if (!d || !d.sub || d.uid !== uid || d.bots === false) continue; devices++;
-    try { const sts = (await self(env, '/int/push', {id, msgs})).sts || []; sent += sts.filter(x => x >= 200 && x < 300).length; } catch (e) { console.warn('bot-push', e.message); }
+  const S = storeOf(env); let sent = 0, devices = 0;
+  for (const [id, d] of await S.getMany(await S.ids('uid', uid))) { // solo los celulares donde esa cuenta inició sesión (uid verificado)
+    if (!d || !d.sub || d.uid !== uid || d.bots === false) continue; devices++;
+    try { const sts = (await self(env, '/int/push', {id, sub: d.sub, msgs})).sts || []; sent += sts.filter(x => x >= 200 && x < 300).length; } catch (e) { console.warn('bot-push', e.message); }
   }
   return J({ok: true, devices, sent});
 }
@@ -552,18 +660,24 @@ async function scrExt(req, env) {
 
 /* ───────── Alertas con indicador con la app cerrada (las calcula scripts/ind-alerts.js en GitHub Actions) ───────── */
 async function indRoute(req, env, path) {
-  let b; try { b = JSON.parse((await req.text()).slice(0, 200000)); } catch { return J({error: 'JSON inválido'}, 400); }
+  let b; try { b = JSON.parse((await req.text()).slice(0, 400000)); } catch { return J({error: 'JSON inválido'}, 400); }
   if (!env.BOT_PUSH_KEY || !sameKey(b && b.key, env.BOT_PUSH_KEY)) return J({error: 'No autorizado'}, 401);
-  const ids = (await env.KV.get('devs', 'json')) || [];
-  if (path === '/ind/jobs') { // alertas encendidas de cada celular (con el uid de la cuenta para leer sus scripts Pine)
-    const devs = []; for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (!d || !d.sub) continue; const alerts = (d.ind || []).filter(a => a.on); if (alerts.length) devs.push({dev: id, uid: d.uid || '', alerts}); }
-    return J({ok: true, devs, now: Date.now()});
+  const S = storeOf(env);
+  if (path === '/ind/jobs') { // alertas encendidas de cada celular (con el uid verificado de la cuenta para leer sus scripts Pine), por páginas
+    const all = await S.ids('ind'), from = Math.max(0, +b.from || 0), lim = b.from == null ? all.length : Math.min(150, Math.max(1, +b.limit || 100));
+    const devs = []; for (const [id, d] of await S.getMany(all.slice(from, from + lim))) { if (!d || !d.sub) continue; const alerts = (d.ind || []).filter(a => a.on); if (alerts.length) devs.push({dev: id, uid: d.uid || '', alerts}); }
+    return J({ok: true, devs, next: from + lim < all.length ? from + lim : null, total: all.length, now: Date.now()});
   }
-  // /ind/report: {results: [{dev, id, lastBar, hit, info}]} → se guarda la vela revisada y, si saltó, se avisa
-  const by = new Map(); for (const r of (Array.isArray(b.results) ? b.results : []).slice(0, 500)) if (r && ids.includes(r.dev)) (by.get(r.dev) || by.set(r.dev, []).get(r.dev)).push(r);
-  let sent = 0, fired = 0; const now = Date.now();
-  for (const [id, rs] of by) {
-    const d = await env.KV.get('dev:' + id, 'json'); if (!d || !d.sub) continue; const msgs = [], dc = []; let changed = false;
+  // /ind/report: {results: [{dev, id, lastBar, hit, info}]} → se reparte por dispositivo en tandas (cada una guarda la vela revisada y avisa)
+  const by = new Map(); for (const r of (Array.isArray(b.results) ? b.results : []).slice(0, 2000)) if (r && typeof r.dev === 'string') (by.get(r.dev) || by.set(r.dev, []).get(r.dev)).push(r);
+  const ids = [...by.keys()]; if (!ids.length) return J({ok: true, fired: 0, sent: 0});
+  const res = await fanout(env, ids, PUSH_BATCH, '/int/indbatch', {rs: Object.fromEntries(by)});
+  return J({ok: true, fired: sumOf(res, 'fired'), sent: sumOf(res, 'sent')});
+}
+async function indBatch(env, b) {
+  const S = storeOf(env), now = Date.now(), all = b.rs || {}; let sent = 0, fired = 0; const changedList = [];
+  for (const [id, d] of await S.getMany((b.ids || []).slice(0, 40))) {
+    if (!d || !d.sub) continue; const rs = Array.isArray(all[id]) ? all[id] : [], msgs = [], dc = []; let changed = false;
     for (const r of rs) {
       const a = (d.ind || []).find(x => x.id === r.id); if (!a || !a.on || !(+r.lastBar > (a.lastBar || 0))) continue; // la app ya revisó esa vela (o la alerta se apagó)
       if (!r.hit) { if (+r.lastBar - (a.lastBar || 0) > 6 * 3600e3) { a.lastBar = +r.lastBar; changed = true; } continue; } // sin aviso: solo se anota de vez en cuando (pocas escrituras)
@@ -572,16 +686,22 @@ async function indRoute(req, env, path) {
       if (n !== 'discord' && d.indOn !== false) msgs.push({title: 'VORTEX · Alerta', body: text, tag: 'in-' + a.id, url: APP_URL + '#alerts'});
       if (n !== 'app' && dcAllow(d, 'ind')) dc.push(text);
     }
-    if (msgs.length) { try { const sts = (await self(env, '/int/push', {id, msgs})).sts || []; sent += sts.filter(x => x >= 200 && x < 300).length; } catch (e) { console.warn('ind push', e.message); } }
-    if (dc.length) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of dc.slice(0, 5)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta con indicador', description: m, color: 0xb07cff}]})}); } catch {} } }
-    if (changed) { d.updated = now; await env.KV.put('dev:' + id, JSON.stringify(d)); }
+    if (msgs.length) { try { const sts = (await self(env, '/int/push', {id, sub: d.sub, msgs})).sts || []; sent += sts.filter(x => x >= 200 && x < 300).length; } catch (e) { console.warn('ind push', e.message); } }
+    if (dc.length) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of dc.slice(0, 2)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta con indicador', description: m, color: 0xb07cff}]})}); } catch {} } }
+    if (changed) { d.updated = now; changedList.push([id, d]); }
   }
-  return J({ok: true, fired, sent});
+  if (changedList.length) await S.putMany(changedList);
+  return {fired, sent};
 }
 
 /* ───────── Screener programado (ver worker/screener.mjs) ───────── */
 const J = (o, status = 200) => new Response(JSON.stringify(o), {status, headers: {'content-type': 'application/json'}});
-async function intToken(env) { let t = await env.KV.get('int'); if (!t) { t = b64u(crypto.getRandomValues(new Uint8Array(24))); await env.KV.put('int', t); } return t; }
+let intMem = null; // en memoria: no se lee el KV en cada llamada interna
+function intToken(env) { // una sola promesa por instancia: varias llamadas a la vez no crean tokens distintos
+  if (intMem && intMem.kv === env.KV) return intMem.p;
+  const p = (async () => { let t = await env.KV.get('int'); if (!t) { t = b64u(crypto.getRandomValues(new Uint8Array(24))); await env.KV.put('int', t); } return t; })();
+  intMem = {kv: env.KV, p}; p.catch(() => { if (intMem && intMem.p === p) intMem = null; }); return p;
+}
 // llamada interna: por el enlace a sí mismo (cada llamada tiene su propio límite de CPU); si no existe, en la misma ejecución
 async function self(env, path, body) {
   const tok = await intToken(env), init = {method: 'POST', headers: {'content-type': 'application/json', 'x-vx-int': tok}, body: JSON.stringify(body || {})};
@@ -597,24 +717,33 @@ async function scrKick(env, now = Date.now()) {
 }
 async function pool(items, n, fn) { const out = []; let k = 0; await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => { while (k < items.length) { const i = k++; out[i] = await fn(items[i]).catch(e => ({error: e.message})); } })); return out; }
 async function scrInternal(req, env, path) {
-  if (req.headers.get('x-vx-int') !== await intToken(env)) return J({error: 'No autorizado'}, 403);
+  if (!sameKey(req.headers.get('x-vx-int'), await intToken(env))) return J({error: 'No autorizado'}, 403);
   let b = {}; try { b = await req.json(); } catch {}
   const tf = b.tf === '4h' ? '4h' : '1h', now = +b.now || Date.now();
   if (path === '/int/dom') return J(await domRun(env, now));
-  if (path === '/int/push') { // manda los avisos de UN dispositivo
-    const d = await env.KV.get('dev:' + b.id, 'json'); if (!d || !d.sub) return J({sts: [404]});
-    const v = await vapidKeys(env), sts = []; for (const m of (b.msgs || []).slice(0, 8)) { try { const st = await sendPush(d.sub, m, v); sts.push(st); if (st === 404 || st === 410) break; } catch (e) { sts.push('err: ' + String(e.message).slice(0, 60)); } }
+  if (path === '/int/push') { // manda los avisos de UN dispositivo (la suscripción viene en la llamada; si no, se lee)
+    const sub = (b.sub && sanSub(b.sub)) || ((await storeOf(env).get(String(b.id || ''))) || {}).sub; if (!sub) return J({sts: [404]});
+    const v = await vapidKeys(env), sts = []; for (const m of (b.msgs || []).slice(0, 8)) { try { const st = await sendPush(sub, m, v); sts.push(st); if (st === 404 || st === 410) break; } catch (e) { sts.push('err: ' + String(e.message).slice(0, 60)); } }
     return J({sts});
   }
+  if (path === '/int/tickbatch') return J(await tickBatch(env, b));
+  if (path === '/int/tickgroup') { const res = await pool(chunkArr(b.ids || [], TICK_BATCH), 6, ids => self(env, '/int/tickbatch', {ids, prices: b.prices, moves: b.moves, now: b.now})); return J({res}); }
+  if (path === '/int/indbatch') return J(await indBatch(env, b));
+  if (path === '/int/fan') { if (!FAN_PATHS.has(b.path)) return J({error: 'ruta'}, 400); const res = await pool(chunkArr(b.ids || [], Math.max(1, +b.size || PUSH_BATCH)), 6, ids => self(env, b.path, {...(b.extra || {}), ids})); return J({res}); }
+  if (path === '/int/pushmany') { // un mismo aviso a una tanda de dispositivos
+    const S = storeOf(env), v = await vapidKeys(env), gone = []; let sent = 0;
+    for (const [id, d] of await S.getMany((b.ids || []).slice(0, 40))) { if (!d || !d.sub) continue; try { const s0 = await sendPush(d.sub, b.msg, v); if (s0 < 300) sent++; else if (s0 === 404 || s0 === 410) gone.push(id); } catch {} }
+    if (gone.length) await S.delMany(gone);
+    return J({sent, gone: gone.length});
+  }
   if (path === '/radar/push') { // grandes oportunidades: solo a los celulares que encendieron el radar
-    const ids = (await env.KV.get('devs', 'json')) || []; let sent = 0; const v = await vapidKeys(env);
-    for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (!d || !d.sub || !d.radar) continue; try { const s0 = await sendPush(d.sub, b.msg, v); if (s0 < 300) sent++; } catch {} }
-    return J({sent});
+    const res = await fanout(env, await storeOf(env).ids('radar'), PUSH_BATCH, '/int/pushmany', {msg: b.msg});
+    return J({sent: sumOf(res, 'sent')});
   }
   if (path.startsWith('/radar/')) {
     const h = {self: (p, body) => self(env, p, body), pool, appUrl: APP_URL, aiKey: () => aiKey(env),
-      anyRadarDc: async () => { const ids = (await env.KV.get('devs', 'json')) || []; for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (d && d.radar && dcAllow(d, 'on')) return true; } return false; },
-      anyRadar: async () => { const ids = (await env.KV.get('devs', 'json')) || []; for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (d && d.radar) return true; } return false; },
+      anyRadarDc: async () => { const S = storeOf(env); for (const part of chunkArr(await S.ids('radar'), 30)) for (const [, d] of await S.getMany(part)) if (d && d.radar && dcAllow(d, 'on')) return true; return false; },
+      anyRadar: async () => storeOf(env).any('radar'),
       discord: async (t, op) => { if (!(await h.anyRadarDc())) return false; return SCR.postDiscord(String(env.DISCORD_WEBHOOK || '').trim(), [{title: '🛰️ ' + t.title, description: t.body + '\n_Radar de Nexus Pixel · no es asesoría financiera._', color: op.side === 'buy' ? 0x089981 : 0xf23645, timestamp: new Date().toISOString()}]); }};
     try { const r = await radarInternal(path, b, env, h); return r ? J(r) : J({error: 'No encontrado'}, 404); } catch (e) { return J({error: String(e && e.message || e).slice(0, 200)}, 500); }
   }
@@ -624,10 +753,9 @@ async function scrInternal(req, env, path) {
     for (const t of (b.syms || []).slice(0, 6)) { try { const sg = await SCR.scanOne(t.symbol, tf, now); if (sg) rows.push({symbol: t.symbol, price: Number.isFinite(sg.price) ? sg.price : t.price, sg}); } catch (e) { fail.push(t); } }
     return J({rows, fail});
   }
-  if (path === '/scr/push') { // notificación a los celulares que activaron las señales del Screener
-    const ids = (await env.KV.get('devs', 'json')) || []; let sent = 0; const v = await vapidKeys(env), msg = b.msg;
-    for (const id of ids) { const d = await env.KV.get('dev:' + id, 'json'); if (!d || !d.sub || !d.scr || !d.scr.on || d.scr[tf === '1h' ? 'h1' : 'h4'] === false) continue; try { const s0 = await sendPush(d.sub, msg, v); if (s0 < 300) sent++; } catch {} }
-    return J({sent});
+  if (path === '/scr/push') { // notificación a los celulares que activaron las señales del Screener (en tandas: aguanta miles)
+    const res = await fanout(env, await storeOf(env).ids('scr', tf), PUSH_BATCH, '/int/pushmany', {msg: b.msg});
+    return J({sent: sumOf(res, 'sent')});
   }
   if (path === '/scr/run') {
     const st = (await env.KV.get('scr', 'json')) || {}, slot = SCR.slotOf(tf, now);

@@ -6,7 +6,7 @@ name: Publicar servidor de avisos (vortex-push)
 on:
   push:
     branches: [main]
-    paths: ['worker/push-alerts.mjs', 'worker/memoria.mjs', 'worker/screener.mjs', 'worker/radar-server.mjs', 'radar.js', 'trade-watch.js', 'scripts/bot-push-key.js', 'alert-eval.js', 'worker/wrangler-push.toml', 'nova-nexus.js', 'discord-format.js', 'dominance-core.js', '.github/workflows/deploy-push-worker.yml']
+    paths: ['worker/push-alerts.mjs', 'worker/devstore.mjs', 'worker/fbauth.mjs', 'worker/memoria.mjs', 'worker/screener.mjs', 'worker/radar-server.mjs', 'radar.js', 'trade-watch.js', 'scripts/bot-push-key.js', 'alert-eval.js', 'worker/wrangler-push.toml', 'nova-nexus.js', 'discord-format.js', 'dominance-core.js', '.github/workflows/deploy-push-worker.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22}
       - name: Pruebas del Worker
-        run: node --test tests/memoria.test.js tests/push-worker.test.js tests/worker-screener.test.js tests/radar.test.js tests/radar-server.test.js tests/alerts-exchanges.test.js tests/ind-alerts.test.js
+        run: node --test tests/memoria.test.js tests/push-worker.test.js tests/worker-screener.test.js tests/radar.test.js tests/radar-server.test.js tests/alerts-exchanges.test.js tests/ind-alerts.test.js tests/push-scale-security.test.js
       - name: Publicar en Cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -35,7 +35,12 @@ jobs:
             echo "Falta el secreto CLOUDFLARE_API_TOKEN (Settings → Secrets and variables → Actions). No se publica nada."; exit 0
           fi
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
-          npx --yes wrangler@4 deploy --config worker/wrangler-push.toml
+          # con la base D1 (miles de celulares); si el token no tiene permiso de D1, se publica sin ella (el Worker usa el KV)
+          if ! npx --yes wrangler@4 deploy --config worker/wrangler-push.toml; then
+            echo "::warning::No se pudo publicar con la base D1 (¿el token de Cloudflare no tiene permiso «D1 Edit»?). Se publica con el KV: máx. 40 celulares."
+            sed '/# >>> D1/,/# <<< D1/d' worker/wrangler-push.toml > worker/wrangler-push-kv.toml
+            npx --yes wrangler@4 deploy --config worker/wrangler-push-kv.toml
+          fi
           # el webhook del canal #vortex pasa del secreto de GitHub al del servidor (nunca queda en el código)
           if [ -n "$DISCORD_WEBHOOK" ]; then printf '%s' "$DISCORD_WEBHOOK" | npx --yes wrangler@4 secret put DISCORD_WEBHOOK --config worker/wrangler-push.toml; fi
           # plan Infinity: llave de AFILIADO de BingX (solo lectura) para comprobar que el UID entró con tu código
@@ -44,4 +49,6 @@ jobs:
           # IA gratis de respaldo (Groq): solo si existe el secreto GROQ_KEY
           # avisos de tus bots (Nova Bot Lab) a tu celular: llave compartida con el paper trading, derivada de FIREBASE_SERVICE_ACCOUNT
           BPK="$(node scripts/bot-push-key.js)"; if [ -n "$BPK" ]; then printf '%s' "$BPK" | npx --yes wrangler@4 secret put BOT_PUSH_KEY --config worker/wrangler-push.toml; fi
+          # planes verificados en el servidor: la cuenta de servicio escribe plans/{uid} en Firestore (la app ya no puede darse un plan sola)
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then printf '%s' "$FIREBASE_SERVICE_ACCOUNT" | npx --yes wrangler@4 secret put FB_SA --config worker/wrangler-push.toml; fi
           if [ -n "$GROQ_KEY" ]; then printf '%s' "$GROQ_KEY" | npx --yes wrangler@4 secret put GROQ_KEY --config worker/wrangler-push.toml; fi

@@ -205,9 +205,21 @@
   /* ───────── verificación ───────── */
   const msgEl = k => ov && ov.querySelector(k === 'yt' ? '[data-pl-ytmsg]' : '[data-pl-uidmsg]');
   const say = (k, t, bad) => { const m = msgEl(k); if (m) { m.textContent = t; m.classList.toggle('bad', !!bad); } };
-  function grant(tier, extra) { // guarda el plan verificado (en este dispositivo y en tu cuenta, para tus otros dispositivos)
+  /* El plan lo verifica y lo guarda el SERVIDOR en plans/{tu uid} (Firestore no deja que la app lo escriba).
+     La app solo lo lee de ahí: ya no basta con escribir «infinity» en el navegador para desbloquear, y con ese mismo plan
+     Firestore deja leer el código de los indicadores Nova Nexus PRO. */
+  const idToken = async () => { try { const P = root.CCTCloudPriv; return P && P.token ? await P.token() : ''; } catch { return ''; } };
+  async function refreshServer() {
+    const fb = root.firebase; if (!user || !fb || !fb.firestore) return;
+    try {
+      const sn = await fb.firestore().doc('plans/' + user.uid).get(), d = sn.exists ? sn.data() || {} : {}, t = TIERS[d.tier] ? d.tier : 'free';
+      if (st.uid !== user.uid || st.tier !== t || !st.srv) { st = Object.assign(st, {tier: t, uid: user.uid, at: Date.now(), srv: 1}); save(st); badge(); if (ov && !ov.hidden) render(); }
+    } catch {} // sin conexión: se queda el último plan leído del servidor para esta cuenta
+  }
+  function grant(tier, extra) { // el servidor ya lo guardó en tu cuenta: aquí solo se refleja y se vuelve a leer
     if (RANK[tier] < RANK[st.tier || 'free'] && st.uid === (user && user.uid)) tier = st.tier;
-    st = Object.assign(st, extra || {}, {tier, uid: user ? user.uid : '', at: Date.now()}); save(st); persist(); badge(); if (ov && !ov.hidden) render();
+    st = Object.assign(st, extra || {}, {tier, uid: user ? user.uid : '', at: Date.now(), srv: 1}); save(st); persist(); badge(); if (ov && !ov.hidden) render();
+    refreshServer();
   }
   async function verifyYouTube() {
     const fb = root.firebase; if (!user || !fb || !fb.auth) { toast('Inicia sesión con Google primero'); return; }
@@ -216,28 +228,27 @@
       const p = new fb.auth.GoogleAuthProvider(); p.addScope('https://www.googleapis.com/auth/youtube.readonly'); p.setCustomParameters({login_hint: user.email || ''});
       const cu = fb.auth().currentUser; const res = await (cu.reauthenticateWithPopup ? cu.reauthenticateWithPopup(p) : fb.auth().signInWithPopup(p));
       const tok = res && res.credential && res.credential.accessToken; if (!tok) throw Error('Google no dio permiso para ver tus suscripciones');
-      say('yt', 'Revisando tu suscripción…');
-      const yt = async u => { const r = await fetch('https://www.googleapis.com/youtube/v3/' + u, {headers: {authorization: 'Bearer ' + tok}}); const j = await r.json(); if (!r.ok) throw Error((j.error && j.error.message) || 'YouTube no respondió'); return j; };
-      let ch = st.ytCh; if (!ch) { const c = await yt(`channels?part=id&forHandle=${YT_HANDLE}`); ch = c.items && c.items[0] && c.items[0].id; if (!ch) throw Error('No se encontró el canal'); st.ytCh = ch; }
-      const sub = await yt(`subscriptions?part=id&mine=true&forChannelId=${ch}`);
-      if (sub.items && sub.items.length) { grant('plus', {yt: Date.now()}); toast('Plus activado · gracias por suscribirte'); }
-      else say('yt', 'Aún no apareces como suscriptor. Suscríbete con esta misma cuenta y vuelve a verificar.', true);
+      say('yt', 'Revisando tu suscripción…'); // la revisión la hace el servidor con ese permiso de solo lectura (y guarda el plan en tu cuenta)
+      const r = await fetch(SRV + '/plan/youtube', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({ytToken: tok, idToken: await idToken()})}), j = await r.json().catch(() => ({}));
+      if (j.ok && j.subscribed) { grant(j.tier || 'plus', {yt: Date.now()}); toast('Plus activado · gracias por suscribirte'); }
+      else if (j.ok) say('yt', 'Aún no apareces como suscriptor. Suscríbete con esta misma cuenta y vuelve a verificar.', true);
+      else throw Error(j.error || 'el servidor no respondió');
     } catch (e) { if (!/popup-closed|cancelled-popup/.test(e && e.code || '')) say('yt', 'No se pudo verificar: ' + (e.message || e.code || e), true); else say('yt', ''); }
   }
   async function verifyBingx(uid) {
     say('bx', 'Verificando con BingX…');
     try {
-      const r = await fetch(SRV + '/plan/bingx', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({uid})}); const j = await r.json();
-      if (j.invited) { grant('infinity', {bx: uid, bxOk: Date.now()}); toast('Infinity activado · bienvenido'); return; }
-      persist(); say('bx', j.setup ? 'UID guardado. La verificación con BingX se activará muy pronto.' : j.ok ? 'Ese UID no aparece registrado con el código ' + BX_CODE + '.' : 'BingX no respondió: inténtalo en un rato.', !j.setup);
+      const r = await fetch(SRV + '/plan/bingx', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({uid, idToken: await idToken()})}); const j = await r.json();
+      if (j.invited) { grant(j.tier || 'infinity', {bx: uid, bxOk: Date.now()}); toast('Infinity activado · bienvenido'); return; }
+      persist(); say('bx', j.taken ? 'Ese UID de BingX ya activó Infinity en otra cuenta de VORTEX.' : j.login ? 'Inicia sesión con Google primero.' : j.setup ? 'UID guardado. La verificación con BingX se activará muy pronto.' : j.ok ? 'Ese UID no aparece registrado con el código ' + BX_CODE + '.' : (j.error || 'BingX no respondió: inténtalo en un rato.'), !j.setup);
     } catch { persist(); say('bx', 'UID guardado. No se pudo conectar con el servidor: inténtalo más tarde.', true); }
   }
   const exportPlan = () => ({tier: st.tier || 'free', uid: st.uid || '', at: st.at || 0, yt: st.yt || 0, bx: st.bx || '', bxOk: st.bxOk || 0});
   function persist() { if (root.CCT_planSave) try { root.CCT_planSave(exportPlan()); } catch {} }
-  function importSaved(p) { // el plan que viaja en tu cuenta (verificado en otro dispositivo)
-    if (!p || typeof p !== 'object' || !TIERS[p.tier] || !user || (p.uid && p.uid !== user.uid)) return;
-    if ((+p.at || 0) <= (+st.at || 0) && st.uid === user.uid) return;
-    st = Object.assign(st, {tier: p.tier, uid: user.uid, at: +p.at || 0, yt: +p.yt || 0, bx: typeof p.bx === 'string' ? p.bx.slice(0, 14) : '', bxOk: +p.bxOk || 0}); save(st); badge(); if (ov && !ov.hidden) render();
+  function importSaved(p) { // de tus preferencias solo se toma el UID de BingX escrito; el plan SIEMPRE se lee del servidor (plans/{uid})
+    if (!p || typeof p !== 'object' || !user || (p.uid && p.uid !== user.uid)) return;
+    if (typeof p.bx === 'string' && p.bx && !st.bx) { st.bx = p.bx.slice(0, 14); save(st); }
+    refreshServer();
   }
   async function setUser(u) {
     user = u || null; if (user && st.uid && st.uid !== user.uid) st = {tier: 'free'}; // otra cuenta en este dispositivo: empieza en Gratis
@@ -246,9 +257,11 @@
       const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(u.email).trim().toLowerCase()));
       o = [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('') === OWNER;
     } catch {}
-    owner = o; st.own = o; save(st); badge(); if (ov && !ov.hidden) render();
+    owner = o; st.own = o; if (user && !st.srv) st.tier = 'free'; // un plan que no vino del servidor no cuenta
+    save(st); badge(); if (ov && !ov.hidden) render();
+    if (user) refreshServer();
   }
   document.addEventListener('click', e => { if (e.target.closest('[data-plans-open]')) open(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', badge); else badge();
-  root.CCTPlans = {badge, open, close, current, real, can, setPreview, importSaved, verifyYouTube, get user() { return user; }, get owner() { return owner && !!user; }, get dev() { return owner && !!user && !pv; }, get previewOn() { return pvOn(); }, /* dev: herramientas de desarrollador (no en la vista previa de Gratis/Plus/Infinity) */ get preview() { return pvOn(); }, FEATURES, setUser, TIERS, links: {youtube: YT, bingx: BX, code: BX_CODE}};
+  root.CCTPlans = {badge, open, close, current, real, can, setPreview, importSaved, verifyYouTube, refreshServer, get user() { return user; }, get owner() { return owner && !!user; }, get dev() { return owner && !!user && !pv; }, get previewOn() { return pvOn(); }, /* dev: herramientas de desarrollador (no en la vista previa de Gratis/Plus/Infinity) */ get preview() { return pvOn(); }, FEATURES, setUser, TIERS, links: {youtube: YT, bingx: BX, code: BX_CODE}};
 })(typeof self !== 'undefined' ? self : this);

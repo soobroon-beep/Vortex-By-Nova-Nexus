@@ -21,6 +21,10 @@ export function targetOf(reqUrl) { // URL del exchange que viene después del «
   if (!h.includes('.') || /^[\d.]+$/.test(h) || h.includes(':') || /(^|\.)(localhost|local|internal|lan|home|arpa)$/.test(h) || h.endsWith('.workers.dev')) return null;
   return u;
 }
+/* Límite por IP (en memoria de cada instancia): el «origen» lo puede falsificar un programa, así que nadie puede usar
+   este puente como proxy gratis a los exchanges a gran escala (gastaría tu cuota y haría que bloquearan a Cloudflare). */
+const hits = new Map(); export const IP_PER_MIN = 240;
+export function allowIp(ip, now = Date.now()) { const h = (hits.get(ip) || []).filter(t => now - t < 60e3); if (h.length >= IP_PER_MIN) { hits.set(ip, h); return false; } h.push(now); hits.set(ip, h); if (hits.size > 5000) hits.clear(); return true; }
 export function originOk(origin, env) {
   const allowed = String((env && env.ALLOWED_ORIGIN) || DEFAULT_ORIGINS).split(',').map(s => s.trim()).filter(Boolean);
   return allowed.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
@@ -32,6 +36,8 @@ export default {
     const cors = {'access-control-allow-origin': ok ? origin : 'null', 'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS', 'access-control-allow-headers': req.headers.get('access-control-request-headers') || '*', 'access-control-expose-headers': '*', 'access-control-max-age': '86400', vary: 'origin'};
     if (req.method === 'OPTIONS') return new Response(null, {status: 204, headers: cors});
     if (!ok) return new Response('Origen no permitido', {status: 403, headers: cors});
+    if (!allowIp(req.headers.get('cf-connecting-ip') || 'x')) return new Response(JSON.stringify({error: 'Demasiadas peticiones seguidas; espera un momento'}), {status: 429, headers: {...cors, 'content-type': 'application/json', 'retry-after': '20'}});
+    if (+(req.headers.get('content-length') || 0) > 256 * 1024) return new Response('Demasiado grande', {status: 413, headers: cors});
     const t = targetOf(req.url); if (!t) return new Response('Destino no válido', {status: 400, headers: cors});
     const headers = new Headers(); for (const [k, v] of req.headers) { const l = k.toLowerCase(); if (!DROP.has(l) && !l.startsWith('cf-') && !l.startsWith('sec-') && !l.startsWith('access-control-')) headers.set(k, v); }
     const init = {method: req.method, headers, redirect: 'manual'}; if (!['GET', 'HEAD'].includes(req.method)) init.body = await req.arrayBuffer();

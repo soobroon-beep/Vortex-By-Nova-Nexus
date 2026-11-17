@@ -18,6 +18,15 @@ service = "vortex-push"
 binding = "KV"
 id = "c6d98896a2a3496b89228e7994cedda2"
 
+# Base D1 «vortex-push-db»: los celulares registrados para avisos (aguanta miles; antes el KV solo daba para ~20).
+# Si el token de Cloudflare no tiene permiso de D1, el flujo publica sin este bloque y el Worker sigue con el KV (respaldo).
+# >>> D1
+[[d1_databases]]
+binding = "DB"
+database_name = "vortex-push-db"
+database_id = "8051f723-d0b9-47e9-bb98-30b408a0875e"
+# <<< D1
+
 # IA open source gratis de tu cuenta de Cloudflare (Workers AI, cupo diario sin costo)
 [ai]
 binding = "AI"

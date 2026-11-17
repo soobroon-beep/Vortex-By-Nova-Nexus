@@ -26,6 +26,9 @@
   const priceAlerts = () => (st().alerts || []).filter(a => a.kind !== 'ind').map(a => ({id: a.id, symbol: a.symbol, on: a.on, price: a.price, dir: a.dir, cond: a.cond, repeat: a.repeat, wait: a.wait, exp: a.exp, expired: a.expired, note: a.note, notify: a.notify, firedAt: a.firedAt || 0, firedPrice: a.firedPrice}));
   const payload = () => ({alerts: priceAlerts(), move: {on: !!(st().moveAlerts || {}).on, pct: (st().moveAlerts || {}).pct || 2}, scr: {on: !!(st().scrPush || {}).on, h1: (st().scrPush || {}).h1 !== false, h4: (st().scrPush || {}).h4 !== false}, radar: !!(window.CCTRadar && CCTRadar.on()), priceOn: !((B.prefs() || {}).n && B.prefs().n.price === false), dc: (() => { try { const on = !!((B.prefs() || {}).n && B.prefs().n.discord), sw = (window.CCT_discordStore && CCT_discordStore.get().on) || {}; return {on, price: on && sw.price !== false, ind: on && sw.ind !== false}; } catch { return {on: false, price: false, ind: false}; } })(), dcUrl: (() => { try { return (B.prefs() || {}).n && B.prefs().n.discord && window.CCT_discordStore ? String(CCT_discordStore.get().url || '') : ''; } catch { return ''; } })(), trades: window.CCTTradeWatch && CCTTradeWatch.payload ? CCTTradeWatch.payload() : [], tradeStep: window.CCTTradeWatch && CCTTradeWatch.step ? CCTTradeWatch.step() : 10, ind: B.indAlerts ? B.indAlerts() : undefined, indOn: !((B.prefs() || {}).n && B.prefs().n.ind === false), uid: B.uid ? B.uid() : '', bots: !((B.prefs() || {}).n && B.prefs().n.bots === false)});
 
+  /* Token de sesión de Firebase: el servidor solo liga este celular a tu cuenta (avisos de tus bots, alertas con tus indicadores) si lo verifica */
+  const lastTok = {t: '', at: 0};
+  async function idTok() { try { const P = window.CCTCloudPriv; if (!P || !P.ready() || !P.token) return ''; const t = await P.token(); if (t) { lastTok.t = t; lastTok.at = Date.now(); } return t || ''; } catch { return ''; } }
   function applyBack(back) { // alertas que el servidor disparó mientras la app estaba cerrada
     let ch = false;
     for (const s of back || []) {
@@ -43,7 +46,7 @@
     try {
       const reg = await navigator.serviceWorker.ready, sub = await ensureSub(reg);
       if (!sub) { lastErr = Notification.permission === 'denied' ? 'El celular bloqueó las notificaciones de VORTEX: actívalas en Ajustes del sistema → Apps → VORTEX/Chrome → Notificaciones. El interruptor sigue encendido y se reanuda solo.' : 'Esperando el permiso de notificaciones del celular.'; return; } // NUNCA se apaga solo: solo tú lo apagas
-      const j = await api('/sync', {id: cfg.id, sub: sub.toJSON(), since: cfg.since || 0, ...p});
+      const j = await api('/sync', {id: cfg.id, sub: sub.toJSON(), since: cfg.since || 0, ...p, idToken: await idTok()});
       applyBack(j.back); if (j.backInd && j.backInd.length && B.applyInd) B.applyInd(j.backInd); cfg.since = j.now || Date.now(); cfg.at = Date.now(); store(cfg); srv = j.srv || null; srvNow = j.now || Date.now();
       lastSig = JSON.stringify(payload()); lastErr = '';
     } catch (e) { lastErr = e.message || 'Sin conexión con el servidor de avisos'; }
@@ -146,7 +149,7 @@
   window.addEventListener('pagehide', () => flush());
   function flush() { // sin esperar: usa la suscripción que el servidor ya tiene
     if (!cfg.on) return; const p = payload(), sig = JSON.stringify(p); if (sig === lastSig) return;
-    try { fetch(url() + '/sync', {method: 'POST', keepalive: true, headers: {'content-type': 'application/json'}, body: JSON.stringify({id: cfg.id, since: cfg.since || 0, ...p})}).then(() => { lastSig = sig; }).catch(() => {}); } catch {}
+    try { fetch(url() + '/sync', {method: 'POST', keepalive: true, headers: {'content-type': 'application/json'}, body: JSON.stringify({id: cfg.id, since: cfg.since || 0, ...p, idToken: lastTok.t && Date.now() - lastTok.at < 50 * 6e4 ? lastTok.t : ''})}).then(() => { lastSig = sig; }).catch(() => {}); } catch {}
   } // al volver a la app trae lo que disparó el servidor
   window.CCTPushSync = () => sync(true);
   setInterval(() => sync(false), 10000); // si cambian tus alertas, se mandan al servidor en ≤10 s

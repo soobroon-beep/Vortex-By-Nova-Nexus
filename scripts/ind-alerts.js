@@ -48,7 +48,9 @@ async function pineRun(code, cs, opts, getK) { // igual que la app: si el script
 
 /* Una vuelta: revisa todas las alertas pendientes y devuelve los resultados */
 async function round(key, getScript) {
-  const jobs = await post('/ind/jobs', {key}), out = [], kc = new Map(), runs = new Map();
+  // las alertas se piden por páginas (con miles de celulares una sola respuesta sería demasiado grande para el servidor)
+  const jobs = {devs: []}; for (let from = 0, pages = 0; from != null && pages < 200; pages++) { const pg = await post('/ind/jobs', {key, from, limit: 100}); jobs.devs.push(...(pg.devs || [])); from = pg.next == null ? null : pg.next; }
+  const out = [], kc = new Map(), runs = new Map();
   const getK = async (s, i) => { const k = s + '|' + i; if (!kc.has(k)) kc.set(k, klines(s, i).catch(e => { kc.delete(k); throw e; })); return kc.get(k); };
   let checked = 0, hits = 0;
   for (const dv of jobs.devs || []) for (const a of dv.alerts || []) {
