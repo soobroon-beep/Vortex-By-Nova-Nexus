@@ -6,6 +6,7 @@
 // · Solo escribe en el KV cuando algo cambia (el plan gratis permite 1000 escrituras al día).
 // Se publica solo con .github/workflows/deploy-push-worker.yml (configuración en worker/wrangler-push.toml). Secretos opcionales: BINGX_AGENT_KEY / BINGX_AGENT_SECRET (plan Infinity) y GROQ_KEY (IA gratis de respaldo).
 
+import {memRoute} from './memoria.mjs'; // Memoria compartida entre Claude, ChatGPT y Gemini (/mem/<llave>/…)
 import * as SCR from './screener.mjs';
 import {radarInternal, loadState as radarState} from './radar-server.mjs';
 import DOM from '../dominance-core.js';
@@ -416,6 +417,7 @@ export default {
     const json = (o, status = 200) => new Response(JSON.stringify(o), {status, headers: {...cors, 'content-type': 'application/json'}});
     if (req.method === 'OPTIONS') return new Response(null, {status: 204, headers: cors});
     const path = new URL(req.url).pathname;
+    if (path.startsWith('/mem/')) return memRoute(req, env, path); // va con su propia llave secreta, desde cualquier IA (sin origen)
     if (req.method === 'GET' && path === '/') return json({ok: true, app: 'VORTEX push', note: 'Notificaciones de alertas con la app cerrada'});
     if (req.method === 'GET' && path === '/scr/state') { const st = (await env.KV.get('scr', 'json')) || {}; return json({ok: true, '1h': st['1h'] || 0, '4h': st['4h'] || 0, last: st.last || {}, lock: st.lock || 0, err: st.err || null, kick: st.kick || null, now: Date.now()}); }
     if (req.method === 'GET' && path === '/dom') { const st = (await env.KV.get('dom', 'json')) || {}; return json({ok: true, method: DOM.METHOD, at: st.at || 0, err: st.err || null, series: st.h || {}, now: Date.now()}); } // muestras de dominancia de cada 15 min (las juntan la app y el flujo de GitHub)
