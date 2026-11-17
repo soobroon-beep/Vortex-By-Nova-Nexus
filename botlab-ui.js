@@ -65,7 +65,7 @@
     const now = Date.now(); const sp = B.normalizeSpec(spec);
     const id = uidOf(), look = newLook ? Object.assign({}, newLook) : (LK ? LK.of({id}) : null); newLook = null;
     return {id, look, name: sp.name, desc: desc || '', status: 'draft', method, createdAt: now, updatedAt: now, lastRunAt: null, mainV: 1,
-      versions: [{v: 1, spec: sp, at: now, note: 'Versión inicial', origin: 'usuario', state: 'principal'}], runs: [], chat: [], journal: [{t: now, kind: 'creación', text: `Bot creado (${method === 'nl' ? 'lenguaje natural' : method === 'nova' ? 'indicadores Nova' : method === 'indicador' ? 'un indicador propio' : 'constructor visual'}).`}], sweeps: {}};
+      versions: [{v: 1, spec: sp, at: now, note: 'Versión inicial', origin: 'usuario', state: 'principal'}], runs: [], chat: [], journal: [{t: now, kind: 'creación', text: `Bot creado (${method === 'nl' ? 'lenguaje natural' : method === 'sala' ? 'la Sala de agentes' : method === 'nova' ? 'indicadores Nova' : method === 'indicador' ? 'un indicador propio' : 'constructor visual'}).`}], sweeps: {}};
   }
   const ver = (bot, v) => bot.versions.find(x => x.v === (v || bot.mainV)), mainSpec = bot => ver(bot).spec;
   const runOf = (bot, v) => { for (let i = bot.runs.length - 1; i >= 0; i--) if (bot.runs[i].v === (v || bot.mainV)) return bot.runs[i]; return null; };
@@ -362,12 +362,37 @@
     }
     save(); if (n) toast(`Nova Bot Lab: ${n} bot${n === 1 ? '' : 's'} corregido${n === 1 ? '' : 's'} para que no cierren enseguida`);
   }
+  /* ───────── Propuestas de la Sala de agentes ─────────
+     La app «Sala de agentes» (repo sala-de-agentes) tiene un Taller de bots: 5 agentes de IA diseñan, prueban con este mismo motor y evalúan un bot.
+     Lo que aprueban llega aquí (documento privado users/<tú>/data/sala_props). Agregar = se crea el bot y se corre su backtest; nada se enciende solo. */
+  const SALA_URL = 'https://soobroon-beep.github.io/sala-de-agentes/'; let salaP = {items: [], at: 0, busy: false};
+  async function salaPull(force) {
+    const C = window.CCTCloudPriv; if (!C || !C.ready() || salaP.busy || (!force && Date.now() - salaP.at < 60000)) return; salaP.busy = true;
+    try { const d = await C.get('sala_props'), items = d && Array.isArray(d.items) ? d.items : [], was = JSON.stringify(salaP.items.filter(x => x.status === 'nueva').map(x => x.id)); salaP.items = items; salaP.at = Date.now();
+      if (JSON.stringify(items.filter(x => x.status === 'nueva').map(x => x.id)) !== was && view === 'lib') render(); } catch {} finally { salaP.busy = false; }
+  }
+  let salaWatch = false; function salaWatchOn() { // al abrir Nova Bot Lab (y cada minuto mientras está abierto) se buscan propuestas nuevas
+    if (salaWatch || !root) return; salaWatch = true; const vis = () => !!(root.offsetParent || root.getClientRects().length);
+    try { new IntersectionObserver(es => { if (es.some(e => e.isIntersecting) && view === 'lib') salaPull(true); }).observe(root); } catch {}
+    setInterval(() => { if (vis() && view === 'lib' && !document.hidden) salaPull(true); }, 60000);
+  }
+  async function salaMark(id, status, botId) { const C = window.CCTCloudPriv; const d = (await C.get('sala_props')) || {}, items = Array.isArray(d.items) ? d.items : []; const p = items.find(x => x.id === id); if (p) { p.status = status; p.doneAt = Date.now(); if (botId) p.botId = botId; } await C.set('sala_props', {items, at: Date.now()}); salaP.items = items; }
+  function salaHTML() {
+    salaWatchOn(); setTimeout(() => salaPull(false), 0); const list = salaP.items.filter(x => x.status === 'nueva' && x.spec); if (!list.length) return '';
+    return `<div class="bl-sala"><div class="bl-list-h"><span>Propuestas de la Sala de agentes</span><small><a href="${SALA_URL}" target="_blank" rel="noopener">Abrir la Sala</a></small></div>
+      ${list.map(p => { const m = p.metrics || {}, sp = B.normalizeSpec(p.spec); return `<div class="bl-prop" style="--pc:${esc((p.look || {}).color || '#7c5cff')}">${LK ? LK.avatar({color: (p.look || {}).color || '#7c5cff', icon: (p.look || {}).icon || 'robot'}, 40) : ''}
+        <div class="bl-prop-b"><b>${esc(p.name)}</b><small>${esc(sp.interval)} · ${esc((sp.basket || [sp.symbol]).map(x => x.replace(/USDT$/, '')).join(', '))} · ${sp.sides === 'long' ? 'compras' : sp.sides === 'short' ? 'ventas' : 'compras y ventas'} · aprobado por el equipo en ${p.rounds || 1} ronda${(p.rounds || 1) > 1 ? 's' : ''}</small>
+        <div class="bl-prop-k"><span>${m.n ?? '—'} ops</span><span class="${cls(m.retPct)}">${pct(m.retPct)}</span><span>aciertos ${m.winRate == null ? '—' : num(m.winRate, 1) + ' %'}</span><span>caída ${num(m.maxDDPct, 1)} %</span><span>validación <i class="${cls(m.valRet)}">${pct(m.valRet)}</i></span><span>prueba <i class="${cls(m.testRet)}">${pct(m.testRet)}</i></span></div>
+        ${p.desc ? `<p>${esc(String(p.desc).replace(/[*_`#]/g, '').slice(0, 220))}</p>` : ''}</div>
+        <div class="bl-prop-a"><button class="bl-btn" data-a="salaAdd" data-id="${esc(p.id)}">${IC.plus}Agregar</button><button class="bl-btn ghost" data-a="salaNo" data-id="${esc(p.id)}">Descartar</button></div></div>`; }).join('')}</div>`;
+  }
   function libView() {
     const act = S.bots.filter(b => b.status !== 'archived').sort((a, b) => (isLive(b) - isLive(a)) || (b.updatedAt - a.updatedAt)), arch = S.bots.filter(b => b.status === 'archived');
     const list = showArch ? act.concat(arch) : act;
     root.innerHTML = head('NOVA BOT LAB', 'Crea, prueba y simula bots sin dinero real') + `<div class="bl-actions bl-acts4"><button class="bl-btn" data-a="new">${IC.plus}Crear nuevo bot</button><button class="bl-btn ghost" data-a="import">Importar</button><button class="bl-btn ghost" data-a="risk">Panel de riesgo</button><button class="bl-btn ghost ${pick ? 'on' : ''}" data-a="cmp" ${S.bots.length >= 2 ? '' : 'disabled'}>${pick ? (sel.size >= 2 ? `Comparar ${sel.size} ›` : `Elige ${2 - Math.min(2, sel.size)} más`) : 'Comparar'}</button></div>
       ${pick ? '<p class="bl-dim bl-pickhint">Marca los bots que quieres comparar. <a href="#" data-a="cmpCancel">Cancelar</a></p>' : ''}
       ${(() => { const tr = tournRows(); return `<button type="button" class="tn-ban" data-a="tourn"><span class="tn-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20h7M10 17h4"/></svg></span><span><b>Torneo de bots</b><small>${tr.length ? `${tr.length} compitiendo · va ganando ${esc(tr[0].name)} (${pct(tr[0].ret)})` : 'Enciende varios bots para que compitan en vivo'}</small></span><span class="bl-row-go">›</span></button>`; })()}
+      ${salaHTML()}
       <div class="bl-list"><div class="bl-list-h"><span>Tus bots</span><small>${act.filter(isLive).length + [window.CCTClaudioUI, window.CCTFelipeUI].filter(Boolean).filter(U => U.isOn()).length} encendidos</small></div>
       ${(() => { const rows = list.map(botRow), ag = [window.CCTClaudioUI, window.CCTFelipeUI].filter(Boolean).map(U => U.card()).filter(Boolean); rows.splice(list.filter(isLive).length, 0, ...ag); return rows.join(''); })()}
       ${list.length || window.CCTClaudioUI ? '' : `<div class="bl-empty0">${IC.robot}<p>Aún no tienes bots.</p><button class="bl-btn" data-a="new">${IC.plus}Crear mi primer bot</button></div>`}</div>
@@ -1260,6 +1285,14 @@ Máximo 3 tips. "patch" es un fragmento de la especificación con el MISMO esque
 
   /* ----- Eventos ----- */
   const ACT = {
+    async salaAdd(el) {
+      const p = salaP.items.find(x => x.id === el.dataset.id); if (!p) return; const sp = B.normalizeSpec(p.spec), v = B.validateSpec(sp); if (!v.ok) return toast('La propuesta no es válida: ' + v.errors[0]);
+      newLook = p.look && p.look.color ? {color: p.look.color, icon: p.look.icon || 'robot'} : null;
+      const b = newBot(sp, 'sala', String(p.goal || p.desc || '').slice(0, 300)); b.fromSala = {id: p.id, room: p.room, at: p.at, metrics: p.metrics};
+      log(b, 'creación', `Propuesto por la Sala de agentes («${p.room || 'Taller de bots'}»), aprobado por el equipo en ${p.rounds || 1} ronda(s). Backtest de la Sala: ${p.metrics ? p.metrics.n + ' ops, ' + pct(p.metrics.retPct) : '—'}.`);
+      S.bots.push(b); touch(b); try { await salaMark(p.id, 'agregada', b.id); } catch {} cur = b.id; tab = 'sum'; view = 'bot'; render(); toast('Bot agregado. Revisa su backtest y enciéndelo cuando quieras.'); runAndShow(b, 1);
+    },
+    async salaNo(el) { try { await salaMark(el.dataset.id, 'descartada'); toast('Propuesta descartada'); } catch { toast('No se pudo descartar'); } render(); },
     claudio() { view = 'claudio'; render(); }, felipe() { view = 'felipe'; render(); }, tcSym(el) { tcSym = el.dataset.k; render(); }, tourn() { view = 'tourn'; render(); },
     toChart() { const b = bot(); if (!b) return; const on = !!b.sigOn;
       if (on) { b.sigOn = false; for (const k of [...sigCache.keys()]) if (k.startsWith(b.id + '|')) sigCache.delete(k); sigPush(); touch(b); render(); return toast('Se quitaron las señales de «' + b.name + '» del gráfico.'); }
