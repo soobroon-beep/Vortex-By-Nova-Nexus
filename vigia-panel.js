@@ -36,7 +36,7 @@
   const toast = m => { const t = $('#toast'); if (!t) return; t.textContent = m; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => { t.style.display = 'none'; }, 2600); };
 
   function row() { // fila en Configuración (solo para ti)
-    const z = $('#devZone'), dev = !!(window.CCTPlans && CCTPlans.owner), pv = !!(window.CCTPlans && CCTPlans.preview); if (z) { z.hidden = !dev; z.classList.toggle('pv-on', dev && pv); } // zona de desarrollador: solo para el creador; en vista previa de un plan solo queda el selector para volver
+    const z = $('#devZone'), dev = !!(window.CCTPlans && CCTPlans.owner), pv = !!(window.CCTPlans && CCTPlans.preview); if (z) { z.hidden = !dev; z.classList.toggle('pv-on', dev && pv); } { const rb = $('#rrDev'); if (rb && rb.hidden !== !dev) rb.hidden = !dev; if (!dev && document.body.dataset.side === 'devView' && window.CCT_switchView) CCT_switchView('settingsView'); } // icono «Desarrollador» en la barra derecha (PC): solo el creador // zona de desarrollador: solo para el creador; en vista previa de un plan solo queda el selector para volver
     const r = $('#setVigia'); if (!r) return; const own = isOwner(); r.hidden = !own; if (!own) return;
     const n = (doc && doc.items || []).filter(o => o.status === 'nuevo').length, b = $('.vg-count', r);
     if (b) { b.textContent = n; b.hidden = !n; }
@@ -96,5 +96,3 @@
   setInterval(() => { if (isOwner() && !ov) load().then(row); }, 30 * 60e3);
   window.CCTVigia = {open: openPanel};
 })();
-/* Botón «Desarrollador» en Configuración: abre/cierra sus opciones (Vigía, Neural Brain, vista de membresía) */
-document.addEventListener('click', e => { const b = e.target.closest('#devOpen'); if (!b) return; const box = document.getElementById('devInner'); if (!box) return; const open = box.hidden; box.hidden = !open; b.setAttribute('aria-expanded', String(open)); });

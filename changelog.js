@@ -7,7 +7,8 @@ window.CCT_CHANGELOG = [
     'Configuración › Cuenta: tu perfil con la etiqueta de tu plan (Gratis, Plus o Infinity).',
     'Aspecto del gráfico: color, grosor, opacidad y estilo de las líneas de entrada, take profit, stop loss, liquidación y órdenes.',
     'La personalización de Nexus Pixel (y el resto de tus ajustes) ya no se pierde cuando tu PC y tu celular guardan al mismo tiempo.',
-    'Las opciones de la cápsula solo salen en el celular; las de desarrollador viven dentro de un solo botón.'
+    'Las opciones de la cápsula solo salen en el celular. Desarrollador: su propio icono en la barra derecha (solo PC y solo para el creador).',
+    'Barra de abajo: Discord como símbolo junto al saldo; el próximo evento económico junto a los horarios de la bolsa.'
   ]},
   {v: '3.36', d: '13 nov 2026', t: 'Nexus Pixel mucho más listo', items: [
     'Pixel ahora LEE tu gráfico completo: tendencia (EMA 20/50/200), RSI, MACD, volatilidad, estructura de mercado (máximos y mínimos, quiebres), niveles clave con su distancia y TODOS tus indicadores tal como los tienes (Nova Nexus: nube, oscilador, flujo, ADX y última señal; tus scripts Pine y los comunes).',

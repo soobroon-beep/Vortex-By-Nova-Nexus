@@ -69,7 +69,7 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   #watchView{display:block!important;grid-area:watch;border-right:1px solid var(--line);padding:18px 16px 20px}
   #chartView{display:flex!important;grid-area:chart;min-width:0}
   #indicatorView{display:none!important}
-  #newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
+  #newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
   body:not([data-side]) #newsView,body[data-side="newsView"] #newsView{display:block}
   body[data-side="aiView"] #aiView{display:block}
   body[data-side="settingsView"] #settingsView{display:block}
@@ -80,6 +80,7 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   body[data-side="lensView"] #lensView{display:block}
   body[data-side="discordView"] #discordView{display:block}
   body[data-side="botLabView"] #botLabView{display:block}
+  body[data-side="devView"] #devView{display:block}
   #goChart{display:none}
   h1{font-size:21px}
   .view-head{margin-bottom:16px}
@@ -654,7 +655,7 @@ body.pane .favbar{display:none}
 .legend-box.dragging{cursor:grabbing}
 .sec-grip{flex:none;display:grid;place-items:center;width:26px;height:30px;color:var(--muted);font-size:15px;cursor:grab;touch-action:none;opacity:.8}
 .sec-grip:active{cursor:grabbing;color:var(--accent)}
-@media(max-width:1023px){#botLabView,#rrBotLab,#blSettingRow{display:none!important}}
+@media(max-width:1023px){#botLabView,#rrBotLab,#blSettingRow,#devView,#rrDev{display:none!important}}
 
 /* Celular: Alertas y Notificaciones en la barra de arriba (junto a cuenta, ajustes y tema); el dock lleva el Screener */
 .icon-btn.m-top-only{display:grid;place-items:center}

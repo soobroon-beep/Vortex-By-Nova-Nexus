@@ -2340,12 +2340,12 @@ body.light .cp-pop{background:rgba(255,255,255,.88)}
 @keyframes fromPill{from{opacity:0;transform:translateY(8px) scale(.94)}to{opacity:1;transform:none}}
 body:not(.light) :is(.acct-pop,.ec-pop){background:rgba(9,12,20,.62)!important;border:1px solid rgba(255,255,255,.12)!important;-webkit-backdrop-filter:blur(30px) saturate(1.8)!important;backdrop-filter:blur(30px) saturate(1.8)!important;box-shadow:0 18px 44px rgba(0,0,0,.45)!important;border-radius:18px!important}
 body:not(.light) .acct-pop input:not([type=checkbox]){background:rgba(255,255,255,.06)!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:11px!important}
-/* Discord: botoncito en la barra de abajo del gráfico (junto a los widgets), ya no en la barra derecha */
-.st-dc{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:26px;height:22px;margin-left:auto;padding:0;border-radius:7px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;transition:color .15s,border-color .15s,background .15s}
-.st-econ:not([hidden])+.st-dc{margin-left:0}
+/* Discord: solo el símbolo (sin recuadro), a la izquierda junto al saldo; el evento económico queda junto a los horarios de la bolsa */
+.st-dc{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:28px;height:24px;margin:0 0 0 2px;padding:0;border:0;background:none;color:var(--muted);cursor:pointer;transition:color .15s,transform .15s}
 .st-dc svg{fill:currentColor;stroke:none;display:block}
-.st-dc:hover,body[data-side="discordView"] .st-dc{color:#8b95ff;border-color:color-mix(in srgb,#7c87ff 55%,transparent);background:color-mix(in srgb,#7c87ff 12%,transparent)}
-.st-dc.dc-on{color:#8b95ff}
+.st-dc:hover,body[data-side="discordView"] .st-dc,.st-dc.dc-on{color:#8b95ff}
+.st-dc:hover{transform:scale(1.08)}
+.st-econ[hidden]+.st-mkt{margin-left:auto}
 #discordView .dc-link{display:flex;align-items:center;gap:10px;width:100%;text-align:left;color:var(--text);cursor:pointer;font:inherit}
 #discordView .dc-link span{flex:1;display:flex;flex-direction:column;gap:3px}
 #discordView .dc-link small{color:var(--muted);font-size:11.5px;line-height:1.4}
@@ -2362,11 +2362,12 @@ button.prof-card:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--li
 .prof-t small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .prof-tag:empty{display:none}
 @media(min-width:1024px){.fb-mode-row{display:none!important}} /* la cápsula solo existe en el celular */
-/* Configuración: todas las opciones de desarrollador dentro de un solo botón «Desarrollador» */
-#devZone .dev-entry{margin-top:10px}
-#devZone .dev-tag{font-style:normal;margin-left:6px;font-size:10px;font-weight:650;padding:1px 7px;border-radius:999px;color:#fff;background:linear-gradient(90deg,#7c4dff,#40c4ff);vertical-align:1px}
-#devZone .dev-chev{margin-left:auto;flex:0 0 auto;color:var(--muted);transition:transform .2s}
-#devZone #devOpen[aria-expanded=true] .dev-chev{transform:rotate(90deg)}
-#devZone #devInner{margin:2px 0 0 14px;padding-left:10px;border-left:1px solid color-mix(in srgb,#9b7bff 35%,transparent)}
-#devZone.pv-on .dev-entry{display:none!important}
-#devZone.pv-on #devInner{display:block!important;margin-left:0;padding-left:0;border-left:0}
+/* Desarrollador: icono en la barra derecha (debajo de IA), solo PC y solo para el creador; mismo efecto galaxia con borde arcoíris */
+.right-rail .rr-dev{position:relative;isolation:isolate;border:1.5px solid transparent!important;color:#fff!important;
+  background:radial-gradient(1px 1px at 22% 30%,#fff,transparent 70%) padding-box,radial-gradient(1px 1px at 70% 68%,rgba(214,204,255,.9),transparent 70%) padding-box,radial-gradient(1.2px 1.2px at 40% 78%,#fff,transparent 70%) padding-box,radial-gradient(80% 90% at 20% 0%,rgba(124,77,255,.45),transparent 65%) padding-box,linear-gradient(135deg,#0b0a1d,#14102e) padding-box,
+  conic-gradient(from var(--vg-a,0deg),#ff5f6d,#ffc371,#47e891,#40c4ff,#7c4dff,#ff5fd2,#ff5f6d) border-box!important;animation:vgSpin 6s linear infinite;box-shadow:0 0 12px rgba(124,77,255,.35)}
+.right-rail .rr-dev svg{stroke:#e4dbff!important;fill:none}
+.right-rail .rr-dev:hover,.right-rail .rr-dev.active{box-shadow:0 0 18px rgba(124,77,255,.6)}
+.right-rail .rr-dev[hidden]{display:none!important}
+#devView #devZone .sg{margin-top:4px}
+@media (prefers-reduced-motion:reduce){.right-rail .rr-dev{animation:none}}

@@ -65,8 +65,7 @@
         <input class="dc-input" id="dcHook" type="password" placeholder="https://discord.com/api/webhooks/…" value="${esc(D.url || '')}" autocomplete="off" spellcheck="false">
         <div class="dc-row"><button class="dc-btn pri" id="dcSave" type="button">Guardar</button><button class="dc-btn" id="dcTest" type="button" ${has ? '' : 'disabled'}>Enviar prueba</button>${has ? '<button class="dc-btn" id="dcDel" type="button">Desconectar</button>' : ''}</div>
         <div class="dc-st ${status.cls}">${esc(status.t || (has ? 'Conectado' : 'Sin conectar'))}</div>
-        <small>La URL es como una llave del canal: quien la tenga puede escribir ahí. Se guarda solo en tu cuenta y en este dispositivo; no la compartas ni subas tu exportación JSON.</small></div>
-      <button type="button" class="dc-card dc-link" id="dcToNotif"><span><b>Qué avisos te llegan</b><small>Movimientos bruscos, alertas, bots y señales: se eligen en Configuración › Notificaciones</small></span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>`;
+        <small>La URL es como una llave del canal: quien la tenga puede escribir ahí. Se guarda solo en tu cuenta y en este dispositivo; no la compartas ni subas tu exportación JSON.</small></div>`;
   }
   const flash = (t, cls) => { status = {t, cls}; paint(); if (!$('#discordBox') || !$('#discordBox').offsetParent) { try { window.CCT_toast && CCT_toast(t); } catch {} } };
   document.addEventListener('click', async e => {
@@ -78,7 +77,6 @@
     } else if (id === 'dcTest') { flash('Enviando…', ''); const r = await send([{title: '✅ VORTEX conectado', description: 'Aquí llegarán tus movimientos bruscos, alertas y señales del Screener.', color: COL.info, timestamp: new Date().toISOString(), footer: {text: 'Nova Nexus · VORTEX'}}]); if (r.ok) flash('Prueba enviada: revisa #vortex', 'ok'); }
     else if (id === 'dcDel') { store().set({url: ''}); flash('Desconectado', ''); }
     else if (id === 'dcNow1' || id === 'dcNow4') { const tf = id === 'dcNow1' ? '1h' : '4h'; flash(`Calculando señales ${tf}… (unos segundos)`, ''); const r = await sendSignals(tf); if (r && r.ok) flash(r.none ? `Ahora no hay señales ${tf}: no se envió nada` : `Señales ${tf} enviadas`, 'ok'); }
-    else if (e.target.closest('#dcToNotif')) { if (window.CCT_switchView) CCT_switchView('notifView'); }
     else if (id === 'dcBack') { if (window.CCT_switchView) CCT_switchView(window.CCT_dcBack || 'settingsView'); window.CCT_dcBack = ''; }
     else if (e.target.closest('#dcOpenFromSettings')) { window.CCT_dcBack = ''; if (window.CCT_switchView) CCT_switchView('discordView'); paint(); }
   });

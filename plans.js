@@ -87,7 +87,7 @@
     applyTier();
     const t = TIERS[current()];
     const pv = pvOn(), dev = owner && !!user && !pv; document.querySelectorAll('[data-plan-badge]').forEach(el => { el.className = 'pl-badge ' + (dev ? 'dev' : t.c); el.innerHTML = dev ? svg(DEV_IC, 13) + 'Desarrollador' : svg(t.ic, 13) + esc(t.n); });
-    document.querySelectorAll('[data-plan-tag]').forEach(el => { const k = pvOn() || real(), tt = TIERS[k] || TIERS.free; el.className = 'prof-tag pl-badge ' + tt.c; el.innerHTML = svg(tt.ic, 13) + 'Plan ' + esc(tt.n); el.title = owner && user && !pv ? 'Plan ' + tt.n + ' · eres el desarrollador' : 'Tu plan de VORTEX'; }); // perfil (Configuración › Cuenta): siempre el plan, sin «Desarrollador»
+    document.querySelectorAll('[data-plan-tag]').forEach(el => { const k = pvOn() || real(), tt = TIERS[k] || TIERS.free; el.className = 'prof-tag pl-badge ' + (dev ? 'dev' : tt.c); el.innerHTML = dev ? svg(DEV_IC, 13) + 'Plan Desarrollador' : svg(tt.ic, 13) + 'Plan ' + esc(tt.n); el.title = dev ? 'Acceso total como creador de VORTEX' : 'Tu plan de VORTEX'; }); // perfil (Configuración › Cuenta): tu plan real (Desarrollador si eres el creador)
     document.querySelectorAll('[data-plan-sub]').forEach(el => { el.innerHTML = pv ? 'Vista previa de ' + tx(pv) + ' · Salir en Vista de membresía' : owner && user ? '<span class="pl-tx dev">Desarrollador</span> · acceso total' : !user ? 'Inicia sesión con Google para ver tu plan' : real() !== 'free' ? 'Plan ' + tx(real()) + ' verificado' : st.bx ? 'UID de BingX pendiente de verificar' : 'Gratis, Plus o Infinity'; });
   }
 
