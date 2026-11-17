@@ -8,7 +8,7 @@
 
 import {memRoute} from './memoria.mjs'; // Memoria compartida entre Claude, ChatGPT y Gemini (/mem/<llave>/…)
 import {storeOf, MAX_PER_UID, MAX_NEW_PER_IP_DAY} from './devstore.mjs'; // celulares registrados: base D1 (miles) o KV de respaldo
-import {verifyIdToken, saOf, fsGet, fsMerge} from './fbauth.mjs'; // sesión de Firebase verificada y Firestore con la cuenta de servicio
+import {verifyIdToken, saOf, syncPlan} from './fbauth.mjs'; // sesión de Firebase verificada y Firestore con la cuenta de servicio
 import * as SCR from './screener.mjs';
 import {radarInternal, loadState as radarState} from './radar-server.mjs';
 import DOM from '../dominance-core.js';
@@ -470,7 +470,7 @@ export default {
     const raw = await req.text(); if (raw.length > 60000) return json({error: 'Demasiado grande'}, 413);
     let b; try { b = JSON.parse(raw); } catch { return json({error: 'JSON inválido'}, 400); }
     if (!b || typeof b !== 'object') return json({error: 'JSON inválido'}, 400);
-    if (path === '/plan/bingx' || path === '/plan/youtube') return planRoute(req, env, path, b, json);
+    if (path === '/plan/bingx') return planRoute(req, env, path, b, json);
     if (path === '/vault/seal' || path === '/vault/open') return vaultRoute(env, path, b, json);
     const id = String(b.id || ''); if (!/^[A-Za-z0-9_-]{16,64}$/.test(id)) return json({error: 'id inválido'}, 400); // id aleatorio del dispositivo (hace de contraseña)
     const S = storeOf(env);
@@ -547,18 +547,12 @@ async function domRun(env, now = Date.now()) {
 }
 
 /* ───────── Planes verificados en el servidor ─────────
-   El plan ya no lo decide la app: el servidor comprueba tu sesión (token de Firebase), verifica con BingX o YouTube
+   El plan ya no lo decide la app: el servidor comprueba tu sesión (token de Firebase), verifica con BingX (el pago lo verifica vortex-pay)
    y escribe el resultado en plans/{uid} de Firestore (las reglas no dejan que nadie más lo escriba).
    Con ese plan Firestore deja leer el código de los indicadores Nova Nexus PRO, y la app lo lee para desbloquear lo demás. */
-const RANKS = {free: 0, plus: 1, infinity: 2};
 const hitsMem = new Map(); // límites por cuenta/IP en memoria (no gastan escrituras)
 function allowHit(key, max, winMs, now = Date.now()) { const h = (hitsMem.get(key) || []).filter(t => now - t < winMs); if (h.length >= max) { hitsMem.set(key, h); return false; } h.push(now); hitsMem.set(key, h); if (hitsMem.size > 20000) hitsMem.clear(); return true; }
 const testAllowed = id => allowHit('test:' + id, 3, 60e3);
-export async function planUpgrade(sa, uid, tier, extra, fetchFn = fetch) {
-  const cur = (await fsGet(sa, 'plans/' + uid, fetchFn)) || {}, keep = RANKS[cur.tier] > RANKS[tier] ? cur.tier : tier;
-  await fsMerge(sa, 'plans/' + uid, Object.assign({}, extra, {tier: keep, at: Date.now()}), fetchFn);
-  return keep;
-}
 export async function planRoute(req, env, path, b, json, fetchFn = fetch) {
   const who = await verifyIdToken(b.idToken, {fetchFn}); if (!who) return json({ok: false, error: 'Inicia sesión con Google para verificar tu plan', login: true}, 401);
   if (!allowHit('plan:' + who.uid, 6, 60e3)) return json({ok: false, error: 'Demasiados intentos; espera un minuto'}, 429);
@@ -570,24 +564,11 @@ export async function planRoute(req, env, path, b, json, fetchFn = fetch) {
     const r = await bingxInvite(env, bx, fetchFn); if (r.error) return json({ok: false, error: r.error}, 400);
     if (!r.ok || !r.invited) return json(r);
     await S.mset('bx:' + bx, {uid: who.uid, at: Date.now()});
-    const tier = await planUpgrade(sa, who.uid, 'infinity', {bx, bxOk: Date.now()}, fetchFn);
+    const tier = await syncPlan(sa, who.uid, {refTier: 'infinity', bx, bxOk: Date.now()}, fetchFn);
     return json({ok: true, invited: true, tier});
   }
-  // /plan/youtube: el token de YouTube (solo lectura) que dio Google en tu dispositivo; el servidor pregunta a YouTube si estás suscrito
-  const yt = String(b.ytToken || ''); if (!yt || yt.length > 4096) return json({ok: false, error: 'Falta el permiso de YouTube'}, 400);
-  try {
-    const ti = await (await fetchFn('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(yt))).json();
-    if (!ti || ti.error || !String(ti.scope || '').includes('youtube')) return json({ok: false, error: 'Google no dio permiso para ver tus suscripciones'}, 400);
-    if (ti.email && who.email && String(ti.email).toLowerCase() !== who.email.toLowerCase()) return json({ok: false, error: 'Usa la misma cuenta de Google con la que iniciaste sesión'}, 400);
-    const call = async u => { const r = await fetchFn('https://www.googleapis.com/youtube/v3/' + u, {headers: {authorization: 'Bearer ' + yt}}); const j = await r.json(); if (!r.ok) throw Error((j.error && j.error.message) || 'YouTube no respondió'); return j; };
-    let ch = await S.mget('ytch'); if (!ch) { const c = await call('channels?part=id&forHandle=' + YT_HANDLE); ch = c.items && c.items[0] && c.items[0].id; if (!ch) throw Error('No se encontró el canal'); await S.mset('ytch', ch); }
-    const sub = await call(`subscriptions?part=id&mine=true&forChannelId=${encodeURIComponent(ch)}`);
-    if (!(sub.items && sub.items.length)) return json({ok: true, subscribed: false});
-    const tier = await planUpgrade(sa, who.uid, 'plus', {yt: Date.now()}, fetchFn);
-    return json({ok: true, subscribed: true, tier});
-  } catch (e) { return json({ok: false, error: 'No se pudo verificar: ' + String(e && e.message || e).slice(0, 120)}, 502); }
+  return json({error: 'No encontrado'}, 404);
 }
-const YT_HANDLE = 'CriptoChaman';
 
 /* ───────── Bóveda de claves de exchange ─────────
    Tu API Key y Secret se guardan en tu cuenta CIFRADOS (AES-256-GCM) con una llave que solo vive en este servidor y atados a tu uid:

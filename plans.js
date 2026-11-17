@@ -1,25 +1,30 @@
-/* VORTEX · Planes: Gratis, Plus (suscriptores de YouTube) e Infinity (cuenta BingX con el código de referido). Nada se cobra.
-   · Plus: con tu cuenta de Google se le pregunta a YouTube si estás suscrito al canal (permiso de solo lectura, se pide solo al tocar «Verificar»).
-   · Infinity: el servidor VORTEX pregunta a la API de afiliado de BingX si tu UID entró con el código.
+/* VORTEX · Planes: Gratis, Plus (pago mensual) e Infinity (pago mensual o cuenta BingX con el código de referido).
+   · Pagos: servidor «vortex-pay» (worker/pay.mjs) con Stripe. Cobro mensual en pesos con tarjeta; se cancela cuando quieras.
+     Tu plan pagado lo dice el servidor (se le pregunta con tu sesión de Google), no lo guardado en el dispositivo.
+   · Infinity gratis: el servidor VORTEX pregunta a la API de afiliado de BingX si tu UID entró con el código.
    · Lo bloqueado se marca con fondo de galaxia; al tocarlo se abren los planes. Al desbloquearlo se ve normal. */
 (function (root) {
   'use strict';
-  const YT = 'https://www.youtube.com/@CriptoChaman', YT_SUB = YT + '?sub_confirmation=1';
-  const BX = 'https://bingxdao.com/invite/YCXE5W/', BX_CODE = 'YCXE5W', LS = 'cct_plan_v1', YT_HANDLE = 'CriptoChaman', SRV = 'https://vortex-push.soobroon.workers.dev';
+  const BX = 'https://bingxdao.com/invite/YCXE5W/', BX_CODE = 'YCXE5W', LS = 'cct_plan_v1', SRV = 'https://vortex-push.soobroon.workers.dev';
+  const PAY = 'https://vortex-pay.soobroon.workers.dev', PAY_LS = 'cct_pay_v1'; // servidor de pagos (Stripe)
+  let PRICE = {plus: 99, infinity: 249}; // pesos al mes (los confirma el servidor)
+  const mxn = n => '$' + Number(n).toLocaleString('es-MX') + ' MXN';
   const OWNER = 'a8d56a29aa7c5208d7748a84e75e4b14c713c521136174e8a652b7a76ac19b28'; // sha-256 del correo del dueño (no se publica el correo)
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const load = () => { try { return Object.assign({tier: 'free'}, JSON.parse(localStorage.getItem(LS) || '{}')); } catch { return {tier: 'free'}; } };
   const save = s => { try { localStorage.setItem(LS, JSON.stringify(s)); } catch {} };
-  let st = load(), owner = false, user = null, ov = null; // owner: solo después de comprobar tu sesión con Google (antes se tomaba lo guardado en el dispositivo y otra cuenta podía ver lo de desarrollador un momento)
+  let st = load(), owner = false, user = null, ov = null, payBusy = false;
+  let pay = (() => { try { return JSON.parse(localStorage.getItem(PAY_LS) || 'null'); } catch { return null; } })(); // último estado del plan pagado (lo confirma el servidor)
+  if (pay && pay.prices) PRICE = Object.assign(PRICE, pay.prices); // owner: solo después de comprobar tu sesión con Google (antes se tomaba lo guardado en el dispositivo y otra cuenta podía ver lo de desarrollador un momento)
   const PV_LS = 'cct_plan_view'; // vista previa TEMPORAL: ver la app como Gratis, Plus o Infinity (solo en este dispositivo)
   let pv = (() => { try { const v = localStorage.getItem(PV_LS) || ''; return ['free', 'plus', 'infinity'].includes(v) ? v : ''; } catch { return ''; } })();
 
   const TIERS = {
     free: {n: 'Gratis', c: 'free', sub: 'Para todos', ic: '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>',
       f: ['Gráfico completo con todas las herramientas de dibujo', 'Indicadores gratuitos', 'Nova LITE · Smart Money Concepts', 'Repetición del mercado y calculadora de riesgo', 'Operar desde el gráfico (cuenta demo)', 'Mi seguimiento, noticias, calendario y panel macro', 'Alertas de precio y de indicador', 'Diseño de un solo gráfico']},
-    plus: {n: 'Plus', c: 'plus', sub: 'Suscriptores de YouTube', ic: '<rect x="3" y="6" width="18" height="12" rx="3.5"/><path d="m10.5 9.5 4 2.5-4 2.5z" fill="currentColor"/>',
+    plus: {n: 'Plus', c: 'plus', sub: 'IA, Screener y más gráficos', ic: '<path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11H12z"/>',
       f: ['Todo lo de Gratis', 'Análisis del gráfico con IA', 'Briefing del día con IA', 'Laboratorio de indicadores con IA', 'Screener', 'VPVR, canales dinámicos, patrones y Fibonacci automático', 'Varios gráficos a la vez', 'Discord Nova Nexus']},
-    infinity: {n: 'Infinity', c: 'inf', sub: 'Cuenta BingX con mi código', ic: '<path d="M6.5 8.5c-2 0-3.5 1.6-3.5 3.5s1.5 3.5 3.5 3.5c3.5 0 7.5-7 11-7 2 0 3.5 1.6 3.5 3.5s-1.5 3.5-3.5 3.5c-3.5 0-7.5-7-11-7z"/>',
+    infinity: {n: 'Infinity', c: 'inf', sub: 'Todo VORTEX desbloqueado', ic: '<path d="M6.5 8.5c-2 0-3.5 1.6-3.5 3.5s1.5 3.5 3.5 3.5c3.5 0 7.5-7 11-7 2 0 3.5 1.6 3.5 3.5s-1.5 3.5-3.5 3.5c-3.5 0-7.5-7-11-7z"/>',
       f: ['Todo lo de Plus', 'Todos los indicadores Nova Nexus', 'Mapa de calor de liquidaciones', 'Nexus Pixel', 'Nexus Lens', 'Nova Bot Lab', 'Todas las herramientas nuevas']}
   };
   // qué plan necesita cada herramienta
@@ -27,7 +32,8 @@
   const FEATURES = {chart: 'free', drawings: 'free', freeInd: 'free', replay: 'free', risk: 'free', trade: 'free', watch: 'free', news: 'free', alerts: 'free', layouts: 'plus', novaLite: 'plus', aiChart: 'plus', aiBrief: 'plus', aiLab: 'plus', screener: 'plus', discord: 'plus', novaNexus: 'infinity', proInd: 'plus', liq: 'infinity', pixel: 'infinity', lens: 'infinity', botlab: 'infinity'};
   const can = f => RANK[current()] >= RANK[FEATURES[f] || 'free'];
   const lastUid = () => { try { return localStorage.getItem('cct_last_uid') || ''; } catch { return ''; } };
-  const real = () => { if (!user) return 'free'; if (owner) return 'infinity'; return TIERS[st.tier] && st.uid === user.uid ? st.tier : 'free'; }; // sin sesión iniciada: siempre Gratis (sin desarrollador ni planes guardados en el dispositivo) // sin sesión: Gratis (mientras carga la sesión se usa el último plan de esa cuenta)
+  const paidTier = () => (user && pay && pay.uid === user.uid && TIERS[pay.tier] && pay.end > Date.now() - 864e5 ? pay.tier : 'free'); // plan pagado vigente (1 día de gracia por el horario del cobro)
+  const real = () => { if (!user) return 'free'; if (owner) return 'infinity'; const ref = TIERS[st.tier] && st.uid === user.uid ? st.tier : 'free', pd = paidTier(); return RANK[pd] > RANK[ref] ? pd : ref; }; // sin sesión iniciada: siempre Gratis (sin desarrollador ni planes guardados en el dispositivo) // sin sesión: Gratis (mientras carga la sesión se usa el último plan de esa cuenta)
   const pvOn = () => (owner && user ? pv : ''); // la vista previa solo existe para el desarrollador (antes cualquiera podía activarla desde el navegador y ver Infinity)
   const current = () => pvOn() || real();
   const svg = (p, s = 18) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
@@ -88,21 +94,38 @@
     const t = TIERS[current()];
     const pv = pvOn(), dev = owner && !!user && !pv; document.querySelectorAll('[data-plan-badge]').forEach(el => { el.className = 'pl-badge ' + (dev ? 'dev' : t.c); el.innerHTML = dev ? svg(DEV_IC, 13) + 'Desarrollador' : svg(t.ic, 13) + esc(t.n); });
     document.querySelectorAll('[data-plan-tag]').forEach(el => { const k = pvOn() || real(), tt = TIERS[k] || TIERS.free; el.className = 'prof-tag pl-badge ' + (dev ? 'dev' : tt.c); el.innerHTML = dev ? svg(DEV_IC, 13) + 'Plan Desarrollador' : svg(tt.ic, 13) + 'Plan ' + esc(tt.n); el.title = dev ? 'Acceso total como creador de VORTEX' : 'Tu plan de VORTEX'; }); // perfil (Configuración › Cuenta): tu plan real (Desarrollador si eres el creador)
-    document.querySelectorAll('[data-plan-sub]').forEach(el => { el.innerHTML = pv ? 'Vista previa de ' + tx(pv) + ' · Salir en Vista de membresía' : owner && user ? '<span class="pl-tx dev">Desarrollador</span> · acceso total' : !user ? 'Inicia sesión con Google para ver tu plan' : real() !== 'free' ? 'Plan ' + tx(real()) + ' verificado' : st.bx ? 'UID de BingX pendiente de verificar' : 'Gratis, Plus o Infinity'; });
+    document.querySelectorAll('[data-plan-sub]').forEach(el => { el.innerHTML = pv ? 'Vista previa de ' + tx(pv) + ' · Salir en Vista de membresía' : owner && user ? '<span class="pl-tx dev">Desarrollador</span> · acceso total' : !user ? 'Inicia sesión con Google para ver tu plan' : paidTier() !== 'free' ? 'Plan ' + tx(paidTier()) + (pay.cancel ? ' · termina el ' : ' · se renueva el ') + fdate(pay.end) : real() !== 'free' ? 'Plan ' + tx(real()) + ' verificado' : st.bx ? 'UID de BingX pendiente de verificar' : 'Gratis, Plus o Infinity'; });
   }
 
+  const fdate = t => new Date(t).toLocaleDateString('es-MX', {day: 'numeric', month: 'long'});
+  function manage(k) { // ya pagas este plan: fecha, cancelar/reactivar y tarjeta
+    const bad = pay.status === 'past_due';
+    return `<div class="pl-manage"><p>${svg(CHK, 15)} ${tx(k)} activo · ${pay.cancel ? 'termina el ' : 'se renueva el '}<b>${fdate(pay.end)}</b></p>${bad ? '<small class="pl-msg bad">No se pudo cobrar tu tarjeta: actualízala para no perder el plan.</small>' : ''}
+      <div class="pl-row"><button type="button" class="pl-btn ghost" data-pl-portal>Tarjeta y facturas</button>${pay.cancel ? `<button type="button" class="pl-btn ghost" data-pl-resume>Reactivar</button>` : `<button type="button" class="pl-btn ghost" data-pl-cancel>Cancelar renovación</button>`}</div>
+      <small class="pl-msg" data-pl-paymsg="${k}">${pay.cancel ? 'No se volverá a cobrar. Lo sigues teniendo hasta esa fecha.' : ''}</small></div>`;
+  }
+  function payBtn(k) {
+    const up = k === 'infinity' && paidTier() === 'plus';
+    if (!user) return `<button type="button" class="pl-btn ghost" data-pl-login>Inicia sesión con Google para pagar</button>`;
+    return `<button type="button" class="pl-btn ${TIERS[k].c}" data-pl-pay="${k}">${svg('<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h3"/>', 16)} ${up ? 'Mejorar a Infinity' : 'Pagar ' + mxn(PRICE[k]) + ' al mes'}</button>
+      <small class="pl-note">${up ? 'Se cambia tu suscripción y hoy solo se cobra la diferencia.' : 'Tarjeta de crédito o débito · pago seguro con Stripe · cancela cuando quieras'}</small><small class="pl-msg" data-pl-paymsg="${k}"></small>`;
+  }
   function col(k) {
-    const t = TIERS[k], cur = current() === k;
+    const t = TIERS[k], cur = current() === k, pd = paidTier(), rl = real();
     let act = '';
     if (k === 'free') act = `<div class="pl-act"><button type="button" class="pl-btn ghost" disabled>${cur ? 'Tu plan actual' : 'Incluido'}</button></div>`;
-    const plusOk = RANK[real()] >= RANK.plus, infOk = real() === 'infinity', login = !user ? `<button type="button" class="pl-btn ghost" data-pl-login>Inicia sesión con Google primero</button>` : '';
-    if (k === 'plus') act = plusOk ? `<div class="pl-act"><button type="button" class="pl-btn ghost" disabled>${svg(CHK, 15)} <span class="pl-tx plus">Plus</span> activo</button></div>` : `<ol class="pl-steps"><li><b>Suscríbete a CriptoChaman</b><small>Con la misma cuenta de Google con la que entras a VORTEX. Es gratis.</small><a class="pl-btn plus" href="${YT_SUB}" target="_blank" rel="noopener noreferrer" data-pl-yt>${svg(TIERS.plus.ic, 16)} Suscribirme en YouTube</a></li>
-        <li><b>Verifica tu suscripción</b><small>Google te pedirá permiso para que VORTEX vea (solo ver) si sigues el canal.</small>${login || `<button type="button" class="pl-btn ghost" data-pl-ytok>Verificar suscripción</button>`}<small class="pl-msg" data-pl-ytmsg></small></li></ol>`;
-    if (k === 'infinity') act = `<ol class="pl-steps"><li><b>Crea tu cuenta en BingX con mi código</b><small>Código de referido <button type="button" class="pl-code" data-pl-copy title="Copiar código">${BX_CODE} ${svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>', 13)}</button></small><a class="pl-btn inf" href="${BX}" target="_blank" rel="noopener noreferrer">${svg(TIERS.infinity.ic, 16)} Abrir cuenta en BingX</a></li>
-        <li><b>Escribe tu UID de BingX</b><small>Lo ves en tu perfil de BingX. Solo lo usamos para comprobar que entraste con el código.</small>${login || `<div class="pl-uid"><input inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Ej. 123456789" value="${esc(st.bx || '')}" data-pl-uid aria-label="UID de BingX"><button type="button" class="pl-btn ghost" data-pl-uidok>Verificar</button></div>`}<small class="pl-msg" data-pl-uidmsg>${st.bx && !infOk ? 'UID guardado: pendiente de verificar.' : ''}</small></li></ol>`;
-    if (k === 'infinity' && infOk) act = `<div class="pl-act"><button type="button" class="pl-btn ghost" disabled>${svg(CHK, 15)} <span class="pl-tx inf">Infinity</span> activo</button></div>`;
+    const on = name => `<div class="pl-act"><button type="button" class="pl-btn ghost" disabled>${svg(CHK, 15)} ${name}</button></div>`;
+    if (k === 'plus') act = pd === 'plus' ? manage('plus') : RANK[rl] >= RANK.infinity ? on('Incluido en tu plan ' + tx('infinity')) : rl === 'plus' ? on(tx('plus') + ' activo') : `<div class="pl-act">${payBtn('plus')}</div>`;
+    if (k === 'infinity') {
+      if (pd === 'infinity') act = manage('infinity');
+      else if (rl === 'infinity') act = on(tx('infinity') + ' activo');
+      else act = `<div class="pl-act">${payBtn('infinity')}</div><div class="pl-or"><span>o gratis con mi código de BingX</span></div>
+        <ol class="pl-steps"><li><b>Crea tu cuenta en BingX con mi código</b><small>Código de referido <button type="button" class="pl-code" data-pl-copy title="Copiar código">${BX_CODE} ${svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>', 13)}</button></small><a class="pl-btn ghost" href="${BX}" target="_blank" rel="noopener noreferrer">${svg(TIERS.infinity.ic, 16)} Abrir cuenta en BingX</a></li>
+        <li><b>Escribe tu UID de BingX</b><small>Lo ves en tu perfil de BingX. Solo lo usamos para comprobar que entraste con el código.</small>${!user ? `<button type="button" class="pl-btn ghost" data-pl-login>Inicia sesión con Google primero</button>` : `<div class="pl-uid"><input inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Ej. 123456789" value="${esc(st.bx || '')}" data-pl-uid aria-label="UID de BingX"><button type="button" class="pl-btn ghost" data-pl-uidok>Verificar</button></div>`}<small class="pl-msg" data-pl-uidmsg>${st.bx ? 'UID guardado: pendiente de verificar.' : ''}</small></li></ol>`;
+    }
+    const price = k === 'free' ? '<div class="pl-price"><b>$0</b><span>para siempre</span></div>' : `<div class="pl-price"><b>$${PRICE[k]}</b><span>MXN / mes${k === 'infinity' ? ' · o gratis con BingX' : ''}</span></div>`;
     return `<section class="pl-col ${t.c}${cur ? ' cur' : ''}"><canvas class="pl-bg" data-fx="${k}" aria-hidden="true"></canvas><header><span class="pl-ic">${svg(t.ic, 22)}</span><div><b>${k === 'free' ? t.n : tx(k)}</b><small>${t.sub}</small></div>${cur ? '<em class="pl-now">Tu plan</em>' : ''}</header>
-      <ul class="pl-f">${t.f.map(x => `<li>${svg(CHK, 14)}${esc(x)}</li>`).join('')}</ul>${act}</section>`;
+      ${price}<ul class="pl-f">${t.f.map(x => `<li>${svg(CHK, 14)}${esc(x)}</li>`).join('')}</ul>${act}</section>`;
   }
 
   function render() {
@@ -181,11 +204,14 @@
   function open(focus) {
     if (!ov) {
       ov = document.createElement('div'); ov.className = 'pl-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Planes de VORTEX');
-      ov.innerHTML = `<div class="pl-box"><div class="pl-top"><div><small>VORTEX</small><h2>Elige tu plan</h2><p>Nada se cobra: Plus es para los suscriptores del canal de YouTube e Infinity para quien abre su cuenta de BingX con mi código. Lo que tiene fondo de galaxia se desbloquea con un plan.</p></div><button type="button" class="pl-x" data-pl-close aria-label="Cerrar">✕</button></div><div class="pl-cols"></div></div>`;
+      ov.innerHTML = `<div class="pl-box"><div class="pl-top"><div><small>VORTEX</small><h2>Elige tu plan</h2><p>Gratis para siempre. Plus e Infinity se pagan mes a mes con tarjeta y los cancelas cuando quieras; Infinity también se desbloquea gratis abriendo tu cuenta de BingX con mi código. Lo que tiene fondo de galaxia se desbloquea con un plan.</p></div><button type="button" class="pl-x" data-pl-close aria-label="Cerrar">✕</button></div><div class="pl-cols"></div></div>`;
       ov.addEventListener('click', e => {
         if (e.target === ov || e.target.closest('[data-pl-close]')) return close();
         if (e.target.closest('[data-pl-login]')) { close(); if (root.CCT_signIn) root.CCT_signIn(); return; }
-        if (e.target.closest('[data-pl-ytok]')) { verifyYouTube(); return; }
+        const pb = e.target.closest('[data-pl-pay]'); if (pb) { checkout(pb.dataset.plPay, pb); return; }
+        if (e.target.closest('[data-pl-cancel]')) { if (confirm(`¿Cancelar la renovación? No se volverá a cobrar y conservas el plan hasta el ${fdate(pay.end)}.`)) payAct('/pay/cancel', 'Renovación cancelada'); return; }
+        if (e.target.closest('[data-pl-resume]')) { payAct('/pay/resume', 'Tu plan se renovará normalmente'); return; }
+        if (e.target.closest('[data-pl-portal]')) { payAct('/pay/portal'); return; }
         if (e.target.closest('[data-pl-copy]')) { (navigator.clipboard ? navigator.clipboard.writeText(BX_CODE) : Promise.reject()).then(() => toast('Código ' + BX_CODE + ' copiado'), () => toast('Código: ' + BX_CODE)); return; }
         if (e.target.closest('[data-pl-uidok]')) {
           const v = (ov.querySelector('[data-pl-uid]').value || '').replace(/\D/g, ''), m = ov.querySelector('[data-pl-uidmsg]');
@@ -221,20 +247,59 @@
     st = Object.assign(st, extra || {}, {tier, uid: user ? user.uid : '', at: Date.now(), srv: 1}); save(st); persist(); badge(); if (ov && !ov.hidden) render();
     refreshServer();
   }
-  async function verifyYouTube() {
-    const fb = root.firebase; if (!user || !fb || !fb.auth) { toast('Inicia sesión con Google primero'); return; }
-    say('yt', 'Abriendo Google…');
-    try {
-      const p = new fb.auth.GoogleAuthProvider(); p.addScope('https://www.googleapis.com/auth/youtube.readonly'); p.setCustomParameters({login_hint: user.email || ''});
-      const cu = fb.auth().currentUser; const res = await (cu.reauthenticateWithPopup ? cu.reauthenticateWithPopup(p) : fb.auth().signInWithPopup(p));
-      const tok = res && res.credential && res.credential.accessToken; if (!tok) throw Error('Google no dio permiso para ver tus suscripciones');
-      say('yt', 'Revisando tu suscripción…'); // la revisión la hace el servidor con ese permiso de solo lectura (y guarda el plan en tu cuenta)
-      const r = await fetch(SRV + '/plan/youtube', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({ytToken: tok, idToken: await idToken()})}), j = await r.json().catch(() => ({}));
-      if (j.ok && j.subscribed) { grant(j.tier || 'plus', {yt: Date.now()}); toast('Plus activado · gracias por suscribirte'); }
-      else if (j.ok) say('yt', 'Aún no apareces como suscriptor. Suscríbete con esta misma cuenta y vuelve a verificar.', true);
-      else throw Error(j.error || 'el servidor no respondió');
-    } catch (e) { if (!/popup-closed|cancelled-popup/.test(e && e.code || '')) say('yt', 'No se pudo verificar: ' + (e.message || e.code || e), true); else say('yt', ''); }
+  /* ───────── pagos (servidor vortex-pay + Stripe) ───────── */
+  const payMsg = (k, t, bad) => { if (!ov) return; ov.querySelectorAll(k ? `[data-pl-paymsg="${k}"]` : '[data-pl-paymsg]').forEach(m => { m.textContent = t; m.classList.toggle('bad', !!bad); }); };
+  function setPay(j) {
+    if (!user || !j || typeof j.tier !== 'string') return;
+    if (j.prices && j.prices.plus > 0) PRICE = {plus: +j.prices.plus, infinity: +j.prices.infinity};
+    const before = real();
+    pay = {uid: user.uid, tier: TIERS[j.tier] ? j.tier : 'free', status: String(j.status || ''), end: +j.end || 0, cancel: !!j.cancel, plan: j.plan || '', ready: !!j.ready && !j.setup, prices: PRICE, at: Date.now()};
+    try { localStorage.setItem(PAY_LS, JSON.stringify(pay)); } catch {}
+    badge(); if (ov && !ov.hidden) render();
+    return before !== real();
   }
+  async function payCall(path, body) {
+    const fb = root.firebase, cu = fb && fb.auth && fb.auth().currentUser; if (!cu) throw Error('Inicia sesión con Google primero');
+    const token = await cu.getIdToken();
+    const r = await fetch(PAY + path, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(Object.assign({}, body, {token}))});
+    const j = await r.json().catch(() => ({})); setPay(j);
+    if (!r.ok || j.error) throw Error(j.error || 'El servidor de pagos no respondió');
+    return j;
+  }
+  async function refreshPay(opt) {
+    if (!user) return; opt = opt || {};
+    if (!opt.force && !opt.sid && pay && pay.uid === user.uid && Date.now() - (pay.at || 0) < 10 * 60e3) return;
+    try { return await payCall('/pay/status', {refresh: !!(opt.force || opt.sid), sid: opt.sid || undefined}); } catch (e) { if (opt.sid) toast('No se pudo confirmar el pago todavía: ' + e.message); }
+  }
+  async function checkout(k, btn) {
+    if (payBusy || !TIERS[k]) return; if (!user) { close(); if (root.CCT_signIn) root.CCT_signIn(); return; }
+    if (k === 'infinity' && paidTier() === 'plus' && !confirm(`Tu suscripción cambia a Infinity (${mxn(PRICE.infinity)} al mes). Hoy se cobra solo la diferencia de lo que queda del mes. ¿Continuar?`)) return;
+    payBusy = true; const lbl = btn && btn.innerHTML; if (btn) { btn.disabled = true; btn.textContent = 'Abriendo el pago seguro…'; } payMsg(k, '');
+    try {
+      const j = await payCall('/pay/checkout', {plan: k});
+      if (j.setup) { payMsg(k, 'Los pagos se activan muy pronto. Vuelve a intentarlo en un rato.', true); return; }
+      if (j.url) { try { sessionStorage.setItem('cct_pay_wait', k); } catch {} location.href = j.url; return; } // página de pago de Stripe (al terminar regresa a VORTEX)
+      if (j.changed) toast(`Plan ${TIERS[k].n} activado`);
+    } catch (e) { payMsg(k, e.message, true); }
+    finally { payBusy = false; if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = lbl; } }
+  }
+  async function payAct(path, okMsg) {
+    if (payBusy) return; payBusy = true; payMsg('', 'Un momento…');
+    try { const j = await payCall(path, {}); if (j.url) { location.href = j.url; return; } if (okMsg) toast(okMsg); }
+    catch (e) { payMsg('', e.message, true); } finally { payBusy = false; }
+  }
+  function payReturn() { // regreso de la página de pago: ?pay=ok&sid=… | ?pay=back | ?pay=portal
+    let q; try { q = new URLSearchParams(location.search); } catch { return; } const v = q.get('pay'); if (!v) return;
+    const sid = q.get('sid') || ''; q.delete('pay'); q.delete('sid');
+    try { history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); } catch {}
+    if (v === 'back') { setTimeout(() => toast('Pago cancelado: no se cobró nada'), 1500); return; }
+    const go = async () => {
+      const j = await refreshPay({force: true, sid: /^cs_[A-Za-z0-9_]{8,200}$/.test(sid) ? sid : ''});
+      if (v === 'ok') { if (j && j.tier !== 'free') { toast(`¡Listo! Plan ${TIERS[j.tier].n} activado · gracias por tu apoyo`); open(j.tier); } else toast('Recibimos tu pago: tu plan se activa en unos segundos'); }
+    };
+    if (user) go(); else payReturn.pending = go;
+  }
+
   async function verifyBingx(uid) {
     say('bx', 'Verificando con BingX…');
     try {
@@ -259,9 +324,10 @@
     } catch {}
     owner = o; st.own = o; if (user && !st.srv) st.tier = 'free'; // un plan que no vino del servidor no cuenta
     save(st); badge(); if (ov && !ov.hidden) render();
-    if (user) refreshServer();
+    if (user) { refreshServer(); if (payReturn.pending) { const f = payReturn.pending; payReturn.pending = null; f(); } else refreshPay(); } // planes: los confirma el servidor (referido en plans/{uid}, pago en vortex-pay)
   }
+  payReturn();
   document.addEventListener('click', e => { if (e.target.closest('[data-plans-open]')) open(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', badge); else badge();
-  root.CCTPlans = {badge, open, close, current, real, can, setPreview, importSaved, verifyYouTube, refreshServer, get user() { return user; }, get owner() { return owner && !!user; }, get dev() { return owner && !!user && !pv; }, get previewOn() { return pvOn(); }, /* dev: herramientas de desarrollador (no en la vista previa de Gratis/Plus/Infinity) */ get preview() { return pvOn(); }, FEATURES, setUser, TIERS, links: {youtube: YT, bingx: BX, code: BX_CODE}};
+  root.CCTPlans = {badge, open, close, current, real, can, setPreview, importSaved, refreshPay, refreshServer, get user() { return user; }, get owner() { return owner && !!user; }, get dev() { return owner && !!user && !pv; }, get previewOn() { return pvOn(); }, /* dev: herramientas de desarrollador (no en la vista previa de Gratis/Plus/Infinity) */ get preview() { return pvOn(); }, FEATURES, setUser, TIERS, get prices() { return Object.assign({}, PRICE); }, links: {bingx: BX, code: BX_CODE}};
 })(typeof self !== 'undefined' ? self : this);

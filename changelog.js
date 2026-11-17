@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.39', d: '17 nov 2026', t: 'Planes de pago dentro de la app', items: [
+    'Plus ya se paga desde VORTEX: $99 MXN al mes con tarjeta de crédito o débito (pago seguro con Stripe). Ya no depende de YouTube.',
+    'Infinity: $249 MXN al mes, o gratis abriendo tu cuenta de BingX con el código YCXE5W (tú eliges).',
+    'Si ya tienes Plus puedes mejorar a Infinity y solo se cobra la diferencia del mes. Cancela la renovación o cambia tu tarjeta desde Configuración › Tu plan.'
+  ]},
   {v: '3.38', d: '17 nov 2026', t: 'Felipe, el hermano de Claudio', items: [
     'Nuevo agente autónomo Felipe en Nova Bot Lab: cazador de rupturas (máximo/mínimo de 20 velas con volumen y a favor de la tendencia) en 10 monedas, con sus propios límites de riesgo.',
     'Felipe aprende de sí mismo: cada noche recalibra su confianza, elige su propio umbral de entrada con sus resultados y deja de operar las monedas donde predice mal (las retoma si mejora).',

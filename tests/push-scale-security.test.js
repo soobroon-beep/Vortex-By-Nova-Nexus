@@ -2,7 +2,7 @@
 // · miles de celulares en la base D1 (aquí una SQLite real en memoria) sin tope global de 20
 // · la cuenta de un celular solo sale de un token de sesión verificado
 // · límites por IP y por cuenta, copia automática KV → D1
-// · planes y bóveda de claves verificados en el servidor
+// · plan por referido y bóveda de claves verificados en el servidor
 const test = require('node:test'), assert = require('node:assert');
 const {DatabaseSync} = require('node:sqlite');
 const FB = require('./fb-token-helper.js');
@@ -144,28 +144,21 @@ test('plan Infinity por BingX: lo verifica y lo escribe el servidor; un UID no s
     assert.strictEqual((await call('/plan/bingx', {uid: '12345678'})).status, 401, 'sin sesión no se da ningún plan');
     const r = await call('/plan/bingx', {uid: '12345678', idToken: await FB.mint('Ana111')});
     assert.strictEqual(r.j.invited, true, JSON.stringify(r.j)); assert.strictEqual(r.j.tier, 'infinity');
-    assert.deepStrictEqual(fs.docs.get('plans/Ana111').tier, {stringValue: 'infinity'});
+    assert.deepStrictEqual(fs.docs.get('plans/Ana111').tier, {stringValue: 'infinity'}); assert.deepStrictEqual(fs.docs.get('plans/Ana111').refTier, {stringValue: 'infinity'});
     const r2 = await call('/plan/bingx', {uid: '12345678', idToken: await FB.mint('Beto222')});
     assert.strictEqual(r2.status, 409); assert.ok(!fs.docs.has('plans/Beto222'));
     assert.strictEqual((await call('/plan/bingx', {uid: '12345678', idToken: await FB.mint('Ana111')})).j.invited, true, 'la misma cuenta puede volver a verificar');
   } finally { globalThis.fetch = real; }
 });
 
-test('plan Plus por YouTube: no baja un Infinity y exige la misma cuenta de Google', async () => {
-  const w = await W(), fs = fakeFirestore(), env = {KV: memKV(), DB: memD1(), FB_SA: await saJson()}, call = caller(w, env), real = globalThis.fetch; let email = 'carla333@ejemplo.com';
-  fs.docs.set('plans/Dani444', {tier: {stringValue: 'infinity'}});
-  globalThis.fetch = FB.withJwks(async (url, init) => {
-    const r = await fs.handler(url, init); if (r) return r; url = String(url);
-    if (url.includes('tokeninfo')) return new Response(JSON.stringify({scope: 'openid https://www.googleapis.com/auth/youtube.readonly', email}));
-    if (url.includes('/channels')) return new Response(JSON.stringify({items: [{id: 'UCxyz'}]}));
-    if (url.includes('/subscriptions')) return new Response(JSON.stringify({items: [{id: 's1'}]}));
-    throw new Error('fetch inesperado ' + url);
-  });
-  try {
-    const r = await call('/plan/youtube', {ytToken: 'ya29.x', idToken: await FB.mint('Carla333')}); assert.strictEqual(r.j.tier, 'plus', JSON.stringify(r.j));
-    email = 'dani444@ejemplo.com'; assert.strictEqual((await call('/plan/youtube', {ytToken: 'ya29.x', idToken: await FB.mint('Dani444')})).j.tier, 'infinity', 'no se baja de plan');
-    email = 'otra@ejemplo.com'; assert.strictEqual((await call('/plan/youtube', {ytToken: 'ya29.x', idToken: await FB.mint('Eva555')})).status, 400, 'token de YouTube de otra persona');
-  } finally { globalThis.fetch = real; }
+test('plans/{uid}: el plan vigente sale del creador, el referido o un pago no vencido', async () => {
+  const {planTier} = await import('../worker/fbauth.mjs'), now = Date.now();
+  assert.strictEqual(planTier({by: 'creador'}), 'infinity');
+  assert.strictEqual(planTier({refTier: 'infinity'}), 'infinity');
+  assert.strictEqual(planTier({payTier: 'plus', payEnd: now + 864e5}), 'plus');
+  assert.strictEqual(planTier({payTier: 'infinity', payEnd: now - 3 * 864e5}), 'free', 'pago vencido');
+  assert.strictEqual(planTier({refTier: 'infinity', payTier: 'plus', payEnd: now + 864e5}), 'infinity', 'el mejor de los dos');
+  assert.strictEqual(planTier(null), 'free');
 });
 
 test('bóveda: cifra tus claves atadas a tu cuenta; otra cuenta no las puede abrir', async () => {

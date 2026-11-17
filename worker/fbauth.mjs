@@ -97,3 +97,21 @@ export async function fsMerge(sa, path, data, fetchFn = fetch) {
   if (!r.ok) { let j = {}; try { j = await r.json(); } catch {} throw new Error('Firestore write: ' + JSON.stringify(j.error || j).slice(0, 160)); }
   return true;
 }
+
+/* ───────── plan de cada cuenta en plans/{uid} ─────────
+   Fuentes: by='creador' (lo pone pro-catalog para el dueño), refTier (Infinity por el referido de BingX, lo verifica vortex-push)
+   y payTier + payEnd (plan pagado con Stripe, lo verifica vortex-pay). «tier» es el mejor vigente; las reglas de Firestore
+   además revisan payEnd, así que un pago vencido deja de abrir el código PRO aunque nadie actualice el documento. */
+export const PLAN_RANK = {free: 0, plus: 1, infinity: 2};
+export function planTier(d, now = Date.now()) {
+  if (!d) return 'free'; if (d.by === 'creador') return 'infinity';
+  const ref = PLAN_RANK[d.refTier] ? d.refTier : 'free', pay = PLAN_RANK[d.payTier] && +d.payEnd > now - 864e5 ? d.payTier : 'free';
+  return PLAN_RANK[pay] > PLAN_RANK[ref] ? pay : ref;
+}
+export async function syncPlan(sa, uid, patch, fetchFn = fetch) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(uid)) throw new Error('uid inválido');
+  const cur = (await fsGet(sa, 'plans/' + uid, fetchFn)) || {}, tier = planTier(Object.assign({}, cur, patch));
+  if (cur.tier === tier && Object.entries(patch).every(([k, v]) => JSON.stringify(cur[k]) === JSON.stringify(v))) return tier; // nada cambió: no se escribe
+  await fsMerge(sa, 'plans/' + uid, Object.assign({}, patch, {tier, at: Date.now()}), fetchFn);
+  return tier;
+}

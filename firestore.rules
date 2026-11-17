@@ -24,9 +24,16 @@ service cloud.firestore {
 
     // Código de los indicadores Nova Nexus PRO: solo lo pueden leer las cuentas con el plan Infinity (lo marca el servidor en plans/{uid}).
     // Nadie lo puede escribir desde la app: lo sube el flujo «Proteger código Nova Nexus» con la cuenta de servicio.
+    // Infinity vigente: el creador, el referido de BingX (refTier) o un pago cuya fecha (payEnd) no ha vencido (1 día de gracia).
+    function proOk(p) {
+      return p.get('by', '') == 'creador' || p.get('refTier', '') == 'infinity'
+          || (p.get('payTier', '') == 'infinity' && p.get('payEnd', 0) > request.time.toMillis() - 86400000)
+          || (p.get('tier', '') == 'infinity' && !('payTier' in p) && !('refTier' in p));   // planes marcados antes de este cambio
+    }
     match /pro/{id} {
       allow read: if request.auth != null
-                  && get(/databases/$(database)/documents/plans/$(request.auth.uid)).data.tier == 'infinity';
+                  && exists(/databases/$(database)/documents/plans/$(request.auth.uid))
+                  && proOk(get(/databases/$(database)/documents/plans/$(request.auth.uid)).data);
       allow write: if false;
     }
     // Plan verificado de cada cuenta: cada quien solo lee el suyo; solo lo escribe el servidor.
