@@ -2,12 +2,12 @@
    Gráfico, indicadores, dibujos, bots, scripts, alertas, Tu IA, diario y exchange ya se guardan en tu cuenta por su lado;
    esto suma el resto: Nexus Pixel (reglas y personalización), cuenta demo de Operar, avisos de tus trades, libro de órdenes,
    filtros de Noticias, última herramienta de cada grupo, leyenda abierta/cerrada, posición de la cápsula del celular, Claudio local
-   y la configuración de la IA. Cada cambio sube solo (users/<tú>/data/prefs) y en tus otros dispositivos se aplica al abrir VORTEX.
+   la configuración de la IA y el estilo de la app (Clásico, Minimal o Espacial). Cada cambio sube solo (users/<tú>/data/prefs) y en tus otros dispositivos se aplica al abrir VORTEX.
    Gana siempre el cambio más reciente de cada ajuste. */
 (function () {
   'use strict';
   if (typeof window === 'undefined' || !window.localStorage || /[?&]pane=/.test(location.search)) return;
-  const KEYS = ['cct_pixel_v1', 'cct_trade_v1', 'cct_trade_ui_v1', 'cct_tw_v1', 'cct_book_ui_v1', 'cct_news_filter', 'cct_news_tab', 'cct_railLast_v1', 'cct_legOpen_v1', 'cct_pill_pos_v1', 'cct_claudio_local_v1', 'cct_llm_v1'];
+  const KEYS = ['cct_pixel_v1', 'cct_trade_v1', 'cct_trade_ui_v1', 'cct_tw_v1', 'cct_book_ui_v1', 'cct_news_filter', 'cct_news_tab', 'cct_railLast_v1', 'cct_legOpen_v1', 'cct_pill_pos_v1', 'cct_claudio_local_v1', 'cct_llm_v1', 'vx-style'];
   const META = 'cct_prefs_at', MAX_VAL = 250000, LS = window.localStorage, t0 = Date.now();
   const C = () => window.CCTCloudPriv;
   let at = {}; try { at = JSON.parse(LS.getItem(META) || '{}') || {}; } catch {}
@@ -34,7 +34,8 @@
     finally { applying = false; }
     try { set0.call(LS, META, JSON.stringify(at)); } catch {}
     if (KEYS.some(k => (at[k] || 0) > (+ra[k] || 0))) push(); // lo de este dispositivo que es más nuevo, a tu cuenta
-    if (changed.length) { // los módulos leen sus ajustes al abrir: si acabas de abrir, se recarga una vez; si no, se aplican la próxima vez
+    if (changed.includes('vx-style') && window.VXTheme && window.VXTheme.refresh) window.VXTheme.refresh(); // el estilo se aplica al momento
+    if (changed.some(k => k !== 'vx-style')) { // los módulos leen sus ajustes al abrir: si acabas de abrir, se recarga una vez; si no, se aplican la próxima vez
       let once = false; try { once = sessionStorage.getItem('cct_prefs_rl') === '1'; } catch {}
       if (Date.now() - t0 < 25000 && !once) { try { sessionStorage.setItem('cct_prefs_rl', '1'); } catch {} location.reload(); }
     }
