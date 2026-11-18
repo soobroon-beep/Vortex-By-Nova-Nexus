@@ -10,9 +10,9 @@
   let PRICE = {plus: 99, infinity: 249}; // pesos al mes (los confirma el servidor)
   /* Precio en la moneda de tu país: lo decide el servidor de pagos por tu país (USD, EUR, COP…) y es lo que se cobra; en México, pesos */
   const LOC_LS = 'cct_price_loc'; let LOC = (() => { try { const o = JSON.parse(localStorage.getItem(LOC_LS) || 'null'); return o && o.currency && o.plus > 0 ? o : null; } catch { return null; } })();
-  const cur = () => LOC && LOC.plus > 0 ? LOC : {currency: 'mxn', plus: PRICE.plus, infinity: PRICE.infinity};
+  const curP = () => LOC && LOC.plus > 0 ? LOC : {currency: 'mxn', plus: PRICE.plus, infinity: PRICE.infinity};
   const fmtAmt = (n, c) => { c = String(c || 'mxn').toUpperCase(); const dec = Number(n) % 1 ? 2 : 0; try { return new Intl.NumberFormat('es-MX', {style: 'currency', currency: c, currencyDisplay: 'narrowSymbol', minimumFractionDigits: dec, maximumFractionDigits: dec}).format(n); } catch { return '$' + Number(n).toLocaleString('es-MX'); } };
-  const money = k => { const c = cur(); return fmtAmt(c[k], c.currency) + ' ' + c.currency.toUpperCase(); };
+  const money = k => { const c = curP(); return fmtAmt(c[k], c.currency) + ' ' + c.currency.toUpperCase(); };
   function setLoc(l) { if (!l || !l.currency || !(l.plus > 0)) return; const ch = !LOC || LOC.currency !== l.currency || LOC.plus !== l.plus || LOC.infinity !== l.infinity; LOC = {currency: l.currency, plus: +l.plus, infinity: +l.infinity, at: Date.now()}; try { localStorage.setItem(LOC_LS, JSON.stringify(LOC)); } catch {} if (ch && ov && !ov.hidden) render(); }
   async function loadLoc() { if (LOC && Date.now() - (LOC.at || 0) < 12 * 3600e3) return; try { const r = await fetch(PAY + '/'); const j = await r.json(); setLoc(j.local); } catch {} }
   const OWNER = 'a8d56a29aa7c5208d7748a84e75e4b14c713c521136174e8a652b7a76ac19b28'; // sha-256 del correo del dueño (no se publica el correo)
@@ -129,7 +129,7 @@
         <ol class="pl-steps"><li><b>Crea tu cuenta en BingX con mi código</b><small>Código de referido <button type="button" class="pl-code" data-pl-copy title="Copiar código">${BX_CODE} ${svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>', 13)}</button></small><a class="pl-btn ghost" href="${BX}" target="_blank" rel="noopener noreferrer">${svg(TIERS.infinity.ic, 16)} Abrir cuenta en BingX</a></li>
         <li><b>Escribe tu UID de BingX</b><small>Lo ves en tu perfil de BingX. Solo lo usamos para comprobar que entraste con el código.</small>${!user ? `<button type="button" class="pl-btn ghost" data-pl-login>Inicia sesión con Google primero</button>` : `<div class="pl-uid"><input inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Ej. 123456789" value="${esc(st.bx || '')}" data-pl-uid aria-label="UID de BingX"><button type="button" class="pl-btn ghost" data-pl-uidok>Verificar</button></div>`}<small class="pl-msg" data-pl-uidmsg>${st.bx ? 'UID guardado: pendiente de verificar.' : ''}</small></li></ol>`;
     }
-    const price = k === 'free' ? '<div class="pl-price"><b>$0</b><span>para siempre</span></div>' : `<div class="pl-price"><b>${fmtAmt(cur()[k], cur().currency)}</b><span>${cur().currency.toUpperCase()} / mes${k === 'infinity' ? ' · o gratis con BingX' : ''}</span></div>`;
+    const price = k === 'free' ? '<div class="pl-price"><b>$0</b><span>para siempre</span></div>' : `<div class="pl-price"><b>${fmtAmt(curP()[k], curP().currency)}</b><span>${curP().currency.toUpperCase()} / mes${k === 'infinity' ? ' · o gratis con BingX' : ''}</span></div>`;
     return `<section class="pl-col ${t.c}${cur ? ' cur' : ''}"><canvas class="pl-bg" data-fx="${k}" aria-hidden="true"></canvas><header><span class="pl-ic">${svg(t.ic, 22)}</span><div><b>${k === 'free' ? t.n : tx(k)}</b><small>${t.sub}</small></div>${cur ? '<em class="pl-now">Tu plan</em>' : ''}</header>
       ${price}<ul class="pl-f">${t.f.map(x => `<li>${svg(CHK, 14)}${esc(x)}</li>`).join('')}</ul>${act}</section>`;
   }
