@@ -1,0 +1,27 @@
+name: Sala · Taller automático (bots 24/7)
+# Cada 3 horas el equipo del Taller de bots de la Sala de agentes (repo sala-de-agentes, carpeta server/) diseña y prueba bots nuevos
+# con velas reales y el motor de Nova Bot Lab de este repo. Si uno pasa todos los filtros, llega a Nova Bot Lab como propuesta y te avisa al celular.
+# También corre tus salas propias que tengan «Funciona sola». Simulación: nada envía órdenes reales. Usa FIREBASE_SERVICE_ACCOUNT y GROQ_KEY (respaldo de IA).
+on:
+  schedule: [{cron: '7 */3 * * *'}]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: sala-taller, cancel-in-progress: false}
+jobs:
+  taller:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: {repository: soobroon-beep/sala-de-agentes, path: sala}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12 >/dev/null 2>&1
+      - name: Sesiones automáticas
+        run: node sala/server/taller.js
+        env:
+          VORTEX_DIR: ${{ github.workspace }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GROQ_KEY: ${{ secrets.GROQ_KEY }}
