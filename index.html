@@ -17,6 +17,10 @@
 <link rel="stylesheet" href="pwa.css">
 <link rel="stylesheet" href="ui-modern.css">
 <link rel="stylesheet" href="splash.css">
+<!-- Estilos de prueba (dev): Clásico / Minimal / Espacial. Se eligen en Configuración → Personalización → Estilo de la app o con ?estilo=. Quitarlos: borrar estas 3 líneas y vx-theme.js, vx-min.css, vx-space.css -->
+<script src="vx-theme.js"></script>
+<link rel="stylesheet" href="vx-min.css">
+<link rel="stylesheet" href="vx-space.css">
 <script>/* Alto real de la pantalla: al abrir/recargar la app en el celular el navegador a veces calcula un alto mayor al visible y la barra de abajo queda fuera. Se mide y se corrige. */
 (function () {
   var r = document.documentElement, vv = window.visualViewport;
@@ -273,6 +277,8 @@
       <div class="sg-label">Apariencia</div>
       <div class="pref-list cu-list"><div id="customBox"></div>
         <button type="button" class="pref-row pref-link cu-acc" id="cuFmt" aria-expanded="false" aria-controls="prefsBox"><span class="sg-ic" style="--c:#548fff"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span><div class="pref-l"><b>Hora, fecha y formato</b><small id="cuFmtEx">Zona horaria, hora, fecha y precios</small></div><div class="pref-c"><svg class="cu-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></div></button>
+        <div class="pref-row vx-pick-row" id="cuStyle"><span class="sg-ic" style="--c:#a9b4ff"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M3.5 9.5h17M9 9.5v10"/></svg></span><div class="pref-l"><b>Estilo de la app</b><small id="cuStyleEx">Elige cómo se ve VORTEX</small></div>
+          <div class="vx-seg" role="group" aria-label="Estilo de la app"><button type="button" data-vx-pick="clasico">Clásico</button><button type="button" data-vx-pick="minimal">Minimal</button><button type="button" data-vx-pick="espacial">Espacial</button></div></div>
         <div id="prefsBox" class="cu-fmt" hidden></div>
       </div>
       <div id="appInstall"></div>
