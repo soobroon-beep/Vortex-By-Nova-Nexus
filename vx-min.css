@@ -1,0 +1,183 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   VORTEX · Estilo «Minimal espacial» (PRUEBA SOLO EN DEV)
+   Capa visual encima de todo lo demás: no cambia la lógica.
+   - Menos colores: grises neutros + un solo acento suave; verde/rojo solo para precio.
+   - Liquid glass oscuro, plano y minimalista (sin reflejos ni brillos).
+   - Paneles flotantes con aire entre ellos (escritorio) sobre un fondo espacial casi negro.
+   - Botones, textos y pestañas con el mismo alto, radio y alineación en toda la app.
+   Todo vive bajo html.vx-min. Para volver al estilo anterior:
+     · en la app: Ajustes → «Estilo de la app» → Clásico, o abrir con ?estilo=clasico
+     · en el código: borrar este archivo y su <link>/<script> en index.html
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ───── 1. Paleta ───── */
+:root.vx-min{
+  --bg:#060709;--surface:rgba(255,255,255,.028);--raised:rgba(255,255,255,.055);--line:rgba(255,255,255,.065);
+  --text:#ececef;--muted:#878a93;--accent:#a9b4ff;--green:#2fbf8f;--red:#ec6672;--nav:rgba(10,11,14,.72);
+  --glass:rgba(14,15,19,.62);--glass-2:rgba(255,255,255,.06);--glass-line:rgba(255,255,255,.07);--glass-hi:rgba(255,255,255,.11);
+  --shine:none;--shadow:0 10px 30px rgba(0,0,0,.32);
+  --blur:blur(24px) saturate(1.25);--blur-s:blur(14px) saturate(1.2);
+  --ui-acc:#a9b4ff;--ui-acc2:#c3cbff;--ui-glass:rgba(255,255,255,.045);--ui-glass-h:rgba(255,255,255,.08);--ui-line:rgba(255,255,255,.08);--ui-line-h:rgba(255,255,255,.16);--ui-txt:#ececef;--ui-pop:rgba(16,17,21,.86);
+  --vx-r:14px;--vx-r-s:10px;--vx-h:32px;--vx-gap:10px;--vx-card:rgba(13,14,18,.58);--vx-ink:#f4f5f7;
+}
+:root.vx-min body:not(.light){
+  background:
+    radial-gradient(1100px 620px at 8% -12%,rgba(120,132,190,.075),transparent 62%),
+    radial-gradient(900px 600px at 105% 112%,rgba(132,118,190,.06),transparent 60%),
+    #060709;
+  background-attachment:fixed;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+}
+/* estrellas lejanas, muy tenues (casi no se notan: solo dan profundidad) */
+:root.vx-min body:not(.light)::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.55;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='300'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='32' cy='41' r='.55' opacity='.35'/%3E%3Ccircle cx='190' cy='18' r='.45' opacity='.25'/%3E%3Ccircle cx='301' cy='96' r='.6' opacity='.3'/%3E%3Ccircle cx='96' cy='170' r='.4' opacity='.22'/%3E%3Ccircle cx='388' cy='212' r='.55' opacity='.28'/%3E%3Ccircle cx='240' cy='262' r='.45' opacity='.2'/%3E%3Ccircle cx='150' cy='118' r='.35' opacity='.18'/%3E%3C/g%3E%3C/svg%3E");
+  background-size:420px 300px}
+:root.vx-min body{letter-spacing:-.005em;font-feature-settings:'cv11','ss01','tnum' 0}
+:root.vx-min :is(strong,b,small,span).positive,:root.vx-min .positive{color:var(--green)!important}
+:root.vx-min .negative{color:var(--red)!important}
+
+/* ───── 2. Tipografía y etiquetas ───── */
+:root.vx-min :is(h1,h2,h3){font-weight:620;letter-spacing:-.02em}
+:root.vx-min .eyebrow,:root.vx-min .section-label,:root.vx-min .list-heading{color:var(--muted)!important;font-weight:600;letter-spacing:.08em;font-size:10.5px}
+:root.vx-min .small-note,:root.vx-min .intro{color:color-mix(in srgb,var(--muted) 85%,transparent)}
+
+/* ───── 3. Botones: un solo sistema (mismo alto, radio, centrado) ───── */
+:root.vx-min :is(.small-button,.icon-btn,.account-btn,.chart-toolbar button,.chart-controls button,.nw-tabs button,.nw-chips button,.nw-ref,.nw-more,.pop-tabs button){
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;line-height:1;
+  min-height:var(--vx-h);border-radius:var(--vx-r-s)!important;
+  background:rgba(255,255,255,.04)!important;border:1px solid var(--glass-line)!important;box-shadow:none!important;background-image:none!important;
+  color:var(--text);font-weight:560;font-size:12.5px;
+  -webkit-backdrop-filter:var(--blur-s);backdrop-filter:var(--blur-s);
+  transition:background .2s,border-color .2s,color .2s,transform .2s var(--ease,ease)}
+@media(hover:hover){:root.vx-min :is(.small-button,.icon-btn,.account-btn,.chart-toolbar button,.chart-controls button,.nw-tabs button,.nw-chips button,.pop-tabs button):hover{background:rgba(255,255,255,.075)!important;border-color:var(--glass-hi)!important;filter:none!important}}
+:root.vx-min :is(.small-button,.icon-btn,.chart-toolbar button,.pop-tabs button):active{transform:scale(.97)}
+/* botón principal: tinta clara sobre cristal oscuro (sobrio, sin azul brillante) */
+:root.vx-min :is(.small-button.add-main,#watchView .add-main,.primary,.nw-tabs button.on){background:var(--vx-ink)!important;color:#0b0c0f!important;border-color:transparent!important;box-shadow:none!important}
+:root.vx-min :is(.small-button.add-main,.primary) svg{stroke:#0b0c0f}
+@media(hover:hover){:root.vx-min #watchView .add-main:hover{background:#fff!important;filter:none}}
+:root.vx-min body:not(#_):not(#__) .cfg-btn.cfg-ok,:root.vx-min body:not(#_):not(#__) .cfg-btn.cfg-ok:hover{background:var(--vx-ink)!important;color:#0b0c0f!important;box-shadow:none!important}
+/* seleccionado = cristal claro + letra blanca (sin azul) */
+:root.vx-min :is(.pop-tabs button.on,.pop-tabs button.active,.nw-chips button.on,.timeframes button.active,.side-tabs button.active){background:rgba(255,255,255,.1)!important;color:#fff!important;border-color:var(--glass-hi)!important;box-shadow:none!important}
+:root.vx-min .toggle{background:rgba(255,255,255,.12)}
+:root.vx-min .toggle.on{background:var(--vx-ink);box-shadow:none}
+:root.vx-min .toggle.on:after{background:#0b0c0f}
+:root.vx-min body input[type=checkbox]:not(.toggle):checked,:root.vx-min body input[type=radio]:checked{background:var(--vx-ink);box-shadow:none}
+:root.vx-min body input[type=checkbox]:not(.toggle)::after{filter:invert(1)}
+:root.vx-min body input[type=radio]::after{background:#0b0c0f}
+
+/* ───── 4. Tarjetas, buscador y filas ───── */
+:root.vx-min :is(.summary,.setting-row,.nw-item,.script-row,.nw-calbox){background:var(--vx-card)!important;background-image:none!important;border:1px solid var(--glass-line)!important;box-shadow:none!important;border-radius:var(--vx-r)!important}
+:root.vx-min .summary{padding:14px 6px}
+:root.vx-min .summary span{font-size:11px;color:var(--muted)}
+:root.vx-min .summary strong{font-weight:600;letter-spacing:-.02em}
+:root.vx-min .summary>div:not(:last-child){border-right-color:var(--glass-line)}
+:root.vx-min .search{height:42px;border-radius:12px!important;background:rgba(255,255,255,.035)!important;border:1px solid var(--glass-line)!important;box-shadow:none!important}
+:root.vx-min .search:focus-within{border-color:var(--glass-hi)!important;box-shadow:0 0 0 3px rgba(255,255,255,.05)!important}
+:root.vx-min .search span{font-size:18px;opacity:.7}
+:root.vx-min .list-heading{border-bottom-color:var(--glass-line)}
+:root.vx-min .watch-row{border-bottom-color:rgba(255,255,255,.045)!important;border-radius:12px}
+:root.vx-min .watch-row.is-open{background:rgba(255,255,255,.055)!important;border-color:transparent!important;box-shadow:inset 0 0 0 1px var(--glass-hi)!important}
+@media(hover:hover){:root.vx-min .watch-row:hover{background:rgba(255,255,255,.04)!important}}
+:root.vx-min .watch-row .row-main strong,:root.vx-min .watch-row .row-prices strong{font-weight:600;letter-spacing:-.01em}
+:root.vx-min .watch-row .row-prices small{font-weight:500}
+
+/* ───── 5. Ventanas, menús y hojas: el mismo liquid glass oscuro ───── */
+:root.vx-min :is(.sheet,.cfg-dlg,.pc-dlg,.rk-dlg,.dz-box,.xc-box,.sym-modal,.acct-menu,.ctx-menu,.bl-box){
+  background:rgba(14,15,19,.78)!important;background-image:none!important;border:1px solid var(--glass-line)!important;
+  box-shadow:0 24px 60px rgba(0,0,0,.5)!important;-webkit-backdrop-filter:blur(28px) saturate(1.2)!important;backdrop-filter:blur(28px) saturate(1.2)!important}
+:root.vx-min #toast{background:rgba(16,17,21,.8)!important;border:1px solid var(--glass-line)!important;border-radius:12px!important;box-shadow:0 10px 30px rgba(0,0,0,.4)!important;font-weight:500}
+
+/* ───── 6. Celular: barra superior y de abajo más limpias ───── */
+:root.vx-min .topbar{background:rgba(8,9,12,.6)!important;border-bottom-color:rgba(255,255,255,.05)!important;box-shadow:none!important}
+:root.vx-min .topbar :is(.icon-btn,.account-btn){min-height:36px;min-width:36px;border-radius:12px!important}
+:root.vx-min .bottom-nav{background:rgba(9,10,13,.7)!important;border-top-color:rgba(255,255,255,.05)!important}
+:root.vx-min .bottom-nav button{color:#6f727b}
+:root.vx-min .bottom-nav button small{font-weight:550;letter-spacing:.01em}
+:root.vx-min .bottom-nav button.active{color:#fff}
+:root.vx-min .bottom-nav button.active span{filter:none!important}
+:root.vx-min .bottom-nav::before{background:rgba(255,255,255,.07)!important;border-color:rgba(255,255,255,.08)!important;box-shadow:none!important}
+/* la estrella de «premium bloqueado»: plateada y sin halo de colores */
+:root.vx-min :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn){animation:none!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2Q13.2 10.8 22 12Q13.2 13.2 12 22Q10.8 13.2 2 12Q10.8 10.8 12 2Z' fill='%23e9eaf0' opacity='.85'/%3E%3C/svg%3E")!important;
+  background-size:9px 9px!important;background-position:right calc(var(--gxx) - 4.5px) top calc(var(--gxy) - 4.5px)!important}
+
+/* ───── 7. Escritorio: paneles flotantes con espacio entre ellos ───── */
+@media(min-width:1024px){
+  :root.vx-min body:not(.pane) main{--rail-w:52px;padding:var(--vx-gap) calc(var(--rail-w) + var(--vx-gap) * 2) var(--vx-gap) var(--vx-gap);column-gap:var(--vx-gap);row-gap:var(--vx-gap)}
+  :root.vx-min body:not(.pane) .expanded main,:root.vx-min .expanded body:not(.pane) main{padding-right:var(--vx-gap)}
+
+  /* barra de herramientas (izquierda) */
+  :root.vx-min #toolRail{background:var(--vx-card)!important;border:1px solid var(--glass-line)!important;border-radius:16px;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);box-shadow:none!important;padding-top:4px;padding-bottom:4px}
+  :root.vx-min #toolRail .rail-btn{color:#9a9da6;border-radius:10px}
+  :root.vx-min #toolRail .rail-btn.on,:root.vx-min #toolRail .rail-btn.grp.on{background:rgba(255,255,255,.08)!important;color:#fff!important;box-shadow:none!important}
+  @media(hover:hover){:root.vx-min #toolRail .rail-btn:hover{color:#fff;background:rgba(255,255,255,.05)}}
+
+  /* gráfico como tarjeta */
+  :root.vx-min #chartView{border:1px solid var(--glass-line);border-radius:18px;overflow:hidden;background:#08090c;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+  :root.vx-min :is(#pane2,#pane3,#pane4,.pane-view){border:1px solid var(--glass-line);border-radius:18px;overflow:hidden}
+
+  /* lista de seguimiento y paneles laterales como tarjetas */
+  :root.vx-min :is(#watchView,#newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView){
+    background:var(--vx-card)!important;border:1px solid var(--glass-line)!important;border-radius:18px;
+    -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);padding:18px 16px 20px!important;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.12) transparent}
+
+  /* barra de iconos de la derecha: cápsula flotante */
+  :root.vx-min .right-rail{top:var(--vx-gap)!important;bottom:var(--vx-gap)!important;right:var(--vx-gap)!important;width:var(--rail-w)!important;border:1px solid var(--glass-line)!important;border-radius:18px;
+    background:var(--vx-card)!important;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);padding:8px 0!important;gap:4px}
+  :root.vx-min .right-rail .rr-btn{color:#8d9099;border-radius:12px}
+  :root.vx-min .right-rail .rr-btn.active{background:rgba(255,255,255,.09)!important;color:#fff!important;box-shadow:none!important}
+  @media(hover:hover){:root.vx-min .right-rail .rr-btn:hover{color:#fff}}
+  :root.vx-min .right-rail .rr-btn::after{background:rgba(16,17,21,.92);border-color:var(--glass-line);border-radius:9px;font-weight:550}
+
+  /* separador para cambiar el ancho del panel derecho: en el hueco entre tarjetas */
+  :root.vx-min body:not(.pane) #splitR{right:calc(var(--side-w) + var(--rail-w) + var(--vx-gap) * 2 - 2px)}
+  :root.vx-min body:not(.pane).side-off #splitR{right:calc(var(--rail-w) + var(--vx-gap) * 2 - 2px)}
+  :root.vx-min #splitRBtn{background:rgba(20,21,26,.9)!important;border:1px solid var(--glass-line)!important;border-radius:8px}
+
+  /* barra superior del gráfico: pestañas, temporalidades y herramientas alineadas */
+  :root.vx-min #chartTabs,:root.vx-min .chart-bar{background:transparent!important;border-color:transparent!important;box-shadow:none!important}
+  :root.vx-min #chartTabs{padding-left:12px;padding-top:4px}
+  :root.vx-min .chart-bar{border-bottom:1px solid rgba(255,255,255,.05)!important}
+  :root.vx-min .ctab.on{background:rgba(255,255,255,.09)!important;color:#fff;box-shadow:none!important;border:1px solid var(--glass-hi)!important}
+  :root.vx-min .timeframes{gap:2px!important;padding-left:12px!important}
+  :root.vx-min .timeframes button{min-height:28px;padding:0 10px!important;border-radius:8px!important;color:#7f828b;font-weight:560;border:1px solid transparent}
+  :root.vx-min .chart-toolbar{gap:2px!important;background:transparent!important;border:0!important;box-shadow:none!important}
+  :root.vx-min .chart-toolbar button{min-height:30px;padding:0 8px!important;font-size:12.5px;background:transparent!important;border-color:transparent!important;color:#c4c6cc;-webkit-backdrop-filter:none;backdrop-filter:none}
+  @media(hover:hover){:root.vx-min .chart-toolbar button:hover{background:rgba(255,255,255,.06)!important;color:#fff}}
+  :root.vx-min .chart-toolbar button.on,:root.vx-min .chart-toolbar button.active{background:rgba(255,255,255,.08)!important;border-color:var(--glass-hi)!important;color:#fff}
+  :root.vx-min .chart-toolbar button svg,:root.vx-min .chart-toolbar button .ic{opacity:.85}
+
+  /* cabecera del símbolo dentro del gráfico */
+  :root.vx-min #chartSymHead{background:rgba(12,13,17,.55)!important;border:1px solid var(--glass-line)!important;border-radius:14px!important;box-shadow:none!important;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+
+  /* barra inferior del gráfico: cápsulas iguales y centradas */
+  :root.vx-min #chartStatus{border-top:1px solid rgba(255,255,255,.05)!important;background:transparent!important;align-items:center}
+  :root.vx-min #chartStatus :is(.st-acct,.st-econ){background:rgba(255,255,255,.035)!important;border:1px solid var(--glass-line)!important;box-shadow:none!important;height:26px;display:inline-flex;align-items:center}
+  :root.vx-min .favbar{background:rgba(14,15,19,.6)!important;border:1px solid var(--glass-line)!important;box-shadow:0 10px 30px rgba(0,0,0,.35)!important}
+  :root.vx-min .chart-controls button{width:30px;min-height:30px;padding:0}
+
+  /* sección «Descubrir» del seguimiento */
+  :root.vx-min #popSection{border-top-color:var(--glass-line)!important}
+  :root.vx-min .pop-tabs{gap:6px!important}
+  :root.vx-min .pop-tabs button{flex:1;min-height:30px;padding:0 8px!important;font-size:12px;color:#9a9da6}
+  :root.vx-min .pop-head h2,:root.vx-min .pop-head strong{font-size:17px}
+}
+
+@media (prefers-reduced-motion:reduce){:root.vx-min *{transition:none!important}}
+
+/* ───── 8. Ajustes finos ───── */
+:root.vx-min .icon-btn.theme-sw{display:grid!important;place-items:center}
+:root.vx-min .theme-sw .ti-moon{color:#cfd2da}
+:root.vx-min .theme-sw .ti-sun{color:#f1f2f4}
+:root.vx-min #watchView #addSection{border:1px solid var(--glass-line)!important;background:rgba(255,255,255,.035)!important;color:#c4c6cc}
+@media(min-width:1024px){
+  :root.vx-min .chart-bar .chart-toolbar button{padding:0 7px!important;font-size:12px;gap:5px}
+}
+/* iconos de Configuración en un solo tono (sin arcoíris) */
+:root.vx-min .sg-ic,:root.vx-min #setVigia .sg-ic,:root.vx-min #setBrain .sg-ic{--c:#c9ccd4!important;color:#c9ccd4!important}
+:root.vx-min :is(#setVigia,#setBrain) .sg-ic svg{color:#c9ccd4!important;stroke:#c9ccd4!important;filter:none!important}
+:root.vx-min #setBrain .sg-t small{color:var(--muted)}
+:root.vx-min .setting-row svg:not(.cu-chev){color:#c9ccd4}
+:root.vx-min .nw-chips button{padding:0 10px!important;gap:6px}
+:root.vx-min .nw-tabs button{padding:0 12px!important}
+:root.vx-min .view-head :is(svg,.vh-ic){color:#d6d8de}
