@@ -216,3 +216,44 @@
 @media(min-width:1024px){:root.vx-min body .summary>div{padding:9px 9px!important}:root.vx-min body .summary{gap:6px}}
 :root.vx-min body .chart-bar .chart-toolbar button{display:inline-flex;align-items:center;gap:5px}
 :root.vx-min body .google-btn{background:#fff!important;color:#1f1f1f!important;box-shadow:0 0 0 1px var(--m-line),0 1px 2px rgba(0,0,0,.1)!important}
+
+/* ───── Nova Bot Lab: el título fijo ya no deja una franja negra (los 3 estilos) ───── */
+#botLabView .bl-head{background:transparent!important;-webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2);border-radius:12px}
+:root.vx-min body #botLabView .bl-head{background:var(--m-card)!important;-webkit-backdrop-filter:none;backdrop-filter:none;border-radius:0}
+
+/* ═════ Minimal v4: todavía más plano — nada parece botón, todo es texto e icono ═════ */
+:root.vx-min body :is(.small-button,.icon-btn,.account-btn,.chart-controls button,.nw-ref,.nw-more,.pop-retry,.pop-more,.dv-chips,.view-back,.bl-btn,.bl-ib){
+  background:transparent!important;border:0!important;box-shadow:none!important;color:var(--m-text)!important;border-radius:8px!important}
+@media(hover:hover){:root.vx-min body :is(.small-button,.icon-btn,.account-btn,.chart-controls button,.nw-ref,.nw-more,.pop-retry,.pop-more,.view-back,.bl-btn,.bl-ib):hover{background:var(--m-fill)!important}}
+/* acción principal: solo texto en azul */
+:root.vx-min body :is(#watchView .add-main,.small-button.add-main,.primary,.bl-btn:not(.ghost)){background:transparent!important;color:var(--m-acc)!important;box-shadow:none!important;font-weight:600}
+@media(hover:hover){:root.vx-min body :is(#watchView .add-main,.bl-btn:not(.ghost),.primary):hover{background:var(--m-acc-t)!important;filter:none!important}}
+:root.vx-min body #watchView #addSection{background:transparent!important;color:var(--m-sub)!important}
+:root.vx-min body #watchView .head-actions{justify-content:flex-start;gap:4px}
+:root.vx-min body #watchView .watch-head .small-button{flex:0 0 auto!important;padding:0 8px!important}
+:root.vx-min body:not(#_):not(#__) .cfg-btn{background:transparent!important;color:var(--m-sub)!important}
+:root.vx-min body:not(#_):not(#__) .cfg-btn.cfg-ok{background:transparent!important;color:var(--m-acc)!important;font-weight:650}
+:root.vx-min body .topbar .account-btn{padding:0 6px;color:var(--m-text)!important}
+/* resumen: números sueltos, sin cajitas */
+:root.vx-min body .summary>div{background:transparent!important;padding:2px 0!important}
+:root.vx-min body .summary{margin:4px 0 16px}
+:root.vx-min body .summary strong{font-size:24px;font-weight:500}
+/* buscador: solo una línea fina abajo */
+:root.vx-min body .search{background:transparent!important;border-radius:0!important;box-shadow:inset 0 -1px 0 var(--m-line)!important;padding:0 2px}
+:root.vx-min body .search:focus-within{box-shadow:inset 0 -1.5px 0 var(--m-acc)!important}
+/* pestañas: texto plano; la elegida en tinta con un puntito de color debajo */
+:root.vx-min body :is(.pop-tabs,.nw-tabs,.nw-chips,.side-tabs,.chart-bar .timeframes){background:transparent!important;padding:0!important;gap:2px!important}
+:root.vx-min body :is(.pop-tabs,.nw-tabs,.nw-chips,.side-tabs,.chart-bar .timeframes) button{flex:0 0 auto;position:relative;background:transparent!important;box-shadow:none!important;color:var(--m-muted)!important}
+:root.vx-min body :is(.pop-tabs,.nw-tabs,.nw-chips,.side-tabs,.chart-bar .timeframes) button:is(.on,.active){background:transparent!important;box-shadow:none!important;color:var(--m-text)!important;font-weight:650}
+:root.vx-min body :is(.pop-tabs,.nw-tabs,.nw-chips,.side-tabs,.chart-bar .timeframes) button:is(.on,.active)::after{content:'';position:absolute;left:50%;bottom:-1px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--m-acc)}
+:root.vx-min body .chart-bar .chart-toolbar button:is(.on,.active,[aria-expanded=true]){background:transparent!important;color:var(--m-acc)!important}
+:root.vx-min body .ctab.on{background:transparent!important;font-weight:650}
+:root.vx-min body .vx-seg{background:transparent;padding:0;gap:4px}
+:root.vx-min body .vx-seg button.on{background:transparent;box-shadow:none;color:var(--m-acc)}
+/* grupos de Configuración y tarjetas: sin relleno, separados por líneas finas */
+:root.vx-min body :is(.sg,.pref-list,.prof-card,.about-card,.setting-row,.nw-item,.nw-calbox,.script-row,.tn-ban){background:transparent!important;border-radius:0!important;box-shadow:inset 0 -1px 0 var(--m-line)!important;border:0!important}
+:root.vx-min body .watch-row.is-open{background:transparent!important;box-shadow:inset 2px 0 0 var(--m-acc)!important;border-radius:0 10px 10px 0!important}
+:root.vx-min body .bottom-nav::before{opacity:0!important}
+:root.vx-min body .right-rail .rr-btn.active,:root.vx-min body #toolRail :is(.rail-btn.on,.rail-btn.grp.on){background:transparent!important}
+:root.vx-min body #chartStatus :is(.st-acct,.st-econ){background:transparent!important}
+:root.vx-min body #botLabView :is(.bl-row,.bl-card){background:transparent!important;border:0!important;box-shadow:inset 0 -1px 0 var(--m-line)!important;border-radius:0!important}

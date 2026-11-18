@@ -11,8 +11,8 @@
       var q = (new URLSearchParams(location.search).get('estilo') || '').toLowerCase().replace('á', 'a');
       if (STYLES.indexOf(q) >= 0) localStorage.setItem(KEY, q);
       var v = localStorage.getItem(KEY);
-      return STYLES.indexOf(v) >= 0 ? v : 'minimal';
-    } catch (e) { return 'minimal'; }
+      return STYLES.indexOf(v) >= 0 ? v : 'clasico'; // sin elegir: el estilo de siempre
+    } catch (e) { return 'clasico'; }
   }
   var cur = read();
   function classes(s) { D.classList.toggle('vx-min', s === 'minimal'); D.classList.toggle('vx-space', s === 'espacial'); D.setAttribute('data-vx-style', s); }
