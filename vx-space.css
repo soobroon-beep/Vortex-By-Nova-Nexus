@@ -226,3 +226,15 @@
     background:linear-gradient(var(--s-card),var(--s-card)) padding-box,linear-gradient(140deg,rgba(255,255,255,.14),rgba(255,255,255,.05) 40%,rgba(255,255,255,.1)) border-box!important}
   :root.vx-space body:not(.light) #chartView{background:linear-gradient(#07090e,#07090e) padding-box,linear-gradient(140deg,rgba(255,255,255,.14),rgba(255,255,255,.05) 40%,rgba(255,255,255,.1)) border-box!important}
 }
+
+/* ═════ 10. Negro sólido en toda la app y estrellas visibles también detrás de los paneles ═════ */
+:root.vx-space body:not(.light){--s-card:rgba(0,0,0,.18);--s-pop:rgba(4,4,6,.94);--blur:none;--blur-s:none}
+:root.vx-space body:not(.light) :is(.summary,.setting-row,.nw-item,.script-row,.nw-calbox,.sg,.prof-card,.about-card,.search,.watch-row){background-color:rgba(0,0,0,.35)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+:root.vx-space body:not(.light) :is(.topbar,.bottom-nav){background:rgba(0,0,0,.55)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+:root.vx-space body:not(.light) :is(#toolRail,.right-rail,#watchView,#newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView,#chartTabs,.chart-bar,#chartStatus){-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+:root.vx-space body:not(.light) #botLabView .bl-head{background:#000!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+@media(min-width:1024px){
+  /* el borde ya no se trasluce por dentro del panel (antes lo volvía gris) */
+  :root.vx-space body:not(.light) :is(#toolRail,.right-rail,#watchView,#newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView){
+    background:rgba(0,0,0,.18)!important;border:1px solid rgba(255,255,255,.09)!important}
+}
