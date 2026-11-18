@@ -1,4 +1,4 @@
-/* VORTEX · Estilos de la app (PRUEBA SOLO EN DEV): «clasico», «minimal» y «espacial».
+/* VORTEX · Estilos de la app (estilo elegible): «clasico», «minimal» y «espacial».
    - Pone html.vx-min o html.vx-space lo antes posible (se carga en <head>) para que no parpadee.
    - Espacial: dibuja un fondo de estrellas que se mueven muy despacio y cambia los iconos
      de las barras por iconos espaciales (al salir del tema se restauran los originales).
@@ -130,7 +130,7 @@
   var NAMES = { clasico: 'Clásico', minimal: 'Minimal', espacial: 'Espacial' };
   function paint() {
     document.querySelectorAll('[data-vx-pick]').forEach(function (b) { var on = b.getAttribute('data-vx-pick') === cur; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
-    var ex = document.getElementById('cuStyleEx'); if (ex) ex.textContent = NAMES[cur] + (cur === 'clasico' ? ' · el estilo de siempre' : ' · prueba');
+    var ex = document.getElementById('cuStyleEx'); if (ex) ex.textContent = NAMES[cur] + (cur === 'clasico' ? ' · el estilo de siempre' : cur === 'minimal' ? ' · limpio y plano' : ' · galaxia y estrellas');
   }
   function apply(s) {
     cur = s; classes(s);
