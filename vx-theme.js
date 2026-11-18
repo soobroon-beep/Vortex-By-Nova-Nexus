@@ -36,19 +36,34 @@
     var n = Math.round(Math.min(220, W * H / 6500)); stars = [];
     for (var i = 0; i < n; i++) {
       var z = Math.random(); // profundidad: las lejanas son más chicas, tenues y lentas
-      stars.push({ x: Math.random() * W, y: Math.random() * H, r: .35 + z * z * 1.05, a: .12 + z * .38, v: 1.2 + z * 5.5, t: Math.random() * 6.28, f: .4 + Math.random() * 1.2 });
+      var c = Math.random(), tint = c < .68 ? 0 : c < .8 ? 1 : c < .9 ? 2 : 3; // blancas y algunas moradas, azules y rosas
+      stars.push({ x: Math.random() * W, y: Math.random() * H, r: .35 + z * z * 1.1, a: .14 + z * .42, v: 1.2 + z * 5.5, t: Math.random() * 6.28, f: .4 + Math.random() * 1.2, c: tint });
     }
     draw(0);
   }
+  var TINT_D = ['255,255,255', '196,181,253', '147,197,253', '249,168,212'], TINT_L = ['40,50,110', '109,40,217', '37,99,235', '219,39,119'];
+  var shoot = null, nextShoot = 4;
   function draw(dt) {
-    var light = document.body.classList.contains('light'), rgb = light ? '40,50,110' : '255,255,255', k = light ? .55 : 1;
+    var light = document.body.classList.contains('light'), T = light ? TINT_L : TINT_D, k = light ? .6 : 1;
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, W, H);
     for (var i = 0; i < stars.length; i++) {
       var s = stars[i];
       if (dt) { s.x -= s.v * dt; s.y += s.v * .18 * dt; s.t += s.f * dt; if (s.x < -2) { s.x = W + 2; s.y = Math.random() * H; } if (s.y > H + 2) s.y = -2; }
-      var a = s.a * k * (.7 + .3 * Math.sin(s.t));
-      ctx.fillStyle = 'rgba(' + rgb + ',' + a.toFixed(3) + ')';
+      var a = s.a * k * (.65 + .35 * Math.sin(s.t));
+      ctx.fillStyle = 'rgba(' + T[s.c] + ',' + a.toFixed(3) + ')';
       ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.2832); ctx.fill();
+      if (s.r > 1.15 && !light) { ctx.fillStyle = 'rgba(' + T[s.c] + ',' + (a * .12).toFixed(3) + ')'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r * 3.2, 0, 6.2832); ctx.fill(); } // halo suave de las más cercanas
+    }
+    // estrella fugaz de vez en cuando (cada 7–16 s), muy sutil
+    if (dt) {
+      nextShoot -= dt;
+      if (!shoot && nextShoot <= 0) { shoot = { x: W * (.3 + Math.random() * .7), y: H * Math.random() * .45, l: 0, d: .9 + Math.random() * .5, c: 1 + Math.floor(Math.random() * 3) }; nextShoot = 7 + Math.random() * 9; }
+      if (shoot) {
+        shoot.l += dt; var p = shoot.l / shoot.d, len = 120, sx = shoot.x - p * 340, sy = shoot.y + p * 150, f = Math.sin(Math.min(1, p) * Math.PI) * (light ? .35 : .55);
+        var g = ctx.createLinearGradient(sx, sy, sx + len * .92, sy - len * .4); g.addColorStop(0, 'rgba(' + T[0] + ',' + f.toFixed(3) + ')'); g.addColorStop(.25, 'rgba(' + T[shoot.c] + ',' + (f * .6).toFixed(3) + ')'); g.addColorStop(1, 'rgba(' + T[shoot.c] + ',0)');
+        ctx.strokeStyle = g; ctx.lineWidth = 1.2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + len * .92, sy - len * .4); ctx.stroke();
+        if (p >= 1) shoot = null;
+      }
     }
   }
   function loop(t) {
@@ -98,6 +113,19 @@
     });
   }
 
+  /* ───── Cursor «Estrella» del gráfico: se enciende solo en el tema Espacial ───── */
+  var prevCur = null, wrapped = false;
+  function starCursor(on) {
+    var C = window.CCTStarCursor; if (!C || !C.setMode) return;
+    if (!wrapped) { // si la app vuelve a poner «Cruz» mientras está el tema Espacial, se queda la estrella
+      var orig = C.setMode; wrapped = true;
+      C.setMode = function (m) { prevCur = m; return orig.call(C, cur === 'espacial' && m === 'Cruz' ? 'Estrella' : m); };
+      C._vxOrig = orig;
+    }
+    if (prevCur === null) prevCur = C.mode || 'Cruz';
+    C._vxOrig.call(C, on && prevCur === 'Cruz' ? 'Estrella' : prevCur);
+  }
+
   /* ───── Selector en Configuración → Personalización ───── */
   var NAMES = { clasico: 'Clásico', minimal: 'Minimal', espacial: 'Espacial' };
   function paint() {
@@ -109,6 +137,7 @@
     if (!document.body) return;
     if (s === 'espacial') go(); else stop();
     icons(s === 'espacial'); paint();
+    if (window.CCTStarCursor) starCursor(s === 'espacial');
   }
   window.VXTheme = {
     get: function () { return cur; },
@@ -116,6 +145,7 @@
   };
   function init() {
     apply(cur);
+    addEventListener('load', function () { setTimeout(function () { starCursor(cur === 'espacial'); }, 400); });
     document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-vx-pick]'); if (b) { e.preventDefault(); window.VXTheme.set(b.getAttribute('data-vx-pick')); } });
     // al cambiar claro/oscuro las estrellas cambian de tinta sin esperar al siguiente cuadro
     new MutationObserver(function () { if (cur === 'espacial' && cv) draw(0); }).observe(document.body, { attributes: true, attributeFilter: ['class'] });

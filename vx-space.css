@@ -50,7 +50,6 @@
 @media(hover:hover){:root.vx-space body :is(.small-button,.icon-btn,.account-btn,.chart-controls button,.nw-tabs button,.nw-chips button,.pop-tabs button):hover{background:var(--s-hover)!important;border-color:var(--s-line2)!important;color:var(--s-text)!important}}
 :root.vx-space body :is(.pop-tabs button.active,.pop-tabs button.on,.nw-chips button.on,.nw-tabs button.on,.side-tabs button.active){background:var(--s-sel)!important;border-color:color-mix(in srgb,var(--s-acc) 45%,transparent)!important;color:var(--s-text)!important;box-shadow:none!important}
 :root.vx-space body :is(#watchView .add-main,.small-button.add-main,.primary,.google-btn){background:linear-gradient(120deg,var(--s-acc),var(--s-acc2))!important;color:#fff!important;border-color:transparent!important;box-shadow:0 6px 22px color-mix(in srgb,var(--s-acc) 30%,transparent)!important}
-:root.vx-space body:not(.light) :is(#watchView .add-main,.small-button.add-main,.primary,.google-btn){color:#0b0c18!important;background:linear-gradient(120deg,#c3ccff,#dcc6ff)!important}
 :root.vx-space body #watchView #addSection{background:transparent!important;border:1px dashed var(--s-line2)!important;color:var(--s-sub)!important}
 :root.vx-space body:not(#_):not(#__) .cfg-btn{border-radius:999px!important;background:rgba(255,255,255,.04)!important;border:1px solid var(--s-line2)!important;color:var(--s-text)!important}
 :root.vx-space body:not(#_):not(#__) .cfg-btn.cfg-ok{background:linear-gradient(120deg,var(--s-acc),var(--s-acc2))!important;color:#fff!important;border-color:transparent!important;box-shadow:none!important}
@@ -133,3 +132,87 @@
   :root.vx-space .pop-tabs button{flex:1;padding:0 8px!important;font-size:12px}
 }
 @media (prefers-reduced-motion:reduce){:root.vx-space *{transition:none!important}}
+
+/* ═════ 8. Galaxia: más color, brillos al pasar el cursor y detalles espaciales ═════ */
+:root.vx-space body{
+  --gx1:#8b5cf6;--gx2:#3b82f6;--gx3:#ec4899;--gx4:#22d3ee;--gx5:#f43f5e;--gx6:#a855f7;
+  --gx-grad:linear-gradient(120deg,#8b5cf6,#3b82f6 55%,#22d3ee);
+  --gx-edge:linear-gradient(140deg,rgba(139,92,246,.55),rgba(59,130,246,.18) 35%,rgba(236,72,153,.12) 65%,rgba(34,211,238,.4));
+  --s-neb1:rgba(124,58,237,.16);--s-neb2:rgba(37,99,235,.12);
+  background:
+    radial-gradient(900px 520px at 6% -8%,var(--s-neb1),transparent 62%),
+    radial-gradient(700px 480px at 104% 104%,var(--s-neb2),transparent 60%),
+    radial-gradient(520px 360px at 72% 18%,rgba(236,72,153,.07),transparent 64%),
+    radial-gradient(600px 420px at 30% 92%,rgba(34,211,238,.05),transparent 64%),
+    var(--s-bg)!important;background-attachment:fixed!important}
+:root.vx-space body.light{--s-neb1:rgba(139,92,246,.16);--s-neb2:rgba(59,130,246,.12)}
+
+/* color de cada botón: morado, azul, magenta, cian, rojo… se reparte solo */
+:root.vx-space body :is(.rr-btn,.rail-btn,.bottom-nav button,.chart-bar .chart-toolbar button,.timeframes button,.small-button,.icon-btn,.pop-tabs button,.nw-tabs button,.nw-chips button,.sg-row,.watch-row){--gl:var(--gx1)}
+:root.vx-space body :is(.rr-btn,.rail-btn,.bottom-nav button,.chart-bar .chart-toolbar button,.timeframes button,.small-button,.icon-btn,.pop-tabs button,.nw-tabs button,.nw-chips button,.sg-row,.watch-row):nth-child(6n+2){--gl:var(--gx2)}
+:root.vx-space body :is(.rr-btn,.rail-btn,.bottom-nav button,.chart-bar .chart-toolbar button,.timeframes button,.small-button,.icon-btn,.pop-tabs button,.nw-tabs button,.nw-chips button,.sg-row,.watch-row):nth-child(6n+3){--gl:var(--gx3)}
+:root.vx-space body :is(.rr-btn,.rail-btn,.bottom-nav button,.chart-bar .chart-toolbar button,.timeframes button,.small-button,.icon-btn,.pop-tabs button,.nw-tabs button,.nw-chips button,.sg-row,.watch-row):nth-child(6n+4){--gl:var(--gx4)}
+:root.vx-space body :is(.rr-btn,.rail-btn,.bottom-nav button,.chart-bar .chart-toolbar button,.timeframes button,.small-button,.icon-btn,.pop-tabs button,.nw-tabs button,.nw-chips button,.sg-row,.watch-row):nth-child(6n+5){--gl:var(--gx5)}
+:root.vx-space body :is(.rr-btn,.rail-btn,.bottom-nav button,.chart-bar .chart-toolbar button,.timeframes button,.small-button,.icon-btn,.pop-tabs button,.nw-tabs button,.nw-chips button,.sg-row,.watch-row):nth-child(6n){--gl:var(--gx6)}
+:root.vx-space body :is(.rr-btn,.rail-btn,.chart-bar .chart-toolbar button,.timeframes button,.small-button,.icon-btn,.pop-tabs button,.nw-tabs button,.nw-chips button){transition:background .25s,color .25s,box-shadow .3s,border-color .25s,transform .25s cubic-bezier(.3,1.4,.5,1)!important}
+@media(hover:hover){
+  :root.vx-space body :is(.rr-btn,.rail-btn,.chart-bar .chart-toolbar button,.timeframes button,.small-button:not(.add-main),.icon-btn,.pop-tabs button,.nw-tabs button,.nw-chips button):hover{
+    color:#fff!important;background:color-mix(in srgb,var(--gl) 18%,transparent)!important;border-color:color-mix(in srgb,var(--gl) 55%,transparent)!important;
+    box-shadow:0 0 0 1px color-mix(in srgb,var(--gl) 45%,transparent),0 0 18px color-mix(in srgb,var(--gl) 45%,transparent),inset 0 0 12px color-mix(in srgb,var(--gl) 22%,transparent)!important}
+  :root.vx-space body.light :is(.rr-btn,.rail-btn,.chart-bar .chart-toolbar button,.timeframes button,.small-button:not(.add-main),.icon-btn,.pop-tabs button,.nw-tabs button,.nw-chips button):hover{color:color-mix(in srgb,var(--gl) 75%,#000)!important}
+  :root.vx-space body :is(.rr-btn,.rail-btn,.icon-btn):hover svg{filter:drop-shadow(0 0 6px var(--gl))}
+  :root.vx-space body .watch-row:hover{background:linear-gradient(90deg,color-mix(in srgb,var(--gl) 14%,transparent),transparent 70%)!important;box-shadow:inset 2px 0 0 var(--gl)!important}
+  :root.vx-space body .sg-row:hover{background:linear-gradient(90deg,color-mix(in srgb,var(--gl) 12%,transparent),transparent 75%)!important}
+  :root.vx-space body .sg-row:hover .sg-ic{color:#fff!important;background:var(--gl)!important;box-shadow:0 0 14px color-mix(in srgb,var(--gl) 60%,transparent)!important}
+}
+/* toque en el celular: destello del color del botón */
+:root.vx-space body .bottom-nav button:active span{filter:drop-shadow(0 0 10px var(--gl))!important}
+:root.vx-space body .bottom-nav button.active{color:#fff!important}
+:root.vx-space body.light .bottom-nav button.active{color:var(--s-text)!important}
+:root.vx-space body .bottom-nav button.active span{filter:drop-shadow(0 0 8px var(--gl))!important;color:color-mix(in srgb,var(--gl) 55%,#fff)}
+:root.vx-space body.light .bottom-nav button.active span{color:var(--gl)}
+
+/* lo seleccionado lleva el degradado de galaxia que se mueve despacio */
+@keyframes vxGal{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+:root.vx-space body :is(.right-rail .rr-btn.active,#toolRail .rail-btn.on,.timeframes button.active,.ctab.on,.pop-tabs button.active,.nw-tabs button.on,.nw-chips button.on){
+  color:#fff!important;border-color:transparent!important;
+  background:linear-gradient(120deg,rgba(139,92,246,.55),rgba(59,130,246,.45),rgba(236,72,153,.4),rgba(139,92,246,.55)) 0 0/200% 100%!important;
+  box-shadow:0 0 16px rgba(139,92,246,.45),inset 0 0 0 1px rgba(255,255,255,.14)!important;animation:vxGal 8s linear infinite}
+:root.vx-space body :is(#watchView .add-main,.small-button.add-main,.primary,.google-btn,.vx-seg button.on){color:#fff!important;
+  background:linear-gradient(120deg,#8b5cf6,#3b82f6,#ec4899,#8b5cf6) 0 0/220% 100%!important;animation:vxGal 9s linear infinite;box-shadow:0 6px 24px rgba(139,92,246,.4)!important}
+:root.vx-space body .watch-row.is-open{background:linear-gradient(90deg,rgba(139,92,246,.2),rgba(59,130,246,.08) 70%,transparent)!important;box-shadow:inset 0 0 0 1px rgba(139,92,246,.35),0 0 20px rgba(139,92,246,.12)!important}
+:root.vx-space .toggle.on{background:linear-gradient(120deg,#8b5cf6,#3b82f6)!important}
+
+/* bordes de las tarjetas con brillo de galaxia */
+@media(min-width:1024px){
+  :root.vx-space body :is(#chartView,#toolRail,.right-rail,#watchView,#newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView){
+    border-color:transparent!important;
+    background:linear-gradient(var(--s-card),var(--s-card)) padding-box,var(--gx-edge) border-box!important}
+  :root.vx-space body #chartView{background:linear-gradient(#07090e,#07090e) padding-box,var(--gx-edge) border-box!important}
+  :root.vx-space body.light #chartView{background:linear-gradient(#fff,#fff) padding-box,var(--gx-edge) border-box!important}
+}
+:root.vx-space body :is(.sheet,.cfg-dlg,.pc-dlg,.rk-dlg,.dz-box,.xc-box,.sym-modal,.acct-menu,.bl-box,.rail-fly){border-color:rgba(139,92,246,.35)!important;box-shadow:0 24px 60px rgba(0,0,0,.45),0 0 40px rgba(139,92,246,.15)!important}
+
+/* títulos y etiquetas con tinta de nebulosa */
+:root.vx-space :is(.eyebrow,.list-heading span,.sg-label,.section-label){background:linear-gradient(90deg,#c4b5fd,#93c5fd,#f9a8d4);-webkit-background-clip:text;background-clip:text;color:transparent!important;opacity:1}
+:root.vx-space body.light :is(.eyebrow,.list-heading span,.sg-label,.section-label){background:linear-gradient(90deg,#7c3aed,#2563eb,#db2777);-webkit-background-clip:text;background-clip:text}
+:root.vx-space .view h1{background:linear-gradient(90deg,#fff,#ddd6fe 60%,#bfdbfe);-webkit-background-clip:text;background-clip:text;color:transparent}
+:root.vx-space body.light .view h1{background:linear-gradient(90deg,#141833,#4c1d95 70%,#1e40af);-webkit-background-clip:text;background-clip:text}
+
+/* iconos de las barras en tonos de galaxia */
+:root.vx-space body .right-rail .rr-btn:not(.active) svg,:root.vx-space body .bottom-nav button:not(.active) svg{color:color-mix(in srgb,var(--gl) 45%,var(--s-muted))}
+
+/* cursor de estrella en toda la app (escritorio) */
+@media(hover:hover) and (pointer:fine){
+  :root.vx-space body{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0' stop-color='%23fff'/%3E%3Cstop offset='.5' stop-color='%23d8ccff'/%3E%3Cstop offset='1' stop-color='%238b5cf6'/%3E%3C/radialGradient%3E%3C/defs%3E%3Cpath d='M12 1.5Q13.3 10.7 22.5 12Q13.3 13.3 12 22.5Q10.7 13.3 1.5 12Q10.7 10.7 12 1.5Z' fill='url(%23g)' stroke='%23140a2e' stroke-width='.6'/%3E%3C/svg%3E") 11 11,auto}
+  :root.vx-space body :is(button,a,[role=button],label,select,.watch-row,summary){cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0' stop-color='%23fff'/%3E%3Cstop offset='.45' stop-color='%23ffe08a'/%3E%3Cstop offset='1' stop-color='%23ec4899'/%3E%3C/radialGradient%3E%3C/defs%3E%3Cpath d='M12 1.5Q13.3 10.7 22.5 12Q13.3 13.3 12 22.5Q10.7 13.3 1.5 12Q10.7 10.7 12 1.5Z' fill='url(%23g)' stroke='%23140a2e' stroke-width='.6'/%3E%3C/svg%3E") 12 12,pointer}
+  :root.vx-space body :is(input,textarea,[contenteditable]){cursor:text}
+}
+@media (prefers-reduced-motion:reduce){:root.vx-space body *{animation:none!important}}
+:root.vx-space body .sg-row .sg-ic{color:color-mix(in srgb,var(--gl) 70%,#fff)!important;background:color-mix(in srgb,var(--gl) 16%,transparent)!important}
+:root.vx-space body.light .sg-row .sg-ic{color:var(--gl)!important}
+:root.vx-space body .google-btn{background:#fff!important;color:#1f1f1f!important;animation:none!important;box-shadow:0 0 22px rgba(139,92,246,.35)!important}
+:root.vx-space body.light :is(.right-rail .rr-btn.active,#toolRail .rail-btn.on,.timeframes button.active,.ctab.on,.pop-tabs button.active,.nw-tabs button.on,.nw-chips button.on){
+  background:linear-gradient(120deg,#8b5cf6,#3b82f6,#ec4899,#8b5cf6) 0 0/200% 100%!important;box-shadow:0 4px 14px rgba(139,92,246,.35)!important}
+:root.vx-space body .bottom-nav::before{background:linear-gradient(120deg,rgba(139,92,246,.5),rgba(59,130,246,.4),rgba(236,72,153,.35))!important;border-color:rgba(196,181,253,.35)!important;box-shadow:0 0 18px rgba(139,92,246,.4)!important}
+:root.vx-space body.light .bottom-nav::before{background:linear-gradient(120deg,rgba(139,92,246,.22),rgba(59,130,246,.18),rgba(236,72,153,.16))!important}
