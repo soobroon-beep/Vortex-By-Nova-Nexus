@@ -1,5 +1,10 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.40', d: '17 nov 2026', t: 'Precios en tu moneda y bots solo tuyos', items: [
+    'Los planes se muestran y se cobran en la moneda de tu país: pesos en México, dólares en EE. UU., euros en Europa, y también pesos colombianos, chilenos, soles y libras. Fuera de esos países, en dólares.',
+    'El precio se calcula con el tipo de cambio del día y se redondea (por ejemplo, Plus $4.99 USD). Si ya pagas, tu suscripción sigue en su moneda.',
+    'Nova Bot Lab ya no crea los bots de plantilla (Seguro, Nova v2.7, Lucas, Pachita) en todas las cuentas: cada persona arma y ve solo sus propios bots.'
+  ]},
   {v: '3.39', d: '17 nov 2026', t: 'Planes de pago dentro de la app', items: [
     'Plus ya se paga desde VORTEX: $99 MXN al mes con tarjeta de crédito o débito (pago seguro con Stripe). Ya no depende de YouTube.',
     'Infinity: $249 MXN al mes, o gratis abriendo tu cuenta de BingX con el código YCXE5W (tú eliges).',

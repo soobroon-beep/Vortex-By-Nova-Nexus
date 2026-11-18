@@ -129,3 +129,34 @@ test('el plan pagado también queda en plans/{uid} de Firestore (para abrir Nova
     const d = docs.get('plans/UserUid1234567890'); assert.ok(d, 'se escribió el plan'); assert.deepStrictEqual(d.payTier, {stringValue: 'plus'}); assert.deepStrictEqual(d.tier, {stringValue: 'plus'}); assert.ok(+d.payEnd.integerValue > Date.now());
   } finally { globalThis.fetch = real; }
 });
+
+test('precio en la moneda del país: México en pesos, EE. UU. en dólares, Chile sin centavos', async () => {
+  const mod = await W();
+  assert.strictEqual(mod.currencyOf('MX'), 'mxn'); assert.strictEqual(mod.currencyOf(''), 'mxn'); assert.strictEqual(mod.currencyOf('US'), 'usd'); assert.strictEqual(mod.currencyOf('ES'), 'eur'); assert.strictEqual(mod.currencyOf('CO'), 'cop'); assert.strictEqual(mod.currencyOf('JP'), 'usd');
+  const env = {PRICE_PLUS: '99', PRICE_INFINITY: '249'}, fx = {usd: 18.6, eur: 21.6, clp: 0.0197, cop: 0.0049};
+  assert.deepStrictEqual(mod.localPrices(env, 'mxn', fx), {currency: 'mxn', plus: 99, infinity: 249});
+  assert.deepStrictEqual(mod.localPrices(env, 'usd', fx), {currency: 'usd', plus: 4.99, infinity: 12.99});
+  const cl = mod.localPrices(env, 'clp', fx); assert.strictEqual(cl.plus % 10, 0); assert.ok(cl.plus > 4000 && cl.plus < 6000);
+  assert.strictEqual(mod.unitAmount('usd', 4.99), 499); assert.strictEqual(mod.unitAmount('clp', 4990), 4990);
+});
+
+test('desde EE. UU. se cobra en dólares y el cambio de plan sigue en dólares', async () => {
+  const wk = (await W()).default, {jwk, tok} = await makeToken(claims(), {kid: 'k-usd'}), st = fakeStripe(jwk);
+  const fn = async (url, opt = {}) => {
+    const u = String(url);
+    if (u.includes('open.er-api.com')) return new Response(JSON.stringify({rates: {USD: 1 / 18.6, EUR: 1 / 21.6, GBP: 1 / 24.9, CAD: 1 / 13.3, COP: 1 / 0.0049, CLP: 1 / 0.0197, PEN: 1 / 5.5}}));
+    if (u.endsWith('/v1/prices')) { const r = await st.fn(url, opt), j = await r.json(); return new Response(JSON.stringify(Object.assign(j, {product: 'prod_' + new URLSearchParams(opt.body).get('metadata[plan]')}))); }
+    return st.fn(url, opt);
+  };
+  const us = (path, b) => { const r = post(path, b); Object.defineProperty(r, 'cf', {value: {country: 'US'}}); return r; };
+  const env = {KV: kv(), PRICE_PLUS: '99', PRICE_INFINITY: '249', STRIPE_SECRET_KEY: 'sk_test_x'};
+  let r = await (await wk.fetch(us('/pay/status', {token: tok}), env, {}, fn)).json();
+  assert.deepStrictEqual(r.local, {currency: 'usd', plus: 4.99, infinity: 12.99}); assert.deepStrictEqual(r.prices, {plus: 99, infinity: 249});
+  await wk.fetch(us('/pay/checkout', {token: tok, plan: 'plus'}), env, {}, fn);
+  const cs = st.calls.find(c => c[1] === '/checkout/sessions')[2];
+  assert.strictEqual(cs['line_items[0][price_data][currency]'], 'usd'); assert.strictEqual(cs['line_items[0][price_data][unit_amount]'], '499'); assert.strictEqual(cs['line_items[0][price_data][product]'], 'prod_plus');
+  await wk.fetch(us('/pay/status', {token: tok, sid: 'cs_1'}), env, {}, fn); st.subs.sub_1.currency = 'usd';
+  r = await (await wk.fetch(us('/pay/checkout', {token: tok, plan: 'infinity'}), env, {}, fn)).json();
+  const up = st.calls.filter(c => c[0] === 'POST' && c[1] === '/subscriptions/sub_1').pop()[2];
+  assert.strictEqual(up['items[0][price_data][currency]'], 'usd'); assert.strictEqual(up['items[0][price_data][unit_amount]'], '1299');
+});

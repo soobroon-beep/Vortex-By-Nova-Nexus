@@ -8,7 +8,13 @@
   const BX = 'https://bingxdao.com/invite/YCXE5W/', BX_CODE = 'YCXE5W', LS = 'cct_plan_v1', SRV = 'https://vortex-push.soobroon.workers.dev';
   const PAY = 'https://vortex-pay.soobroon.workers.dev', PAY_LS = 'cct_pay_v1'; // servidor de pagos (Stripe)
   let PRICE = {plus: 99, infinity: 249}; // pesos al mes (los confirma el servidor)
-  const mxn = n => '$' + Number(n).toLocaleString('es-MX') + ' MXN';
+  /* Precio en la moneda de tu país: lo decide el servidor de pagos por tu país (USD, EUR, COP…) y es lo que se cobra; en México, pesos */
+  const LOC_LS = 'cct_price_loc'; let LOC = (() => { try { const o = JSON.parse(localStorage.getItem(LOC_LS) || 'null'); return o && o.currency && o.plus > 0 ? o : null; } catch { return null; } })();
+  const cur = () => LOC && LOC.plus > 0 ? LOC : {currency: 'mxn', plus: PRICE.plus, infinity: PRICE.infinity};
+  const fmtAmt = (n, c) => { c = String(c || 'mxn').toUpperCase(); const dec = Number(n) % 1 ? 2 : 0; try { return new Intl.NumberFormat('es-MX', {style: 'currency', currency: c, currencyDisplay: 'narrowSymbol', minimumFractionDigits: dec, maximumFractionDigits: dec}).format(n); } catch { return '$' + Number(n).toLocaleString('es-MX'); } };
+  const money = k => { const c = cur(); return fmtAmt(c[k], c.currency) + ' ' + c.currency.toUpperCase(); };
+  function setLoc(l) { if (!l || !l.currency || !(l.plus > 0)) return; const ch = !LOC || LOC.currency !== l.currency || LOC.plus !== l.plus || LOC.infinity !== l.infinity; LOC = {currency: l.currency, plus: +l.plus, infinity: +l.infinity, at: Date.now()}; try { localStorage.setItem(LOC_LS, JSON.stringify(LOC)); } catch {} if (ch && ov && !ov.hidden) render(); }
+  async function loadLoc() { if (LOC && Date.now() - (LOC.at || 0) < 12 * 3600e3) return; try { const r = await fetch(PAY + '/'); const j = await r.json(); setLoc(j.local); } catch {} }
   const OWNER = 'a8d56a29aa7c5208d7748a84e75e4b14c713c521136174e8a652b7a76ac19b28'; // sha-256 del correo del dueño (no se publica el correo)
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const load = () => { try { return Object.assign({tier: 'free'}, JSON.parse(localStorage.getItem(LS) || '{}')); } catch { return {tier: 'free'}; } };
@@ -107,7 +113,7 @@
   function payBtn(k) {
     const up = k === 'infinity' && paidTier() === 'plus';
     if (!user) return `<button type="button" class="pl-btn ghost" data-pl-login>Inicia sesión con Google para pagar</button>`;
-    return `<button type="button" class="pl-btn ${TIERS[k].c}" data-pl-pay="${k}">${svg('<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h3"/>', 16)} ${up ? 'Mejorar a Infinity' : 'Pagar ' + mxn(PRICE[k]) + ' al mes'}</button>
+    return `<button type="button" class="pl-btn ${TIERS[k].c}" data-pl-pay="${k}">${svg('<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h3"/>', 16)} ${up ? 'Mejorar a Infinity' : 'Pagar ' + money(k) + ' al mes'}</button>
       <small class="pl-note">${up ? 'Se cambia tu suscripción y hoy solo se cobra la diferencia.' : 'Tarjeta de crédito o débito · pago seguro con Stripe · cancela cuando quieras'}</small><small class="pl-msg" data-pl-paymsg="${k}"></small>`;
   }
   function col(k) {
@@ -123,7 +129,7 @@
         <ol class="pl-steps"><li><b>Crea tu cuenta en BingX con mi código</b><small>Código de referido <button type="button" class="pl-code" data-pl-copy title="Copiar código">${BX_CODE} ${svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>', 13)}</button></small><a class="pl-btn ghost" href="${BX}" target="_blank" rel="noopener noreferrer">${svg(TIERS.infinity.ic, 16)} Abrir cuenta en BingX</a></li>
         <li><b>Escribe tu UID de BingX</b><small>Lo ves en tu perfil de BingX. Solo lo usamos para comprobar que entraste con el código.</small>${!user ? `<button type="button" class="pl-btn ghost" data-pl-login>Inicia sesión con Google primero</button>` : `<div class="pl-uid"><input inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Ej. 123456789" value="${esc(st.bx || '')}" data-pl-uid aria-label="UID de BingX"><button type="button" class="pl-btn ghost" data-pl-uidok>Verificar</button></div>`}<small class="pl-msg" data-pl-uidmsg>${st.bx ? 'UID guardado: pendiente de verificar.' : ''}</small></li></ol>`;
     }
-    const price = k === 'free' ? '<div class="pl-price"><b>$0</b><span>para siempre</span></div>' : `<div class="pl-price"><b>$${PRICE[k]}</b><span>MXN / mes${k === 'infinity' ? ' · o gratis con BingX' : ''}</span></div>`;
+    const price = k === 'free' ? '<div class="pl-price"><b>$0</b><span>para siempre</span></div>' : `<div class="pl-price"><b>${fmtAmt(cur()[k], cur().currency)}</b><span>${cur().currency.toUpperCase()} / mes${k === 'infinity' ? ' · o gratis con BingX' : ''}</span></div>`;
     return `<section class="pl-col ${t.c}${cur ? ' cur' : ''}"><canvas class="pl-bg" data-fx="${k}" aria-hidden="true"></canvas><header><span class="pl-ic">${svg(t.ic, 22)}</span><div><b>${k === 'free' ? t.n : tx(k)}</b><small>${t.sub}</small></div>${cur ? '<em class="pl-now">Tu plan</em>' : ''}</header>
       ${price}<ul class="pl-f">${t.f.map(x => `<li>${svg(CHK, 14)}${esc(x)}</li>`).join('')}</ul>${act}</section>`;
   }
@@ -202,6 +208,7 @@
     }
   }
   function open(focus) {
+    loadLoc();
     if (!ov) {
       ov = document.createElement('div'); ov.className = 'pl-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Planes de VORTEX');
       ov.innerHTML = `<div class="pl-box"><div class="pl-top"><div><small>VORTEX</small><h2>Elige tu plan</h2><p>Gratis para siempre. Plus e Infinity se pagan mes a mes con tarjeta y los cancelas cuando quieras; Infinity también se desbloquea gratis abriendo tu cuenta de BingX con mi código. Lo que tiene fondo de galaxia se desbloquea con un plan.</p></div><button type="button" class="pl-x" data-pl-close aria-label="Cerrar">✕</button></div><div class="pl-cols"></div></div>`;
@@ -252,6 +259,7 @@
   function setPay(j) {
     if (!user || !j || typeof j.tier !== 'string') return;
     if (j.prices && j.prices.plus > 0) PRICE = {plus: +j.prices.plus, infinity: +j.prices.infinity};
+    if (j.local) setLoc(j.local);
     const before = real();
     pay = {uid: user.uid, tier: TIERS[j.tier] ? j.tier : 'free', status: String(j.status || ''), end: +j.end || 0, cancel: !!j.cancel, plan: j.plan || '', ready: !!j.ready && !j.setup, prices: PRICE, at: Date.now()};
     try { localStorage.setItem(PAY_LS, JSON.stringify(pay)); } catch {}
@@ -273,7 +281,7 @@
   }
   async function checkout(k, btn) {
     if (payBusy || !TIERS[k]) return; if (!user) { close(); if (root.CCT_signIn) root.CCT_signIn(); return; }
-    if (k === 'infinity' && paidTier() === 'plus' && !confirm(`Tu suscripción cambia a Infinity (${mxn(PRICE.infinity)} al mes). Hoy se cobra solo la diferencia de lo que queda del mes. ¿Continuar?`)) return;
+    if (k === 'infinity' && paidTier() === 'plus' && !confirm(`Tu suscripción cambia a Infinity (${money('infinity')} al mes). Hoy se cobra solo la diferencia de lo que queda del mes. ¿Continuar?`)) return;
     payBusy = true; const lbl = btn && btn.innerHTML; if (btn) { btn.disabled = true; btn.textContent = 'Abriendo el pago seguro…'; } payMsg(k, '');
     try {
       const j = await payCall('/pay/checkout', {plan: k});
