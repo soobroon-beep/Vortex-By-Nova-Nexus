@@ -33,11 +33,11 @@
     if (!cv) return;
     DPR = Math.min(window.devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
-    var n = Math.round(Math.min(220, W * H / 6500)); stars = [];
+    var n = Math.round(Math.min(320, W * H / 4200)); stars = [];
     for (var i = 0; i < n; i++) {
       var z = Math.random(); // profundidad: las lejanas son más chicas, tenues y lentas
       var c = Math.random(), tint = c < .68 ? 0 : c < .8 ? 1 : c < .9 ? 2 : 3; // blancas y algunas moradas, azules y rosas
-      stars.push({ x: Math.random() * W, y: Math.random() * H, r: .35 + z * z * 1.1, a: .14 + z * .42, v: 1.2 + z * 5.5, t: Math.random() * 6.28, f: .4 + Math.random() * 1.2, c: tint });
+      stars.push({ x: Math.random() * W, y: Math.random() * H, r: .35 + z * z * 1.1, a: .2 + z * .55, v: 1.2 + z * 5.5, t: Math.random() * 6.28, f: .4 + Math.random() * 1.2, c: tint });
     }
     draw(0);
   }

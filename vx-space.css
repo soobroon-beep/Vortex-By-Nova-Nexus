@@ -216,3 +216,13 @@
   background:linear-gradient(120deg,#8b5cf6,#3b82f6,#ec4899,#8b5cf6) 0 0/200% 100%!important;box-shadow:0 4px 14px rgba(139,92,246,.35)!important}
 :root.vx-space body .bottom-nav::before{background:linear-gradient(120deg,rgba(139,92,246,.5),rgba(59,130,246,.4),rgba(236,72,153,.35))!important;border-color:rgba(196,181,253,.35)!important;box-shadow:0 0 18px rgba(139,92,246,.4)!important}
 :root.vx-space body.light .bottom-nav::before{background:linear-gradient(120deg,rgba(139,92,246,.22),rgba(59,130,246,.18),rgba(236,72,153,.16))!important}
+
+/* ═════ 9. Fondo negro con estrellas (sin nubes moradas/azules); los botones siguen de colores ═════ */
+:root.vx-space body:not(.light){--s-bg:#000;--s-card:rgba(6,6,9,.62);--s-pop:rgba(10,10,14,.9);--s-line:rgba(255,255,255,.08);--s-line2:rgba(255,255,255,.15);
+  --s-sel:rgba(255,255,255,.07);--s-hover:rgba(255,255,255,.05);background:#000!important}
+:root.vx-space body:not(.light) .topbar,:root.vx-space body:not(.light) .bottom-nav{background:rgba(0,0,0,.6)!important}
+@media(min-width:1024px){
+  :root.vx-space body:not(.light) :is(#toolRail,.right-rail,#watchView,#newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView){
+    background:linear-gradient(var(--s-card),var(--s-card)) padding-box,linear-gradient(140deg,rgba(255,255,255,.14),rgba(255,255,255,.05) 40%,rgba(255,255,255,.1)) border-box!important}
+  :root.vx-space body:not(.light) #chartView{background:linear-gradient(#07090e,#07090e) padding-box,linear-gradient(140deg,rgba(255,255,255,.14),rgba(255,255,255,.05) 40%,rgba(255,255,255,.1)) border-box!important}
+}
