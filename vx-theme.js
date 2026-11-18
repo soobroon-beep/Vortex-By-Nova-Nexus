@@ -3,6 +3,7 @@
    - Espacial: dibuja un fondo de estrellas que se mueven muy despacio y cambia los iconos
      de las barras por iconos espaciales (al salir del tema se restauran los originales).
    - Se elige en Configuración → Personalización → Estilo de la app, o con ?estilo=clasico|minimal|espacial.
+   - Se guarda en tu cuenta (prefs-sync.js, clave vx-style) y se aplica igual en todos tus dispositivos.
    Quitarlo: borrar este archivo, vx-min.css, vx-space.css y sus líneas en index.html. */
 (function () {
   var KEY = 'vx-style', D = document.documentElement, STYLES = ['clasico', 'minimal', 'espacial'];
@@ -141,7 +142,9 @@
   }
   window.VXTheme = {
     get: function () { return cur; },
-    set: function (s) { if (STYLES.indexOf(s) < 0) return; try { localStorage.setItem(KEY, s); } catch (e) {} apply(s); dispatchEvent(new Event('resize')); }
+    set: function (s) { if (STYLES.indexOf(s) < 0) return; try { localStorage.setItem(KEY, s); } catch (e) {} apply(s); dispatchEvent(new Event('resize')); },
+    // lo llama prefs-sync.js cuando llega de tu cuenta un estilo elegido en otro dispositivo: se aplica al momento, sin recargar
+    refresh: function () { var v; try { v = localStorage.getItem(KEY); } catch (e) {} if (STYLES.indexOf(v) >= 0 && v !== cur) { apply(v); dispatchEvent(new Event('resize')); } }
   };
   function init() {
     apply(cur);
