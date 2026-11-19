@@ -3114,8 +3114,9 @@ let raf = 0;
 const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 let glideRaf = 0, glideT = null, inertiaRaf = 0;
 function stopMotion() { cancelAnimationFrame(glideRaf); cancelAnimationFrame(inertiaRaf); glideRaf = inertiaRaf = 0; glideT = null; }
+const liteMode = () => document.documentElement.classList.contains('vx-lite'); // Modo ligero: zoom y desplazamiento directos (menos cuadros que dibujar)
 function glide(t) { // t = {visible?, pan?}: se acerca al objetivo con suavizado exponencial
-  if (REDUCED) { if (t.visible != null) visible = t.visible; if (t.pan != null) pan = t.pan; render(); return; }
+  if (REDUCED || liteMode()) { if (t.visible != null) visible = t.visible; if (t.pan != null) pan = t.pan; render(); return; }
   cancelAnimationFrame(inertiaRaf); glideT = Object.assign(glideT || {}, t); if (glideRaf) return;
   let last = performance.now();
   const step = now => {
@@ -3127,7 +3128,7 @@ function glide(t) { // t = {visible?, pan?}: se acerca al objetivo con suavizado
   glideRaf = requestAnimationFrame(step);
 }
 function inertia(v) { // v en velas/ms; se frena con fricción
-  if (REDUCED || Math.abs(v) < .004) return; cancelAnimationFrame(inertiaRaf); let last = performance.now();
+  if (REDUCED || liteMode() || Math.abs(v) < .004) return; cancelAnimationFrame(inertiaRaf); let last = performance.now();
   const step = now => { const dt = Math.min(48, now - last); last = now; pan += v * dt; v *= Math.pow(.0035, dt / 1000);
     render(); if (Math.abs(v) > .0015) inertiaRaf = requestAnimationFrame(step); else inertiaRaf = 0; };
   inertiaRaf = requestAnimationFrame(step);
@@ -3213,10 +3214,13 @@ function legGlass(text, x, y, act) {
 }
 function syncLegToggle() {
   const b = $('#legToggle'); if (!b) return; b.hidden = !legN; if (!legN) return;
-  $('#legCount').textContent = legN === 1 ? '1 indicador' : legN + ' indicadores';
+  // solo se escribe lo que cambió: reescribir el texto y los atributos en cada cuadro obligaba al navegador a recalcular la página entera (zoom trabado)
+  const k = legN + '|' + legOpen; if (b._k === k) return; b._k = k;
+  setTxt($('#legCount'), legN === 1 ? '1 indicador' : legN + ' indicadores');
   b.classList.toggle('open', legOpen); b.setAttribute('aria-expanded', legOpen ? 'true' : 'false');
   b.title = legOpen ? 'Ocultar las opciones de los indicadores' : 'Mostrar los indicadores y sus opciones (ocultar, ajustes, eliminar)';
 }
+function setTxt(el, t) { if (el && el.textContent !== t) el.textContent = t; }
 (() => { const b = $('#legToggle'); if (!b) return; b.insertAdjacentHTML('beforeend', SV(IC.chevron, 12));
   b.addEventListener('click', e => { e.stopPropagation(); legOpen = !legOpen; try { localStorage.setItem('cct_legOpen_v1', legOpen ? '1' : '0'); } catch {} legSig = ''; legStruct = ''; $('#legMenu')?.remove(); scheduleRender(); }); })();
 function legMeasure() { const box = $('#legendBox'); if (!box) return; let ch = false; legRows.forEach((r, i) => { const el = box.children[grips.length + i]; if (!el) return; const w = el.offsetWidth, k = legKey(r.act); if (w && Math.abs((legW.get(k) || 0) - w) > 1) { legW.set(k, w); ch = true; } }); if (ch) scheduleRender(); }
@@ -3265,7 +3269,14 @@ document.addEventListener('click', e => {
     if (isCopy(id)) removeCopy(id); else state.indicators[id] = false; if (state.stdHide) delete state.stdHide[id]; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast('Indicador apagado: puedes volver a activarlo en Indicadores');
   }
 });
-function render() { renderCore(); syncLegend(); syncLegToggle(); if (candles.length && window.CCT_splashDone) CCT_splashDone(); } // ya hay velas: termina la animación de apertura
+let cssCache = null;
+function cssVars() {
+  const k = document.documentElement.className + '|' + document.body.className;
+  if (cssCache && cssCache.k === k) return cssCache;
+  const c = getComputedStyle(document.body), v = n => c.getPropertyValue(n).trim();
+  return (cssCache = {k, text: v('--muted'), line: v('--line'), bg: v('--bg'), draw: v('--draw') || '#e9c36e', fg: v('--text'), getPropertyValue: n => c.getPropertyValue(n)});
+}
+function render() { if (raf) { cancelAnimationFrame(raf); raf = 0; } /* un solo dibujo por cuadro */ let mv = !!(glideRaf || inertiaRaf); try { mv = mv || !!(gest || pinch); } catch {} if (mv && window.VXTheme && VXTheme.busy) VXTheme.busy(); /* mientras mueves el gráfico, el fondo animado espera */ renderCore(); syncLegend(); syncLegToggle(); if (candles.length && window.CCT_splashDone) CCT_splashDone(); } // ya hay velas: termina la animación de apertura
 /* Reordenar paneles: mantén pulsado el NOMBRE de un indicador (RSI, MACD, un script en panel…) y arrástralo hacia arriba o abajo; al soltar queda guardado.
    Solo se mueve el nombre/panel elegido; los botones y el resto de la leyenda no cambian. */
 (() => {
@@ -3367,8 +3378,8 @@ function renderCore() {
   if (currentView !== 'chartView') return;
   const el = $('#priceCanvas'); if (!el.getBoundingClientRect().width) return;
   const {w, h} = setupCanvas();
-  const css = getComputedStyle(document.body);
-  const text = css.getPropertyValue('--muted').trim(), line = css.getPropertyValue('--line').trim(), bg = css.getPropertyValue('--bg').trim(), drawCol = css.getPropertyValue('--draw').trim() || '#e9c36e', fg = css.getPropertyValue('--text').trim();
+  const css = cssVars(); // colores del tema (en caché: leerlos en cada cuadro forzaba a recalcular los estilos de toda la página)
+  const text = css.text, line = css.line, bg = css.bg, drawCol = css.draw, fg = css.fg;
   syncNovaCols(); const CS = cstyle(), up = CS.up, down = CS.down;
   g.clearRect(0, 0, w, h); if (CS.bg) { g.fillStyle = CS.bg; g.fillRect(0, 0, w, h); }
   const gridCol = CS.grid || line; grips = []; paneHit = []; { const sk = state.symbol + '|' + state.interval; if (paneMan._k !== sk) { paneMan = {_k: sk}; for (const [k, v] of Object.entries(paneManSaved)) paneMan[k] = {min: v[0], max: v[1]}; } }
@@ -3379,7 +3390,7 @@ function renderCore() {
   const prAll = activePine().filter(p => pineVisibleOn(p, state.interval)).map(p => ({p, r: pineStyled(pineRes[p.sid], p)})).filter(x => x.r && x.r.ok && x.r._key === pineKeyNow), pr = prAll.filter(x => !x.p.hide), pHid = prAll.filter(x => x.p.hide);
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
-  const SH = symHeadH(); document.getElementById('chartArea').style.setProperty('--sh', SH + 'px'); // la franja con el nombre y el precio de la moneda va arriba del gráfico
+  const SH = symHeadH(); { const ca = document.getElementById('chartArea'); if (ca._sh !== SH) { ca._sh = SH; ca.style.setProperty('--sh', SH + 'px'); } } // la franja con el nombre y el precio de la moneda va arriba del gráfico
   const CBH = (() => { // PC: la franja de temporalidades y botones va encima del gráfico (cristal translúcido); el precio empieza debajo de ella
     const v = $('#chartView'), b = v && v.querySelector('.chart-bar'), tb = $('#chartTabs'), on = deskMQ.matches && !document.body.classList.contains('pane') && b && b.offsetParent !== null, hh = on ? b.offsetHeight + (tb && tb.offsetParent !== null ? tb.offsetHeight : 0) : 0; // también la franja de pestañas (cristal translúcido)
     if (v && v.style.getPropertyValue('--cbh') !== hh + 'px') v.style.setProperty('--cbh', hh + 'px'); return hh; })();
@@ -3792,8 +3803,7 @@ function renderCore() {
   if (shown) {
     const chg = (shown.c - shown.o) / shown.o * 100;
     const sgAt = cross && nn && state.indicators.nnIa ? nn.bySignal[clamp(Math.round(IDX(cross.x)), 0, n - 1)] : null;
-    $('#ohlcText').textContent = `O ${fmt(shown.o)}  H ${fmt(shown.h)}  L ${fmt(shown.l)}  C ${fmt(shown.c)}  ${pct(chg)}` + (sgAt ? `\n${NovaNexus.tooltip(sgAt)}` : '');
-    $('#ohlcText').style.color = shown.c >= shown.o ? up : down;
+    { const oe = $('#ohlcText'), col = shown.c >= shown.o ? up : down; setTxt(oe, `O ${fmt(shown.o)}  H ${fmt(shown.h)}  L ${fmt(shown.l)}  C ${fmt(shown.c)}  ${pct(chg)}` + (sgAt ? `\n${NovaNexus.tooltip(sgAt)}` : '')); if (oe._c !== col) { oe._c = col; oe.style.color = col; } }
   }
 }
 /* ───────── Paneles inferiores: MACD · Estocástico · ATR · OBV ───────── */
@@ -4713,7 +4723,10 @@ area.addEventListener('pointermove', e => {
   scheduleRender();
 });
 area.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !ptrs.size && cross) { cross = null; scheduleRender(); } });
-area.addEventListener('wheel', e => { e.preventDefault(); cancelAnimationFrame(inertiaRaf); const base = glideT && glideT.visible != null ? glideT.visible : visible; glide({visible: clamp(base * (e.deltaY > 0 ? 1.12 : .89), 15, 400)}); }, {passive: false});
+area.addEventListener('wheel', e => { // zoom proporcional al giro: la rueda del ratón da el mismo paso de siempre y el trackpad (muchos pasos pequeños) ya no salta ni se acelera
+  e.preventDefault(); cancelAnimationFrame(inertiaRaf); const base = glideT && glideT.visible != null ? glideT.visible : visible;
+  const px = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1), f = Math.exp(clamp(px, -240, 240) * (e.ctrlKey ? .01 : .00113)); // ctrlKey = pellizco en el trackpad
+  glide({visible: clamp(base * f, 15, 400)}); }, {passive: false});
 function fit() { priceMan = null; updateAutoBtn(); glide({visible: defaultVisible(), pan: 0}); }
 function updateAutoBtn() { const b = $('#autoScale'); if (b) b.hidden = !priceMan; }
 $('#autoScale').onclick = () => { priceMan = null; updateAutoBtn(); render(); };

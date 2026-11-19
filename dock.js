@@ -21,10 +21,27 @@
       }
       raf = busy ? requestAnimationFrame(frame) : 0;
     }
-    const go = () => { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } };
-    rail.addEventListener('mousemove', e => { if (e.buttons) return; /* arrastrando: no interfiere */ mouse = e.clientY; go(); });
+    const go = () => { if (lite() || ignore) return; if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } };
+    const snap = () => { // todo de vuelta a su tamaño al instante (sin resorte)
+      mouse = Infinity; cancelAnimationFrame(raf); raf = 0;
+      for (const b of rail.querySelectorAll(sel)) { const s = st.get(kOf(b)); if (s) { s.x = 1; s.v = 0; } const g = glyph(b); if (g && !b.classList.contains('theme-sw')) g.style.transform = ''; b.style.zIndex = ''; b.style.removeProperty('--dk'); }
+    };
+    rail.addEventListener('mousemove', e => {
+      if (e.buttons) return; /* arrastrando: no interfiere */
+      // Al volver a la ventana (estaba minimizada o en otra app) el navegador manda un «mousemove» con la última posición del ratón aunque no lo muevas:
+      // antes eso inflaba los iconos y luego se encogían solos. Ahora solo crecen cuando el ratón de verdad se mueve sobre la barra.
+      if (ignore) { if (ignore === true) { ignore = {x: e.clientX, y: e.clientY}; return; } if (Math.hypot(e.clientX - ignore.x, e.clientY - ignore.y) < 3) return; ignore = null; }
+      mouse = e.clientY; go();
+    });
     rail.addEventListener('mouseleave', () => { mouse = Infinity; go(); });
+    resets.push(snap);
   }
+  let ignore = null; const resets = [];
+  const lite = () => document.documentElement.classList.contains('vx-lite'); // Modo ligero: sin efecto dock
+  const away = () => { ignore = true; resets.forEach(f => f()); };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) away(); else ignore = true; });
+  window.addEventListener('blur', away); window.addEventListener('focus', () => { ignore = true; });
+  document.addEventListener('mouseleave', () => resets.forEach(f => f())); // el ratón salió de la ventana
   const init = () => { dock(document.getElementById('rightRail'), '.rr-btn', 1.9); dock(document.getElementById('toolRail'), 'button', 1.6);
     dock(document.getElementById('watchRows'), '.watch-row[data-symbol]', 1.25, '.coin-icon', 80, b => b.dataset.symbol); /* lista de seguimiento: crece la foto de la moneda */ };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

@@ -57,7 +57,14 @@
     lockRaf = 0; if (typeof document === 'undefined' || !document.body) return;
     for (const [sel, f, style] of GATE) { const lock = !can(f); let els = []; try { els = document.querySelectorAll(style || sel); } catch {} els.forEach(el => { if (el.classList.contains('gx-lock') !== lock) el.classList.toggle('gx-lock', lock); if (lock) el.dataset.gxNeed = TIERS[FEATURES[f]].n; else delete el.dataset.gxNeed; }); }
   }
-  const queueLocks = () => { if (!lockRaf) lockRaf = requestAnimationFrame(markLocks); };
+  // Rendimiento: el observador ve TODOS los cambios de la página (la leyenda y el precio cambian en cada cuadro del gráfico).
+  // Antes eso volvía a buscar todos los botones premium en cada cuadro (selectores :has() costosos) y trababa el zoom y las animaciones.
+  // Ahora solo se revisa cuando se agregan elementos nuevos, agrupado (máx. ~6 veces por segundo); al cambiar de plan se revisa al momento.
+  let lockT = 0;
+  const queueLocks = recs => {
+    if (recs && !recs.some(r => [...r.addedNodes].some(n => n.nodeType === 1 && !(n.closest && n.closest('#legendBox,#chartSymHead,.toast,#toast'))))) return;
+    if (lockRaf || lockT) return; lockT = setTimeout(() => { lockT = 0; lockRaf = requestAnimationFrame(markLocks); }, 160);
+  };
   if (typeof document !== 'undefined') {
     const css = below('infinity').map(t => `body[data-tier="${t}"] .px-layer`).join(',') + '{display:none!important}';
     const el = document.createElement('style'); el.id = 'plGate'; el.textContent = css; (document.head || document.documentElement).appendChild(el);

@@ -16,6 +16,11 @@
     } catch (e) { return 'clasico'; }
   }
   var cur = read();
+  /* ───── Rendimiento: «Completo» (todas las animaciones y el cristal) o «Ligero» (para equipos o celulares lentos) ───── */
+  var PKEY = 'vx-perf';
+  function readPerf() { try { var q = (new URLSearchParams(location.search).get('rendimiento') || '').toLowerCase(); if (q === 'ligero') localStorage.setItem(PKEY, 'lite'); if (q === 'completo') localStorage.setItem(PKEY, 'full'); return localStorage.getItem(PKEY) === 'lite' ? 'lite' : 'full'; } catch (e) { return 'full'; } }
+  var perf = readPerf(); D.classList.toggle('vx-lite', perf === 'lite');
+  function isLite() { return perf === 'lite'; }
   function classes(s) { D.classList.toggle('vx-min', s === 'minimal'); D.classList.toggle('vx-space', s === 'espacial'); D.setAttribute('data-vx-style', s); }
   classes(cur);
 
@@ -67,12 +72,13 @@
       }
     }
   }
+  var busyUntil = 0; // mientras mueves o haces zoom al gráfico el fondo se queda quieto: así el cristal no se recalcula y el gráfico va fluido
   function loop(t) {
     raf = requestAnimationFrame(loop);
-    if (t - last < 33) return; // ~30 cuadros por segundo: suficiente y cuida la batería
+    if (t - last < 33 || t < busyUntil) return; // ~30 cuadros por segundo: suficiente y cuida la batería
     var dt = last ? Math.min(.1, (t - last) / 1000) : 0; last = t; draw(dt);
   }
-  function go() { if (!cv) { mk(); size(); } if (still) { draw(0); return; } if (!raf) { last = 0; raf = requestAnimationFrame(loop); } }
+  function go() { if (!cv) { mk(); size(); } if (still || isLite()) { stop(); draw(0); return; } if (!raf) { last = 0; raf = requestAnimationFrame(loop); } }
   function stop() { if (raf) cancelAnimationFrame(raf); raf = 0; }
 
   /* ───── Iconos espaciales ───── */
@@ -140,14 +146,71 @@
     icons(s === 'espacial'); paint();
     if (window.CCTStarCursor) starCursor(s === 'espacial');
   }
+  /* Modo ligero: quita el desenfoque de cristal (lo más pesado para la tarjeta gráfica) y en su lugar hace los fondos casi opacos
+     para que todo se siga leyendo bien. Se genera a partir de las reglas de la app, así cubre todos los paneles y menús. */
+  var liteEl = null;
+  function boost(bg) { // rgba(…, .55) → rgba(…, .94): mismo color, casi opaco
+    // los tintes muy suaves (resaltes de 4–25 %) se quedan igual; las capas negras que oscurecen detrás de una ventana solo un poco más
+    // (así se sigue viendo la vista previa en vivo); los paneles de cristal pasan a casi opacos
+    return bg.replace(/rgba\(([^()]*?),\s*([\d.]+)\)/g, function (m, rgb, a) {
+      a = +a; if (a >= .9 || a < .3) return m;
+      var c = rgb.split(',').map(Number); if (c[0] < 12 && c[1] < 12 && c[2] < 12) return 'rgba(' + rgb + ',' + Math.min(.75, a + .15).toFixed(2) + ')';
+      return 'rgba(' + rgb + ',.94)';
+    });
+  }
+  function liteCss() {
+    var out = [];
+    function walk(rules) {
+      for (var i = 0; i < rules.length; i++) {
+        var r = rules[i];
+        if (r.cssRules && !r.selectorText) { // @media / @supports: se respeta la condición
+          var inner = []; var save = out; out = inner; walk(r.cssRules); out = save;
+          var at = r.type === 4 ? '@media ' : r.type === 12 ? '@supports ' : /Container/.test(r.constructor && r.constructor.name) ? '@container ' : '';
+          if (inner.length && at && r.conditionText != null) out.push(at + r.conditionText + '{' + inner.join('') + '}');
+          else if (inner.length) out.push.apply(out, inner);
+          continue;
+        }
+        if (!r.style || !r.selectorText) continue;
+        var bf = r.style.getPropertyValue('backdrop-filter') || r.style.getPropertyValue('-webkit-backdrop-filter');
+        if (!bf || bf === 'none') continue;
+        var bg = r.style.getPropertyValue('background-color') || r.style.getPropertyValue('background'), extra = '';
+        if (bg && /rgba\(/.test(bg) && !/url\(|gradient/.test(bg)) extra = 'background-color:' + boost(bg) + '!important;';
+        out.push(r.selectorText + '{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;' + extra + '}');
+      }
+    }
+    for (var i = 0; i < document.styleSheets.length; i++) { var sh = document.styleSheets[i]; if (sh.ownerNode && sh.ownerNode.id === 'vxLiteCss') continue; try { walk(sh.cssRules); } catch (e) {} }
+    return out.join('\n');
+  }
+  function applyPerf() {
+    D.classList.toggle('vx-lite', isLite());
+    if (isLite()) {
+      if (!liteEl) { liteEl = document.createElement('style'); liteEl.id = 'vxLiteCss'; }
+      if (!liteEl.textContent) liteEl.textContent = liteCss();
+      if (!liteEl.isConnected) document.head.appendChild(liteEl); // al final: gana sobre las reglas originales
+    } else if (liteEl && liteEl.isConnected) liteEl.remove();
+    if (cur === 'espacial') go();
+    paintPerf();
+  }
+  var PNAMES = { full: 'Completo · todas las animaciones y efectos de cristal', lite: 'Ligero · menos efectos, ideal para equipos o celulares lentos' };
+  function paintPerf() {
+    document.querySelectorAll('[data-vx-perf]').forEach(function (b) { var on = b.getAttribute('data-vx-perf') === perf; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    var ex = document.getElementById('cuPerfEx'); if (ex) ex.textContent = PNAMES[perf];
+  }
+
   window.VXTheme = {
+    lite: isLite,
+    busy: function (ms) { busyUntil = performance.now() + (ms || 350); },
+    setPerf: function (p) { if (p !== 'lite' && p !== 'full') return; perf = p; try { localStorage.setItem(PKEY, p); } catch (e) {} applyPerf(); dispatchEvent(new Event('vx-perf')); },
+    refreshPerf: function () { var p = readPerf(); if (p !== perf) { perf = p; applyPerf(); dispatchEvent(new Event('vx-perf')); } },
     get: function () { return cur; },
     set: function (s) { if (STYLES.indexOf(s) < 0) return; try { localStorage.setItem(KEY, s); } catch (e) {} apply(s); dispatchEvent(new Event('resize')); },
     // lo llama prefs-sync.js cuando llega de tu cuenta un estilo elegido en otro dispositivo: se aplica al momento, sin recargar
     refresh: function () { var v; try { v = localStorage.getItem(KEY); } catch (e) {} if (STYLES.indexOf(v) >= 0 && v !== cur) { apply(v); dispatchEvent(new Event('resize')); } }
   };
   function init() {
-    apply(cur);
+    apply(cur); applyPerf();
+    if (isLite()) addEventListener('load', function () { if (liteEl) { liteEl.textContent = liteCss(); } }); // por si alguna hoja de estilos terminó de cargar después
+    document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-vx-perf]'); if (b) { e.preventDefault(); window.VXTheme.setPerf(b.getAttribute('data-vx-perf')); } });
     addEventListener('load', function () { setTimeout(function () { starCursor(cur === 'espacial'); }, 400); });
     document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-vx-pick]'); if (b) { e.preventDefault(); window.VXTheme.set(b.getAttribute('data-vx-pick')); } });
     // al cambiar claro/oscuro las estrellas cambian de tinta sin esperar al siguiente cuadro

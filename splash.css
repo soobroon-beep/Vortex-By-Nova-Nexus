@@ -28,3 +28,10 @@
 @keyframes vxsBar{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
 @keyframes vxsNeb{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#vxSplash *{animation-duration:.01s!important;animation-iteration-count:1!important}#vxSplash .vxs-logo{opacity:1;transform:none;filter:none}}
+/* La app se recargó durante la apertura (llegaron ajustes de tu cuenta): todo aparece ya en su lugar, sin repetir la entrada */
+#vxSplash.resume *{animation-delay:-2.2s!important}
+/* Modo ligero: sin nebulosa ni brillo que recorre el texto */
+.vx-lite #vxSplash .vxs-neb{display:none}
+.vx-lite #vxSplash .vxs-word{animation:vxsWord .6s ease .4s forwards}
+.vx-lite #vxSplash .vxs-logo{filter:none;animation-duration:.6s}
+.vx-lite #vxSplash .vxs-halo{animation:none;opacity:.7}

@@ -1,5 +1,12 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.41', d: '18 nov 2026', t: 'Más fluida y nuevo modo Ligero', items: [
+    'El zoom del gráfico va más suave: la rueda del ratón da el mismo paso y el trackpad ya no salta ni se acelera.',
+    'Las animaciones se ven igual pero gastan mucho menos: la página ya no revisa los botones premium en cada cuadro y los brillos que se repiten ya no vuelven a pintar todo.',
+    'La app ya no carga dos veces al abrir: la animación de las estrellas sale una sola vez.',
+    'Los iconos de la barra derecha ya no se agrandan solos al volver a la ventana después de minimizarla.',
+    'Nuevo en Configuración › Personalización › Rendimiento: «Ligero» quita el cristal y las animaciones decorativas para que VORTEX vaya fluida en cualquier celular o computadora.'
+  ]},
   {v: '3.40', d: '17 nov 2026', t: 'Precios en tu moneda y bots solo tuyos', items: [
     'Los planes se muestran y se cobran en la moneda de tu país: pesos en México, dólares en EE. UU., euros en Europa, y también pesos colombianos, chilenos, soles y libras. Fuera de esos países, en dólares.',
     'El precio se calcula con el tipo de cambio del día y se redondea (por ejemplo, Plus $4.99 USD). Si ya pagas, tu suscripción sigue en su moneda.',
