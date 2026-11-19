@@ -29,3 +29,24 @@ test('rescue: pide la lista y lanza solo cuando toca', async () => {
   assert.strictEqual(calls.length, 1);
   assert.strictEqual(await WR.rescue('', 'tok', 'x.yml', EVERY, NOW), null);
 });
+
+test('diaria: ya pasó su hora de hoy y no ha corrido → toca; si ya corrió hoy, no', () => {
+  const rule = {daily: [6, 15]}, today = Date.UTC(2026, 10, 19, 6, 15);
+  assert.strictEqual(WR.due([{created_at: iso(today - 15 * H), status: 'completed'}], today + 20 * 6e4, rule), true);
+  assert.strictEqual(WR.due([{created_at: iso(today + 16 * 6e4), status: 'completed'}], today + 9 * H, rule), false);
+  assert.strictEqual(WR.due([{created_at: iso(today - 15 * H), status: 'completed'}], today + 5 * 6e4, rule), false); // margen para que GitHub cumpla
+  assert.strictEqual(WR.due([{created_at: iso(today - 15 * H), status: 'completed'}], today - H, rule), false); // aún no es su hora
+});
+test('todas las tareas vigiladas existen y se pueden lanzar a mano', () => {
+  const fs = require('fs'), path = require('path');
+  for (const j of WR.JOBS) {
+    const y = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', j.wf), 'utf8');
+    assert.match(y, /workflow_dispatch/, j.wf);
+    assert.ok(j.every > 0 || (Array.isArray(j.daily) && j.daily.length === 2), j.wf);
+  }
+});
+test('rescueAll: una tarea que falla no detiene a las demás', async () => {
+  let n = 0; global.fetch = async u => { n++; if (String(u).includes('brain-sync')) throw new Error('red'); return {ok: false}; };
+  const logs = []; await WR.rescueAll('o/r', 'tok', NOW, 'main', m => logs.push(m));
+  assert.strictEqual(n, WR.JOBS.length); assert.ok(logs.some(l => l.startsWith('brain-sync.yml')));
+});
