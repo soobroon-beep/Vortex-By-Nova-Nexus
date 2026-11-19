@@ -226,11 +226,15 @@
   function shell() {
     const info = exInfo(), s = snap(), live = info && s && !s.err;
     return `<div class="ln${demo ? ' demo' : ''}">
-      <div class="view-head ln-head"><div><div class="eyebrow">NEXUS LENS${info ? ' · ' + esc(info.name.toUpperCase()) : ''}</div><h1>Mi cuenta</h1></div>
+      <div class="view-head ln-head"><div><div class="eyebrow">NEXUS LENS${info ? ' · ' + esc(info.name.toUpperCase()) : ''}</div><h1>Mi cuenta</h1>${info ? balHtml() : ''}</div>
         <div class="ln-hact">${info ? `<div class="ln-exw"><button type="button" class="ln-exch" ${demo ? 'data-ln="demo-off"' : 'data-ex-open'} title="${demo ? 'Salir del ejemplo' : 'Tu exchange conectado'}"><i class="ln-dot${live ? ' on' : ''}"></i>${esc(demo ? 'Ejemplo' : info.name)}</button><small class="ln-fut">Solo futuros</small></div>` : ''}
         ${info ? `<button type="button" class="ln-ib${loading ? ' spin' : ''}" data-ln="sync" aria-label="Actualizar" title="Actualizar">${svg(IC.sync, 17)}</button>` : ''}</div></div>
       ${info ? `<div class="ln-tabs" role="tablist" aria-label="Nexus Lens">${TABS.map(([k, n, i]) => `<button type="button" role="tab" data-ln-tab="${k}" aria-selected="${P.tab === k}">${svg(i, 15)}<span>${n}</span></button>`).join('')}</div>` : ''}
       <div class="ln-body">${body()}</div></div>`;
+  }
+  function balHtml() { // saldo de futuros siempre visible arriba, en todas las pestañas
+    const s = snap() || {}, eq = s.equity, fr = s.free;
+    return `<div class="ln-bal" title="Saldo de tu cuenta de futuros (equity, incluye lo abierto)"><span>Saldo futuros</span><b>${fin(eq) ? money(eq) : loading || !s.at ? '…' : '—'}</b>${fin(fr) ? `<small>Disponible ${money(fr)}</small>` : ''}</div>`;
   }
   function body() {
     const info = exInfo();
