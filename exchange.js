@@ -1,6 +1,6 @@
 /* VORTEX · Tu exchange conectado (una sola vez para toda la app).
    Eliges tu exchange de la lista (todos los que soporta CCXT: BingX, Binance, Bybit, OKX, Bitget, KuCoin, Gate, MEXC…), pegas tu API Key una vez
-   y la usan el saldo de la cuenta, Operar desde el gráfico (si permites operar en vivo) y Nexus Lens (BingX).
+   y la usan el saldo de la cuenta, Operar desde el gráfico (si permites operar en vivo) y Nexus Lens (cualquier exchange de la lista).
    La firma de cada consulta se calcula EN TU DISPOSITIVO con CCXT; el Worker «vortex-exchange» solo la reenvía (los exchanges bloquean CORS).
    Las claves se guardan en este dispositivo y, si iniciaste sesión, en tu cuenta (documento privado que solo tú puedes leer). */
 (function (root) {
@@ -192,13 +192,87 @@
       else if (cfg && (!rc || legacy || (cfg.at || 0) > (rc.at || 0))) cloudSave();
     } catch {}
   }
-  /* Nexus Lens (BingX) usa la misma clave: se le escribe en su almacenamiento y se recarga si estaba abierto */
-  function lensLink() {
-    if (!cfg || cfg.id !== 'bingx' || !root.indexedDB) return;
+  /* Nexus Lens ya es parte de VORTEX (lens.js): lee este mismo exchange con history() y onChange(); no hace falta copiarle la clave */
+  function lensLink() { try { root.dispatchEvent(new CustomEvent('vx-exchange-changed')); } catch {} }
+
+  /* ───────── Historial de operaciones cerradas (Nexus Lens) ─────────
+     Cada exchange lo entrega distinto; aquí se normaliza a una sola forma:
+     {id, sym (base: BTC), pair (símbolo del exchange), side: 'long'|'short'|'', pnl (realizado, USDT), ts (cierre), tOpen, entry, exit, qty, notional, lev, fee}.
+     BingX: órdenes cerradas con su ganancia (y, si no trae, los ingresos REALIZED_PNL). Binance: ingresos REALIZED_PNL + lado de tus fills recientes.
+     Bybit, OKX, Bitget, MEXC, Gate, KuCoin, BloFin…: historial de posiciones de CCXT. Cualquier otro: tus fills con PnL realizado. */
+  const symBase = s => String(s || '').split(/[/:]/)[0].replace(/[-_]?(USDT|USDC|BUSD|USD)$/i, '').replace(/^1000+/, '') || '?';
+  const tsNum = v => { const n = +v; return Number.isFinite(n) && n > 0 ? (n < 1e12 ? n * 1000 : n) : 0; };
+  async function history(o) {
+    o = o || {}; if (!cfg) throw new Error('Conecta tu exchange para ver tu historial');
+    if (!ex) ex = await make(cfg);
+    const days = Math.min(Math.max(+o.days || 90, 7), 365), since = Date.now() - days * 864e5;
+    if (cfg.market === 'spot') return {trades: [], spot: true, src: 'spot', days};
+    let out = [], src = '', last = null;
+    const tryIt = async (name, fn) => { if (out.length) return; try { const r = await fn(); if (r && r.length) { out = r; src = name; } } catch (e) { last = e; } };
+    if (cfg.id === 'bingx') await tryIt('bingx', () => histBingx(since));
+    if (/^binance/.test(cfg.id)) await tryIt('binance', () => histBinance(since));
+    if (ex.has.fetchPositionsHistory) await tryIt('positions', () => histPositions(since));
+    if (ex.has.fetchMyTrades) await tryIt('fills', () => histFills(since));
+    if (!out.length && last) throw new Error(errText(last));
+    const seen = new Set(), trades = [];
+    for (const t of out) { if (!t || !Number.isFinite(t.pnl) || !t.pnl || !t.ts || t.ts < since) continue; const k = t.id || `${t.sym}|${t.ts}|${t.pnl.toFixed(6)}`; if (seen.has(k)) continue; seen.add(k); trades.push(t); }
+    trades.sort((a, b) => a.ts - b.ts);
+    return {trades, src, days};
+  }
+  async function histBingx(since) {
+    const now = Date.now(), chunk = 30 * 864e5, orders = []; let err = null;
+    for (let end = now; end > since; end -= chunk) {
+      try { const r = await ex.swapV2PrivateGetTradeAllOrders({startTime: Math.max(since, end - chunk), endTime: end, limit: 1000}); orders.push(...((r && r.data && r.data.orders) || [])); } catch (e) { err = err || e; }
+    }
+    const lv = v => { const n = parseFloat(String(v || '').replace(/x/i, '')); return Number.isFinite(n) ? n : NaN; };
+    let t = orders.filter(x => (x.status === 'FILLED' || x.status === 2 || x.status === 'PARTIALLY_FILLED') && num(x.profit)).map(x => {
+      const ps = String(x.positionSide || '').toUpperCase(), sd = String(x.side || '').toUpperCase(), q = Math.abs(num(x.executedQty || x.origQty)), px = num(x.avgPrice || x.price);
+      return {id: 'bx' + x.orderId, sym: symBase(x.symbol), pair: x.symbol, side: ps === 'LONG' ? 'long' : ps === 'SHORT' ? 'short' : sd === 'SELL' ? 'long' : 'short', pnl: num(x.profit), ts: tsNum(x.updateTime || x.time), tOpen: 0, entry: NaN, exit: px, qty: q, notional: q * px, lev: lv(x.leverage), fee: Math.abs(num(x.commission)) || 0};
+    });
+    if (!t.length) { // sin «profit» en las órdenes: ingresos de PnL realizado
+      try {
+        const r = await ex.swapV2PrivateGetUserIncome({incomeType: 'REALIZED_PNL', startTime: since, endTime: now, limit: 1000}), inc = (r && r.data) || [];
+        t = inc.map(i => ({id: 'bxi' + (i.tranId || i.tradeId || (i.symbol + i.time)), sym: symBase(i.symbol), pair: i.symbol, side: '', pnl: num(i.income), ts: tsNum(i.time), tOpen: 0, entry: NaN, exit: NaN, qty: NaN, notional: NaN, lev: NaN, fee: 0}));
+      } catch (e) { err = err || e; }
+    }
+    if (!t.length && err) throw err; return t;
+  }
+  async function histBinance(since) {
+    const inc = await ex.fapiPrivateGetIncome({incomeType: 'REALIZED_PNL', startTime: since, limit: 1000}) || [];
+    const fills = {}; // lado y precio de tus fills recientes (Binance da 7 días por símbolo)
     try {
-      const rq = indexedDB.open('nova_nexus', 1); rq.onupgradeneeded = e => e.target.result.createObjectStore('config');
-      rq.onsuccess = e => { const db = e.target.result, tx = db.transaction('config', 'readwrite'), st = tx.objectStore('config'); st.put(cfg.apiKey, 'bx_k'); st.put(cfg.secret, 'bx_s'); tx.oncomplete = () => { const f = document.getElementById('lensFrame'); if (f && f.src) try { f.contentWindow.location.reload(); } catch {} }; };
+      await ex.loadMarkets(); const syms = [...new Set(inc.map(i => i.symbol))].slice(-12);
+      for (const id of syms) { const m = Object.values(ex.markets).find(k => k.id === id && k.swap); if (!m) continue; try { for (const f of await ex.fetchMyTrades(m.symbol, undefined, 500)) fills[f.id] = f; } catch {} }
     } catch {}
+    const grp = []; // varios fills de una misma orden = una operación
+    for (const i of inc.slice().sort((a, b) => a.time - b.time)) {
+      const f = fills[i.tradeId], g = grp[grp.length - 1], oid = f && f.order;
+      if (g && g.pair === i.symbol && ((oid && g.oid === oid) || Math.abs(tsNum(i.time) - g.ts) < 2500)) { g.pnl += num(i.income); g.ts = tsNum(i.time); if (f) { g.qty = (g.qty || 0) + num(f.amount); } continue; }
+      const ps = f && String(f.info && f.info.positionSide || '').toUpperCase();
+      grp.push({id: 'bn' + (oid || i.tradeId || i.tranId), oid, sym: symBase(i.symbol), pair: i.symbol, side: !f ? '' : ps === 'LONG' ? 'long' : ps === 'SHORT' ? 'short' : f.side === 'sell' ? 'long' : 'short', pnl: num(i.income), ts: tsNum(i.time), tOpen: 0, entry: NaN, exit: f ? num(f.price) : NaN, qty: f ? num(f.amount) : NaN, notional: NaN, lev: NaN, fee: f && f.fee ? Math.abs(num(f.fee.cost)) || 0 : 0});
+    }
+    for (const g of grp) { g.notional = g.qty * g.exit; delete g.oid; }
+    return grp;
+  }
+  async function histPositions(since) {
+    const all = [], step = cfg.id === 'bybit' ? 7 * 864e5 : 0; // Bybit solo deja pedir 7 días por consulta
+    if (step) { let err = null; for (let end = Date.now(); end > since; end -= step) { try { all.push(...await ex.fetchPositionsHistory(undefined, Math.max(since, end - step), 100, {until: end})); } catch (e) { err = err || e; } } if (!all.length && err) throw err; }
+    else all.push(...await ex.fetchPositionsHistory(undefined, since, 100));
+    return all.map(p => {
+      const I = p.info || {}, pnl = [p.realizedPnl, I.closedPnl, I.realizedPnl, I.pnl, I.netProfit, I.achievedProfits, I.realisedPnl].map(num).find(Number.isFinite);
+      const exit = [I.avgExitPrice, I.closeAvgPx, I.closeAvgPrice, I.closePrice, I.closeAvgPrice, p.lastPrice].map(num).find(v => v > 0);
+      const q = Math.abs(num(p.contracts)) * (num(p.contractSize) || 1);
+      return {id: 'ph' + (I.positionId || I.posId || I.orderId || I.id || '') + (p.lastUpdateTimestamp || p.timestamp || ''), sym: symBase(p.symbol), pair: p.symbol, side: p.side === 'short' ? 'short' : p.side === 'long' ? 'long' : '', pnl, ts: p.lastUpdateTimestamp || p.timestamp || 0, tOpen: p.lastUpdateTimestamp ? p.timestamp || 0 : 0, entry: num(p.entryPrice), exit: exit || NaN, qty: q, notional: Math.abs(num(p.notional)) || q * (exit || num(p.entryPrice)), lev: num(p.leverage), fee: 0};
+    });
+  }
+  async function histFills(since) {
+    const f = await ex.fetchMyTrades(undefined, since, 1000), grp = {};
+    for (const t of f) {
+      const I = t.info || {}, pnl = [I.realizedPnl, I.realisedPnl, I.closedPnl, I.pnl, I.profit, I.closedProfit].map(num).find(v => Number.isFinite(v) && v !== 0); if (pnl === undefined) continue;
+      const k = t.order || t.id, g = grp[k] || (grp[k] = {id: 'tr' + k, sym: symBase(t.symbol), pair: t.symbol, side: t.side === 'sell' ? 'long' : 'short', pnl: 0, ts: 0, tOpen: 0, entry: NaN, exit: num(t.price), qty: 0, notional: 0, lev: NaN, fee: 0});
+      g.pnl += pnl; g.ts = Math.max(g.ts, t.timestamp || 0); g.qty += Math.abs(num(t.amount)) || 0; g.notional += Math.abs(num(t.cost)) || 0; g.fee += t.fee ? Math.abs(num(t.fee.cost)) || 0 : 0;
+    }
+    return Object.values(grp);
   }
 
   /* Permisos reales de la clave (Binance los informa): para avisar ANTES de intentar operar */
@@ -299,5 +373,5 @@
   })();
   if (cfg) { startPoll(); setTimeout(checkPerms, 1500); }
 
-  root.CCTExchange = {open, close, refresh, refreshSoon, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, protections, setTpSl, removeTpSl, baseOf, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, lensKeys: () => cfg && cfg.id === 'bingx' && cfg.apiKey && cfg.secret ? {k: cfg.apiKey, s: cfg.secret} : null, /* Nexus Lens (mismo sitio) entra solo con tu BingX */ snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
+  root.CCTExchange = {open, close, refresh, refreshSoon, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, protections, setTpSl, removeTpSl, baseOf, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, history, snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
 })(typeof self !== 'undefined' ? self : this);

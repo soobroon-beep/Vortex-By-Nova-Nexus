@@ -1,5 +1,12 @@
 /* Novedades de VORTEX (la más reciente primero). Solo los cambios grandes; los ajustes pequeños de diseño no se anotan aquí. */
 window.CCT_CHANGELOG = [
+  {v: '3.42', d: '18 nov 2026', t: 'Nexus Lens, ahora parte de VORTEX', items: [
+    'Nexus Lens ya no es una app aparte: tiene la misma tipografía, colores, cristal y temas que VORTEX (Clásico, Minimal, Espacial, claro u oscuro).',
+    'Se conecta solo con el exchange que conectas en VORTEX, sea cual sea (BingX, Binance, Bybit, OKX, Bitget, MEXC…): equity, posiciones abiertas e historial sin volver a poner claves.',
+    'Gráficos nuevos: curva de capital (7D, 30D, 90D o todo), P&L por día, distribución en R, caídas, win rate móvil, mapas por día y por hora, con globo al pasar el cursor.',
+    'Coach IA renovado con la IA de VORTEX (o la tuya): análisis completo, conducta, ventaja, riesgo, plan de 7 días y cada posición con la tendencia, el ATR y los niveles del mercado.',
+    'Sin exchange conectado puedes probar todo con una cuenta de ejemplo.'
+  ]},
   {v: '3.41', d: '18 nov 2026', t: 'Más fluida y nuevo modo Ligero', items: [
     'El zoom del gráfico va más suave: la rueda del ratón da el mismo paso y el trackpad ya no salta ni se acelera.',
     'Las animaciones se ven igual pero gastan mucho menos: la página ya no revisa los botones premium en cada cuadro y los brillos que se repiten ya no vuelven a pintar todo.',
