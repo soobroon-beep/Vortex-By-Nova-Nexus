@@ -227,7 +227,7 @@
     const info = exInfo(), s = snap(), live = info && s && !s.err;
     return `<div class="ln${demo ? ' demo' : ''}">
       <div class="view-head ln-head"><div><div class="eyebrow">NEXUS LENS${info ? ' · ' + esc(info.name.toUpperCase()) : ''}</div><h1>Mi cuenta</h1></div>
-        <div class="ln-hact">${info ? `<button type="button" class="ln-exch" ${demo ? 'data-ln="demo-off"' : 'data-ex-open'} title="${demo ? 'Salir del ejemplo' : 'Tu exchange conectado'}"><i class="ln-dot${live ? ' on' : ''}"></i>${esc(demo ? 'Ejemplo' : info.name)}</button>` : ''}
+        <div class="ln-hact">${info ? `<div class="ln-exw"><button type="button" class="ln-exch" ${demo ? 'data-ln="demo-off"' : 'data-ex-open'} title="${demo ? 'Salir del ejemplo' : 'Tu exchange conectado'}"><i class="ln-dot${live ? ' on' : ''}"></i>${esc(demo ? 'Ejemplo' : info.name)}</button><small class="ln-fut">Solo futuros</small></div>` : ''}
         ${info ? `<button type="button" class="ln-ib${loading ? ' spin' : ''}" data-ln="sync" aria-label="Actualizar" title="Actualizar">${svg(IC.sync, 17)}</button>` : ''}</div></div>
       ${info ? `<div class="ln-tabs" role="tablist" aria-label="Nexus Lens">${TABS.map(([k, n, i]) => `<button type="button" role="tab" data-ln-tab="${k}" aria-selected="${P.tab === k}">${svg(i, 15)}<span>${n}</span></button>`).join('')}</div>` : ''}
       <div class="ln-body">${body()}</div></div>`;
@@ -248,7 +248,7 @@
     const X = EX(), feat = (X && X.FEATURED || []).slice(0, 8);
     return `<div class="ln-empty">
       <div class="ln-orb">${svg(IC.lens, 34, 1.5)}</div>
-      <h2>Conecta tu exchange</h2>
+      <h2>Conecta tu exchange</h2><small class="ln-fut big">Solo futuros</small>
       <p>Nexus Lens lee tu cuenta para mostrarte tu equity, tus posiciones abiertas, tu historial, estadísticas de nivel profesional y un coach con IA que analiza tu forma de operar.</p>
       <div class="ln-exl">${feat.map(([id, n]) => `<button type="button" class="ln-exc" data-ex-open title="${esc(n)}">${esc(n)}</button>`).join('')}<span class="ln-exc more">+100</span></div>
       <button type="button" class="primary ln-go" data-ex-open>${svg(IC.plug, 17)} Conectar exchange</button>
