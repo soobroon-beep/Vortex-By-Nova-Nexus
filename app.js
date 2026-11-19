@@ -337,7 +337,7 @@ const SUB_VIEWS = ['alertsView', 'discordView', 'customView', 'notifView']; let 
 function setSide(id) {
   { const cur = document.body.dataset.side; if (id === 'alertsView' && cur && !SUB_VIEWS.includes(cur)) alBackTo = cur; }
   document.body.dataset.side = id;
-  if (id === 'lensView') { const f = $('#lensFrame'); if (f && !f.src) f.src = f.dataset.src; } // Nexus Lens se carga la primera vez que se abre
+  if (id === 'lensView' && window.CCTLens) CCTLens.open(); // Nexus Lens (lens.js): se pinta y lee tu exchange al abrirlo
   $$('.right-rail [data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === (id === 'customView' || id === 'notifView' ? 'settingsView' : id)));
 }
 function switchView(id) {
@@ -347,7 +347,7 @@ function switchView(id) {
   }
   if (id === 'alertsView' && currentView !== id && !SUB_VIEWS.includes(currentView)) alBackTo = currentView;
   currentView = id; if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); }
-  if (id === 'lensView') { const f = $('#lensFrame'); if (f && !f.src) f.src = f.dataset.src; }
+  if (id === 'lensView' && window.CCTLens) CCTLens.open();
   $$('.view').forEach(x => x.classList.toggle('active', x.id === id));
   $$('.bottom-nav button').forEach(x => x.classList.toggle('active', x.dataset.view === id));
   { const ta = $('#topAlertsBtn'); if (ta) ta.classList.toggle('active', id === 'alertsView'); } // celular: Alertas vive arriba, junto a Notificaciones
@@ -4831,7 +4831,7 @@ window.addEventListener('resize', scheduleRender);
 
 /* ───────── Barra de progreso de la cuenta ─────────
    Una barra sencilla: la mitad es tu capital inicial; si ganas sube y se queda verde, si pierdes se vacía y pasa de verde a amarillo, naranja y rojo.
-   El saldo lo escribes tú o llega solo desde Nexus Lens (equity de BingX) mientras «Actualizar automático» esté activo. */
+   El saldo lo escribes tú o llega solo desde tu exchange conectado (equity que lee Nexus Lens) mientras «Actualizar automático» esté activo. */
 function acctInfo() {
   const A = state.acct || {}, ok = A.start > 0 && Number.isFinite(A.cur) && (A.cur > 0 || A.start > 0);
   if (!ok) return {ok: false, pct: 0, color: '', ratio: null, text: '—', tip: 'Saldo de la cuenta · toca para configurarlo'};
@@ -4856,7 +4856,7 @@ function openAcctDialog(anchor) {
   m.innerHTML = `<b>Saldo de la cuenta</b><small>La mitad de la barra es tu capital inicial. Si ganas sube y se pone verde; si pierdes se vacía y pasa a amarillo, naranja y rojo. Úsala para cuidar tu stop loss.</small>
     <label>Capital inicial (USD)<input id="acStart" inputmode="decimal" value="${A.start || ''}" placeholder="1000"></label>
     <label>Saldo actual (USD)<input id="acCur" inputmode="decimal" value="${A.start ? A.cur : ''}" placeholder="1000"></label>
-    <label class="ac-chk"><input id="acAuto" type="checkbox" ${A.auto !== false ? 'checked' : ''}><span>Actualizar automático desde Nexus Lens (equity de BingX)</span></label>
+    <label class="ac-chk"><input id="acAuto" type="checkbox" ${A.auto !== false ? 'checked' : ''}><span>Actualizar automático desde tu exchange conectado (Nexus Lens)</span></label>
     <div class="ac-btns"><button class="small-button" data-ac="clear" type="button">Quitar</button><button class="small-button" data-ac="close" type="button">Cancelar</button><button class="primary" data-ac="ok" type="button">Guardar</button></div>`;
   document.body.appendChild(m);
   // desde el widget de Saldo (abajo del gráfico) el menú sale de ahí mismo, hacia arriba; desde Configuración o la barra derecha, donde estaba
@@ -4875,7 +4875,7 @@ function openAcctDialog(anchor) {
   };
 }
 document.addEventListener('click', e => { const a = e.target.closest('[data-acct-open]'); if (a) { e.preventDefault(); openAcctDialog(a); } });
-window.addEventListener('message', e => { // Nexus Lens (iframe del mismo sitio) avisa el equity de la cuenta
+window.addEventListener('message', e => { // Nexus Lens (lens.js) avisa el equity de tu exchange conectado
   if (e.origin !== location.origin || !e.data || e.data.cct !== 'equity') return;
   const v = +e.data.value; if (!Number.isFinite(v) || v < 0 || !state.acct || state.acct.auto === false) return;
   const A = state.acct; if (A.cur === Math.round(v * 100) / 100 && A.start > 0) return;

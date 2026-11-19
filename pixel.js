@@ -295,7 +295,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     newsView: [['Resume las noticias', 'Resume las noticias'], ['¿Qué mueve al mercado?', '¿Qué está moviendo al mercado hoy?'], ['¿Algo de BTC?', '¿Hay noticias importantes de Bitcoin?']],
     screenerView: [['Mejor entrada', '¿Cuál tiene la mejor entrada del screener?'], ['Mejores LONG', '¿Cuáles son las mejores señales LONG del screener?'], ['Mejores SHORT', '¿Cuáles son las mejores señales SHORT del screener?'], ['Más confluencias', '¿Cuál tiene más confluencias para entrar?']],
     alertsView: [['Crear una alerta', 'Quiero crear una alerta'], ['Mis alertas', '¿Qué alertas tengo activas?'], ['¿Cómo funcionan?', '¿Cómo funcionan las alertas?']],
-    lensView: [['¿Qué lleno aquí?', '¿Qué tengo que llenar aquí?'], ['¿Dónde saco mi API key?', '¿Dónde encuentro mi API key de BingX?'], ['¿Es seguro?', '¿Es seguro poner mis datos aquí?']],
+    lensView: [['¿Cómo voy?', '¿Cómo voy con mis trades este mes?'], ['¿Qué mejoro?', '¿Qué es lo que más debo mejorar según mis operaciones?'], ['¿Es seguro?', '¿Es seguro conectar mi exchange aquí?']],
     botLabView: [['Ayúdame a crear un bot', 'Ayúdame a crear un bot'], ['Consejos', 'Dame consejos para mejorar mis bots'], ['¿Cómo empiezo?', '¿Cómo empiezo con Nova Bot Lab?']],
     watchView: [['¿Cuál se mueve más?', '¿Cuál de mi seguimiento se está moviendo más?'], ['Añadir una cripto', '¿Cómo añado una criptomoneda?'], ['Ordenar mi lista', '¿Cómo ordeno mi lista en secciones?']],
     aiView: [['¿Qué puedes hacer?', '¿Qué puedes hacer en cada sección?'], ['Analiza mi gráfico', 'Análisis completo']],
@@ -329,7 +329,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     [/calendario/, 'Calendario económico', 'newsView', '[data-nw-tab="cal"]', '[data-nw-tab="cal"]', 'Eventos pasados, de hoy y futuros.'],
     [/noticia/, 'Noticias', 'newsView', '[data-side="newsView"]', '.bottom-nav [data-view="newsView"]', 'Cripto y bolsa en español.'],
     [/screener|senales/, 'Screener', 'screenerView', '[data-side="screenerView"]', '.bottom-nav [data-view="screenerView"]', 'Señales de Nova Nexus en el top de criptos.'],
-    [/lens|mi cuenta de bingx|mis operaciones/, 'Nexus Lens', 'lensView', '[data-side="lensView"]', '.bottom-nav [data-view="lensView"]', 'Tu cuenta, trades abiertos y operaciones.'],
+    [/lens|mi cuenta de bingx|mi cuenta del exchange|mis operaciones/, 'Nexus Lens', 'lensView', '[data-side="lensView"]', '.bottom-nav [data-view="lensView"]', 'Tu cuenta, trades abiertos y operaciones.'],
     [/bot lab|crear (un )?bot|backtest|paper/, 'Nova Bot Lab', 'botLabView', '#rrBotLab', null, 'Crea, prueba y simula bots (versión de PC).'],
     [/discord/, 'Discord', 'discordView', '#rrDiscord', '#dcOpenFromSettings', 'Únete a Nova Nexus y manda tus avisos a tu canal.'],
     [/tema|modo oscuro|modo claro/, 'Tema claro/oscuro', null, '#rrTheme', '#themeBtn', 'Cambia entre claro y oscuro.'],
@@ -361,7 +361,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
 
   /* ── IA con el contexto de la sección ── */
   const SYS_APP = `Eres NEXUS PIXEL, el asistente amigable de VORTEX (by Nova Nexus), una app de trading cripto. Vives en toda la app y ayudas en cada sección.
-Secciones: Gráfico (velas, indicadores, dibujos; tú puedes dibujar), Mi seguimiento (lista de criptos), Noticias (cripto y bolsa en español + Calendario económico), Screener (señales LONG/SHORT/RANGO de Nova Nexus; edad = velas desde que salió), Alertas (de precio y de indicador; avisos con la app cerrada y a Discord), IA (Analizar gráfico, Briefing del día, Laboratorio de indicadores), Nexus Lens (ver tu cuenta de BingX: saldo, trades abiertos, historial; usa API key de SOLO LECTURA de BingX), Nova Bot Lab (PC: crear bots en español o constructor visual, backtest, paper trading, riesgo), Discord, Configuración.
+Secciones: Gráfico (velas, indicadores, dibujos; tú puedes dibujar), Mi seguimiento (lista de criptos), Noticias (cripto y bolsa en español + Calendario económico), Screener (señales LONG/SHORT/RANGO de Nova Nexus; edad = velas desde que salió), Alertas (de precio y de indicador; avisos con la app cerrada y a Discord), IA (Analizar gráfico, Briefing del día, Laboratorio de indicadores), Nexus Lens (tu cuenta del exchange conectado en VORTEX, cualquier exchange: equity, posiciones abiertas, historial, estadísticas, calendario y Coach IA; API key de SOLO LECTURA), Nova Bot Lab (PC: crear bots en español o constructor visual, backtest, paper trading, riesgo), Discord, Configuración.
 Habla en español, claro, breve y con buena onda. No prometas ganancias (no es asesoría financiera). Usa SOLO los datos que te dan; si falta algo, dilo.`;
   async function llmText(sys, user, maxTokens = 650) {
     const L = LLM(); if (!L || !L.chat) throw new Error('sin IA');
@@ -409,11 +409,14 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     say(`¡Listo! Te aviso cuando ${sym.replace(/USDT$/, '')} ${dir === 'up' ? 'suba a' : 'baje a'} ${h.fmt(price)} (ahora ${h.fmt(last)})${a.repeat === 'every' ? ', cada vez que pase' : ', una vez'}${a.notify !== 'app' ? ', también en Discord' : ''}.`);
     setChipsCustom([['Deshacer', '__undoalert:' + a.id], ['Otra alerta', 'Quiero crear otra alerta']]);
   }
-  async function skillLens(t) {
-    const fr = document.getElementById('lensFrame'); let txt = ''; try { txt = fr && fr.contentDocument ? fr.contentDocument.body.innerText.replace(/\n{2,}/g, '\n').slice(0, 3000) : ''; } catch {}
-    mood('thinking', 'think'); say('Déjame ver la pantalla de Nexus Lens…', {busy: true});
-    try { const r = await llmText(SYS_APP + '\nTAREA: ayuda con Nexus Lens. Explica qué llenar y dónde conseguir cada dato. Para BingX: Perfil → Gestión de API → Crear API, permiso SOLO de lectura (nunca retiros ni trading), copia API Key y Secret Key; la firma se hace en el dispositivo del usuario. Si piden «Proxy URL», es el Worker de Cloudflare que reenvía las consultas de lectura. Responde en pasos cortos.', `${t}\n\nLO QUE SE VE EN NEXUS LENS:\n${txt || '(no se pudo leer la pantalla)'}`, 600); big(true); mood('happy', 'idle'); say(r); }
-    catch { big(true); say('Para Nexus Lens necesitas tu API Key y Secret Key de BingX con permiso SOLO de lectura: en BingX ve a Perfil → Gestión de API → Crear API, marca solo lectura y copia las dos claves aquí. Nunca actives retiros.'); }
+  async function skillLens(t) { // Nexus Lens ya es parte de VORTEX: si tu exchange está conectado, Pixel ve tus números; si no, te explica cómo conectarlo
+    const X = window.CCTExchange, on = !!(X && X.connected && X.connected()); let ctx = '';
+    try { if (window.CCTLens && CCTLens.metrics()) ctx = await CCTLens.context(); } catch {}
+    mood('thinking', 'think'); say(on ? 'Déjame ver tu cuenta en Nexus Lens…' : 'Te explico cómo conectar tu exchange…', {busy: true});
+    const task = on && ctx ? '\nTAREA: eres el coach de la cuenta del usuario en Nexus Lens. Responde su pregunta con SUS números (win rate, P&L, pares, sesiones, posiciones). Breve, en viñetas, con acciones concretas. Para un análisis más largo, dile que use la pestaña «Coach IA» de Nexus Lens.'
+      : '\nTAREA: ayuda con Nexus Lens. Se conecta solo con el exchange que el usuario conecta UNA vez en VORTEX (botón «Conectar exchange», cualquier exchange: BingX, Binance, Bybit, OKX, Bitget…). Explica cómo crear la API en su exchange con permiso SOLO de lectura (nunca retiros), pegar API Key y Secret Key (y passphrase si la pide), y que la firma se hace en su dispositivo. También puede tocar «Ver con una cuenta de ejemplo». Pasos cortos.';
+    try { const r = await llmText(SYS_APP + task, `${t}${ctx ? '\n\nDATOS DE SU CUENTA (Nexus Lens):\n' + ctx.slice(0, 5000) : ''}`, 650); big(true); mood('happy', 'idle'); say(r); }
+    catch { big(true); say(on ? 'No pude leer tu cuenta ahora. Abre la pestaña «Coach IA» de Nexus Lens para un análisis completo.' : 'Toca «Conectar exchange» en Nexus Lens, elige tu exchange y pega una API Key de SOLO lectura (nunca actives retiros). Se guarda en tu cuenta y Nexus Lens se configura solo.'); }
   }
   async function skillBot(t) {
     const h = H(), B = window.CCTBotLabUI, bots = B ? (B.state().bots || []).filter(b => b.status !== 'archived').map(b => { const r = (b.runs || [])[b.runs.length - 1]; return `${b.name} (${b.status})${r && r.metrics ? `: ${r.metrics.n} op., ${r.metrics.retPct != null ? (+r.metrics.retPct).toFixed(1) : '—'}%, aciertos ${r.metrics.winRate != null ? (+r.metrics.winRate).toFixed(0) : '—'}%, caída ${r.metrics.maxDDPct != null ? (+r.metrics.maxDDPct).toFixed(1) : '—'}%` : ''}`; }) : [];
@@ -451,13 +454,13 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     const desk = !!(H() && H().desktop()); // en PC el gráfico SIEMPRE está a la vista: el panel derecho solo manda si lo mencionas
     if ((sec === 'screenerView' && (desk ? /(screener|mejor(es)? (entrada|senal)|confluencia)/ : /(mejor|entrada|long|short|confluencia|senal|cual|analiza)/).test(q)) || /screener/.test(q)) { await skillScreener(text); return true; }
     if (/\bbots?\b|estrategia automat|bot lab/.test(q) && !/screener/.test(q)) { await skillBot(text); return true; }
-    if (/nexus lens|api key|secret key/.test(q) || (!desk && sec === 'lensView' && !D.parse(text).length)) { await skillLens(text); return true; }
+    if (/nexus lens|api key|secret key/.test(q) || (sec === 'lensView' && !D.parse(text).length)) { await skillLens(text); return true; }
     if (sec !== 'chartView' && !D.parse(text).length && (!desk || (SIDE_KW[sec] && SIDE_KW[sec].test(q) && !/grafic|vela|indicador|\bema\b|rsi|soporte|resistencia|tendencia|dibuj|canal|fibo|linea|color/.test(q)))) { await skillGeneral(text); return true; }
     return false;
   }
 
   /* ── se asoma de vez en cuando con una sugerencia de la sección (máximo una por sección al día) ── */
-  const TIPS = {newsView: ['¿Te resumo las noticias?', 'Resume las noticias'], screenerView: ['¿Te digo cuál tiene la mejor entrada?', '¿Cuál tiene la mejor entrada del screener?'], alertsView: ['¿Te ayudo a crear una alerta?', 'Quiero crear una alerta'], lensView: ['¿Te explico qué llenar aquí?', '¿Qué tengo que llenar aquí?'], botLabView: ['¿Armamos un bot juntos?', 'Ayúdame a crear un bot'], chartView: ['¿Te dibujo soportes y resistencias?', 'Marca soportes y resistencias'], watchView: ['¿Te digo cuál se mueve más?', '¿Cuál de mi seguimiento se está moviendo más?']};
+  const TIPS = {newsView: ['¿Te resumo las noticias?', 'Resume las noticias'], screenerView: ['¿Te digo cuál tiene la mejor entrada?', '¿Cuál tiene la mejor entrada del screener?'], alertsView: ['¿Te ayudo a crear una alerta?', 'Quiero crear una alerta'], lensView: ['¿Te digo qué mejorar en tus trades?', '¿Qué es lo que más debo mejorar según mis operaciones?'], botLabView: ['¿Armamos un bot juntos?', 'Ayúdame a crear un bot'], chartView: ['¿Te dibujo soportes y resistencias?', 'Marca soportes y resistencias'], watchView: ['¿Te digo cuál se mueve más?', '¿Cuál de mi seguimiento se está moviendo más?']};
   let lastSec = '', lastTip = 0, tipTimer = 0;
   function maybeTip(sec) {
     if (open || busy || CFG().tips === false || !TIPS[sec] || Date.now() - lastTip < 90000) return; const day = new Date().toDateString(); ls.tips = ls.tips || {}; if (ls.tips[sec] === day) return;
@@ -508,7 +511,7 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     try { await ensureModel(); } catch { if (g !== gen) return; av.hidden = true; open = false; fab.classList.remove('on', 'out'); try { window.CCT_bot && window.CCT_bot.toast('No se pudo cargar a Nexus Pixel. Revisa tu conexión.'); } catch {} return; }
     if (g !== gen) return; if (M) M.pause(false);
     mood('excited', 'fly'); const h = home(); await flyTo(h.x, h.y, greet ? 1000 : 500); if (g !== gen) return;
-    setChips(); const sec = section(), G = {newsView: 'Te puedo resumir las noticias o decirte qué mueve al mercado.', screenerView: 'Te digo cuál tiene la mejor entrada, las mejores LONG o SHORT y cuál tiene más confluencias.', alertsView: 'Dime qué alerta quieres, por ejemplo «avísame si BTC pasa 70 mil», y yo la creo.', lensView: 'Te explico qué llenar y dónde sacar tus datos de BingX.', botLabView: 'Armemos juntos un bot o te doy consejos para mejorar los tuyos.', watchView: 'Te digo cuál se mueve más o te enseño dónde está cada cosa.', aiView: 'Te ayudo en toda la app: pregúntame dónde está algo o qué puedo hacer en cada sección.', settingsView: 'Pregúntame dónde se configura cualquier cosa.'};
+    setChips(); const sec = section(), G = {newsView: 'Te puedo resumir las noticias o decirte qué mueve al mercado.', screenerView: 'Te digo cuál tiene la mejor entrada, las mejores LONG o SHORT y cuál tiene más confluencias.', alertsView: 'Dime qué alerta quieres, por ejemplo «avísame si BTC pasa 70 mil», y yo la creo.', lensView: 'Te digo cómo vas con tus trades y qué mejorar, o te ayudo a conectar tu exchange.', botLabView: 'Armemos juntos un bot o te doy consejos para mejorar los tuyos.', watchView: 'Te digo cuál se mueve más o te enseño dónde está cada cosa.', aiView: 'Te ayudo en toda la app: pregúntame dónde está algo o qué puedo hacer en cada sección.', settingsView: 'Pregúntame dónde se configura cualquier cosa.'};
     if (greet) { mood('happy', 'wave'); say(`¡Hola${CFG().nombre ? ', ' + CFG().nombre : ''}! Soy Nexus Pixel. ${G[sec] && !(H() && H().desktop()) ? G[sec] : 'Pídeme que te dibuje el canal, el rango, soportes y resistencias… o pregúntame lo que quieras de ' + (H() ? H().symbol() : 'tu gráfico') + '.' + (G[sec] && H() && H().desktop() ? ' ' + G[sec] : '')}`); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2400); }
     else { mood('neutral', 'idle'); say('Aquí sigo. ¿Qué te dibujo?', {instant: true}); }
     lastAct = Date.now();

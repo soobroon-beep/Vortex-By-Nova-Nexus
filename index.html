@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="pwa.css">
 <link rel="stylesheet" href="ui-modern.css">
 <link rel="stylesheet" href="splash.css">
+<link rel="stylesheet" href="lens.css">
 <!-- Estilos de prueba (dev): Clásico / Minimal / Espacial. Se eligen en Configuración → Personalización → Estilo de la app o con ?estilo=. Quitarlos: borrar estas 3 líneas y vx-theme.js, vx-min.css, vx-space.css -->
 <script src="vx-theme.js"></script>
 <link rel="stylesheet" href="vx-min.css">
@@ -255,7 +256,7 @@
 
     <!-- Screener (panel lateral; en celular es una vista completa) -->
     <section class="view" id="lensView" aria-label="Nexus Lens">
-      <iframe id="lensFrame" title="Nexus Lens" data-src="lens.html" loading="lazy" allow="clipboard-write"></iframe>
+      <div id="lensRoot"></div>
     </section>
     <section class="view" id="screenerView">
       <div class="view-head"><div><div class="eyebrow">NOVA NEXUS</div><h1>Screener</h1></div></div>
@@ -365,6 +366,7 @@
 <script src="trade-watch.js"></script>
 <script src="radar.js"></script>
 <script src="trade.js"></script>
+<script src="lens.js"></script>
 <script src="pine.js"></script>
 <script src="pine-draw.js"></script>
 <script src="pine-preview.js"></script>
