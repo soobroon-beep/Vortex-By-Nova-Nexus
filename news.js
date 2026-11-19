@@ -136,9 +136,13 @@
     thingproxy: u => ({url: 'https://thingproxy.freeboard.io/fetch/' + bust(u), json: false}),
     codetabs2: u => ({url: 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u), json: false})
   };
-  const ROUTE_ORDER = ['rss2json', 'direct', 'codetabs', 'allorigins', 'alloriginsjson', 'corsproxy', 'thingproxy', 'codetabs2'];
+  /* Sin ruta «directa»: los feeds de otros sitios no dan permiso CORS, así que pedirlos directo siempre fallaba y dejaba un error rojo
+     en la consola (p. ej. Cointelegraph: «blocked by CORS policy»), que la Revisión de apps de la Sala marcaba como error de código.
+     Las noticias llegan igual por news-data.json (servidor) y por los proxys. */
+  const ROUTE_ORDER = ['rss2json', 'codetabs', 'allorigins', 'alloriginsjson', 'corsproxy', 'thingproxy', 'codetabs2'];
   const ls = {get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
   let goodRoute = {}; try { goodRoute = JSON.parse(ls.get('cct_news_route') || '{}') || {}; } catch {}
+  for (const k of Object.keys(goodRoute)) if (!ROUTE_ORDER.includes(goodRoute[k])) delete goodRoute[k]; // olvida la ruta directa si quedó guardada
   /* El tiempo límite cubre TODA la respuesta (antes solo la cabecera: un proxy lento dejaba la lectura colgada para siempre,
      la actualización nunca terminaba y el botón «Actualizar» ya no hacía nada). Devuelve el texto. */
   async function fetchWithTimeout(url, ms) {
