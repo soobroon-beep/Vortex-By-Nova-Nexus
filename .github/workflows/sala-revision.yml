@@ -1,0 +1,31 @@
+name: Sala · Revisión de apps (cada 2 h)
+# La Sala de revisión de apps (repo sala-de-agentes, server/revision.js): un inspector por app abre VORTEX, Nova HUB, Neural Brain, INKBOT PRO,
+# la Sala y Moldes Gaby's con un navegador real (PC y celular), aprieta los botones seguros y revisa sus tareas de GitHub; el Centinela vigila
+# Motor, velas, servidores, bots y Claudio; Quasar confirma cada falla y Andrómeda escribe el informe (pestaña «Revisión» de la Sala).
+# Solo lee: no cambia nada en tus apps. Si aparece una falla grave nueva o se apaga un bot, te avisa al celular.
+on:
+  schedule: [{cron: '37 */2 * * *'}]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency: {group: sala-revision, cancel-in-progress: false}
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: {repository: soobroon-beep/sala-de-agentes, path: sala}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12 playwright@1 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Revisar todas las apps
+        run: node sala/server/revision.js
+        env:
+          VORTEX_DIR: ${{ github.workspace }}
+          NODE_PATH: ${{ github.workspace }}/node_modules
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GROQ_KEY: ${{ secrets.GROQ_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}

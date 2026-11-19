@@ -50,9 +50,10 @@
       paper: (b.paper || []).map(x => Object.assign({}, x, {ledger: x.ledger.slice(-(lvl ? 150 : 400)), curve: x.curve.slice(-(lvl ? 200 : 400))}))}); })}));
     let str = lite(0); if (str.length > 900000) str = lite(1); if (str.length > 900000) str = lite(2); return str;
   }
+  const mine = () => !!(window.CCTPlans && window.CCTPlans.owner); // la cuenta del creador de VORTEX (comprobada con su sesión de Google)
   async function pullCloud() {
     const c = H.cloud && H.cloud(); if (!c) return; let got = false; try { const str = await c.get(); got = true; if (str) { cloudStr = str; const m = merge(readLocal(), JSON.parse(str)); S = m; save(); } } catch {}
-    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) { seedSafe(); fixNov26(); seedLucas(); learnOn(); fixQuick(); seedPachita(); healBots(); } if (view === 'lib') render();
+    try { if (c.server) { const r = await c.server(); if (r) { mergeServer(r.results); mergePaper(r.paper); } } } catch {} if (got) { if (mine()) { seedSafe(); fixNov26(); seedLucas(); seedPachita(); } learnOn(); fixQuick(); healBots(); } /* los bots de plantilla (Seguro, Nova v2.7, Lucas, Pachita) son del creador: solo se crean en SU cuenta; cada persona arma los suyos */ if (view === 'lib') render();
   }
 
   /* ───────── Modelo de bot ───────── */
@@ -1376,7 +1377,7 @@ Máximo 3 tips. "patch" es un fragmento de la especificación con el MISMO esque
 
   /* ----- Arranque ----- */
   function init() {
-    root = $('#botLabRoot'); if (!root) return; S = dedupe(Object.assign({deleted: {}}, readLocal())); bind(); setTimeout(() => { if (!(H.cloud && H.cloud())) { seedSafe(); seedLucas(); fixQuick(); seedPachita(); healBots(); if (view === 'lib') render(); } }, 12000); if (window.CCTClaudioUI) window.CCTClaudioUI.onChange = () => { if (view === 'lib') render(); }; render();
+    root = $('#botLabRoot'); if (!root) return; S = dedupe(Object.assign({deleted: {}}, readLocal())); bind(); setTimeout(() => { if (!(H.cloud && H.cloud())) { if (mine()) { seedSafe(); seedLucas(); seedPachita(); } fixQuick(); healBots(); if (view === 'lib') render(); } }, 12000); if (window.CCTClaudioUI) window.CCTClaudioUI.onChange = () => { if (view === 'lib') render(); }; render();
     const open = () => { S = merge(S, readLocal()); setTimeout(() => { if (view === 'lib') render(); }, 30); pullCloud(); paperTick(); };
     const rb = $('#rrBotLab'); rb && rb.addEventListener('click', open);
     paperTick(); setInterval(() => { if (!document.hidden) paperTick(); }, 60000);

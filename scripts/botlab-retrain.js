@@ -202,7 +202,7 @@ async function main() {
   admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); const db = admin.firestore(), now = Date.now(); try { require('../markets.js').setStore(require('./candle-store.js').reader(db)); } catch {}
   const force = process.env.FORCE === '1', cache = new Map();
   const getCandles = async (s, i, n) => { const k = s + '|' + i + '|' + n; if (!cache.has(k)) cache.set(k, await history(s, i, n)); return cache.get(k); };
-  const users = await db.collection('users').listDocuments(); let nb = 0, nr = 0, np = 0, nps = 0, nbr = 0, rG = 0, cG = 0;
+  const users = await db.collection('users').listDocuments(); let nb = 0, nr = 0, np = 0, nps = 0, nbr = 0, rG = 0, cG = 0, nmir = 0;
   for (const u of users) {
     const bd = await u.collection('data').doc('botlab').get(); if (!bd.exists) continue; let S; try { S = JSON.parse(bd.data().items || '{}'); } catch { continue; }
     let links = {}; try { const bb = await u.collection('data').doc('brain_bots').get(); links = (bb.exists && bb.data().bots) || {}; } catch {} const linked = b => links[b.id] && links[b.id].auto !== false;
@@ -242,12 +242,13 @@ async function main() {
       if (dUrl) await postDiscord(dUrl, [{title: t, description: body, color: kind === 'rollback' ? 0xf2a33a : 0x20bf9f, timestamp: new Date(now).toISOString()}]);
     }
     if (guarded.length) { rG += guarded.filter(x => x.kind === 'rollback').length; cG += guarded.filter(x => x.kind === 'confirm').length; }
-    for (const b of pap) { await loadScripts(); adoptServer(b, (prev.paper || {})[b.id]); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.dcOff ? false : S.notify, pushOut); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
+    for (const b of pap) { await loadScripts(); adoptServer(b, (prev.paper || {})[b.id]); const ss = await paperBot(b, scripts, getCandles, now, gateF, S.dcOff ? false : S.notify, pushOut); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; }
+      else { const run = (b.paper || []).filter(x => x.status === 'running'), have = new Set((paper[b.id] || []).map(x => x.id)); if (run.some(x => !have.has(x.id))) { paper[b.id] = run.map(x => x); changed = true; nmir++; } } } // la app lo avanzó primero (estaba abierta): el servidor guarda su copia igual, para seguirlo en cuanto la cierres
     if (pushOut.length) await botPush(u.id, pushOut);
     if (changed) { for (const id of Object.keys(results)) if (!all.some(b => b.id === id)) delete results[id]; for (const id of Object.keys(paper)) if (!all.some(b => b.id === id)) delete paper[id]; for (const id of Object.keys(brainMem)) if (!all.some(b => b.id === id)) delete brainMem[id]; const clean = o => JSON.parse(JSON.stringify(o || {})); // Firestore no acepta «undefined» (p. ej. ctx de una posición abierta): antes el guardado fallaba y los bots no avanzaban
       await u.collection('data').doc('botlab_server').set({results: clean(results), paper: clean(paper), brainMem: clean(brainMem), updatedAt: admin.firestore.FieldValue.serverTimestamp()}); }
   }
-  console.log(`Modo ${MODE} · ciclos: ${nb} · reentrenados: ${nr} · con cerebro: ${nbr} · con propuesta: ${np} · sesiones paper avanzadas: ${nps} · regresos: ${rG} · confirmadas: ${cG}`);
+  console.log(`Modo ${MODE} · ciclos: ${nb} · reentrenados: ${nr} · con cerebro: ${nbr} · con propuesta: ${np} · sesiones paper avanzadas: ${nps} · bots que llevaba la app y ahora también sigue el servidor: ${nmir} · regresos: ${rG} · confirmadas: ${cG}`);
 }
 if (require.main === module) main().catch(e => { console.error('Error:', String(e.message || e).slice(0, 200)); process.exit(1); });
 module.exports = {retrainBot, paperBot, due, history, userSeries, promote, rollback, confirmV};

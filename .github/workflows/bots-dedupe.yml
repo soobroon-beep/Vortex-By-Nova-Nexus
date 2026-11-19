@@ -1,0 +1,19 @@
+name: Bots repetidos (Nova Bot Lab)
+# Se corre a mano: si un bot se clonó (misma plantilla dos veces), deja el que mejor funciona en simulación y borra el otro.
+# apply=1 borra; apply=0 solo muestra lo que haría.
+on:
+  workflow_dispatch:
+    inputs:
+      apply: {description: '1 = borrar los repetidos · 0 = solo ver', default: '0'}
+permissions: {contents: read}
+jobs:
+  dedupe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12 >/dev/null 2>&1
+      - run: node scripts/bots-dedupe.js
+        env: {APPLY: '${{ inputs.apply }}', FIREBASE_SERVICE_ACCOUNT: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'}
