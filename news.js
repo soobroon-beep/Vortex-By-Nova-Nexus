@@ -11,7 +11,7 @@
   // cat: categoría por defecto de la fuente. null = fuente general: solo entran las notas que coinciden con palabras clave de mercado.
   const SOURCES = [
     {id: 'criptonoticias', name: 'CriptoNoticias', url: 'https://www.criptonoticias.com/feed/', cat: 'cripto'},
-    {id: 'cointelegraph', name: 'Cointelegraph', url: 'https://es.cointelegraph.com/rss', cat: 'cripto'},
+    {id: 'cointelegraph', name: 'Cointelegraph', url: 'https://es.cointelegraph.com/rss', cat: 'cripto', serverOnly: true}, // bloquea a los proxys públicos: solo la trae el servidor (news-data.json)
     {id: 'beincrypto', name: 'BeInCrypto', url: 'https://es.beincrypto.com/feed/', cat: 'cripto'},
     {id: 'investing', name: 'Investing.com', url: 'https://es.investing.com/rss/news_25.rss', cat: 'bolsa'},
     {id: 'bloomberglinea', name: 'Bloomberg Línea', url: 'https://www.bloomberglinea.com/arc/outboundfeeds/rss/?outputType=xml', cat: null},
@@ -241,7 +241,7 @@
       const its = (j.items || []).filter(i => i && i.title && Number.isFinite(i.t) && n - i.t <= MAX_AGE_MS && looksSpanish(i.title)); if (its.length) { lists.static = its; st.ok++; st.staticAt = j.at || 0; partial(); } } catch {} })();
     const before = new Set(st.items.map(i => i.id || i.title)); if (manual) btnBusy(true);
     const cap = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(null), ms))]); // ninguna fuente puede frenar la actualización más de 20 s
-    await Promise.all([stat, ...SOURCES.map(async src => {
+    await Promise.all([stat, ...SOURCES.filter(src => !src.serverOnly).map(async src => { // las «solo servidor» llegan por news-data.json (desde el navegador todas las rutas fallaban y dejaban errores rojos)
       const raw = await cap(loadSource(src), 20000); done++;
       if (raw) { st.ok++; lists[src.id] = buildItems(raw, src, Date.now()); } else if (st.per[src.id]) lists[src.id] = st.per[src.id]; // si una fuente falla se conserva lo último que dio
       if (Object.keys(lists).length) partial();
