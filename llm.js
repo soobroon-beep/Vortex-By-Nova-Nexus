@@ -226,22 +226,28 @@
     }
     throw errs.find(e => e.kind === 'network') || errs[errs.length - 1] || new LLMError('La IA no respondió a tiempo.', 'abort');
   }
-  /* ───────── Nexus Pixel: SIEMPRE la IA gratis y open source (nunca «Tu IA») ─────────
-     Va directo a tu servidor VORTEX con su propia cadena de modelos que razonan (task «pixel»: Qwen 3.6 → GPT-OSS 120B → GLM → Gemma)
-     y, para «ver» la captura del gráfico, un modelo con visión (task «see»). Si el servidor no contesta, usa la ruta gratis de siempre. */
+  /* ───────── Nexus Pixel: SIEMPRE la IA gratis de VORTEX (nunca «Tu IA» ni Pollinations) ─────────
+     Va directo a tu servidor VORTEX con su propia cadena de IA gratis (task «pixel»: Qwen 3.x → GPT-OSS 120B → Kimi K2 → Llama 3.3 en Groq,
+     Gemini / Mistral / OpenRouter gratis si tienen clave, y Cloudflare) y, para «ver» la captura, un modelo con visión (task «see»).
+     Antes, si el servidor no contestaba, Pixel caía en la ruta de Pollinations (que ya cobra) y respondía «no tienes créditos suficientes».
+     Ahora nunca toca rutas de pago: si la IA gratis está ocupada lo vuelve a intentar una vez y, si no, Pixel usa su motor local. */
+  const PIXEL_CREDIT = /credit|cr[eé]dito|pollen|top ?up|insufficient|saldo|balance|quota|cuota|billing|payment|paid|402/i;
   async function pixelChat(messages, o) {
-    o = o || {}; const task = o.task === 'see' ? 'see' : 'pixel', tm = o.timeout || (task === 'see' ? 32000 : 72000);
-    try {
-      const body = {model: 'openai', task, messages, temperature: o.temperature == null ? .35 : o.temperature, max_tokens: o.maxTokens || (task === 'see' ? 500 : 1800), json: !!o.json};
-      const r = await fetchT(VX + '/ai', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body)}, tm, o.signal);
-      if (!r.ok) { let m = ''; try { const j = await r.json(); m = j.error || ''; } catch {} throw new LLMError(String(m || 'Error ' + r.status), kindOf(r.status), r.status); }
-      const j = await r.json(), text = String(textOf(j) || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-      if (!text || noCredit(text) || looksBad(text)) throw new LLMError('La IA gratis no devolvió texto', 'server');
-      return {text, model: String(j.model || 'IA gratis'), image: !!j.image};
-    } catch (e) {
-      if ((o.signal && o.signal.aborted) || task === 'see') throw e;
-      return chat(messages, Object.assign({}, o, {noOwn: true, purpose: 'text', task: undefined}));
+    o = o || {}; const task = o.task === 'see' ? 'see' : 'pixel', tm = o.timeout || (task === 'see' ? 34000 : 80000), t0 = Date.now();
+    const body = JSON.stringify({model: 'openai', task, messages, temperature: o.temperature == null ? .3 : o.temperature, max_tokens: o.maxTokens || (task === 'see' ? 500 : 1800), json: !!o.json});
+    let last;
+    for (let i = 0; i < 2; i++) {
+      const left = tm - (Date.now() - t0); if (left < 12000 || (o.signal && o.signal.aborted)) break;
+      if (i) { try { o.onProgress && o.onProgress({text: 'La IA gratis está ocupada, lo intento otra vez…'}); } catch {} await sleep(2500); }
+      try {
+        const r = await fetchT(VX + '/ai', {method: 'POST', headers: {'content-type': 'application/json'}, body}, left, o.signal);
+        if (!r.ok) { let m = ''; try { const j = await r.json(); m = j.error || ''; } catch {} throw new LLMError(PIXEL_CREDIT.test(m) ? 'La IA gratis está ocupada' : String(m || 'Error ' + r.status), r.status === 502 ? 'busy' : kindOf(r.status), r.status); }
+        const j = await r.json(), text = String(textOf(j) || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+        if (!text || looksBad(text) || (text.length < 600 && PIXEL_CREDIT.test(text) && !/"reply"/.test(text))) throw new LLMError('La IA gratis no devolvió una respuesta', 'busy');
+        return {text, model: String(j.model || 'IA gratis'), image: !!j.image};
+      } catch (e) { last = e; if ((o.signal && o.signal.aborted) || task === 'see' || e.kind === 'network' || e.kind === 'auth') break; }
     }
+    throw last instanceof LLMError ? last : new LLMError('La IA gratis no respondió', 'busy');
   }
   async function serverStatus() { try { const r = await fetchT(VX + '/ai/status', {}, 7000); return r.ok ? await r.json() : {ready: false}; } catch { return {ready: false, offline: true}; } }
   async function serverSetKey(key) { const r = await fetchT(VX + '/ai/key', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({key})}, 10000); let j = {}; try { j = await r.json(); } catch {} if (!r.ok) throw new LLMError(j.error || 'Error ' + r.status, 'auth', r.status); vxDown = 0; vxModels = null; return j; }

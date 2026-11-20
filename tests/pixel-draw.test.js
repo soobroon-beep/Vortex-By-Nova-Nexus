@@ -46,3 +46,17 @@ test('editar dibujos: color, grosor, estilo, borrar y mover (no dibuja de más)'
   assert.deepStrictEqual(P.pickTargets(L, 'trend'), [5]);
   assert.deepStrictEqual(P.pickTargets(L, 'fib'), []);
 });
+
+test('Colores en español: nombres finos, tonos, hex, rgb y uno por cada cosa al dibujar', () => {
+  const D = require('../pixel-draw.js');
+  assert.equal(D.colorOf('ponlo en carmesí').col, '#dc143c');
+  assert.equal(D.colorOf('rosa mexicano').col, '#e4007c');
+  assert.equal(D.colorOf('azul cielo').col, '#60b5ff');
+  assert.equal(D.colorOf('color #f80').col, '#ff8800');
+  assert.equal(D.colorOf('rgb(10, 200, 30)').col, '#0ac81e');
+  assert.notEqual(D.colorOf('verde claro').col, D.colorOf('verde').col);
+  assert.deepEqual(D.parse('dibuja un canal verde'), [{do: 'channel', col: '#22c55e'}]);
+  assert.deepEqual(D.parse('marca soportes verdes y resistencias rojas'), [{do: 'sr', colSup: '#22c55e', colRes: '#ef4444'}]);
+  assert.deepEqual(D.parse('pon los soportes en verde y las resistencias en carmesí'), [{do: 'style', target: 'sup', col: '#22c55e'}, {do: 'style', target: 'res', col: '#dc143c'}]);
+  assert.deepEqual(D.parse('¿el oro va a subir?'), []); // «oro» el activo, no el color
+});

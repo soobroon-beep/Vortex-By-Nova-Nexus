@@ -154,19 +154,25 @@
     const all = (H().candles && H().candles()) || cs, snap = BR && all.length >= 30 ? BR.snapshot(all, {visible: cs}) : null, errs = [];
     for (const a of acts.filter(a => a.do === 'draw').slice(0, 8)) { const r = BR.toDrawings(a, all, snap && snap.st), grp = 'draw:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); if (!r.drawings.length) { errs.push(r.err); continue; } for (const d of r.drawings) { d.grp = grp; await drawAnimated(d); } }
     if (errs.length && !acts.some(a => a.do !== 'draw')) texts.push(acts.filter(a => a.do === 'draw').length === errs.length ? `No pude dibujar eso (${errs[0]}). Dime los precios o en qué velas y lo intento otra vez.` : '');
-    for (const a of acts.filter(a => a.do !== 'draw').slice(0, 5)) { const r = D.build(a.do, cs, a.price, {sr: C.sr}), grp = a.do + ':' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); texts.push(r.text); for (const d of r.drawings) { d.grp = grp; if (/^Soporte/.test(d.label || '') && C.colSup) d.col = C.colSup; if (/^Resistencia/.test(d.label || '') && C.colRes) d.col = C.colRes; await drawAnimated(d); } }
+    for (const a of acts.filter(a => a.do !== 'draw').slice(0, 5)) { const r = D.build(a.do, cs, a.price, {sr: C.sr}), grp = a.do + ':' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); texts.push(r.text); for (const d of r.drawings) { d.grp = grp; const sup = /^Soporte/.test(d.label || ''), res = /^Resistencia/.test(d.label || '');
+        if (sup && C.colSup) d.col = C.colSup; if (res && C.colRes) d.col = C.colRes;
+        if (a.col) d.col = a.col; if (sup && a.colSup) d.col = a.colSup; if (res && a.colRes) d.col = a.colRes; // el color que pediste al dibujar
+        await drawAnimated(d); }
+      if (a.do === 'sr' && (a.col || a.colSup || a.colRes)) setCfgSafe(Object.assign({}, (a.colSup || a.col) ? {colSup: a.colSup || a.col} : {}, (a.colRes || a.col) ? {colRes: a.colRes || a.col} : {})); }
     const hm = home(); await flyTo(hm.x, hm.y); mood('happy', 'thumbs');
     say(((intro ? intro + ' ' : '') + texts.filter(Boolean).join(' ')).trim() || 'Listo.'); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2200);
   }
 
   /* ── editar lo que ya está dibujado: color, grosor, estilo, borrar o mover una pieza ── */
   const TNAME = {channel: ['el canal', 'los canales'], sup: ['el soporte', 'los soportes'], res: ['la resistencia', 'las resistencias'], trend: ['la tendencia', 'las tendencias'], fib: ['el Fibonacci', 'los Fibonacci'], range: ['el rango', 'los rangos'], hline: ['el nivel', 'los niveles'], line: ['la línea', 'las líneas'], last: ['el último dibujo', 'el último dibujo'], all: ['mis dibujos', 'mis dibujos']};
-  const CNAME = c => { for (const [k, v] of Object.entries(D.COLORS)) if (v === c) return k; return c; };
+  const CNAME = c => (D.colorName && D.colorName(c)) || (() => { for (const [k, v] of Object.entries(D.COLORS)) if (v === c) return k; return c; })();
+  const DRAWABLE = {channel: 'channel', sup: 'sr', res: 'sr', trend: 'trend', fib: 'fib', range: 'range'};
   async function editDrawings(acts, intro) {
-    const h = H(), out = []; let any = false;
+    const h = H(), out = [], missing = []; let any = false;
     for (const a of acts.slice(0, 4)) {
       const list = h.list(), ids = D.pickTargets(list, a.target, a.do === 'move' ? a.price : undefined), nm = TNAME[a.target] || ['eso', 'eso'], pl = ids.length > 1 ? nm[1] : nm[0];
-      if (!ids.length) { out.push(list.length ? `No encontré ${nm[0]} en el gráfico. ¿Quieres que lo dibuje primero?` : 'Todavía no hay dibujos en este gráfico. Pídeme uno y luego lo cambiamos.'); continue; }
+      if (!ids.length) { const mk = DRAWABLE[a.target]; if (a.do === 'style' && mk) { missing.push(Object.assign({do: mk}, a.target === 'sup' ? {colSup: a.col} : a.target === 'res' ? {colRes: a.col} : {col: a.col})); continue; } // «pon el canal en morado» sin canal: te lo dibujo ya en morado
+        out.push(list.length ? `No encontré ${nm[0]} en el gráfico. ¿Quieres que lo dibuje primero?` : 'Todavía no hay dibujos en este gráfico. Pídeme uno y luego lo cambiamos.'); continue; }
       const d0 = list.find(d => d.id === ids[0]); if (d0 && d0.pts && d0.pts[0]) { const q = h.toScreen(d0.pts[0]); if (q) { const s = AV(), f = V2(q), hd = M ? M.handScreen() : {x: s.w * .8, y: s.h * .55}; bub.hidden = true; mood('focused', 'point'); await flyTo(clamp(f.x - hd.x, 0, AW() - s.w), clamp(f.y - hd.y, 0, AH() - s.h), 650); await sleep(REDUCED ? 0 : 250); } }
       any = true;
       if (a.do === 'remove') { const n = h.remove(ids); out.push(`Listo, quité ${pl}${n > 1 ? ` (${n})` : ''}.`); }
@@ -176,6 +182,9 @@
         h.patch(ids, f); const bits = [a.col && `en ${CNAME(a.col)}`, a.lw === 3 && 'más gruesa', a.lw === 1 && 'más delgada', a.ds === 'dot' && 'punteada', a.ds === 'dash' && 'discontinua', a.ds === '' && 'sólida'].filter(Boolean);
         out.push(`Listo, puse ${pl} ${bits.join(' y ')}.`); }
     }
+    if (missing.length) { const m = []; for (const x of missing) { const y = m.find(z => z.do === x.do); if (y) Object.assign(y, Object.fromEntries(Object.entries(x).filter(([, v]) => v))); else m.push(x); } // soporte + resistencia = un solo «sr»
+      if (any) { say(out.join(' '), {busy: true}); await sleep(REDUCED ? 0 : 900); }
+      await perform(m, (intro ? intro + ' ' : '') + (out.length ? out.join(' ') + ' ' : '') + 'No lo tenías dibujado, así que te lo dibujo con ese color.'); return; }
     if (any) { mood('happy', 'thumbs'); await sleep(REDUCED ? 0 : 300); const hm = home(); await flyTo(hm.x, hm.y, 600); } else mood('thinking', 'idle');
     say(((intro ? intro + ' ' : '') + out.join(' ')).trim()); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2000);
   }
@@ -243,7 +252,9 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     let seen = ''; if (it.see && BR) { status('mirando tu gráfico…'); say('Déjame mirar tu gráfico…', {busy: true}); seen = await look(); }
     status('pensando…'); if (it.decide) say('Revisando tu posición, tus indicadores y la estructura…', {busy: true}); else if (!it.see) say('Déjame pensarlo…', {busy: true});
     const data = brainData(seen), sys = (BR ? BR.SYS : SYS_OLD) + profile() + VOZ() + (it.draw ? '\nEl usuario SÍ pidió dibujar: incluye las acciones necesarias.' : '\nEl usuario NO pidió dibujar: "actions" debe ir vacío salvo que edite dibujos existentes.');
-    const msgs = [{role: 'system', content: sys}, ...hist.slice(-6), {role: 'user', content: `${text}\n\nDATOS DEL GRÁFICO (en vivo):\n${data.text}`}];
+    let cols = []; try { cols = D.colorsIn ? D.colorsIn(text) : []; } catch {}
+    const colHint = cols.length ? '\nCOLORES QUE PIDIÓ (úsalos EXACTOS en "col"): ' + cols.map(c => `${c.name} = ${c.col}`).join(' · ') : '';
+    const msgs = [{role: 'system', content: sys}, ...hist.slice(-6), {role: 'user', content: `${text}${colHint}\n\nDATOS DEL GRÁFICO (en vivo):\n${data.text}`}];
     const call = L.pixelChat ? L.pixelChat(msgs, {json: true, maxTokens: 1800}) : L.chat(msgs, {purpose: 'text', maxTokens: 900, noOwn: true});
     const r = await Promise.race([call, sleep(90000).then(() => { throw new Error('La IA tardó demasiado'); })]);
     const pr = BR ? BR.parseReply(r && r.text) : {reply: String(r && r.text || ''), actions: []};

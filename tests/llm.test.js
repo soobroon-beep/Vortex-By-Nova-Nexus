@@ -135,3 +135,15 @@ test('Sin créditos en ninguna clave: Nexus Pixel usa el servicio gratis sin cla
   const r = await L.chat([{role: 'user', content: 'hola'}], {cfg: {provider: 'free', lab: 'free', compat: {}}});
   assert.equal(r.text, 'hola desde el servicio gratis'); assert.ok(calls.some(c => /text\.pollinations\.ai\/openai/.test(c.url)));
 }));
+
+/* Nexus Pixel: solo la IA gratis de VORTEX; nunca muestra «sin créditos» ni cae en Pollinations */
+test('Nexus Pixel: si la IA gratis está ocupada (502) lo reintenta una vez en tu servidor', async () => {
+  const calls = mockFetch((u, o, n) => n === 1 ? mkRes({error: 'La IA gratis no respondió'}, false, 502) : mkRes(reply('{"reply":"listo","actions":[]}')));
+  const r = await L.pixelChat([{role: 'user', content: 'hola'}], {json: true});
+  assert.match(r.text, /listo/); assert.equal(calls.length, 2); assert.ok(calls.every(c => /vortex-push.*\/ai$/.test(c.url)));
+});
+test('Nexus Pixel: un aviso de «no tienes créditos» nunca llega como respuesta ni manda a rutas de pago', async () => {
+  const calls = mockFetch(() => mkRes(reply("The account behind this API key doesn't have enough credits. Please top up")));
+  await assert.rejects(L.pixelChat([{role: 'user', content: 'hola'}], {json: true}), e => !/credit|cr[eé]dito/i.test(e.message));
+  assert.ok(calls.every(c => /vortex-push/.test(c.url)) && !calls.some(c => /pollinations/.test(c.url)));
+});
