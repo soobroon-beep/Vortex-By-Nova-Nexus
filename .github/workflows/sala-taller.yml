@@ -25,3 +25,4 @@ jobs:
           VORTEX_DIR: ${{ github.workspace }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           GROQ_KEY: ${{ secrets.GROQ_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}

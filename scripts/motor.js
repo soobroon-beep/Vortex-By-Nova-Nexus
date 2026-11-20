@@ -5,9 +5,10 @@
 //   · cada hora (minuto 8): Claudio (scripts/claudio-run.js MODE=tick)
 //   · al cerrar cada vela de 1h/4h: el Screener a Discord + celulares + radar (scripts/discord-screener.js · motorRound)
 //   · una vez al día (7:17 a. m. Veracruz): lanza el Vigía si GitHub se saltó su horario
+//   · cada 10 min: lanza las tareas con horario que GitHub se saltó (Taller y Revisión de la Sala, Cerebro, noticias y las nocturnas; ver wf-rescue.js)
 // Cada tarea corre por separado: si una falla, las demás siguen.
 'use strict';
-const {spawn} = require('child_process'), path = require('path');
+const {spawn} = require('child_process'), path = require('path'), WR = require('./wf-rescue.js');
 const IA = require('./ind-alerts.js'), DS = require('./discord-screener.js'), CS = require('./candle-store.js'), MK = require('../markets.js');
 const REPO = process.env.GITHUB_REPOSITORY || '', VIGIA_UTC = {h: 13, m: 17}; // Vigía: 7:17 a. m. en Veracruz
 async function vigiaDue(day) { // ¿ya corrió hoy el Vigía de la mañana? (GitHub se salta su horario: aquí se lanza desde el Motor)
@@ -44,7 +45,7 @@ const child = (script, env) => new Promise(res => {
   // franjas del Screener ya enviadas (en Firestore, para no repetirlas al relanzarse el Motor)
   let db = null, scr = {}; try { db = require('firebase-admin').firestore(); const d = await db.doc('server/motor').get(); scr = (d.exists && d.data().scr) || {}; } catch (e) { console.log('estado del Screener:', String(e.message || e).slice(0, 120)); }
   if (db) MK.setStore(CS.reader(db)); // si los exchanges fallan, alertas y Screener usan las velas guardadas por VORTEX
-  const memC = {}; let retrainAt = 0, beatKey = -1;
+  const memC = {}; let retrainAt = 0, beatKey = -1, rescueKey = -1;
   console.log(`Motor encendido hasta ${new Date(end).toISOString()}`);
   while (Date.now() < end) {
     const t0 = Date.now(), d = new Date(), hourKey = Math.floor(t0 / 36e5);
@@ -55,6 +56,7 @@ const child = (script, env) => new Promise(res => {
     if (Date.now() - retrainAt > 6 * 36e5 && d.getUTCMinutes() >= 40) { retrainAt = Date.now(); await child('botlab-retrain.js', {MODE: 'retrain'}); await child('brain-sync.js', {MODE: 'cerebro', BRAIN_APP: 'vortex', BRAIN_NO_COMMITS: '1'}); } // y el análisis de cada bot sube a Neural Brain enseguida // reentrenamiento (cada bot decide si ya le toca; GitHub se saltaba su horario) · en fila con el paper trading para que no se pisen
     if (db && Math.floor(t0 / 6e5) !== beatKey) { beatKey = Math.floor(t0 / 6e5); db.doc('server/motor').set({beat: Date.now()}, {merge: true}).catch(() => {}); } // latido cada 10 min: el Vigía revisa que el Motor siga vivo
     await calCheck(Date.now());
+    if (Math.floor(t0 / 6e5) !== rescueKey) { rescueKey = Math.floor(t0 / 6e5); await WR.rescueAll(REPO, process.env.GH_TOKEN, Date.now(), process.env.GITHUB_REF_NAME || 'main', m => console.log(`${new Date().toISOString()} · rescate: ${m}`)); }
     const qKey = Math.floor(t0 / 9e5);
     if (qKey !== lastQ && d.getUTCMinutes() % 15 >= 2) { // cada 15 min (2 min después del cierre): bots de 15 m como Pachita; los de 1 h/4 h solo avanzan cuando cerró su vela
       lastQ = qKey;
