@@ -82,9 +82,9 @@ const UPDN = {
   azul: {n: 'Océano', up: '#3b8cff', down: '#ff8a2a', upL: '#1f6fe0', downL: '#e8711a'},
   neon: {n: 'Neón', up: '#00e5a0', down: '#ff3d71', upL: '#00a874', downL: '#e0245a'},
   galaxia: {n: 'Galaxia', up: '#5ad1ff', down: '#b56bff', upL: '#1c9fd6', downL: '#8a3fe0'},
-  oro: {n: 'Oro', up: '#f0c04a', down: '#c2405c', upL: '#b8860b', downL: '#a3304a'},
-  hielo: {n: 'Hielo', up: '#9fdcff', down: '#ff9aae', upL: '#2b8fc9', downL: '#d9546f'},
-  terminal: {n: 'Terminal', up: '#3dff8f', down: '#ff6a3d', upL: '#109c4f', downL: '#d9481b'}
+  aurora: {n: 'Aurora', up: '#4dffc3', down: '#b86bff', upL: '#0f9f74', downL: '#8a3fe0'},
+  cometa: {n: 'Cometa', up: '#7ae7ff', down: '#ff5fa8', upL: '#1593b8', downL: '#d93a83'},
+  supernova: {n: 'Supernova', up: '#ffcf5c', down: '#ff4f7b', upL: '#c48a00', downL: '#d9305a'}
 }; // líneas de tus operaciones (entrada, TP, SL, liquidación y órdenes)
 const TL_KINDS = ['pos', 'tp', 'sl', 'liq', 'ord'], TL_DASH = {'Sólida': [], Guiones: [6, 4], Puntos: [2, 4]};
 function sanChartStyle(c) {
