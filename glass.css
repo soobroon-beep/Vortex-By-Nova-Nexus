@@ -2508,3 +2508,4 @@ body:not(.signed-in) #settingsView .sg:not(:has(.sg-row:not(.needs-login))){disp
 .view-head.vh-t>.vh-ic svg.ai-ic *{fill:none}
 .bl-main-head{margin:4px 0 14px 4px}.bl-main-head .bl-exp{margin-left:auto;align-self:center}
 #lensView .view-head.vh-t>div:not(.vh-ic){min-width:0}
+.view-head.vh-t>.vh-ic svg{transform:none!important;scale:1!important}

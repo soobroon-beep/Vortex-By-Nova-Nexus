@@ -73,7 +73,7 @@
   function put() {
     for (const [id, col] of Object.entries(C)) {
       const v = document.getElementById(id), h = v && v.querySelector('.view-head'), t = h && h.querySelector('h1'), src = document.querySelector(`.rr-btn[data-side="${id}"] svg`);
-      if (!h || !t || !src || h.querySelector('.vh-ic')) continue; const box = t.parentElement, ic = document.createElement('span'); ic.className = 'vh-ic'; ic.style.setProperty('--c', col); ic.setAttribute('aria-hidden', 'true'); ic.appendChild(src.cloneNode(true)); box.parentElement.insertBefore(ic, box); h.classList.add('vh-t');
+      if (!h || !t || !src || h.querySelector('.vh-ic')) continue; const box = t.parentElement, ic = document.createElement('span'); ic.className = 'vh-ic'; ic.style.setProperty('--c', col); ic.setAttribute('aria-hidden', 'true'); { const cl = src.cloneNode(true); cl.removeAttribute('style'); cl.querySelectorAll('[style]').forEach(x => x.removeAttribute('style')); ic.appendChild(cl); } /* sin el tamaño del efecto dock: si el icono de la barra estaba agrandado al copiarlo, salía gigante */ box.parentElement.insertBefore(ic, box); h.classList.add('vh-t');
     }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', put); else put();
