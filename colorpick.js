@@ -29,6 +29,7 @@
     pop = document.createElement('div'); pop.className = 'cp-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Paleta de colores');
     pop.innerHTML = html(); document.body.appendChild(pop); place(); requestAnimationFrame(() => pop && pop.classList.add('open'));
     pop.addEventListener('click', onClick); pop.addEventListener('input', onNative);
+    pop.addEventListener('change', e => { if (e.target.matches('[data-native]') && hex(e.target.value) && C() && !C().has(e.target.value)) { if (C().add(e.target.value) === true) paint(); } }); // «Otro color» se guarda solo en Mis colores
   }
   function close() { if (!pop) return; const p = pop; pop = null; target = null; p.classList.remove('open'); setTimeout(() => p.remove(), 140); }
   function apply(c) { if (!target || !hex(c)) return; target.value = c; target.dispatchEvent(new Event('input', {bubbles: true})); target.dispatchEvent(new Event('change', {bubbles: true})); }

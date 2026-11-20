@@ -1444,13 +1444,29 @@ function recalcSoon(force) {
   if (force || now - rcAt >= gap) { clearTimeout(rcTimer); rcTimer = 0; const t0 = performance.now(); recalc(); rcCost = performance.now() - t0; rcAt = performance.now(); }
   else if (!rcTimer) rcTimer = setTimeout(() => { rcTimer = 0; recalcSoon(true); scheduleRender(); }, gap - (now - rcAt));
 }
+/* Modo Completo: el precio de la vela en vivo se desliza suave hasta el dato nuevo (≈170 ms) en vez de saltar,
+   así la vela, la línea y la etiqueta del precio se mueven fluidas a la frecuencia de la pantalla (60, 120 o 144 Hz).
+   En modo Ligero (o con «reducir movimiento») el precio salta directo como siempre. Las alertas usan siempre el dato real. */
+let liveGlide = null;
+function liveGlideStop() { if (!liveGlide) return; cancelAnimationFrame(liveGlide.raf); const n = candles.length, L = liveGlide; liveGlide = null; if (n && candles[n - 1].t === L.t) candles[n - 1] = L.k; }
+function liveGlideStart(k, last) {
+  if (REDUCED || liteMode() || document.hidden || currentView !== 'chartView' || !Number.isFinite(last.c) || last.c === k.c) { liveGlideStop(); return false; }
+  const from = last.c; if (liveGlide) cancelAnimationFrame(liveGlide.raf);
+  const L = liveGlide = {t: k.t, k, from, to: k.c, t0: performance.now(), raf: 0}, D = 170;
+  candles[candles.length - 1] = {...k, c: from};
+  const step = now => { if (liveGlide !== L) return; const n = candles.length; if (!n || candles[n - 1].t !== L.t) { liveGlide = null; return; }
+    const p = Math.min(1, (now - L.t0) / D), e = 1 - Math.pow(1 - p, 3);
+    if (p >= 1) { candles[n - 1] = L.k; liveGlide = null; recalcSoon(); try { updateChartHeader(); } catch {} } else { candles[n - 1] = {...L.k, c: L.from + (L.to - L.from) * e}; L.raf = requestAnimationFrame(step); }
+    render(); };
+  L.raf = requestAnimationFrame(step); return true;
+}
 function applyKline(k) {
   if (replay) { replayLive(k); return; } // en repetición el gráfico no se mueve con el precio en vivo
   const n = candles.length; if (!n) return;
   const last = candles[n - 1];
   let isNew = false;
-  if (k.t === last.t) candles[n - 1] = k;
-  else if (k.t > last.t) { candles.push(k); if (pan > 0) pan += 1; isNew = true; }
+  if (k.t === last.t) { if (!liveGlideStart(k, last)) candles[n - 1] = k; }
+  else if (k.t > last.t) { liveGlideStop(); candles.push(k); if (pan > 0) pan += 1; isNew = true; }
   else return;
   recalcSoon(isNew); updateChartHeader(); checkAlerts(state.symbol, k.c); if (window.CCTTrade) CCTTrade.tick(state.symbol, k.c);
   if (currentView === 'chartView') scheduleRender();
@@ -1888,6 +1904,7 @@ const IC = {
   starfill: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" fill="currentColor"/>',
   magnet: '<path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4zM6 8h4M14 8h4"/>',
   keep: '<path d="M9 4h6v5l3 4H6l3-4zM12 13v7"/>',
+  tree: '<path d="M12 3 3 7.5l9 4.5 9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   eyeoff: '<path d="M3 3l18 18M10.6 6.1A9.6 9.6 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3.2 3.9M6.5 7.6A16 16 0 0 0 2 12s4 7 10 7a9.5 9.5 0 0 0 4.2-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
@@ -2498,6 +2515,7 @@ function sbResetStyle() { const d = curDraw(); if (!d) return; patchD(d.type ===
 const posColors = d => `<label class="pp-lbl">Objetivo (ganancia)</label>${sbPal('data-pgc', d.gc || '#089981')}<label class="pp-lbl">Stop (pérdida)</label>${sbPal('data-prc', d.rc || '#f23645')}`;
 const posToggles = d => `<label class="pp-lbl">Textos que se muestran</label><div class="pp-col">${[['nt', 'Título (Long / Short)'], ['no', 'Texto del objetivo'], ['ns', 'Texto del stop'], ['nr', 'Tamaño y riesgo (calculadora)']].map(([k, n]) => `<button class="pp-item${d[k] ? '' : ' on'}" data-ptog="${k}"><span class="pp-ic">${d[k] ? '' : I('check', 16)}</span><span>${n}</span></button>`).join('')}</div>`;
 const sbSw = (attr, c, cur) => `<button class="pp-sw${String(cur || '').toLowerCase() === c ? ' on' : ''}" ${attr}="${c}" style="background:${c}" aria-label="${c}"></button>`;
+function selPopMineRefresh() { setTimeout(() => { try { if (selPop) renderPop(); } catch {} }, 0); }
 const sbMine = (attr, cur) => { const m = window.CCTColors ? CCTColors.get() : []; const ok = /^#[0-9a-f]{6}$/i.test(cur || ''); return `<div class="pp-mine"><div class="pp-mine-h"><span>Mis colores</span>${ok ? `<button type="button" class="pp-mine-add" data-mycol-add="${String(cur).toLowerCase()}" title="Guardar el color actual en Mis colores" aria-label="Guardar el color actual en Mis colores">+</button>` : ''}</div>${m.length ? `<div class="pp-grid">${m.map(c => sbSw(attr, c, cur)).join('')}</div>` : '<small class="pp-mine-e">Guarda hasta 20 colores y aparecerán en todas las paletas.</small>'}</div>`; };
 const sbPal = (attr, cur) => `<div class="pp-grid">${SB_PAL.flat().map(c => sbSw(attr, c, cur)).join('')}</div>${sbMine(attr, cur)}<label class="pp-custom">Otro color <input type="color" ${attr}-in value="${/^#[0-9a-f]{6}$/i.test(cur || '') ? cur : '#e9c36e'}"></label>`;
 const sbLwRow = (list, cur) => `<div class="pp-row">${list.map(w => `<button class="pp-lw${Math.round(cur) === w ? ' on' : ''}" data-pw="${w}"><i style="height:${Math.min(w, 8)}px"></i><span>${w}px</span></button>`).join('')}</div>`;
@@ -2705,7 +2723,7 @@ document.addEventListener('click', e => {
   if (k === 'undo') undoDrawing(); else if (k === 'redo') redoDrawing();
   else if (k === 'clear') { closePop(); if (!getDrawings().length) return toast('No hay dibujos'); if (confirm('¿Borrar todos los dibujos de este gráfico? (Ctrl+Z los recupera)')) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); } }
 });
-document.addEventListener('change', e => { const i = e.target.closest('#selPop input[type=color]'); if (!i) return; if (i.hasAttribute('data-pc-in')) sbSetColor(i.value); else if (i.hasAttribute('data-ptc-in')) patchD({tc: i.value}); else if (i.hasAttribute('data-pgc-in')) patchD({gc: i.value}); else if (i.hasAttribute('data-prc-in')) patchD({rc: i.value}); else if (i.hasAttribute('data-opc-in')) dApplyCol(i.value); });
+document.addEventListener('change', e => { const i = e.target.closest('#selPop input[type=color]'); if (!i) return; if (window.CCTColors && CCTColors.add(i.value) === true) selPopMineRefresh(); /* «Otro color» se suma solo a Mis colores: así sale en todas las paletas */ if (i.hasAttribute('data-pc-in')) sbSetColor(i.value); else if (i.hasAttribute('data-ptc-in')) patchD({tc: i.value}); else if (i.hasAttribute('data-pgc-in')) patchD({gc: i.value}); else if (i.hasAttribute('data-prc-in')) patchD({rc: i.value}); else if (i.hasAttribute('data-opc-in')) dApplyCol(i.value); });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'sbTxt') { e.preventDefault(); sbEditText(e.target.value); } else if (e.key === 'Enter' && e.target.id === 'sbPrice') { e.preventDefault(); document.querySelector('#selPop [data-sb="priceok"]').click(); } });
 document.addEventListener('keydown', e => { // atajos de escritorio: copiar / pegar / clonar
   if (!(e.ctrlKey || e.metaKey) || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || currentView !== 'chartView') return;
@@ -2726,7 +2744,7 @@ let railLast = {}; try { railLast = JSON.parse(lsGet(RAIL_KEY) || '{}') || {}; }
 const groupOf = k => TOOL_GROUPS.find(gr => gr.tools.some(t => t[0] === k));
 const toolOf = k => { for (const gr of TOOL_GROUPS) { const t = gr.tools.find(x => x[0] === k); if (t) return t; } return null; };
 const lastOf = gr => (railLast[gr.id] && gr.tools.some(t => t[0] === railLast[gr.id])) ? railLast[gr.id] : gr.tools[0][0];
-const RAIL_OPTS = [['magnet', 'Imán: ajusta a máximo, mínimo, apertura y cierre', IC.magnet], ['stay', 'Mantener la herramienta activa después de dibujar', IC.keep], ['lock', 'Bloquear dibujos (no se seleccionan ni se mueven)', IC.lock], ['hide', 'Ver u ocultar dibujos e indicadores', IC.eye], ['clear', 'Borrar dibujos o indicadores', IC.trash]];
+const RAIL_OPTS = [['tree', 'Árbol de objetos: dibujos e indicadores, adelante o atrás', IC.tree], ['magnet', 'Imán: ajusta a máximo, mínimo, apertura y cierre', IC.magnet], ['stay', 'Mantener la herramienta activa después de dibujar', IC.keep], ['lock', 'Bloquear dibujos (no se seleccionan ni se mueven)', IC.lock], ['hide', 'Ver u ocultar dibujos e indicadores', IC.eye], ['clear', 'Borrar dibujos o indicadores', IC.trash]];
 function buildRail() {
   const rail = $('#toolRail'); if (!rail) return;
   rail.innerHTML = `<button class="rail-btn grp" data-rail="cursor" title="Cursor (Esc)" aria-label="Cursor">${SV(CURSOR_IC[cstyle().cursor] || CURSOR_IC.Cruz)}<i class="caret" data-curfly="1" title="Elegir cursor: cruz, flecha o estrella"></i></button><div class="rail-sep"></div>`
@@ -2747,7 +2765,7 @@ function syncRail() {
     if (b.dataset.last !== k || !b.querySelector('svg')) { b.dataset.last = k; const old = b.querySelector('svg'); if (old) old.outerHTML = SV(t[3]); }
     b.title = t[1];
   });
-  rail.querySelectorAll('[data-opt]').forEach(b => { const k = b.dataset.opt; if (k === 'clear') return; b.classList.toggle('on', !!DOPT[k]); if (k === 'hide') { const want = DOPT.hide ? IC.eyeoff : IC.eye; if (b.dataset.ic !== (DOPT.hide ? '1' : '0')) { b.dataset.ic = DOPT.hide ? '1' : '0'; b.querySelector('svg').outerHTML = SV(want); } } });
+  rail.querySelectorAll('[data-opt]').forEach(b => { const k = b.dataset.opt; if (k === 'tree') { b.classList.toggle('on', !!document.getElementById('objTree')); return; } if (k === 'clear') return; b.classList.toggle('on', !!DOPT[k]); if (k === 'hide') { const want = DOPT.hide ? IC.eyeoff : IC.eye; if (b.dataset.ic !== (DOPT.hide ? '1' : '0')) { b.dataset.ic = DOPT.hide ? '1' : '0'; b.querySelector('svg').outerHTML = SV(want); } } });
 }
 function closeFly() { const f = $('#railFly'); if (f) uxOut(f); }
 function openFly(id, btn) {
@@ -2908,6 +2926,7 @@ function toggleOpt(k) {
     if (cav) { openFly(cav.dataset.fly, cav.closest('.rail-btn')); return; }
     closeFly();
     if (grp) { pickTool(grp.dataset.last); return; }
+    if (opt && opt.dataset.opt === 'tree') { toggleObjTree(opt); return; }
     if (opt) { const k = opt.dataset.opt; if (k === 'clear' || k === 'hide') { const r = opt.getBoundingClientRect(); (k === 'clear' ? openClearMenu : openVisMenu)({left: r.right + 10, right: r.right, top: r.bottom, bottom: r.top - 8}); return; } toggleOpt(k); return; } // ojo y basura: menú con dibujos / indicadores
     if (e.target.closest('[data-rail="cursor"]')) cancelTool();
   });
@@ -2920,6 +2939,86 @@ function toggleOpt(k) {
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFly(); });
   window.addEventListener('resize', closeFly);
+})();
+
+/* ───────── Árbol de objetos (barra izquierda, junto al imán/candado/ojo) ─────────
+   Lista todo lo que hay en el gráfico, como en TradingView: dibujos (el de arriba es el que queda al frente) e indicadores.
+   Arrastra una fila para pasarla adelante o atrás; botones para mandar un dibujo detrás de las velas, bloquear, ocultar o borrar.
+   Los indicadores usan los mismos botones de la leyenda (ocultar, ajustes, quitar) y se reordenan igual que arrastrando su nombre. */
+let objTreeOn = false, objTreeSig = '';
+const OT_IC = {grip: '<path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/>', back: '<rect x="3" y="3" width="12" height="12" rx="2"/><path d="M9 21h10a2 2 0 0 0 2-2V9"/>', front: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>', gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>', ind: '<path d="M3 17l5-6 4 3 6-8 3 4"/>', unlock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/>'};
+function otDrawName(d) { const t = toolOf(d.type), base = t ? t[1] : d.type === 'brush' ? 'Pincel' : 'Dibujo', lab = String(d.label || (d.type === 'text' || d.type === 'note' || d.type === 'callout' ? d.text || '' : '') || '').trim(); return lab ? `${base} · ${lab.slice(0, 22)}` : base; }
+function otDrawIc(d) { const t = toolOf(d.type); return t ? t[3] : IC.brush || IC.trend; }
+function otIndGroups() { // filas de indicadores en el orden en que salen en la leyenda, agrupadas por lugar (sobre el precio, panel arriba, panel abajo)
+  const out = [], seen = new Set();
+  for (const r of treeInds) {
+    const a = r.act || {}, id = a.sid || a.key || '', k = a.t + ':' + id + ':' + (a.pane || ''); if (!a.t || seen.has(k)) continue; seen.add(k);
+    const pk = a.mid || (a.t === 'std' ? a.key : a.t === 'pine' ? 'pine:' + a.sid : '');
+    const grp = a.mid ? 'main' : paneLayout.top.some(q => q.key === pk) ? 'top' : paneLayout.bot.some(q => q.key === pk) ? 'bot' : '';
+    out.push({text: r.text, act: a, id, dim: r.dim, pk, grp});
+  }
+  return out;
+}
+function objTreeHtml() {
+  const ds = getDrawings().slice().reverse(), inds = otIndGroups(), b = (act, ic, t, on) => `<button type="button" class="ot-b${on ? ' on' : ''}" data-ot="${act}" title="${esc(t)}" aria-label="${esc(t)}">${SVX(ic, 15)}</button>`;
+  const dRows = ds.map(d => `<div class="ot-row${d.id === selectedId ? ' sel' : ''}${d.hide ? ' off' : ''}" data-otd="${esc(d.id)}" draggable="false"><span class="ot-grip" title="Arrastra para pasarlo adelante o atrás">${SVX(OT_IC.grip, 14)}</span><span class="ot-ic" style="color:${esc(d.col || 'var(--draw, #e9c36e)')}">${SVX(otDrawIc(d), 15)}</span><span class="ot-n">${esc(otDrawName(d))}</span>`
+    + b('bk', d.bk ? OT_IC.back : OT_IC.front, d.bk ? 'Detrás de las velas · tocar para traerlo delante' : 'Delante de las velas · tocar para mandarlo detrás', !!d.bk) + b('lock', d.lock ? IC.lock : OT_IC.unlock, d.lock ? 'Desbloquear' : 'Bloquear', !!d.lock) + b('eye', d.hide ? IC.eyeoff : IC.eye, d.hide ? 'Mostrar' : 'Ocultar', false) + b('del', IC.trash, 'Borrar', false) + `</div>`).join('');
+  const gName = {main: 'Sobre el precio', top: 'Panel de arriba', bot: 'Paneles de abajo', '': 'Otros'};
+  let iRows = '', lastG = null;
+  for (const r of inds) {
+    if (r.grp !== lastG) { lastG = r.grp; if (inds.filter(x => x.grp === r.grp).length) iRows += `<div class="ot-sub">${gName[r.grp] || ''}</div>`; }
+    const d = `data-leg="${esc(r.act.t)}" data-id="${esc(r.id)}"`, many = r.grp && inds.filter(x => x.grp === r.grp).length > 1;
+    iRows += `<div class="ot-row ind${r.dim ? ' off' : ''}" data-oti="${esc(r.pk)}" data-otg="${esc(r.grp)}">${many ? `<span class="ot-grip" title="Arrastra para cambiar el orden">${SVX(OT_IC.grip, 14)}</span>` : '<span class="ot-grip ghost"></span>'}<span class="ot-ic">${SVX(OT_IC.ind, 15)}</span><span class="ot-n">${esc(r.text)}</span>`
+      + `<button type="button" class="ot-b" ${d} data-do="set" title="Ajustes" aria-label="Ajustes">${SVX(OT_IC.gear, 15)}</button><button type="button" class="ot-b" ${d} data-do="eye" title="${r.dim ? 'Mostrar' : 'Ocultar'}" aria-label="${r.dim ? 'Mostrar' : 'Ocultar'}">${SVX(r.dim ? IC.eyeoff : IC.eye, 15)}</button><button type="button" class="ot-b" ${d} data-do="del" title="Quitar del gráfico" aria-label="Quitar del gráfico">${SVX(IC.trash, 15)}</button></div>`;
+  }
+  return `<div class="ot-head"><b>Árbol de objetos</b><button type="button" class="ot-x" data-ot-close aria-label="Cerrar">✕</button></div>
+    <div class="ot-scroll"><div class="ot-sec"><span>Dibujos</span><em>${ds.length}</em></div>${dRows || '<p class="ot-empty">Aún no hay dibujos en este gráfico.</p>'}
+    <div class="ot-sec"><span>Indicadores</span><em>${inds.length}</em></div>${iRows || '<p class="ot-empty">No hay indicadores en el gráfico.</p>'}</div>
+    <small class="ot-foot">Arriba = al frente. Arrastra las filas para ordenarlas.</small>`;
+}
+function objTreeSig2() { return getDrawings().map(d => d.id + (d.hide ? 'h' : '') + (d.lock ? 'l' : '') + (d.bk ? 'b' : '') + (d.col || '') + (d.label || d.text || '')).join(',') + '|' + selectedId + '|' + treeInds.map(r => r.text + (r.dim ? '~' : '')).join(',') + '|' + paneLayout.top.length + paneLayout.bot.length; }
+function objTreeSync(force) { const el = document.getElementById('objTree'); if (!el) { objTreeOn = false; return; } if (el.dataset.drag) return; const sg = objTreeSig2(); if (!force && sg === objTreeSig) return; objTreeSig = sg; const sc = el.querySelector('.ot-scroll'), top = sc ? sc.scrollTop : 0; el.innerHTML = objTreeHtml(); const s2 = el.querySelector('.ot-scroll'); if (s2) s2.scrollTop = top; }
+function placeObjTree(el, btn) { const r = (btn || document.querySelector('#toolRail [data-opt="tree"]') || {getBoundingClientRect: () => ({right: 52, bottom: innerHeight - 20})}).getBoundingClientRect(); el.style.left = Math.round(r.right + 8) + 'px'; el.style.bottom = Math.max(8, Math.round(innerHeight - r.bottom)) + 'px'; }
+function closeObjTree() { const el = document.getElementById('objTree'); if (el) uxOut(el); objTreeOn = false; syncRail(); }
+function toggleObjTree(btn) {
+  if (document.getElementById('objTree')) { closeObjTree(); return; }
+  const el = document.createElement('div'); el.id = 'objTree'; el.className = 'obj-tree rail-fly'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Árbol de objetos');
+  document.body.appendChild(el); objTreeOn = true; objTreeSig = ''; legSig = ''; render(); objTreeSync(true); placeObjTree(el, btn); syncRail();
+}
+(() => {
+  const ordD = ids => { const by = new Map(getDrawings().map(d => [d.id, d])); return ids.slice().reverse().map(id => by.get(id)).filter(Boolean); }; // la lista va del frente al fondo; el arreglo se dibuja del fondo al frente
+  document.addEventListener('click', e => {
+    const el = e.target.closest('#objTree'); if (!el) { if (objTreeOn && !e.target.closest('#toolRail,.sel-bar,#selPop,.cfg-overlay,.cfg-dlg,#legMenu,.pc-back,.pc-dlg') && !e.target.closest('#chartArea')) closeObjTree(); return; }
+    if (e.target.closest('[data-ot-close]')) { closeObjTree(); return; }
+    if (e.target.closest('[data-leg]')) { setTimeout(() => objTreeSync(true), 60); return; } // indicadores: lo hace el mismo manejador de la leyenda
+    const row = e.target.closest('[data-otd]'); if (!row) return; const id = row.dataset.otd, d = getDrawings().find(x => x.id === id); if (!d) return;
+    const bt = e.target.closest('[data-ot]');
+    if (!bt) { selectedId = d.hide ? null : id; updateDrawUI(); render(); objTreeSync(true); return; }
+    const k = bt.dataset.ot; snapDraw();
+    if (k === 'del') { setDrawings(getDrawings().filter(x => x.id !== id)); if (selectedId === id) selectedId = null; toast('Dibujo borrado · Ctrl+Z lo recupera'); }
+    else { const key = k === 'eye' ? 'hide' : k; setDrawings(getDrawings().map(x => { if (x.id !== id) return x; const n = {...x}; if (n[key]) delete n[key]; else n[key] = true; return n; })); if (k === 'eye' && selectedId === id) selectedId = null; if (k === 'bk') toast(d.bk ? 'Dibujo delante de las velas' : 'Dibujo detrás de las velas'); }
+    updateDrawUI(); render(); objTreeSync(true);
+  });
+  document.addEventListener('pointerdown', e => { // arrastrar filas para cambiar el orden (dibujos: adelante/atrás · indicadores: su lugar en la leyenda o en los paneles)
+    const gp = e.target.closest('#objTree .ot-grip:not(.ghost)'); if (!gp || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const el = document.getElementById('objTree'), row = gp.closest('.ot-row'); if (!el || !row) return; e.preventDefault();
+    const isD = row.hasAttribute('data-otd'), grp = row.dataset.otg, sel = isD ? '[data-otd]' : `[data-oti][data-otg="${CSS.escape(grp || '')}"]`;
+    const rows = [...el.querySelectorAll(sel)]; if (rows.length < 2) return;
+    el.dataset.drag = '1'; row.classList.add('drag'); const y0 = e.clientY; let moved = false;
+    const mv = ev => { ev.preventDefault(); const dy = ev.clientY - y0; if (Math.abs(dy) > 3) moved = true; row.style.transform = `translateY(${dy}px)`;
+      const mid = ev.clientY, sib = rows.filter(r => r !== row); let before = null; for (const r of sib) { const b = r.getBoundingClientRect(); if (mid < b.top + b.height / 2) { before = r; break; } }
+      sib.forEach(r => r.classList.remove('drop-b', 'drop-a')); if (before) before.classList.add('drop-b'); else sib[sib.length - 1].classList.add('drop-a'); row._before = before; };
+    const up = () => { document.removeEventListener('pointermove', mv, true); document.removeEventListener('pointerup', up, true); document.removeEventListener('pointercancel', up, true);
+      delete el.dataset.drag; row.classList.remove('drag'); row.style.transform = ''; rows.forEach(r => r.classList.remove('drop-b', 'drop-a'));
+      if (!moved) { objTreeSync(true); return; }
+      const order = rows.filter(r => r !== row), at = row._before ? order.indexOf(row._before) : order.length; order.splice(at, 0, row);
+      if (isD) { const ids = order.map(r => r.dataset.otd); snapDraw(); setDrawings(ordD(ids)); toast('Orden de los dibujos actualizado'); }
+      else { const ks = order.map(r => r.dataset.oti); paneOrder = [...ks, ...paneOrder.filter(k => !ks.includes(k))].slice(0, 64); savePaneOrder(); legSig = ''; legStruct = ''; }
+      render(); objTreeSync(true); };
+    document.addEventListener('pointermove', mv, true); document.addEventListener('pointerup', up, true); document.addEventListener('pointercancel', up, true);
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && objTreeOn) closeObjTree(); });
+  window.addEventListener('resize', () => { const el = document.getElementById('objTree'); if (el) placeObjTree(el); });
 })();
 
 function idxOfTime(t) {
@@ -3145,7 +3244,7 @@ function setupCanvas() {
   return {w: r.width, h: r.height};
 }
 function timeLabel(t, prev) { return CCTPrefs.axisLabel(t, prev, state.interval, PR); }
-let legRows = [], legSig = '', legStruct = '', grips = [], gripDrag = false;
+let legRows = [], legSig = '', legStruct = '', grips = [], gripDrag = false, treeInds = [];
 let paneH = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneH_v1') || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; } })();
 let paneOrder = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneOrder_v1') || '[]'); return Array.isArray(o) ? o.filter(k => typeof k === 'string').slice(0, 64) : []; } catch { return []; } })(); // orden elegido por el usuario para los paneles (RSI, MACD…)
 let paneLayout = {bot: [], top: [], main: [], mainBase: 0}, mainCount = 0; // paneles de abajo y de arriba tal como se dibujaron: [{key, h}], para poder arrastrarlos
@@ -3192,7 +3291,7 @@ function legAt(text, x, y, act, dim) {
 /* Leyenda de indicadores plegable: cerrada solo se ve «N indicadores»; abierta muestra nombres, valores y botones (ocultar, ajustes, eliminar) */
 let legOpen = lsGet('cct_legOpen_v1') === '1', legN = 0;
 function legLabel(text, x, y, act, dim) {
-  legN++; if (!legOpen) return; const f = g.font; g.font = LEG_FONT;
+  legN++; treeInds.push({text: String(text), act, dim: !!dim}); if (!legOpen) return; const f = g.font; g.font = LEG_FONT;
   const css = getComputedStyle(document.documentElement), muted = css.getPropertyValue('--muted').trim().toLowerCase(), fg = css.getPropertyValue('--text').trim();
   if (fg) { // nombres más legibles: activos casi blancos (los que traen su propio color no se tocan) y ocultos atenuados pero claros
     if (dim) { g.fillStyle = muted; g.globalAlpha = .5; }
@@ -3276,7 +3375,7 @@ function cssVars() {
   const c = getComputedStyle(document.body), v = n => c.getPropertyValue(n).trim();
   return (cssCache = {k, text: v('--muted'), line: v('--line'), bg: v('--bg'), draw: v('--draw') || '#e9c36e', fg: v('--text'), getPropertyValue: n => c.getPropertyValue(n)});
 }
-function render() { if (raf) { cancelAnimationFrame(raf); raf = 0; } /* un solo dibujo por cuadro */ let mv = !!(glideRaf || inertiaRaf); try { mv = mv || !!(gest || pinch); } catch {} if (mv && window.VXTheme && VXTheme.busy) VXTheme.busy(); /* mientras mueves el gráfico, el fondo animado espera */ renderCore(); syncLegend(); syncLegToggle(); if (candles.length && window.CCT_splashDone) CCT_splashDone(); } // ya hay velas: termina la animación de apertura
+function render() { if (raf) { cancelAnimationFrame(raf); raf = 0; } /* un solo dibujo por cuadro */ let mv = !!(glideRaf || inertiaRaf); try { mv = mv || !!(gest || pinch); } catch {} if (mv && window.VXTheme && VXTheme.busy) VXTheme.busy(); /* mientras mueves el gráfico, el fondo animado espera */ renderCore(); syncLegend(); syncLegToggle(); if (objTreeOn) objTreeSync(); if (candles.length && window.CCT_splashDone) CCT_splashDone(); } // ya hay velas: termina la animación de apertura
 /* Reordenar paneles: mantén pulsado el NOMBRE de un indicador (RSI, MACD, un script en panel…) y arrástralo hacia arriba o abajo; al soltar queda guardado.
    Solo se mueve el nombre/panel elegido; los botones y el resto de la leyenda no cambian. */
 (() => {
@@ -3386,7 +3485,7 @@ function renderCore() {
   const n = candles.length; if (!n) { geo = null; return; }
 
   const pineKeyNow = `${state.symbol}|${state.interval}|${candles[0].t}`;
-  legRows = []; legN = 0;
+  legRows = []; legN = 0; treeInds = [];
   const prAll = activePine().filter(p => pineVisibleOn(p, state.interval)).map(p => ({p, r: pineStyled(pineRes[p.sid], p)})).filter(x => x.r && x.r.ok && x.r._key === pineKeyNow), pr = prAll.filter(x => !x.p.hide), pHid = prAll.filter(x => x.p.hide);
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
@@ -3526,6 +3625,7 @@ function renderCore() {
   }
   if (stdOn('liqmap') && ind.lm) drawLiqMap(ind.lm, lo, hi);
   if (vpvr) drawVPVR(vpvr); // detrás de las velas, como en TradingView
+  if (!DOPT.hide) for (const d of getDrawings()) if (d.bk) drawShape(d, d.id === selectedId, drawCol, text); // dibujos enviados «detrás de las velas» desde el árbol de objetos
   // velas
   const barW = clamp(step * .66, 1.5, 16), limeBars = !!(state.indicators.nnLiq && state.indicators.nnLiqBars && ind.liq);
   if (stdOn('volume') && candles.length) { // volumen en el mismo panel de las velas: barras al fondo (detrás de las velas), ocupan el ~18 % inferior
@@ -3593,7 +3693,7 @@ function renderCore() {
   if (nn && (state.indicators.nnIa || state.indicators.nnTp)) drawNovaSignals(nn, lo, hi, n);
   if (nn && nn.smc && state.indicators.nnSmc) drawNovaStruct(nn.smc);
   // dibujos del usuario
-  if (!DOPT.hide) for (const d of getDrawings()) drawShape(d, d.id === selectedId, drawCol, text);
+  if (!DOPT.hide) for (const d of getDrawings()) if (!d.bk) drawShape(d, d.id === selectedId, drawCol, text);
   const dPre = drawTool && !isBrushTool(drawTool) ? withLastStyle({id: '_', type: drawTool}) : {}, preCol = dPre.col || drawCol; // mientras se dibuja ya sale con el color, grosor y ajustes de la última vez
   if (pending2) drawShape({id: '_', type: 'trend', a: pending2.a, b: pending2.b, col: dPre.col, lw: dPre.lw, ds: dPre.ds}, false, drawCol, text);
   if (preview) drawShape({...dPre, a: preview.a, b: preview.b, c: preview.c}, false, drawCol, text);
@@ -3720,6 +3820,7 @@ function renderCore() {
     }
   }
   if (vpvr) drawVPVRTags(vpvr); // etiquetas de POC / VAH / VAL en la escala de precios
+  try { drawSelTags(drawCol); } catch {} // niveles del dibujo seleccionado en la escala de precios
   // leyenda de indicadores
   let ly2 = plotTop + 54 + SH; g.font = '12px system-ui'; const LS = legStep();
   // Cada indicador conserva SIEMPRE su lugar en la leyenda: al ocultarlo con el ojito queda en la misma fila (atenuado, «oculto») y no salta al final.
@@ -4067,6 +4168,37 @@ function drawVPVR(vp) {
   if (P('vaOn') === 'Sí') { const cv = P('cVa'); hl(vp.vah, cv, 1, [4, 3], 'VAH'); hl(vp.val, cv, 1, [4, 3], 'VAL'); }
   if (P('pocOn') === 'Sí') hl(vp.pocPrice, P('cPoc'), 1.5, [], 'POC');
   g.restore(); g.textAlign = 'left';
+}
+/* Niveles del dibujo seleccionado en la columna de precios (como TradingView): cada punto de la herramienta se marca
+   con un recuadro de su color; Long/Short marca entrada, take profit y stop; también mientras se está dibujando. */
+function drawLevels(d) {
+  if (!d || d.hide) return [];
+  const col = d.col || '', L = [], add = (p, c, k) => { if (Number.isFinite(+p) && +p > 0) L.push({p: +p, c: c || col, k}); };
+  if (d.type === 'long' || d.type === 'short') { const q = posBox(d); const G = d.gc || '#089981', R = d.rc || '#f23645', lg = d.type === 'long'; add(q.target, lg ? G : R, 'tp'); add(q.entry, '#5d6b82', 'in'); add(q.stop, lg ? R : G, 'sl'); return L; }
+  if (d.type === 'brush' && Array.isArray(d.pts) && d.pts.length) { let lo = Infinity, hi = -Infinity; for (const q of d.pts) { const v = Array.isArray(q) ? +q[1] : q && +q.p; if (Number.isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } } add(hi, col); if (lo !== hi) add(lo, col); return L; }
+  if (d.type === 'vertical') return L;
+  if (d.pts && Array.isArray(d.pts) && MULTI[d.type]) { for (const q of d.pts) if (q) add(q.p, col); return L; }
+  for (const q of [d.a, d.b, d.c]) if (q) add(q.p, col);
+  if (d.type === 'channel' && d.a && d.b && d.c) { try { const off = channelOff(d); add(d.a.p + off, col); add(d.b.p + off, col); } catch {} }
+  return L;
+}
+function drawSelTags(fallCol) {
+  if (DOPT.hide) return;
+  const d = selectedId ? getDrawings().find(x => x.id === selectedId) : null;
+  let lv = drawLevels(d);
+  if (!lv.length && (preview || pending)) { const dP = drawTool ? withLastStyle({id: '_', type: drawTool}) : {}; lv = preview ? drawLevels({...dP, ...preview, type: drawTool || 'trend'}) : drawLevels({type: 'label', a: pending, col: dP.col}); }
+  if (!lv.length) return;
+  const x = geo.w - geo.right + 2, wT = geo.right - 3, top = geo.plotTop, bot = geo.plotTop + geo.plotH, seen = new Set();
+  const lum = c => { const m = /^#?([\da-f]{6})/i.exec(String(c)); if (!m) return 0; const n = parseInt(m[1], 16); return (.299 * (n >> 16) + .587 * (n >> 8 & 255) + .114 * (n & 255)) / 255; };
+  g.save();
+  if (lv.length > 1) { const ys = lv.map(q => Y(q.p)), y1 = Math.max(top, Math.min(...ys)), y2 = Math.min(bot, Math.max(...ys)); if (y2 > y1) { g.globalAlpha = .14; g.fillStyle = lv[0].c || fallCol; g.fillRect(x, y1, wT, y2 - y1); g.globalAlpha = 1; } } // franja entre el nivel más alto y el más bajo
+  g.font = '11px system-ui'; g.textAlign = 'left';
+  for (const q of lv) {
+    const y = Math.round(Y(q.p)), key = fmt(q.p); if (y < top || y > bot || seen.has(key)) continue; seen.add(key);
+    const c = q.c || fallCol; g.fillStyle = c; roundRect(x, y - 9, wT, 18, 3); g.fill();
+    g.fillStyle = lum(c) > .62 ? '#10151f' : '#fff'; g.fillText(key, x + 3, y + 3.5);
+  }
+  g.restore();
 }
 function drawVPVRTags(vp) {
   const P = k => sp('vpvr', k), x = geo.w - geo.right + 2, wTag = geo.right - 3, tag = (p, col) => { const y = Y(p); if (y < geo.plotTop || y > geo.plotTop + geo.plotH) return; g.fillStyle = col; g.fillRect(x, y - 8, wTag, 16); g.fillStyle = '#fff'; g.font = '10px system-ui'; g.textAlign = 'left'; g.fillText(fmt(p), x + 3, y + 3.5); };
@@ -5735,13 +5867,25 @@ function renderAccount() {
 const RR_USER = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.8-3.6 3.7-5.4 7-5.4s6.2 1.8 7 5.4"/></svg>';
 /* Menú de la cuenta: se abre desde la foto (barra derecha en PC, arriba en el celular) con tu nombre, correo, plan y «Cerrar sesión» */
 let acctMenu = null, acctAnchor = null;
+/* Tu plan en el perfil: solo la etiqueta. «Mejorar plan» sale si aún puedes subir; con Infinity ya no hay botón de planes
+   (solo «Administrar suscripción» si lo pagas con tarjeta, para cancelar o cambiar la tarjeta). */
+function planRows() {
+  const P = window.CCTPlans; if (!P) return '';
+  const dev = P.owner && !P.preview, k = P.preview || (P.real ? P.real() : P.current()), t = P.TIERS[k] || P.TIERS.free, paid = P.paid ? P.paid() : 'free';
+  const tag = `<em class="am-plan pl-badge ${dev ? 'dev' : t.c}">${dev ? 'Desarrollador' : esc(t.n)}</em>`, crown = SV('<path d="M3 8.5 7.5 12 12 5l4.5 7L21 8.5 19 18H5z"/>', 17);
+  if (dev) return `<button type="button" class="am-it" data-plans-open>${crown}<span>Tu plan</span>${tag}</button>`;
+  let h = `<div class="am-it am-static" role="note">${crown}<span>Tu plan</span>${tag}</div>`;
+  if (k !== 'infinity') h += `<button type="button" class="am-it am-up" data-plans-open>${SV('<path d="M12 19V5M5 12l7-7 7 7"/>', 17)}<span>${k === 'free' ? 'Ver planes' : 'Mejorar a Infinity'}</span></button>`;
+  else if (paid !== 'free') h += `<button type="button" class="am-it" data-plans-open>${SV('<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18"/>', 17)}<span>Administrar suscripción</span></button>`;
+  return h;
+}
 function paintAcctMenu() {
   if (!acctMenu || !fbUser) return;
   const plan = window.CCTPlans ? CCTPlans.TIERS[CCTPlans.real ? CCTPlans.real() : CCTPlans.current()] : null;
   acctMenu.innerHTML = `<div class="am-head">${fbUser.photoURL ? `<img class="am-av" src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : `<span class="am-av">${I('user', 26)}</span>`}<div class="am-t"><b>${esc(fbUser.displayName || 'Cuenta de Google')}</b><small>${esc(fbUser.email || '')}</small></div></div>
     <div class="am-sync">${I('check', 14)}<span>${esc(syncStatus || 'Todo se guarda en tu cuenta')}</span></div>
     <button type="button" class="am-it" data-ex-open>${SV('<path d="M7 7h11l-3-3M17 17H6l3 3"/>', 17)}<span>${window.CCTExchange && CCTExchange.connected() ? esc(CCTExchange.info().name) : 'Conectar exchange'}</span>${window.CCTExchange && CCTExchange.connected() ? '<em class="am-plan am-ok">Conectado</em>' : ''}</button>
-    ${plan ? `<button type="button" class="am-it" data-plans-open>${SV('<path d="M3 8.5 7.5 12 12 5l4.5 7L21 8.5 19 18H5z"/>', 17)}<span>Tu plan</span>${(() => { const P = window.CCTPlans, dev = P && P.owner && !P.preview, k = P ? (P.preview || (P.real ? P.real() : P.current())) : 'free', t = P && P.TIERS[k] || plan; return `<em class="am-plan pl-badge ${dev ? 'dev' : t.c}">${dev ? 'Desarrollador' : esc(t.n)}</em>`; })()}</button>` : ''}
+    ${plan ? planRows() : ''}
     <button type="button" class="am-it danger" id="signOutBtn">${I('power', 17)}<span>Cerrar sesión</span></button>`;
   acctMenu.querySelector('#signOutBtn').onclick = () => { closeAcctMenu(); signOut(); };
   placeAcctMenu();
@@ -5774,19 +5918,17 @@ async function signIn() {
   }
 }
 async function signOut() { if (!auth) return; clearTimeout(pushTimer); try { await cloudPushNow(); } catch {} auth.signOut(); } // antes de salir se sube lo último que cambiaste (el envío tiene 1 s de espera)
-/* Bienvenida: al abrir VORTEX sin sesión aparece una ventana para iniciar sesión con Google (y ver tu plan).
+/* Bienvenida: al abrir VORTEX sin sesión aparece una ventana SOLO para iniciar sesión con Google (sin planes: esos salen al tocar algo premium o desde el perfil).
    Si la cierras sigues usando el gráfico con el plan Gratis. Sale una vez cada vez que abres la app. */
 function showWelcome() {
   if (PANE || fbUser || !cloudEnabled || document.querySelector('.vw-ov')) return;
   try { if (sessionStorage.getItem('cct_welcome')) return; sessionStorage.setItem('cct_welcome', '1'); } catch {}
   const ov = document.createElement('div'); ov.className = 'vw-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Bienvenido a VORTEX');
-  const T = window.CCTPlans ? CCTPlans.TIERS : null, row = (k, t) => `<li class="vw-t ${k}"><b>${t}</b><small>${T && T[k] ? esc(T[k].sub) : ''}</small></li>`;
   ov.innerHTML = `<div class="vw-box"><canvas class="vw-fx" aria-hidden="true"></canvas><button type="button" class="vw-x" data-wl="close" aria-label="Cerrar y seguir gratis">✕</button>
     <img class="vw-logo" src="icons/vortex-mark.png" alt="VORTEX">
-    <h2>Bienvenido a VORTEX</h2><p>Inicia sesión con Google para guardar tu gráfico en todos tus dispositivos y desbloquear tu plan. Nada se cobra.</p>
-    <ul class="vw-tiers">${row('free', 'Gratis')}${row('plus', 'Plus')}${row('infinity', 'Infinity')}</ul>
+    <h2>Bienvenido a VORTEX</h2><p>Inicia sesión con Google para guardar tu gráfico, tus dibujos e indicadores en todos tus dispositivos. Es gratis.</p>
     <button type="button" class="google-btn vw-go" data-wl="login"><span class="g">G</span> Iniciar sesión con Google</button>
-    <div class="vw-alt"><button type="button" data-wl="plans">Ver los planes</button><button type="button" data-wl="close">Seguir con el plan Gratis</button></div></div>`;
+    <div class="vw-alt"><button type="button" data-wl="close">Seguir sin iniciar sesión</button></div></div>`;
   document.body.appendChild(ov); requestAnimationFrame(() => ov.classList.add('open'));
   // fondo de estrellas que se mueven despacio
   const cv = ov.querySelector('.vw-fx'), g = cv.getContext('2d'); let raf = 0, stars = null;
@@ -5796,9 +5938,9 @@ function showWelcome() {
     if (ov.isConnected) raf = requestAnimationFrame(draw); };
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) raf = requestAnimationFrame(draw);
   const close = () => { cancelAnimationFrame(raf); ov.classList.remove('open'); setTimeout(() => ov.remove(), 220); document.removeEventListener('keydown', key); };
-  const key = e => { if (e.key === 'Escape') { close(); toast('Usando VORTEX con el plan Gratis'); } };
+  const key = e => { if (e.key === 'Escape') { close(); toast('Usando VORTEX sin sesión'); } };
   document.addEventListener('keydown', key);
-  ov.addEventListener('click', e => { const b = e.target.closest('[data-wl]'); if (e.target === ov || (b && b.dataset.wl === 'close')) { close(); toast('Usando VORTEX con el plan Gratis'); return; } if (!b) return;
+  ov.addEventListener('click', e => { const b = e.target.closest('[data-wl]'); if (e.target === ov || (b && b.dataset.wl === 'close')) { close(); toast('Usando VORTEX sin sesión'); return; } if (!b) return;
     if (b.dataset.wl === 'login') { close(); signIn(); } else if (b.dataset.wl === 'plans') { close(); if (window.CCTPlans) CCTPlans.open(); } });
 }
 window.CCT_signIn = () => signIn(); window.CCT_showWelcome = showWelcome;

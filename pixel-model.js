@@ -139,7 +139,7 @@ export function create(canvas, opts = {}) {
   let W = 0, H = 0;
   function size() { const r = canvas.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1), w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height)); if (w === W && h === H) return; W = w; H = h; renderer.setPixelRatio(d); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
   function frame(now) {
-    raf = requestAnimationFrame(frame); if (paused) return; if (now - last < 1000 / 45) return; const dt = Math.min(.05, (now - (last || now)) / 1000); last = now; size();
+    raf = requestAnimationFrame(frame); if (paused) return; if (now - last < (document.documentElement.classList.contains('vx-lite') ? 1000 / 45 : 7)) return; const dt = Math.min(.05, (now - (last || now)) / 1000); last = now; size();
     const t = now / 1000, k = 1 - Math.pow(.0015, dt), p = P[pose] || P.idle;
     if (now > blinkAt + 3200 + Math.random() * 1500) blinkAt = now;
     setRot(R.sh, p.R, k); setRot(R.el, p.Re, k); setRot(L.sh, p.L, k); setRot(L.el, p.Le, k);

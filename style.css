@@ -712,6 +712,7 @@ body.pane .favbar{display:none}
 .acct-menu .am-it{width:100%;display:flex;align-items:center;gap:10px;padding:10px 8px;border:0;border-radius:10px;background:none;color:var(--text);font-size:13.5px;cursor:pointer;text-align:left}
 .acct-menu .am-it:hover{background:rgba(255,255,255,.06)}.light .acct-menu .am-it:hover{background:rgba(0,0,0,.05)}
 .acct-menu .am-it span{flex:1}.acct-menu .am-it.danger{color:var(--red)}
+.acct-menu .am-it.am-static{cursor:default}.acct-menu .am-it.am-static:hover{background:none}.acct-menu .am-it.am-up{color:#c9b8ff}.light .acct-menu .am-it.am-up{color:#6b4fd8}
 .acct-menu .am-plan{font-style:normal;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--raised);color:var(--muted)}
 /* ── Vista de membresía (temporal) ── */
 .sg-tmp{font-style:normal;font-size:10px;font-weight:700;letter-spacing:.4px;margin-left:6px;padding:1px 6px;border-radius:6px;background:rgba(245,166,35,.15);color:#f5a623;vertical-align:1px}

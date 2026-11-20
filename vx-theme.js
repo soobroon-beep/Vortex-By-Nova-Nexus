@@ -75,7 +75,7 @@
   var busyUntil = 0; // mientras mueves o haces zoom al gráfico el fondo se queda quieto: así el cristal no se recalcula y el gráfico va fluido
   function loop(t) {
     raf = requestAnimationFrame(loop);
-    if (t - last < 33 || t < busyUntil) return; // ~30 cuadros por segundo: suficiente y cuida la batería
+    if (t - last < 7 || t < busyUntil) return; // modo Completo: a la frecuencia de la pantalla (hasta ~144 Hz); en Ligero este fondo no se anima
     var dt = last ? Math.min(.1, (t - last) / 1000) : 0; last = t; draw(dt);
   }
   function go() { if (!cv) { mk(); size(); } if (still || isLite()) { stop(); draw(0); return; } if (!raf) { last = 0; raf = requestAnimationFrame(loop); } }
@@ -191,7 +191,7 @@
     if (cur === 'espacial') go();
     paintPerf();
   }
-  var PNAMES = { full: 'Completo · todas las animaciones y efectos de cristal', lite: 'Ligero · menos efectos, ideal para equipos o celulares lentos' };
+  var PNAMES = { full: 'Completo · todas las animaciones y el cristal, a la frecuencia de tu pantalla (hasta 120 Hz)', lite: 'Ligero · menos efectos, ideal para equipos o celulares lentos' };
   function paintPerf() {
     document.querySelectorAll('[data-vx-perf]').forEach(function (b) { var on = b.getAttribute('data-vx-perf') === perf; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
     var ex = document.getElementById('cuPerfEx'); if (ex) ex.textContent = PNAMES[perf];

@@ -344,5 +344,5 @@
   payReturn();
   document.addEventListener('click', e => { if (e.target.closest('[data-plans-open]')) open(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', badge); else badge();
-  root.CCTPlans = {badge, open, close, current, real, can, setPreview, importSaved, refreshPay, refreshServer, get user() { return user; }, get owner() { return owner && !!user; }, get dev() { return owner && !!user && !pv; }, get previewOn() { return pvOn(); }, /* dev: herramientas de desarrollador (no en la vista previa de Gratis/Plus/Infinity) */ get preview() { return pvOn(); }, FEATURES, setUser, TIERS, get prices() { return Object.assign({}, PRICE); }, links: {bingx: BX, code: BX_CODE}};
+  root.CCTPlans = {badge, open, close, current, real, paid: () => paidTier(), can, setPreview, importSaved, refreshPay, refreshServer, get user() { return user; }, get owner() { return owner && !!user; }, get dev() { return owner && !!user && !pv; }, get previewOn() { return pvOn(); }, /* dev: herramientas de desarrollador (no en la vista previa de Gratis/Plus/Infinity) */ get preview() { return pvOn(); }, FEATURES, setUser, TIERS, get prices() { return Object.assign({}, PRICE); }, links: {bingx: BX, code: BX_CODE}};
 })(typeof self !== 'undefined' ? self : this);
