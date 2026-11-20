@@ -2500,3 +2500,11 @@ body:not(.signed-in) #settingsView .sg:not(:has(.sg-row:not(.needs-login))){disp
 /* Nexus Pixel: el mensajito siempre encima del avatar (su X no abre a Pixel) y foco de recomendaciones en el encabezado */
 .px-tip{z-index:12}
 .px-tipsw{color:#e6d9ff}.px-tipsw.off{color:var(--muted);opacity:.55}.px-tipsw.off svg{stroke-dasharray:2 2}
+
+/* Encabezados de las pestañas, todos iguales (Noticias, Alertas, Screener, Nova Bot Lab, Nexus Lens, IA): icono de 42 px, subtítulo y título */
+.view-head.vh-t{display:flex;align-items:center;justify-content:flex-start;gap:12px}
+.view-head.vh-t>.vh-ic{flex:none!important;width:42px!important;height:42px!important;margin:0!important}
+.view-head.vh-t>.vh-ic svg{width:36px!important;height:36px!important;max-width:36px;max-height:36px}
+.view-head.vh-t>.vh-ic svg.ai-ic *{fill:none}
+.bl-main-head{margin:4px 0 14px 4px}.bl-main-head .bl-exp{margin-left:auto;align-self:center}
+#lensView .view-head.vh-t>div:not(.vh-ic){min-width:0}

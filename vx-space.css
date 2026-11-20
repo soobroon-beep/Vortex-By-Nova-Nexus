@@ -238,3 +238,4 @@
   :root.vx-space body:not(.light) :is(#toolRail,.right-rail,#watchView,#newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView){
     background:rgba(0,0,0,.18)!important;border:1px solid rgba(255,255,255,.09)!important}
 }
+:root.vx-space body .bl-main-head{margin:0 0 14px 0}

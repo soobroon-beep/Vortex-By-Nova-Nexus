@@ -264,3 +264,4 @@
 :root.vx-min body :is(#watchView .add-main,.small-button.add-main,.primary,.google-btn) :is(svg,.g){color:var(--m-on-acc)!important;stroke:currentColor}
 :root.vx-min body .prof-tag.pl-badge:not(.dev),:root.vx-min body .acct-menu .am-plan.pl-badge:not(.dev){background:var(--m-fill)!important;color:var(--m-text)!important;border-color:transparent!important;animation:none!important}
 :root.vx-min body .prof-tag.pl-badge:not(.dev) svg{color:var(--m-text)!important}
+:root.vx-min body .bl-main-head{margin:0 0 14px 0}
