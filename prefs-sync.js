@@ -30,6 +30,7 @@
     if (busy) return; busy = true;
     let d = null; try { d = await c.get('prefs'); } catch { return; } finally { busy = false; }
     pulled = true; const changed = [];
+    { let ow = ''; try { ow = LS.getItem('cct_prefs_uid') || ''; } catch {} if (ow && ow !== uid) { at = {}; } try { set0.call(LS, 'cct_prefs_uid', uid); } catch {} } // ajustes de otra cuenta en este navegador: gana lo de TU cuenta y no se suben a ella
     const ra = (d && d.at) || {}, rv = (d && d.v) || {};
     applying = true;
     try { for (const k of KEYS) { const t = +ra[k] || 0; if (t > (at[k] || 0)) { if (rv[k] == null) LS.removeItem(k); else LS.setItem(k, rv[k]); at[k] = t; changed.push(k); } } }

@@ -153,8 +153,8 @@ test('plan Infinity por BingX: lo verifica y lo escribe el servidor; un UID no s
 
 test('Infinity por BingX pide $100 de saldo: con menos se dan 7 días de Plus (una sola vez) y al recargar pasa a Infinity', async () => {
   const w = await W(), fs = fakeFirestore(), env = {KV: memKV(), DB: memD1(), FB_SA: await saJson(), BINGX_AGENT_KEY: 'k', BINGX_AGENT_SECRET: 's'}, call = caller(w, env), real = globalThis.fetch;
-  let bal = '35.2';
-  globalThis.fetch = FB.withJwks(async (url, init) => { const r = await fs.handler(url, init); if (r) return r; if (String(url).includes('bingx')) return new Response(JSON.stringify({code: 0, data: {inviteResult: true, balanceVolume: bal}})); throw new Error('fetch inesperado ' + url); });
+  let bal = '35.2', vol = [];
+  globalThis.fetch = FB.withJwks(async (url, init) => { const r = await fs.handler(url, init); if (r) return r; if (String(url).includes('commissionDataList')) return new Response(JSON.stringify({code: 0, data: {list: vol}})); if (String(url).includes('bingx')) return new Response(JSON.stringify({code: 0, data: {inviteResult: true, balanceVolume: bal}})); throw new Error('fetch inesperado ' + url); });
   try {
     const r = await call('/plan/bingx', {uid: '87654321', idToken: await FB.mint('Caro333')});
     assert.strictEqual(r.j.need, true, JSON.stringify(r.j)); assert.strictEqual(r.j.bal, 35.2); assert.strictEqual(r.j.min, 100); assert.strictEqual(r.j.tier, 'plus', 'prueba de Plus');
@@ -165,6 +165,12 @@ test('Infinity por BingX pide $100 de saldo: con menos se dan 7 días de Plus (u
     bal = '120';
     const ok = await call('/plan/bingx', {uid: '87654321', idToken: await FB.mint('Caro333')});
     assert.strictEqual(ok.j.tier, 'infinity'); assert.ok(ok.j.refEnd > Date.now() + 30 * 864e5, 'se vuelve a revisar en un mes');
+    bal = '3'; // renovar: ya no se piden los $100, solo actividad en los últimos 7 días
+    const idle = await call('/plan/bingx', {uid: '87654321', idToken: await FB.mint('Caro333')});
+    assert.strictEqual(idle.j.inactive, true, JSON.stringify(idle.j)); assert.strictEqual(idle.j.tier, 'infinity', 'sigue con Infinity hasta su fecha');
+    vol = [{uid: 87654321, commissionTime: Date.now() - 2 * 864e5, tradingVolume: '850.2'}];
+    const ren = await call('/plan/bingx', {uid: '87654321', idToken: await FB.mint('Caro333')});
+    assert.strictEqual(ren.j.renewed, true, JSON.stringify(ren.j)); assert.strictEqual(ren.j.tier, 'infinity');
   } finally { globalThis.fetch = real; }
 });
 

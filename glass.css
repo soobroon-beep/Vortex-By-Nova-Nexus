@@ -2449,15 +2449,15 @@ html.vx-lite :is(.pop-menu,.pbar-pop,.cfg-overlay,.sheet,.acct-menu){box-shadow:
 :root body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn)::before,
 :root.vx-space body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn)::before{
   content:''!important;display:block!important;position:absolute;z-index:-1;pointer-events:none;
-  left:50%;top:50%;right:auto;width:42px;height:42px;border-radius:50%!important;translate:-50% -50%;scale:min(calc(.8 + (var(--dk,1) - 1) * .42),1.18);opacity:0;
+  left:50%;top:50%;right:auto;width:46px;height:46px;border-radius:50%!important;translate:-50% -50%;scale:1;opacity:0;
   border:1px solid rgba(167,139,250,.42)!important;box-shadow:0 0 14px rgba(124,77,255,.28)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;
   background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='8' cy='9' r='.7' opacity='.85'/%3E%3Ccircle cx='27' cy='29' r='.55' opacity='.6'/%3E%3Ccircle cx='45' cy='14' r='.8' fill='%23d6ccff' opacity='.8'/%3E%3Ccircle cx='62' cy='31' r='.5' opacity='.55'/%3E%3Ccircle cx='72' cy='6' r='.6' opacity='.7'/%3E%3Ccircle cx='36' cy='4' r='.45' opacity='.5'/%3E%3C/g%3E%3C/svg%3E") 0 0/80px 40px repeat,
     radial-gradient(90% 90% at 25% 15%,rgba(124,77,255,.55),transparent 65%),radial-gradient(80% 80% at 90% 95%,rgba(56,96,200,.4),transparent 65%),#0c0b1e!important;
-  transition:opacity .22s ease;animation:gxHoverStars 9s linear infinite!important;animation-play-state:paused!important;will-change:opacity,scale}
+  transition:opacity .28s ease;animation:gxSpin 14s linear infinite!important;animation-play-state:paused!important;will-change:opacity,rotate}
 :root body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn):is(:hover,:focus-visible,:active)::before{opacity:1;animation-play-state:running!important}
 :root body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn):is(:hover,:focus-visible,:active){color:#ece6ff!important}
-:root body .rail-btn.gx-lock:not(#liqBtn):not(#layoutBtn)::before{width:34px;height:34px}
-@keyframes gxHoverStars{to{background-position:-80px 0,0 0,0 0,0 0}}
+:root body .rail-btn.gx-lock:not(#liqBtn):not(#layoutBtn)::before{width:36px;height:36px}
+@keyframes gxSpin{to{rotate:360deg}} /* la galaxia gira despacio: solo transform en la GPU, sin repintar ni cambiar de tamaño (nada brinca) */
 html.vx-lite body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock::before{animation:none!important}
 @media (hover:none){:root body .bottom-nav button.gx-lock:not(#liqBtn)::before{transition-duration:.12s,.2s}}
 /* Opciones de cuenta (Exchange, Tu IA…) solo con la sesión iniciada */
@@ -2477,12 +2477,23 @@ body:not(.signed-in) #settingsView .sg:not(:has(.sg-row:not(.needs-login))){disp
 .light .rz-ov .rz-c{border-color:rgba(20,30,50,.6)}.light .rz-ov .rz-a,.light .rz-ov .rz-p{color:#1b2333;filter:none}
 #chartArea.rz-on,#chartArea.rz-on *{cursor:none!important}
 
-/* Personalización · combinaciones de colores de subida y bajada */
-.updn-row{border-bottom:0!important;padding-bottom:4px!important}
-.updn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:8px;padding:2px 14px 14px}
-.updn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px 8px;border-radius:14px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--text);cursor:pointer;transition:border-color .15s,background .15s,transform .15s}
-.updn:hover{background:rgba(255,255,255,.07);transform:translateY(-1px)}
-.updn.on{border-color:rgba(160,140,255,.6);background:rgba(140,120,255,.12);box-shadow:0 0 0 1px rgba(160,140,255,.25) inset}
-.updn-sw{display:flex;gap:4px}.updn-sw i{width:14px;height:14px;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.15)}
-.updn small{font-size:11px;color:var(--muted);text-align:center;line-height:1.2}.updn.on small{color:var(--text)}
+/* Personalización · colores del mercado (8 paletas en dos filas compactas) */
+.updn-row{border-bottom:0!important;padding-bottom:2px!important}
+.updn-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:2px 14px 12px}
+.updn{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px 5px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);color:var(--text);cursor:pointer;transition:border-color .15s,background .15s}
+.updn:hover{background:rgba(255,255,255,.07)}
+.updn.on{border-color:rgba(160,140,255,.55);background:rgba(140,120,255,.12)}
+.updn-c svg{display:block;width:26px;height:16px}
+.updn small{font-size:10px;color:var(--muted);text-align:center;line-height:1.1;white-space:nowrap}.updn.on small{color:var(--text)}
 .light .updn{border-color:rgba(0,0,0,.1);background:rgba(0,0,0,.03)}.light .updn.on{border-color:#7c5cff;background:rgba(124,92,255,.08)}
+
+/* Saldo: abajo del gráfico solo una píldora chica (Saldo +4 %); la barra se ve al abrirla */
+#stAcct .st-track{display:none}
+#stAcct.st-acct{gap:6px;padding:2px 10px;min-height:22px}
+#stAcct .ab-val{min-width:0;font-size:11px}
+.acct-pop .ac-bar{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+.acct-pop .ac-bar .st-track{flex:1;width:auto;height:8px}
+.acct-pop .ac-bar .ab-val{font-size:13px;font-weight:800}
+.acct-pop .ac-bar.empty .st-track{outline:1px dashed var(--line);outline-offset:-1px;opacity:.75}
+.acct-pop.from-anchor{transform-origin:bottom left;animation:acPop .22s cubic-bezier(.2,.9,.25,1.1) both}
+@keyframes acPop{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}

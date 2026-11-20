@@ -8,7 +8,7 @@
 
 import {memRoute} from './memoria.mjs'; // Memoria compartida entre Claude, ChatGPT y Gemini (/mem/<llave>/…)
 import {storeOf, MAX_PER_UID, MAX_NEW_PER_IP_DAY} from './devstore.mjs'; // celulares registrados: base D1 (miles) o KV de respaldo
-import {verifyIdToken, saOf, syncPlan} from './fbauth.mjs'; // sesión de Firebase verificada y Firestore con la cuenta de servicio
+import {verifyIdToken, saOf, syncPlan, fsGet} from './fbauth.mjs'; // sesión de Firebase verificada y Firestore con la cuenta de servicio
 import * as SCR from './screener.mjs';
 import {radarInternal, loadState as radarState} from './radar-server.mjs';
 import DOM from '../dominance-core.js';
@@ -36,6 +36,24 @@ export async function bingxInvite(env, uid, fetchFn = fetch) {
     const j = await r.json(); if (j.code !== 0) return {ok: false, invited: false, msg: String(j.msg || 'BingX no respondió')};
     const d = j.data || {}, bal = parseFloat(d.balanceVolume); return {ok: true, invited: d.inviteResult === true || d.inviteResult === 'true', deposit: !!d.deposit, trade: !!d.trade, bal: Number.isFinite(bal) ? Math.round(bal * 100) / 100 : null}; // balanceVolume = activos netos del referido en USDT
   } catch { return {ok: false, invited: false, msg: 'BingX sin respuesta'}; }
+}
+
+/* ¿Operó en los últimos días? Para renovar Infinity cada mes basta con que la cuenta siga activa: al menos una operación en los últimos 7 días
+   (volumen diario del referido en la API de afiliado; BingX lo publica con ~1 día de retraso, por eso se miran 8 días). */
+export async function bingxRecentTrade(env, uid, days = 7, fetchFn = fetch, now = Date.now()) {
+  uid = String(uid == null ? '' : uid).replace(/\D/g, ''); if (!/^\d{6,14}$/.test(uid)) return {error: 'UID inválido'};
+  const key = env.BINGX_AGENT_KEY, sec = env.BINGX_AGENT_SECRET; if (!key || !sec) return {ok: false, setup: true};
+  const ymd = t => new Date(t).toISOString().slice(0, 10).replace(/-/g, '');
+  const q = `endTime=${ymd(now)}&pageIndex=1&pageSize=100&startTime=${ymd(now - (days + 1) * 864e5)}&timestamp=${now}&uid=${uid}`;
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(sec), {name: 'HMAC', hash: 'SHA-256'}, false, ['sign']);
+  const sig = [...new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(q)))].map(x => x.toString(16).padStart(2, '0')).join('');
+  try {
+    const r = await fetchFn(`https://open-api.bingx.com/openApi/agent/v2/reward/commissionDataList?${q}&signature=${sig}`, {headers: {'X-BX-APIKEY': key}});
+    const j = await r.json(); if (j.code !== 0) return {ok: false, msg: String(j.msg || 'BingX no respondió')};
+    const list = (j.data && j.data.list) || [], hit = list.filter(x => String(x.uid) === uid && parseFloat(x.tradingVolume) > 0);
+    const last = hit.reduce((m, x) => Math.max(m, +x.commissionTime || 0), 0);
+    return {ok: true, traded: hit.length > 0, last: last || null};
+  } catch { return {ok: false, msg: 'BingX sin respuesta'}; }
 }
 
 /* ───────── utilidades ───────── */
@@ -567,8 +585,19 @@ export async function planRoute(req, env, path, b, json, fetchFn = fetch) {
     /* Saldo mínimo: Infinity gratis pide al menos $100 en la cuenta de BingX (el dinero es del usuario, para que haga trading;
        solo evita que se creen cuentas vacías una y otra vez). Se vuelve a revisar cada mes (refEnd). Mientras junta el saldo: 7 días de Plus, una sola vez. */
     const now = Date.now(), MIN = BX_MIN_USD, bal = r.bal;
+    // Renovación (ya tuvo Infinity con esta cuenta): no se piden los $100 otra vez, solo que la cuenta siga activa (un trade en los últimos 7 días)
+    if (claim && claim.uid === who.uid && (claim.inf || (!claim.chk && !claim.trial))) { // (los que ya tenían Infinity antes de esta regla también renuevan así)
+      const a = await bingxRecentTrade(env, bx, 7, fetchFn, now); if (!a.ok) return json({ok: false, invited: true, error: a.msg || 'BingX no respondió; inténtalo en un rato'}, 502);
+      if (a.traded) {
+        await S.mset('bx:' + bx, Object.assign({}, claim, {chk: now, bal}));
+        const tier = await syncPlan(sa, who.uid, {refTier: 'infinity', bx, bxOk: now, refEnd: now + 31 * 864e5, bxBal: bal}, fetchFn);
+        return json({ok: true, invited: true, renewed: true, tier, refEnd: now + 31 * 864e5});
+      }
+      const cur = await fsGet(sa, 'plans/' + who.uid, fetchFn), left = cur && +cur.refEnd > now ? +cur.refEnd : 0; // sigue con Infinity hasta su fecha; después, hasta que vuelva a operar
+      return json({ok: true, invited: true, inactive: true, tier: left ? 'infinity' : 'free', refEnd: left});
+    }
     if (bal != null && bal >= MIN) {
-      await S.mset('bx:' + bx, {uid: who.uid, at: (claim && claim.at) || now, chk: now, bal, trial: claim && claim.trial || 0});
+      await S.mset('bx:' + bx, {uid: who.uid, at: (claim && claim.at) || now, chk: now, bal, trial: claim && claim.trial || 0, inf: now});
       const tier = await syncPlan(sa, who.uid, {refTier: 'infinity', bx, bxOk: now, refEnd: now + 31 * 864e5, bxBal: bal}, fetchFn);
       return json({ok: true, invited: true, tier, bal, min: MIN, refEnd: now + 31 * 864e5});
     }

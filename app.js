@@ -74,16 +74,17 @@ const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'B
 const CURSOR_MODES = ['Cruz', 'Flecha', 'Estrella']; // tipo de puntero sobre el gráfico (la estrella deja estela al mantener presionado: star-cursor.js)
 const CHART_DEF = {bg: '#07090e', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1, cursor: 'Cruz', alertCol: '', alertA: 28, alertS: 'Puntos', alertW: 1,
   posCol: '', posA: 90, posS: 'Sólida', posW: 1, tpCol: '#20bf9f', tpA: 90, tpS: 'Guiones', tpW: 1, slCol: '#f06b79', slA: 90, slS: 'Guiones', slW: 1, liqCol: '#f0b90b', liqA: 55, liqS: 'Puntos', liqW: 1, ordCol: '#548fff', ordA: 90, ordS: 'Guiones', ordW: 1};
-/* Colores de subida y bajada de TODA la app (no es el tema): velas, volumen, %, Mi seguimiento, mini gráficos, P&L…
+/* Colores del mercado (alcista / bajista) de TODA la app (no es el tema): velas, volumen, %, Mi seguimiento, mini gráficos, P&L…
    Cada combinación trae una versión para modo oscuro y otra para modo claro. Se pueden cambiar a mano después en Aspecto del gráfico. */
 const UPDN = {
   clasico: {n: 'Clásico', up: '#089981', down: '#f23645', upL: '#089981', downL: '#f23645'},
-  mono: {n: 'Blanco y gris', up: '#e9edf3', down: '#5e6878', upL: '#1d2330', downL: '#9aa3b2'},
-  azul: {n: 'Azul y naranja', up: '#3b8cff', down: '#ff8a2a', upL: '#1f6fe0', downL: '#e8711a'},
+  mono: {n: 'Monocromo', up: '#e9edf3', down: '#5e6878', upL: '#1d2330', downL: '#9aa3b2'},
+  azul: {n: 'Océano', up: '#3b8cff', down: '#ff8a2a', upL: '#1f6fe0', downL: '#e8711a'},
   neon: {n: 'Neón', up: '#00e5a0', down: '#ff3d71', upL: '#00a874', downL: '#e0245a'},
   galaxia: {n: 'Galaxia', up: '#5ad1ff', down: '#b56bff', upL: '#1c9fd6', downL: '#8a3fe0'},
-  oro: {n: 'Oro y vino', up: '#f0c04a', down: '#c2405c', upL: '#b8860b', downL: '#a3304a'},
-  menta: {n: 'Menta y coral', up: '#5ee6b4', down: '#ff7a6b', upL: '#13a37a', downL: '#e05545'}
+  oro: {n: 'Oro', up: '#f0c04a', down: '#c2405c', upL: '#b8860b', downL: '#a3304a'},
+  hielo: {n: 'Hielo', up: '#9fdcff', down: '#ff9aae', upL: '#2b8fc9', downL: '#d9546f'},
+  terminal: {n: 'Terminal', up: '#3dff8f', down: '#ff6a3d', upL: '#109c4f', downL: '#d9481b'}
 }; // líneas de tus operaciones (entrada, TP, SL, liquidación y órdenes)
 const TL_KINDS = ['pos', 'tp', 'sl', 'liq', 'ord'], TL_DASH = {'Sólida': [], Guiones: [6, 4], Puntos: [2, 4]};
 function sanChartStyle(c) {
@@ -179,11 +180,11 @@ function syncUpDown() { // los verdes/rojos de la interfaz (--green / --red) sig
   if (k === updnKey) return; updnKey = k; const def = up.toLowerCase() === CHART_DEF.up && dn.toLowerCase() === CHART_DEF.down;
   for (const el of [document.documentElement, document.body]) for (const [v, col] of [['--green', up], ['--red', dn], ['--up', up], ['--down', dn]]) { if (def && v.length > 4) el.style.removeProperty(v); else if (def) el.style.removeProperty(v); else el.style.setProperty(v, col, 'important'); }
   document.documentElement.classList.toggle('vx-updn', !def);
-  try { if (typeof renderWatch === 'function') renderWatch(); } catch {}
+  setTimeout(() => { try { renderWatch(); } catch {} }, 0); // la lista se repinta con los colores nuevos (después: al abrir aún no está todo listo)
 }
 function setUpDown(id) { // elegir una combinación: borra los colores puestos a mano en las velas para que se vea la combinación completa
   if (!UPDN[id]) return; const cs = Object.assign({}, state.chartStyle || {}); for (const k of ['up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick']) delete cs[k];
-  if (id === 'clasico') delete cs.pal; else cs.pal = id; state.chartStyle = sanChartStyle(cs); save(); syncUpDown(); scheduleRender(); toast('Colores: ' + UPDN[id].n);
+  if (id === 'clasico') delete cs.pal; else cs.pal = id; state.chartStyle = sanChartStyle(cs); save(); syncUpDown(); scheduleRender(); toast('Paleta del mercado: ' + UPDN[id].n);
 }
 /* Preferencias de interfaz que también viajan a la cuenta: altura de paneles, tamaño de paneles, opciones del dibujo (imán, bloquear…) y color/ícono de la app */
 function sanUi(u) {
@@ -5103,7 +5104,8 @@ function renderAcct() {
 function openAcctDialog(anchor) {
   document.querySelectorAll('.acct-pop').forEach(x => x.remove());
   const A = state.acct || {}, m = document.createElement('div'); m.className = 'acct-pop';
-  m.innerHTML = `<b>Saldo de la cuenta</b><small>La mitad de la barra es tu capital inicial. Si ganas sube y se pone verde; si pierdes se vacía y pasa a amarillo, naranja y rojo. Úsala para cuidar tu stop loss.</small>
+  const I0 = acctInfo();
+  m.innerHTML = `<b>Saldo de la cuenta</b><div class="ac-bar${I0.ok ? '' : ' empty'}" data-acct-bar><span class="st-track"><span class="ab-fill" style="--ab-p:${I0.pct}%;background:${I0.color || 'transparent'}"></span></span><span class="ab-val" style="color:${I0.color || ''}">${I0.text.replace(/[<&>]/g, '')}</span></div><small>${(I0.ok ? I0.tip : 'Sin configurar todavía.').replace(/[<&>]/g, '')} La mitad de la barra es tu capital inicial. Si ganas sube y se pone verde; si pierdes se vacía y pasa a amarillo, naranja y rojo. Úsala para cuidar tu stop loss.</small>
     <label>Capital inicial (USD)<input id="acStart" inputmode="decimal" value="${A.start || ''}" placeholder="1000"></label>
     <label>Saldo actual (USD)<input id="acCur" inputmode="decimal" value="${A.start ? A.cur : ''}" placeholder="1000"></label>
     <label class="ac-chk"><input id="acAuto" type="checkbox" ${A.auto !== false ? 'checked' : ''}><span>Actualizar automático desde tu exchange conectado (Nexus Lens)</span></label>
@@ -5205,8 +5207,8 @@ function renderCustom() {
   box.innerHTML = ``
     + `<div class="pref-row">${ic('#f5a623', state.light ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>' : '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>')}<div class="pref-l"><b>Tema claro</b><small>${state.light ? 'Activo · apágalo para el tema oscuro' : 'Ahora usas el tema oscuro'}</small></div><div class="pref-c"><button type="button" class="toggle${state.light ? ' on' : ''}" data-cu="theme" role="switch" aria-checked="${!!state.light}" aria-label="Tema claro"></button></div></div>`
     + (() => { const cur = (state.chartStyle || {}).pal || 'clasico', lt = state.light, man = !!((state.chartStyle || {}).up || (state.chartStyle || {}).down);
-        return `<div class="pref-row updn-row">${ic('#20bf9f', '<path d="M4 17l5-6 4 3 7-8"/><path d="M15 6h5v5"/>')}<div class="pref-l"><b>Colores de subida y bajada</b><small>Velas, volumen, porcentajes y toda la app. ${man ? 'Tienes colores puestos a mano en Aspecto del gráfico: elegir una combinación los reemplaza.' : 'Puedes ajustarlos a mano en Aspecto del gráfico.'}</small></div></div>`
-          + `<div class="updn-grid" role="radiogroup" aria-label="Colores de subida y bajada">${Object.entries(UPDN).map(([k, P]) => `<button type="button" class="updn${!man && cur === k ? ' on' : ''}" data-cu="updn" data-v="${k}" role="radio" aria-checked="${!man && cur === k}"><span class="updn-sw"><i style="background:${lt ? P.upL : P.up}"></i><i style="background:${lt ? P.downL : P.down}"></i></span><span class="updn-c"><svg viewBox="0 0 30 18" width="30" height="18" aria-hidden="true"><rect x="3" y="6" width="5" height="8" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M5.5 3v3M5.5 14v2" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/><rect x="12" y="4" width="5" height="9" rx="1" fill="${lt ? P.downL : P.down}"/><path d="M14.5 1.5v2.5M14.5 13v3" stroke="${lt ? P.downL : P.down}" stroke-width="1.3"/><rect x="21" y="3" width="5" height="10" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M23.5 1v2M23.5 13v3" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/></svg></span><small>${esc(P.n)}</small></button>`).join('')}</div>`; })()
+        return `<div class="pref-row updn-row">${ic('#20bf9f', '<path d="M4 17l5-6 4 3 7-8"/><path d="M15 6h5v5"/>')}<div class="pref-l"><b>Colores del mercado</b><small>Paleta alcista y bajista para velas, volumen y variaciones en toda la app.${man ? ' Tienes colores personalizados en Aspecto del gráfico; elegir una paleta los reemplaza.' : ''}</small></div></div>`
+          + `<div class="updn-grid" role="radiogroup" aria-label="Colores del mercado">${Object.entries(UPDN).map(([k, P]) => `<button type="button" class="updn${!man && cur === k ? ' on' : ''}" data-cu="updn" data-v="${k}" role="radio" aria-checked="${!man && cur === k}"><span class="updn-c"><svg viewBox="0 0 30 18" width="30" height="18" aria-hidden="true"><rect x="3" y="6" width="5" height="8" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M5.5 3v3M5.5 14v2" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/><rect x="12" y="4" width="5" height="9" rx="1" fill="${lt ? P.downL : P.down}"/><path d="M14.5 1.5v2.5M14.5 13v3" stroke="${lt ? P.downL : P.down}" stroke-width="1.3"/><rect x="21" y="3" width="5" height="10" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M23.5 1v2M23.5 13v3" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/></svg></span><small>${esc(P.n)}</small></button>`).join('')}</div>`; })()
     + `<button type="button" class="pref-row pref-link" data-cu="style">${ic('#548fff', '<path d="M6 20V10M12 20V4M18 20v-7"/>')}<div class="pref-l"><b>Aspecto del gráfico</b><small>Colores de velas, fondo, cuadrícula, cursor y línea de alertas</small></div><div class="pref-c">${chev}</div></button>`
     + `<div class="pref-row">${ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>')}<div class="pref-l"><b>Barra de herramientas favoritas</b><small>Tus herramientas de dibujo con estrella, siempre a la mano</small></div><div class="pref-c"><button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button></div></div>`
     + (isDesktop() ? '' : `<div class="pref-row fb-mode-row"><span class="sg-ic" style="--c:transparent"></span><div class="pref-l"><b>Cápsula del gráfico en el celular</b><small>${FB.mode === 'flotante' ? 'Flotante: la cápsula (temporalidad, estrella y menú) se mueve a donde quieras' : 'Fija: la cápsula va en vertical arriba del logo VORTEX y se abre hacia arriba'}</small></div><div class="pref-c"><div class="seg-mini" role="radiogroup" aria-label="Estilo de la barra de favoritos en el celular">${[['fija', 'Fija'], ['flotante', 'Flotante']].map(([v, n]) => `<button type="button" role="radio" aria-checked="${(FB.mode || 'fija') === v}" class="${(FB.mode || 'fija') === v ? 'on' : ''}" data-cu="favmode" data-v="${v}">${n}</button>`).join('')}</div></div></div>`);
