@@ -38,7 +38,7 @@
   const ink = document.createElement('canvas'); ink.className = 'px-ink'; ink.setAttribute('aria-hidden', 'true');
   const av = document.createElement('div'); av.className = 'px-av'; av.hidden = true; av.innerHTML = '<canvas class="px-cv" aria-label="Nexus Pixel: arrástralo de lado a lado para girarlo; tócalo para que salude"></canvas><span class="px-spin" aria-hidden="true"></span>';
   const bub = document.createElement('div'); bub.className = 'px-bub'; bub.hidden = true; bub.setAttribute('role', 'dialog'); bub.setAttribute('aria-label', 'Nexus Pixel');
-  bub.innerHTML = `<div class="px-hd" title="Arrastra para moverlo"><span class="px-dot"></span><b>Nexus Pixel</b><small class="px-st">IA de VORTEX</small><button type="button" class="px-x" data-px="close" aria-label="Despedir a Nexus Pixel">&times;</button></div>
+  bub.innerHTML = `<div class="px-hd" title="Arrastra para moverlo"><span class="px-dot"></span><b>Nexus Pixel</b><small class="px-st">IA de VORTEX</small><button type="button" class="px-x px-tipsw" data-px="tips" aria-pressed="true" aria-label="Recomendaciones de Nexus Pixel" title="Recomendaciones: activadas"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.9V16h5v-.2c0-.8.4-1.5 1-1.9A6 6 0 0 0 12 3z"/></svg></button><button type="button" class="px-x" data-px="close" aria-label="Despedir a Nexus Pixel">&times;</button></div>
     <div class="px-msg" aria-live="polite"></div>
     <div class="px-chips">${[['¿Cómo lo ves?', '¿Cómo ves mi gráfico? Léeme mis indicadores'], ['¿Long o short?', '¿Debería entrar en long, en short o esperar?'], ['Canal', 'Dibújame el canal'], ['Fibonacci', 'Pon Fibonacci']].map(([t, q]) => `<button type="button" data-q="${esc(q)}">${t}</button>`).join('')}</div>
     <form class="px-in"><input type="text" placeholder="Pídeme algo: «dibuja el canal»…" autocomplete="off" enterkeyhint="send" aria-label="Escríbele a Nexus Pixel"><button type="button" class="px-mic" aria-label="Hablarle a Nexus Pixel" title="Háblale"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button><button type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></form>`;
@@ -466,7 +466,8 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     if (open || busy || CFG().tips === false || !TIPS[sec] || Date.now() - lastTip < 90000) return; const day = new Date().toDateString(); ls.tips = ls.tips || {}; if (ls.tips[sec] === day) return;
     clearTimeout(tipTimer); tipTimer = setTimeout(() => { if (open || section() !== sec) return; ls.tips[sec] = day; store(); lastTip = Date.now(); setTip(TIPS[sec][0]); tip.dataset.q = TIPS[sec][1]; tip.hidden = false; const r = fab.getBoundingClientRect(), l = layer.getBoundingClientRect(); tip.style.left = clamp(r.left - l.left + r.width / 2 - 110, 8, AW() - 228) + 'px'; tip.style.top = (r.top - l.top - 46) + 'px'; fab.classList.add('peek-up'); tipTimer = setTimeout(() => closeTip(), 6500); }, 2500);
   }
-  tip.addEventListener('click', async e => { if (e.target.closest('.px-tip-x')) { e.stopPropagation(); closeTip(); return; } const q = tip.dataset.q; closeTip(true); await show(false); if (open) ask(q); });
+  tip.addEventListener('pointerdown', e => e.stopPropagation()); // el mensajito va encima del avatar: tocarlo nunca abre a Pixel por debajo
+  tip.addEventListener('click', async e => { if (e.target.closest('.px-tip-x')) { e.preventDefault(); e.stopPropagation(); setTips(false); return; } const q = tip.dataset.q; closeTip(true); await show(false); if (open) ask(q); });
   setInterval(() => { const sec = section(); if (sec !== lastSec) { lastSec = sec; placePeek(); if (open) { setChips(); if (!busy) { const h = home(); flyTo(h.x, h.y, 500); } } else maybeTip(sec); } }, 1200);
 
   /* ── Vigía de tus reglas: cada cierto tiempo mira el gráfico, lo compara con tus reglas y te deja un mensajito con su lectura ──
@@ -524,7 +525,16 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     hiding = false; av.hidden = true; av.classList.remove('px-fading'); fab.classList.remove('on', 'out'); fab.setAttribute('aria-label', 'Abrir a Nexus Pixel'); if (M) { M.setVel(0, 0); M.pause(true); }
   }
   fab.addEventListener('click', () => { if (open) { if (bub.hidden) { bub.hidden = false; placeBubble(); input.focus({preventScroll: true}); } else hide(); } else show(true); });
-  bub.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (q) { ask(q.dataset.q); return; } if (e.target.closest('[data-px=close]')) hide(); });
+  /* Recomendaciones (sugerencias de cada sección y avisos de tus reglas): se apagan con la X del mensajito o con el foco del encabezado; se guardan en tu cuenta */
+  const tipsOn = () => { const c = CFG(); return c.tips !== false && !(W && W.every(c) === 0); };
+  function paintTipsSw() { const b = bub.querySelector('.px-tipsw'); if (!b) return; const on = tipsOn(); b.classList.toggle('off', !on); b.setAttribute('aria-pressed', String(on)); b.title = on ? 'Recomendaciones: activadas (tócalo para apagarlas)' : 'Recomendaciones: apagadas (tócalo para activarlas)'; }
+  const pxToast = m => { try { if (window.CCT_toast) window.CCT_toast(m); else if (window.CCT_bot) window.CCT_bot.toast(m); } catch {} };
+  function setTips(on, why) {
+    setCfgSafe(on ? {tips: true, vigia: W ? W.DEF_EVERY : 30} : {tips: false, vigia: 0}); paintTipsSw(); if (!on) closeTip();
+    pxToast(on ? 'Recomendaciones de Nexus Pixel activadas' : (why || 'Listo: Nexus Pixel ya no te dará recomendaciones. Puedes activarlas en su configuración.'));
+  }
+  bub.addEventListener('click', e => { const q = e.target.closest('[data-q]'); if (q) { ask(q.dataset.q); return; } if (e.target.closest('[data-px=tips]')) { setTips(!tipsOn()); return; } if (e.target.closest('[data-px=close]')) hide(); });
+  addEventListener('cct-pixel-cfg', paintTipsSw); setTimeout(paintTipsSw, 1500);
   bub.querySelector('form').addEventListener('submit', e => { e.preventDefault(); if (micOn()) { stopMic(); return; } ask(input.value); }); // grabando: «enviar» manda tu audio
   input.addEventListener('keydown', e => e.stopPropagation());
 

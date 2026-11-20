@@ -2497,3 +2497,6 @@ body:not(.signed-in) #settingsView .sg:not(:has(.sg-row:not(.needs-login))){disp
 .acct-pop .ac-bar.empty .st-track{outline:1px dashed var(--line);outline-offset:-1px;opacity:.75}
 .acct-pop.from-anchor{transform-origin:bottom left;animation:acPop .22s cubic-bezier(.2,.9,.25,1.1) both}
 @keyframes acPop{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}
+/* Nexus Pixel: el mensajito siempre encima del avatar (su X no abre a Pixel) y foco de recomendaciones en el encabezado */
+.px-tip{z-index:12}
+.px-tipsw{color:#e6d9ff}.px-tipsw.off{color:var(--muted);opacity:.55}.px-tipsw.off svg{stroke-dasharray:2 2}

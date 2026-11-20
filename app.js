@@ -5973,14 +5973,15 @@ function askExBalance(v) {
   document.body.appendChild(m);
   const an = $('#stAcct'); if (an && an.getClientRects().length) { const r = an.getBoundingClientRect(); m.classList.add('from-anchor'); m.style.right = 'auto'; m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.bottom = (innerHeight - r.top + 10) + 'px'; }
   m.onclick = e => { const b = e.target.closest('[data-exa]'); if (!b) return; const A = state.acct || {};
-    if (b.dataset.exa === 'yes') { const q = Math.round(v * 100) / 100; state.acct = sanAcct({start: q, cur: q, auto: true, ex: 'yes'}); toast('Listo: la barra de saldo usa tu exchange'); }
+    if (b.dataset.exa === 'yes') { const q = Math.round(v * 100) / 100, B = state.acct || {}; state.acct = sanAcct({start: B.start > 0 ? B.start : q, cur: q, auto: true, ex: 'yes'}); toast('Listo: la barra de saldo usa tu exchange'); } // tu capital inicial se conserva si ya lo tenías
     else state.acct = sanAcct({...A, auto: false, ex: 'no'});
     save(); renderAcct(); uxOut(m); };
 }
 if (window.CCTExchange) CCTExchange.onChange(s => { exSub(); if (acctMenu) paintAcctMenu(); if (!(Number.isFinite(s.equity) && s.equity >= 0 && !s.err) || !CCTExchange.connected()) return;
+  if (!fbUser || !lastRemote) return; // espera a que llegue lo guardado en TU cuenta (si no, se preguntaba de nuevo y se perdía tu capital inicial)
   const v = Math.round(s.equity * 100) / 100, A = state.acct || {};
   if (A.ex === 'no' || (A.ex !== 'yes' && A.auto === false)) return;
-  if (A.ex !== 'yes') { if (A.start > 0 && A.cur > 0 && A.auto !== false && Math.abs(A.cur - v) < .01) { state.acct = sanAcct({...A, ex: 'yes'}); save(); return; } askExBalance(v); return; } // aún no decides: se pregunta una vez
+  if (A.ex !== 'yes') { if (A.start > 0 && A.auto !== false) { state.acct = sanAcct({...A, cur: v, ex: 'yes'}); save(); if (typeof renderAcct === 'function') renderAcct(); return; } askExBalance(v); return; } // ya la tenías configurada (con tu capital inicial): se respeta sin preguntar; solo se pregunta a quien nunca la configuró
   if (A.cur !== v || !(A.start > 0)) { state.acct = sanAcct({start: A.start > 0 ? A.start : v, cur: v, auto: true, ex: 'yes'}); save(); if (typeof renderAcct === 'function') renderAcct(); } }); // el saldo real de tu exchange alimenta la barra de saldo de la cuenta
 function renderAccount() {
   document.body.classList.toggle('signed-in', !!fbUser); // Exchange, Tu IA y demás opciones de cuenta solo con la sesión iniciada
