@@ -69,7 +69,7 @@
 
 /* Encabezados de Noticias, Alertas y Screener con su icono grande (el mismo de la barra lateral, sin marco) */
 (function () {
-  const C = {newsView: '#548fff', alertsView: '#f5a623', screenerView: '#20bf9f'};
+  const C = {newsView: '#548fff', alertsView: '#f5a623', screenerView: '#20bf9f', lensView: '#a98bff'}; // en el tema Minimal salen en blanco (vx-min.css); Nexus Lens también lleva el suyo
   function put() {
     for (const [id, col] of Object.entries(C)) {
       const v = document.getElementById(id), h = v && v.querySelector('.view-head'), t = h && h.querySelector('h1'), src = document.querySelector(`.rr-btn[data-side="${id}"] svg`);
@@ -77,4 +77,5 @@
     }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', put); else put();
+  { let q = 0; new MutationObserver(() => { if (!q) q = requestAnimationFrame(() => { q = 0; put(); }); }).observe(document.getElementById('lensView') || document.body, {childList: true, subtree: true}); } // Nexus Lens dibuja su encabezado después (y lo vuelve a dibujar al actualizar)
 })();

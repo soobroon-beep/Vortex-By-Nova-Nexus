@@ -2243,9 +2243,9 @@ function renderTabs() {
   const on = bar.querySelector('.ctab.on'); if (on && bar.scrollWidth > bar.clientWidth) on.scrollIntoView({inline: 'nearest', block: 'nearest'});
 }
 function loadTabChart() { clearTransient(); closeWS(); candles = []; ind = {}; updateChartHeader(); renderFrames(); syncCtypeBtn(); render(); loadCandles(); }
-const tabSnap = () => { const sn = designSnap(); delete sn.ctype; return structuredClone(sn); };
+const tabSnap = () => { const sn = designSnap(); delete sn.ctype; delete sn.chartStyle; return structuredClone(sn); }; // el aspecto (fondo, colores de velas, cursor…) es de tu cuenta, igual en todas las pestañas y dispositivos
 function tabStore() { const o = state.tabs.find(x => x.id === state.tab); if (o && !PANE) o.cfg = tabSnap(); } // guarda en la pestaña activa sus indicadores y ajustes actuales
-function tabApply(t) { if (t && t.cfg) applyDesign({snap: t.cfg}); else { renderIndicators(); countIndicators(); } }
+function tabApply(t) { if (t && t.cfg) { const sn = Object.assign({}, t.cfg); delete sn.chartStyle; applyDesign({snap: sn}); } else { renderIndicators(); countIndicators(); } }
 function switchTab(id) {
   const t = state.tabs.find(x => x.id === id); if (!t || id === state.tab) return;
   tabTouch(); hideTabPrev(); tabStore(); state.tab = id; state.tabRev = Date.now(); state.symbol = t.s; state.interval = t.i; state.ctype = t.c; tabApply(t); renderIndicators(); countIndicators(); save(); renderTabs(); loadTabChart();

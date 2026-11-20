@@ -11,8 +11,8 @@
 /* ───── 1. Paleta ───── */
 :root.vx-min body{
   --m-bg:#08080a;--m-card:#111113;--m-chart:#07090e;--m-fill:#1c1c20;--m-fill2:#26262b;--m-chip:#2c2c32;--m-line:rgba(255,255,255,.06);
-  --m-text:#f4f4f5;--m-sub:#a6a6ae;--m-muted:#6e6e78;--m-acc:#4f8cff;--m-acc-t:rgba(79,140,255,.14);
-  --m-up:#2bd18f;--m-down:#ff5c6c;--m-up-t:rgba(43,209,143,.13);--m-down-t:rgba(255,92,108,.13);--m-pop:#16161a;
+  --m-text:#f4f4f5;--m-sub:#a6a6ae;--m-muted:#6e6e78;--m-acc:#ececee;--m-acc-t:rgba(255,255,255,.08);--m-on-acc:#0b0b0d;
+  --m-up:#f4f4f5;--m-down:#6e6e78;--m-up-t:rgba(255,255,255,.09);--m-down-t:rgba(255,255,255,.04);--m-pop:#16161a;
   --m-shadow:0 1px 0 rgba(255,255,255,.03) inset;--m-chip-sh:0 1px 2px rgba(0,0,0,.5),0 0 0 .5px rgba(255,255,255,.06);
   --bg:var(--m-bg);--surface:var(--m-card);--raised:var(--m-fill);--line:var(--m-line);--text:var(--m-text);--muted:var(--m-muted);
   --accent:var(--m-acc);--green:var(--m-up);--red:var(--m-down);--nav:var(--m-card);
@@ -23,8 +23,8 @@
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 :root.vx-min body.light{
   --m-bg:#ececee;--m-card:#ffffff;--m-chart:#ffffff;--m-fill:#f1f1f3;--m-fill2:#e7e7ea;--m-chip:#ffffff;--m-line:rgba(0,0,0,.06);
-  --m-text:#111114;--m-sub:#5c5c66;--m-muted:#93939c;--m-acc:#2f6bff;--m-acc-t:rgba(47,107,255,.1);
-  --m-up:#0f9d6a;--m-down:#e5374a;--m-up-t:rgba(15,157,106,.1);--m-down-t:rgba(229,55,74,.1);--m-pop:#ffffff;
+  --m-text:#111114;--m-sub:#5c5c66;--m-muted:#93939c;--m-acc:#18181b;--m-acc-t:rgba(0,0,0,.06);--m-on-acc:#ffffff;
+  --m-up:#111114;--m-down:#93939c;--m-up-t:rgba(0,0,0,.07);--m-down-t:rgba(0,0,0,.03);--m-pop:#ffffff;
   --m-shadow:0 1px 2px rgba(16,16,24,.04),0 6px 20px rgba(16,16,24,.04);--m-chip-sh:0 1px 2px rgba(0,0,0,.08),0 0 0 .5px rgba(0,0,0,.05);--glass-hi:rgba(0,0,0,.08)}
 :root.vx-min body :is(button,input,select,textarea){font-family:inherit}
 :root.vx-min body *{text-shadow:none}
@@ -53,11 +53,11 @@
   transition:background .15s,transform .15s}
 @media(hover:hover){:root.vx-min body :is(.small-button,.icon-btn,.account-btn,.chart-controls button,.nw-ref,.nw-more,.pop-retry,.pop-more,.view-back):hover{background:var(--m-fill2)!important}}
 :root.vx-min body :is(.small-button,.icon-btn,.account-btn,.view-back):active{transform:scale(.97)}
-:root.vx-min body :is(#watchView .add-main,.small-button.add-main,.primary,.google-btn){background:var(--m-acc)!important;color:#fff!important;border:0!important;box-shadow:none!important;border-radius:10px!important;font-weight:600}
+:root.vx-min body :is(#watchView .add-main,.small-button.add-main,.primary,.google-btn){background:var(--m-acc)!important;color:var(--m-on-acc)!important;border:0!important;box-shadow:none!important;border-radius:10px!important;font-weight:600}
 @media(hover:hover){:root.vx-min body #watchView .add-main:hover{filter:brightness(1.08)!important}}
 :root.vx-min body #watchView #addSection{background:var(--m-fill)!important;border:0!important;color:var(--m-text)!important}
 :root.vx-min body:not(#_):not(#__) .cfg-btn{background:var(--m-fill)!important;border:0!important;border-radius:10px!important;color:var(--m-text)!important;box-shadow:none!important}
-:root.vx-min body:not(#_):not(#__) .cfg-btn.cfg-ok{background:var(--m-acc)!important;color:#fff!important}
+:root.vx-min body:not(#_):not(#__) .cfg-btn.cfg-ok{background:var(--m-acc)!important;color:var(--m-on-acc)!important}
 :root.vx-min body .google-btn{background:var(--m-text)!important;color:var(--m-bg)!important}
 
 /* ───── 5. Controles segmentados: pista gris + ficha que resalta ───── */
@@ -113,10 +113,12 @@
 :root.vx-min body :is(.sg-row,.pref-row){background:transparent!important;border:0!important;border-radius:0!important}
 :root.vx-min body :is(.sg-row+.sg-row,.pref-row+.pref-row){border-top:1px solid var(--m-line)!important}
 @media(hover:hover){:root.vx-min body .sg-row:hover{background:var(--m-fill2)!important}}
-:root.vx-min body .sg-ic{width:30px!important;height:30px!important;border-radius:8px!important;background:var(--c,#6e6e78)!important;color:#fff!important;box-shadow:none!important}
-:root.vx-min body .sg-ic svg{width:17px!important;height:17px!important;color:#fff!important;stroke:#fff!important;filter:none!important}
-:root.vx-min body #setVigia .sg-ic{background:linear-gradient(135deg,#7c4dff,#40c4ff)!important}
-:root.vx-min body #setBrain .sg-ic{background:#22b8cf!important}
+:root.vx-min body .sg-ic,:root.vx-min body #setVigia .sg-ic,:root.vx-min body #setBrain .sg-ic{width:30px!important;height:30px!important;border-radius:0!important;background:none!important;color:var(--m-text)!important;box-shadow:none!important}
+:root.vx-min body .sg-ic svg,:root.vx-min body #setVigia .sg-ic svg{width:23px!important;height:23px!important;color:var(--m-text)!important;stroke:var(--m-text)!important;filter:none!important}
+/* Minimal: sin colores de acento en iconos y pestañas activas (todo en el color del texto) */
+:root.vx-min body .right-rail .rr-btn.active,:root.vx-min body .bottom-nav button.active{color:var(--m-text)!important}
+:root.vx-min body :is(.vh-ic,.bl-logo){color:var(--m-text)!important}:root.vx-min body .vh-ic svg{stroke:var(--m-text)!important}
+:root.vx-min body .updn.on{border-color:var(--m-text)!important;background:var(--m-fill)!important}
 :root.vx-min body :is(.pl-badge,.prof-tag){border:0!important;background:var(--m-acc-t)!important;color:var(--m-acc)!important;box-shadow:none!important;border-radius:6px!important}
 
 /* ───── 8. Ventanas y menús ───── */
@@ -187,7 +189,7 @@
   :root.vx-min body .right-rail{top:8px!important;bottom:8px!important;right:8px!important;width:var(--rail-w)!important;background:var(--m-card)!important;border:0!important;border-radius:14px;box-shadow:var(--m-shadow)!important;padding:6px 0!important;gap:2px}
   :root.vx-min body:not(.light) .right-rail{box-shadow:0 0 0 1px var(--m-line)!important}
   :root.vx-min body .right-rail .rr-btn{color:var(--m-sub)!important;border-radius:10px!important;background:none!important}
-  :root.vx-min body .right-rail .rr-btn.active{background:var(--m-fill)!important;color:var(--m-acc)!important;box-shadow:none!important}
+  :root.vx-min body .right-rail .rr-btn.active{background:var(--m-fill)!important;color:var(--m-text)!important;box-shadow:none!important}
   @media(hover:hover){:root.vx-min body .right-rail .rr-btn:hover{background:var(--m-fill)!important;color:var(--m-text)!important}}
   :root.vx-min body .right-rail .rr-btn::after{background:var(--m-text);color:var(--m-bg);border:0;border-radius:8px;font-weight:550;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 }
@@ -257,3 +259,8 @@
 :root.vx-min body .right-rail .rr-btn.active,:root.vx-min body #toolRail :is(.rail-btn.on,.rail-btn.grp.on){background:transparent!important}
 :root.vx-min body #chartStatus :is(.st-acct,.st-econ){background:transparent!important}
 :root.vx-min body #botLabView :is(.bl-row,.bl-card){background:transparent!important;border:0!important;box-shadow:inset 0 -1px 0 var(--m-line)!important;border-radius:0!important}
+
+/* Minimal sin color de acento: el acento es el mismo blanco/negro del texto; las etiquetas de plan y los botones primarios en tonos neutros */
+:root.vx-min body :is(#watchView .add-main,.small-button.add-main,.primary,.google-btn) :is(svg,.g){color:var(--m-on-acc)!important;stroke:currentColor}
+:root.vx-min body .prof-tag.pl-badge:not(.dev),:root.vx-min body .acct-menu .am-plan.pl-badge:not(.dev){background:var(--m-fill)!important;color:var(--m-text)!important;border-color:transparent!important;animation:none!important}
+:root.vx-min body .prof-tag.pl-badge:not(.dev) svg{color:var(--m-text)!important}
