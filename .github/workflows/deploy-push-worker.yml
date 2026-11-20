@@ -28,6 +28,9 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           BINGX_AGENT_KEY: ${{ secrets.BINGX_AGENT_KEY }}
           GROQ_KEY: ${{ secrets.GROQ_KEY }}
+          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
+          MISTRAL_KEY: ${{ secrets.MISTRAL_KEY }}
+          OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
           BINGX_AGENT_SECRET: ${{ secrets.BINGX_AGENT_SECRET }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
@@ -52,3 +55,7 @@ jobs:
           # planes verificados en el servidor: la cuenta de servicio escribe plans/{uid} en Firestore (la app ya no puede darse un plan sola)
           if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then printf '%s' "$FIREBASE_SERVICE_ACCOUNT" | npx --yes wrangler@4 secret put FB_SA --config worker/wrangler-push.toml; fi
           if [ -n "$GROQ_KEY" ]; then printf '%s' "$GROQ_KEY" | npx --yes wrangler@4 secret put GROQ_KEY --config worker/wrangler-push.toml; fi
+          # IA gratis EXTRA solo para Nexus Pixel (cada una opcional, sin tarjeta): Google AI Studio, Mistral (plan Experiment) y OpenRouter
+          if [ -n "$GEMINI_KEY" ]; then printf '%s' "$GEMINI_KEY" | npx --yes wrangler@4 secret put GEMINI_KEY --config worker/wrangler-push.toml; fi
+          if [ -n "$MISTRAL_KEY" ]; then printf '%s' "$MISTRAL_KEY" | npx --yes wrangler@4 secret put MISTRAL_KEY --config worker/wrangler-push.toml; fi
+          if [ -n "$OPENROUTER_KEY" ]; then printf '%s' "$OPENROUTER_KEY" | npx --yes wrangler@4 secret put OPENROUTER_KEY --config worker/wrangler-push.toml; fi

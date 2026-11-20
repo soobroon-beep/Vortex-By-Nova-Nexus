@@ -4,7 +4,7 @@
 // · La app le manda tus alertas y la suscripción de tu celular a /sync (solo alertas de PRECIO; las de indicador siguen en la app).
 // · Las claves VAPID se crean solas la primera vez y se guardan en el KV: no hay secretos que configurar.
 // · Solo escribe en el KV cuando algo cambia (el plan gratis permite 1000 escrituras al día).
-// Se publica solo con .github/workflows/deploy-push-worker.yml (configuración en worker/wrangler-push.toml). Secretos opcionales: BINGX_AGENT_KEY / BINGX_AGENT_SECRET (plan Infinity) y GROQ_KEY (IA gratis de respaldo).
+// Se publica solo con .github/workflows/deploy-push-worker.yml (configuración en worker/wrangler-push.toml). Secretos opcionales: BINGX_AGENT_KEY / BINGX_AGENT_SECRET (plan Infinity), GROQ_KEY (IA gratis) y GEMINI_KEY / MISTRAL_KEY / OPENROUTER_KEY (IA gratis extra para Nexus Pixel).
 
 import {memRoute} from './memoria.mjs'; // Memoria compartida entre Claude, ChatGPT y Gemini (/mem/<llave>/…)
 import {storeOf, MAX_PER_UID, MAX_NEW_PER_IP_DAY} from './devstore.mjs'; // celulares registrados: base D1 (miles) o KV de respaldo
@@ -328,11 +328,15 @@ export const OPEN_AI = {
   chat: {wai: ['@cf/openai/gpt-oss-120b', '@cf/meta/llama-4-scout-17b-16e-instruct'], groq: ['openai/gpt-oss-120b', 'qwen/qwen3.6-27b']},
   vision: {wai: ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/google/gemma-4-26b-a4b-it'], groq: []},
   code: {wai: ['@cf/qwen/qwen2.5-coder-32b-instruct', '@cf/openai/gpt-oss-120b'], groq: ['openai/gpt-oss-120b', 'qwen/qwen3.6-27b']},
-  /* Nexus Pixel (el avatar del gráfico): la IA open source y gratis MÁS lista que hay hoy para razonar con tus indicadores,
-     tu posición y la estructura del mercado. Qwen 3.6 27B (razona, Groq gratis) → GPT-OSS 120B (razona) → GLM 4.7 Flash → Gemma 4.
+  /* Nexus Pixel (el avatar del gráfico): su propia cadena de IA gratis, separada de los bots.
+     Antes usaba «qwen/qwen3.6-27b» (ese nombre ya no existe en Groq) y GPT-OSS 120B, cuyo cupo diario gratis (200 000 tokens) se lo
+     acaban los bots, el Vigía y las salas: por la noche ya no quedaba nada, Pixel caía en Pollinations y contestaba «sin créditos».
+     Ahora: Qwen 3.x (el más nuevo que haya) → GPT-OSS 120B → Kimi K2 → Llama 3.3 70B → GPT-OSS 20B en Groq (cada modelo tiene su PROPIO cupo diario),
+     luego Gemini 2.5 Flash / Mistral / OpenRouter gratis si pusiste su clave (GEMINI_KEY, MISTRAL_KEY, OPENROUTER_KEY), y al final Cloudflare.
+     Los nombres de Groq se buscan solos en su lista de modelos, así un cambio de versión ya no la rompe.
      «see» = sus ojos: un modelo con visión describe la captura del gráfico y luego el modelo que razona decide. */
-  pixel: {groq: ['qwen/qwen3.6-27b', 'openai/gpt-oss-120b'], wai: ['@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', '@cf/google/gemma-4-26b-a4b-it'], json: true, cap: 38000, budget: 68000},
-  see: {wai: ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/google/gemma-4-26b-a4b-it', '@cf/mistralai/mistral-small-3.1-24b-instruct'], groq: [], cap: 22000, budget: 30000}
+  pixel: {groq: [/^qwen\/qwen3/, 'qwen/qwen3.8-27b', 'openai/gpt-oss-120b', /kimi-k2/, 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b'], gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'], mistral: ['mistral-medium-latest', 'mistral-small-latest'], openrouter: ['openai/gpt-oss-120b:free', 'deepseek/deepseek-chat-v3.1:free', 'qwen/qwen3-235b-a22b:free'], wai: ['@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', '@cf/google/gemma-4-26b-a4b-it'], json: true, cap: 30000, budget: 75000},
+  see: {gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'], mistral: ['mistral-small-latest'], groq: [/^qwen\/qwen3/], wai: ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/google/gemma-4-26b-a4b-it', '@cf/mistralai/mistral-small-3.1-24b-instruct'], order: ['Gemini', 'Mistral', 'Cloudflare', 'Groq'], cap: 22000, budget: 32000}
 };
 export const AI_TASKS = Object.keys(OPEN_AI);
 const OPEN_NAME = m => m.replace(/^@cf\/[^/]+\//, '').replace(/^(openai|meta-llama|qwen)\//, '');
@@ -353,29 +357,63 @@ export function groqExtra(m, task) {
   if (/gpt-oss/.test(m)) return {reasoning_effort: task === 'pixel' || task === 'code' ? 'medium' : 'low', include_reasoning: false};
   return {};
 }
+/* Lista real de modelos de Groq (se guarda 6 h): los nombres cambian con cada versión y uno viejo daba error 404 */
+let groqList = null;
+export async function groqModels(env, fetchFn = fetch) {
+  if (groqList && Date.now() - groqList.t < 6 * 3600e3) return groqList.ids;
+  try { const r = await fetchFn('https://api.groq.com/openai/v1/models', {headers: {authorization: 'Bearer ' + env.GROQ_KEY}, signal: AbortSignal.timeout(5000)}); if (r.ok) { const j = await r.json(), ids = (j.data || []).map(x => x && x.id).filter(Boolean); if (ids.length) { groqList = {t: Date.now(), ids}; return ids; } } } catch {}
+  return groqList ? groqList.ids : null;
+}
+export const resetGroqList = () => { groqList = null; };
+/* Preferencias (texto exacto o patrón) → nombres que de verdad existen. Sin lista: solo los nombres exactos. */
+export function resolveModels(prefs, ids) {
+  const out = [];
+  for (const p of prefs || []) {
+    if (typeof p === 'string') { if (!ids || ids.includes(p)) out.push(p); continue; }
+    if (!ids) continue; const hit = ids.filter(id => p.test(id) && !/guard|safeguard|tts|whisper|embed/.test(id)).sort().reverse()[0]; if (hit) out.push(hit);
+  }
+  return [...new Set(out)];
+}
+/* Proveedores gratis compatibles con OpenAI (cada uno solo si existe su clave) */
+const OAI = {
+  Groq: {url: 'https://api.groq.com/openai/v1/chat/completions', key: e => e.GROQ_KEY},
+  Gemini: {url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', key: e => e.GEMINI_KEY},
+  Mistral: {url: 'https://api.mistral.ai/v1/chat/completions', key: e => e.MISTRAL_KEY},
+  OpenRouter: {url: 'https://openrouter.ai/api/v1/chat/completions', key: e => e.OPENROUTER_KEY}
+};
+export function providerExtra(who, m, task) {
+  if (who === 'Groq') return groqExtra(m, task);
+  if (who === 'Gemini' && /2\.5/.test(m)) return {reasoning_effort: task === 'pixel' ? 'low' : 'none'}; // piensa un poco (Pixel) sin comerse los tokens
+  return {};
+}
 export async function openChain(env, task, messages, opts = {}, fetchFn = fetch) {
   const T = OPEN_AI[task] || OPEN_AI.chat, max_tokens = Math.min(+opts.max_tokens || 1600, AI_MAX_TOKENS), temperature = Number.isFinite(+opts.temperature) ? +opts.temperature : .4, tried = [];
   const end = Date.now() + (T.budget || 120000), left = () => end - Date.now(), cap = ms => Math.max(4000, Math.min(T.cap || ms, ms, left()));
   const clean = t => String(t || '').replace(/<think>[\s\S]*?<\/think>/g, '').replace(/^[\s\S]*?<\/think>/, '').trim();
-  const viaGroq = async (m, msgs) => {
-    const base = {model: m, messages: msgs, max_tokens, temperature, ...groqExtra(m, task)}, json = T.json && opts.json ? {response_format: {type: 'json_object'}} : {};
-    const go = b => fetchFn('https://api.groq.com/openai/v1/chat/completions', {method: 'POST', headers: {'content-type': 'application/json', authorization: 'Bearer ' + env.GROQ_KEY}, body: JSON.stringify(b), signal: AbortSignal.timeout(cap(45000))});
+  const viaOai = who => async (m, msgs) => {
+    const P = OAI[who], base = {model: m, messages: msgs, max_tokens, temperature, ...providerExtra(who, m, task)}, json = T.json && opts.json ? {response_format: {type: 'json_object'}} : {};
+    const go = b => fetchFn(P.url, {method: 'POST', headers: {'content-type': 'application/json', authorization: 'Bearer ' + P.key(env)}, body: JSON.stringify(b), signal: AbortSignal.timeout(cap(45000))});
     let r = await go({...base, ...json});
-    if (!r.ok && r.status === 400) r = await go(base); // el modelo no acepta algún parámetro (modo JSON o de razonamiento): se pide normal
-    if (!r.ok) throw new Error('groq ' + r.status); return clean(aiText(await r.json()));
+    if (!r.ok && r.status === 400) { const lite = {model: m, messages: msgs, max_tokens, temperature}; r = await go(json.response_format ? {...base} : lite); if (!r.ok && r.status === 400) r = await go(lite); } // el modelo no acepta algún parámetro (modo JSON o de razonamiento): se pide normal
+    if (!r.ok) throw new Error(who.toLowerCase() + ' ' + r.status); return clean(aiText(await r.json()));
   };
   const viaWai = async (m, msgs) => clean(aiText(await withTimeout(env.AI.run(m, {messages: msgs, max_tokens, temperature}), cap(55000))));
   const routes = []; const add = (who, list, fn) => { for (const m of list || []) routes.push([who, m, fn]); };
-  if (env.GROQ_KEY) add('Groq', T.groq, viaGroq); // Groq primero si tienes clave: es el más rápido
-  if (env.AI) add('Cloudflare', T.wai, viaWai);
+  for (const who of T.order || ['Groq', 'Gemini', 'Mistral', 'OpenRouter', 'Cloudflare']) { // Groq primero si tienes clave: es el más rápido
+    if (who === 'Cloudflare') { if (env.AI) add('Cloudflare', T.wai, viaWai); continue; }
+    if (!OAI[who].key(env) || !(T[who.toLowerCase()] || []).length) continue;
+    const list = T[who.toLowerCase()], ids = who === 'Groq' && list.some(p => typeof p !== 'string') ? await groqModels(env, fetchFn) : null;
+    add(who, who === 'Groq' ? resolveModels(list, ids) : list, viaOai(who));
+  }
   for (const [who, m, fn] of routes) {
     if (left() < 4000) break;
-    try { const text = await fn(m, messages); if (text && text.length > 1) return {text, model: OPEN_NAME(m) + ' · ' + who}; tried.push(m + ': vacío'); }
+    try { const text = await fn(m, messages); if (text && text.length > 1 && !NO_CREDIT.test(text.slice(0, 300))) return {text, model: OPEN_NAME(m) + ' · ' + who}; tried.push(m + ': vacío'); }
     catch (e) { tried.push(m + ': ' + String(e && e.message || e).slice(0, 60)); }
   }
   if ((task === 'vision' || task === 'pixel') && hasImg(messages) && left() > 6000) { const r = await openChain(env, task === 'pixel' ? 'pixel' : 'chat', noImg(messages), opts, fetchFn); if (r) return Object.assign(r, {image: false}); } // sin visión disponible: analiza con los datos
   return null;
 }
+const NO_CREDIT = /enough credits|top up|paid pollen|insufficient (balance|credits|funds|quota)|requires? (a )?paid|out of credits|quota exceeded|exceeded your (current )?quota/i;
 async function aiKey(env) { return env.POLLEN_KEY || (await env.KV.get('ai:pollen')) || POLLEN_KEY; }
 async function aiRoute(req, env, path, json, cors) {
   if (path === '/ai/status') return json({ok: true, ready: !!(await aiKey(env))});
@@ -384,14 +422,15 @@ async function aiRoute(req, env, path, json, cors) {
     const k = String(b.key || '').trim(); if (!/^sk_[\w-]{10,}$/.test(k) || await sha256(k) !== AI_KEY_HASH) return json({error: 'Esa no es la clave autorizada para este servidor'}, 403);
     await env.KV.put('ai:pollen', k); return json({ok: true, ready: true});
   }
-  const key = await aiKey(env); if (!key && !env.AI && !env.GROQ_KEY) return json({error: 'El servidor aún no tiene la clave de IA', kind: 'nokey'}, 503);
+  const freeAI = !!(env.AI || env.GROQ_KEY || env.GEMINI_KEY || env.MISTRAL_KEY || env.OPENROUTER_KEY);
+  const key = await aiKey(env); if (!key && !freeAI) return json({error: 'El servidor aún no tiene la clave de IA', kind: 'nokey'}, 503);
   if (!aiAllowed(req.headers.get('cf-connecting-ip') || 'x')) return json({error: 'Demasiadas consultas seguidas; espera un minuto'}, 429);
   if (path === '/ai/models') { const r = await fetch(AI_MODELS, {headers: {authorization: 'Bearer ' + key}}); return new Response(r.body, {status: r.status, headers: {...cors, 'content-type': 'application/json', 'cache-control': 'max-age=1800'}}); }
   if (path === '/ai' && req.method === 'POST') {
     const raw = await req.text(); if (raw.length > AI_MAX_BODY) return json({error: 'La consulta es demasiado grande'}, 413);
     let b; try { b = JSON.parse(raw); } catch { return json({error: 'JSON inválido'}, 400); }
     const want = String(b.model || 'openai'), model = AI_MODELS_OK.includes(want) ? want : 'openai'; // solo modelos de chat (nunca filtros tipo qwen3guard)
-    if (model !== 'openai-audio' && (env.AI || env.GROQ_KEY)) { // IA open source y gratis primero (Workers AI / Groq); si no contesta, sigue con Pollinations
+    if (model !== 'openai-audio' && freeAI) { // IA open source y gratis primero (Workers AI / Groq); si no contesta, sigue con Pollinations
       const msgs = Array.isArray(b.messages) ? b.messages.slice(-16) : [], task = AI_TASKS.includes(b.task) ? b.task : hasImg(msgs) ? 'vision' : 'chat';
       try { const r = await openChain(env, task === 'chat' && hasImg(msgs) ? 'vision' : task, msgs, b); if (r) return json({object: 'chat.completion', model: r.model, image: r.image !== false && hasImg(msgs), choices: [{index: 0, message: {role: 'assistant', content: r.text}, finish_reason: 'stop'}]}); } catch {}
       if (task === 'pixel' || task === 'see') return json({error: 'La IA gratis no respondió', kind: 'busy'}, 502); // Pixel: no gastar créditos de Pollinations; la app reintenta por su lado

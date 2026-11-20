@@ -189,8 +189,14 @@ test('IA open source: cada uso con su modelo, Groq primero si hay clave, Cloudfl
   assert.equal(g.text, 'desde groq'); assert.match(g.model, /Groq/); assert.match(gUrl, /api\.groq\.com/);
   assert.equal(W.aiText({result: {choices: [{message: {content: 'x'}}]}}), 'x');
   // Nexus Pixel: su propia cadena (la que razona), modo JSON en Groq y, si Groq rechaza un parámetro (400), se repite sin él
-  const bodies = []; const px = await W.openChain({AI, GROQ_KEY: 'gk'}, 'pixel', [{role: 'user', content: '¿cierro mi long?'}], {json: true}, async (u, init) => { const b = JSON.parse(init.body); bodies.push(b); return b.response_format ? {ok: false, status: 400, json: async () => ({})} : {ok: true, json: async () => ({choices: [{message: {content: '<think>mmm</think>{"reply":"ok"}'}}]})}; });
-  assert.equal(px.text, '{"reply":"ok"}'); assert.match(px.model, /qwen3\.6-27b · Groq/); assert.equal(bodies[0].reasoning_format, 'hidden'); assert.ok(bodies[0].response_format); assert.ok(!bodies[1].response_format);
+  W.resetGroqList();
+  const bodies = []; const px = await W.openChain({AI, GROQ_KEY: 'gk'}, 'pixel', [{role: 'user', content: '¿cierro mi long?'}], {json: true}, async (u, init) => { if (/\/models$/.test(u)) return {ok: true, json: async () => ({data: [{id: 'qwen/qwen3.8-27b'}, {id: 'openai/gpt-oss-120b'}]})}; const b = JSON.parse(init.body); bodies.push(b); return b.response_format ? {ok: false, status: 400, json: async () => ({})} : {ok: true, json: async () => ({choices: [{message: {content: '<think>mmm</think>{"reply":"ok"}'}}]})}; });
+  assert.equal(px.text, '{"reply":"ok"}'); assert.match(px.model, /qwen3\.8-27b · Groq/); assert.equal(bodies[0].reasoning_format, 'hidden'); assert.ok(bodies[0].response_format); assert.ok(!bodies[1].response_format);
+  // cupo de Groq agotado (429 en todos) → Gemini gratis con su clave; un aviso de «sin créditos» nunca cuenta como respuesta
+  W.resetGroqList(); const seen = [];
+  const pg = await W.openChain({GROQ_KEY: 'gk', GEMINI_KEY: 'gm', OPENROUTER_KEY: 'or'}, 'pixel', [{role: 'user', content: 'pon el canal en morado'}], {json: true}, async (u, init) => { seen.push(u); if (/\/models$/.test(u)) return {ok: true, json: async () => ({data: [{id: 'qwen/qwen3.8-27b'}]})}; if (/groq/.test(u)) return {ok: false, status: 429, json: async () => ({})}; if (/googleapis/.test(u)) return {ok: true, json: async () => ({choices: [{message: {content: "You don't have enough credits. Please top up"}}]})}; return {ok: true, json: async () => ({choices: [{message: {content: '{"reply":"listo"}'}}]})}; });
+  assert.equal(pg.text, '{"reply":"listo"}'); assert.match(pg.model, /OpenRouter/); assert.ok(seen.some(u => /googleapis/.test(u)));
+  assert.deepEqual(W.resolveModels(W.OPEN_AI.pixel.groq, ['qwen/qwen3.6-27b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-safeguard-20b']), ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b']);
   const pxw = await W.openChain({AI}, 'pixel', [{role: 'user', content: 'hola'}]); assert.match(pxw.text, /gpt-oss-120b/);
   assert.deepEqual(W.groqExtra('openai/gpt-oss-120b', 'pixel'), {reasoning_effort: 'medium', include_reasoning: false});
   const AI2 = {run: async m => { if (/llama-4-scout/.test(m)) throw new Error('x'); return {response: 'veo ' + m}; }};
