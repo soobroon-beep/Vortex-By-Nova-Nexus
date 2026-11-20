@@ -197,6 +197,8 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     try { const c = window.CCT_getAIContext && window.CCT_getAIContext(); if (c) o.indicadores = JSON.stringify(c).slice(0, 1800); } catch {}
     return o;
   }
+  const VL = () => window.VozLimpia || {clean: t => String(t || '').trim(), merge: (a, b) => (a + ' ' + b).trim(), fromResults: r => { let t = ''; for (let i = 0; i < r.length; i++) t += r[i][0].transcript; return t; }, HINT: '', TRANSCRIBE: ''};
+  const VOZ = () => VL().HINT || ''; // pista: entiende la intención aunque el dictado traiga muletillas o repeticiones
   function profile() { // lo que el usuario configuró en la tarjeta de Pixel
     const c = CFG(), out = [];
     if (c.nombre) out.push(`El usuario se llama ${c.nombre}: llámalo así.`);
@@ -240,7 +242,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     const L = LLM(); if (!L || !L.chat) throw new Error('sin IA'); it = it || (BR ? BR.intent(text) : {});
     let seen = ''; if (it.see && BR) { status('mirando tu gráfico…'); say('Déjame mirar tu gráfico…', {busy: true}); seen = await look(); }
     status('pensando…'); if (it.decide) say('Revisando tu posición, tus indicadores y la estructura…', {busy: true}); else if (!it.see) say('Déjame pensarlo…', {busy: true});
-    const data = brainData(seen), sys = (BR ? BR.SYS : SYS_OLD) + profile() + (it.draw ? '\nEl usuario SÍ pidió dibujar: incluye las acciones necesarias.' : '\nEl usuario NO pidió dibujar: "actions" debe ir vacío salvo que edite dibujos existentes.');
+    const data = brainData(seen), sys = (BR ? BR.SYS : SYS_OLD) + profile() + VOZ() + (it.draw ? '\nEl usuario SÍ pidió dibujar: incluye las acciones necesarias.' : '\nEl usuario NO pidió dibujar: "actions" debe ir vacío salvo que edite dibujos existentes.');
     const msgs = [{role: 'system', content: sys}, ...hist.slice(-6), {role: 'user', content: `${text}\n\nDATOS DEL GRÁFICO (en vivo):\n${data.text}`}];
     const call = L.pixelChat ? L.pixelChat(msgs, {json: true, maxTokens: 1800}) : L.chat(msgs, {purpose: 'text', maxTokens: 900, noOwn: true});
     const r = await Promise.race([call, sleep(90000).then(() => { throw new Error('La IA tardó demasiado'); })]);
@@ -365,7 +367,7 @@ Secciones: Gráfico (velas, indicadores, dibujos; tú puedes dibujar), Mi seguim
 Habla en español, claro, breve y con buena onda. No prometas ganancias (no es asesoría financiera). Usa SOLO los datos que te dan; si falta algo, dilo.`;
   async function llmText(sys, user, maxTokens = 650) {
     const L = LLM(); if (!L || !L.chat) throw new Error('sin IA');
-    const r = await Promise.race([L.chat([{role: 'system', content: sys + profile()}, ...hist.slice(-4), {role: 'user', content: user}], {purpose: 'text', maxTokens, noOwn: true}), sleep(60000).then(() => { throw new Error('tarde'); })]);
+    const r = await Promise.race([L.chat([{role: 'system', content: sys + profile() + VOZ()}, ...hist.slice(-4), {role: 'user', content: user}], {purpose: 'text', maxTokens, noOwn: true}), sleep(60000).then(() => { throw new Error('tarde'); })]);
     const t = String(r && r.text || '').replace(/```[\s\S]*?```/g, '').trim(); hist.push({role: 'user', content: user.slice(0, 300)}, {role: 'assistant', content: t.slice(0, 600)}); if (hist.length > 12) hist.splice(0, hist.length - 12); return t;
   }
   const big = on => { bub.classList.toggle('long', !!on); if (!bub.hidden) placeBubble(); };
@@ -565,7 +567,7 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
   async function transcribe(blob) {
     const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(), dec = await ac.decodeAudioData(await blob.arrayBuffer()); try { ac.close(); } catch {}
     const len = Math.ceil(dec.duration * 16000), off = new OfflineAudioContext(1, Math.max(1, len), 16000), src = off.createBufferSource(); src.buffer = dec; src.connect(off.destination); src.start(); const pcm = (await off.startRendering()).getChannelData(0);
-    const body = {model: 'openai-audio', temperature: 0, max_tokens: 1200, messages: [{role: 'system', content: 'Eres un transcriptor. Escribe EXACTAMENTE lo que dice la persona en el audio, completo de principio a fin, en español, sin responderle, sin comillas y sin agregar nada. Si no se entiende nada, responde solo: ""'}, {role: 'user', content: [{type: 'text', text: 'Transcribe este audio completo.'}, {type: 'input_audio', input_audio: {data: b64(toWav(pcm)), format: 'wav'}}]}]};
+    const body = {model: 'openai-audio', temperature: 0, max_tokens: 1200, messages: [{role: 'system', content: VL().TRANSCRIBE || 'Eres un transcriptor. Escribe EXACTAMENTE lo que dice la persona en el audio, completo de principio a fin, en español, sin responderle, sin comillas y sin agregar nada. Si no se entiende nada, responde solo: ""'}, {role: 'user', content: [{type: 'text', text: 'Transcribe este audio completo.'}, {type: 'input_audio', input_audio: {data: b64(toWav(pcm)), format: 'wav'}}]}]};
     const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 30000 + Math.min(60000, dec.duration * 400));
     try { const r = await fetch(VXURL + '/ai', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body), signal: ctl.signal}); if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(), m = j && j.choices && j.choices[0] && j.choices[0].message || {}, t = m.content || (m.audio && m.audio.transcript) || ''; return String(t || '').replace(/^["«“\s]+|["»”\s]+$/g, '').trim(); }
     finally { clearTimeout(to); }
@@ -582,7 +584,7 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
       if (cancelled || !open) { cancelled = false; mood('neutral', 'idle'); return; }
       if (!chunks.length || dur < 600) { mood('neutral', 'idle'); say('No alcancé a escucharte. Toca el micrófono y habla.'); return; }
       busy = true; bub.classList.add('working'); mood('thinking', 'think'); say('Escuchando lo que dijiste…', {busy: true}); status('transcribiendo…');
-      let t = ''; try { t = await transcribe(new Blob(chunks, {type})); } catch (e) { console.warn('Pixel voz', e); }
+      let t = ''; try { t = VL().clean(await transcribe(new Blob(chunks, {type}))); } catch (e) { console.warn('Pixel voz', e); } // sin muletillas ni repeticiones
       busy = false; bub.classList.remove('working'); status('IA de VORTEX'); if (!open) return;
       if (!t || t.length < 2) { mood('surprised', 'idle'); say('No te entendí bien. Intenta de nuevo hablando un poco más cerca del micrófono, o escríbeme.'); return; }
       input.value = t; ask(t); };
@@ -593,14 +595,14 @@ Habla en español, claro, breve y con buena onda. No prometas ganancias (no es a
     const start = () => {
       rec = new SR(); rec.lang = 'es-MX'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1; part = ''; fail = ''; lastStart = Date.now();
       rec.onstart = () => { if (first) { first = false; micUI(true); } };
-      rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; part = t.trim(); input.value = (said + ' ' + part).trim(); };
+      rec.onresult = e => { part = VL().fromResults(e.results).trim(); input.value = VL().merge(said, part); }; // sin duplicar lo que Android repite
       rec.onerror = e => { fail = e.error; };
-      rec.onend = () => { said = (said + ' ' + part).trim(); part = '';
+      rec.onend = () => { said = VL().merge(said, part); part = '';
         const fatal = ['not-allowed', 'service-not-allowed', 'audio-capture', 'language-not-supported'].includes(fail);
         if (Date.now() - lastStart < 700) restarts++; else restarts = 0;
         if (wantRec && !cancelled && open && !fatal && restarts < 6) { try { start(); return; } catch {} }
         rec = null; wantRec = false; micUI(false); mood('neutral', 'idle'); if (cancelled || !open) { cancelled = false; return; }
-        if (said) { ask(said); return; }
+        if (said) { const t = VL().clean(said) || said; input.value = t; ask(t); return; }
         if (fail === 'not-allowed' || fail === 'service-not-allowed') { say('Necesito permiso para usar el micrófono: actívalo en los permisos del navegador (o de VORTEX) y vuelve a tocarlo.'); return; }
         say('No te escuché. Toca el micrófono y vuelve a intentarlo.'); };
       rec.start();
