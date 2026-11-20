@@ -51,7 +51,7 @@ function sanAlert(a) {
 }
 function sanAcct(a) { // saldo de la cuenta para la barra de progreso (USD)
   const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {}, n = v => Number.isFinite(+v) && +v >= 0 && +v < 1e12 ? Math.round(+v * 100) / 100 : 0;
-  return {start: n(q.start), cur: n(q.cur), auto: q.auto !== false};
+  const o = {start: n(q.start), cur: n(q.cur), auto: q.auto !== false}; if (q.ex === 'yes' || q.ex === 'no') o.ex = q.ex; return o; // ex: si aceptaste (o no) que el saldo de tu exchange llene la barra
 }
 function sanRisk(a) { // calculadora de riesgo: % por operación, apalancamiento, comisión, capital manual y si se muestra en los dibujos Long/Short
   const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {}, n = (v, lo, hi, d) => Number.isFinite(+v) && +v >= lo && +v <= hi ? +v : d;
@@ -1408,6 +1408,8 @@ function replayBar() {
 function setLive(on) { $('#liveDot').classList.toggle('on', !!on); }
 function closeWS() { wsGen++; wsOpen = false; clearInterval(wsPing); if (ws) { ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null; try { ws.close(); } catch {} } ws = null; setLive(false); }
 let wsLast = 0, wsReloadAt = 0; // último dato en vivo recibido / última recarga del vigilante
+let tradeBuf = null, tradeT = 0, tradeLastT = 0, tradeLastP = 0;
+let liveGlide = null;
 function connectWS() {
   closeWS(); wsLast = Date.now();
   if (typeof WebSocket === 'undefined') return;
@@ -1417,17 +1419,21 @@ function connectWS() {
     setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH[src].get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 8000); return;
   }
   const by = (src === 'bybit' || src === 'bybitf') && BY_IV[tf], ok = (src === 'okx' || src === 'okxf') && OKX_BAR[tf];
-  const url = by ? `wss://stream.bybit.com/v5/public/${src === 'bybitf' ? 'linear' : 'spot'}` : ok ? 'wss://ws.okx.com:8443/ws/v5/business' : src === 'binancef' ? `wss://fstream.binance.com/ws/${sym.toLowerCase()}@kline_${tf}` : `wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_${tf}`;
+  const ls = sym.toLowerCase(), url = by ? `wss://stream.bybit.com/v5/public/${src === 'bybitf' ? 'linear' : 'spot'}` : ok ? 'wss://ws.okx.com:8443/ws/v5/business' : src === 'binancef' ? `wss://fstream.binance.com/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade` : `wss://stream.binance.com:9443/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade`; // vela + cada operación (aggTrade): el precio se mueve en vivo, no cada 2 s
+  tradeBuf = null; tradeLastT = 0; tradeLastP = 0;
   try { ws = new WebSocket(url); } catch { return; }
   ws.onopen = () => { if (gen === wsGen) { wsOpen = true; wsRetry = 0; setLive(true);
-    if (by) { ws.send(JSON.stringify({op: 'subscribe', args: [`kline.${BY_IV[tf]}.${sym}`]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send(JSON.stringify({op: 'ping'})); } catch {} }, 20000); }
+    if (by) { ws.send(JSON.stringify({op: 'subscribe', args: [`kline.${BY_IV[tf]}.${sym}`, `publicTrade.${sym}`]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send(JSON.stringify({op: 'ping'})); } catch {} }, 20000); }
     if (ok) { ws.send(JSON.stringify({op: 'subscribe', args: [{channel: 'candle' + OKX_BAR[tf], instId: dashPair(sym) + (src === 'okxf' ? '-SWAP' : '')}]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send('ping'); } catch {} }, 20000); } } };
   ws.onmessage = e => {
     if (gen !== wsGen) return; wsLast = Date.now();
     let m; try { m = JSON.parse(e.data); } catch { return; }
-    if (by) { const d = m && typeof m.topic === 'string' && m.topic.startsWith('kline.') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d.start, o: +d.open, h: +d.high, l: +d.low, c: +d.close, v: +d.volume}); return; }
+    if (by) { if (m && typeof m.topic === 'string' && m.topic.startsWith('publicTrade.') && Array.isArray(m.data)) { for (const q of m.data) pushTrade(+q.p, +q.v, +q.T); return; } const d = m && typeof m.topic === 'string' && m.topic.startsWith('kline.') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d.start, o: +d.open, h: +d.high, l: +d.low, c: +d.close, v: +d.volume}); return; }
     if (ok) { const d = m && m.arg && /^candle/.test(m.arg.channel || '') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}); return; }
-    const k = m && m.k; if (k) applyKline({t: k.t, o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.v});
+    const dm = m && m.data && m.stream ? m.data : m; if (dm && dm.e === 'aggTrade') { pushTrade(+dm.p, +dm.q, +dm.T); return; }
+    const k = dm && dm.k; if (k) { let c = +k.c, h = +k.h, l = +k.l; const n = candles.length, L = n ? (liveGlide ? liveGlide.k : candles[n - 1]) : null;
+      if (L && L.t === k.t && tradeLastT > (+dm.E || 0) && tradeLastP > 0) { c = tradeLastP; h = Math.max(h, c); l = Math.min(l, c); } // la vela llega cada ~2 s: si ya hubo operaciones más nuevas, el precio no se regresa
+      applyKline({t: k.t, o: +k.o, h, l, c, v: +k.v}); }
   };
   ws.onerror = () => { try { ws.close(); } catch {} };
   ws.onclose = () => {
@@ -1435,6 +1441,21 @@ function connectWS() {
     wsOpen = false; setLive(false);
     setTimeout(() => { if (gen === wsGen && !document.hidden) connectWS(); }, Math.min(15000, 3000 * ++wsRetry));
   };
+}
+/* Operaciones en vivo (aggTrade / publicTrade): se juntan y se aplican a la última vela cada ~70 ms; entre medio el precio se desliza
+   (modo Completo), así la vela se mueve como en vivo de verdad. Si una operación ya cae en la vela siguiente, se abre provisional
+   y el stream de velas la confirma después. */
+function pushTrade(p, q, t) {
+  if (!(p > 0) || replay || !candles.length) return;
+  const b = tradeBuf || (tradeBuf = {h: p, l: p, c: p, v: 0, t}); if (p > b.h) b.h = p; if (p < b.l) b.l = p; b.c = p; b.v += q > 0 ? q : 0; b.t = Math.max(b.t || 0, t || 0);
+  if (!tradeT) tradeT = setTimeout(flushTrades, 70);
+}
+function flushTrades() {
+  tradeT = 0; const b = tradeBuf; tradeBuf = null; if (!b || !candles.length) return; tradeLastT = b.t || Date.now(); tradeLastP = b.c;
+  const n = candles.length, L = liveGlide ? liveGlide.k : candles[n - 1], iv = IV_MS[state.interval];
+  if (iv && state.interval !== '1M' && b.t >= L.t + iv) { const t0 = L.t + Math.floor((b.t - L.t) / iv) * iv; applyKline({t: t0, o: b.c, h: b.h, l: b.l, c: b.c, v: b.v}); return; }
+  if (b.t && b.t < L.t) return;
+  applyKline({t: L.t, o: L.o, h: Math.max(L.h, b.h), l: Math.min(L.l, b.l), c: b.c, v: (L.v || 0) + b.v});
 }
 /* La vela se pinta con CADA dato en vivo; los indicadores (lo pesado) se recalculan como mucho unas veces por segundo,
    según lo que tarden: así el hilo no se satura y el gráfico nunca se queda «a tirones». Una vela nueva sí recalcula al instante. */
@@ -1447,7 +1468,6 @@ function recalcSoon(force) {
 /* Modo Completo: el precio de la vela en vivo se desliza suave hasta el dato nuevo (≈170 ms) en vez de saltar,
    así la vela, la línea y la etiqueta del precio se mueven fluidas a la frecuencia de la pantalla (60, 120 o 144 Hz).
    En modo Ligero (o con «reducir movimiento») el precio salta directo como siempre. Las alertas usan siempre el dato real. */
-let liveGlide = null;
 function liveGlideStop() { if (!liveGlide) return; cancelAnimationFrame(liveGlide.raf); const n = candles.length, L = liveGlide; liveGlide = null; if (n && candles[n - 1].t === L.t) candles[n - 1] = L.k; }
 function liveGlideStart(k, last) {
   if (REDUCED || liteMode() || document.hidden || currentView !== 'chartView' || !Number.isFinite(last.c) || last.c === k.c) { liveGlideStop(); return false; }
@@ -4836,6 +4856,79 @@ function endPointer(e, cancelled) {
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && selAlertId && !alConfirm && !document.querySelector('.cfg-overlay')) { selAlertId = null; scheduleRender(); } });
 area.addEventListener('pointerup', e => endPointer(e, false));
 area.addEventListener('pointercancel', e => endPointer(e, true));
+/* ───────── Clic derecho mantenido: zoom libre y fluido (como en OpenMarket) ─────────
+   Clic derecho normal = el menú de siempre. Si lo MANTIENES presionado (o lo arrastras), aparece una mira en ese punto y unas esquinas:
+   a la derecha/izquierda acercas o alejas las velas, arriba/abajo estiras o encoges el precio, siempre alrededor del punto donde presionaste.
+   El zoom sigue al ratón con suavizado (a la frecuencia de la pantalla); en modo Ligero va directo. */
+let rz = null, rzSkipMenu = 0, rzRaf = 0;
+const RZ_SKIP = '.chart-controls,.draw-hint,.leg-row,.pbar,.pbar-pop,.pbar-hidden,.leg-toggle,.favbar,.fav-fab,.brand-fab,.wl-add-fab,.al-confirm,.chart-label,button';
+function rzOverlay() {
+  let o = document.getElementById('rzOv'); if (o) return o;
+  o = document.createElement('div'); o.id = 'rzOv'; o.className = 'rz-ov'; o.setAttribute('aria-hidden', 'true');
+  o.innerHTML = '<i class="rz-c tl"></i><i class="rz-c tr"></i><i class="rz-c bl"></i><i class="rz-c br"></i><svg class="rz-a" viewBox="0 0 24 24" width="26" height="26"><path d="M12 1Q12.9 11.1 23 12Q12.9 12.9 12 23Q11.1 12.9 1 12Q11.1 11.1 12 1Z" fill="currentColor"/></svg><svg class="rz-p" viewBox="0 0 24 24" width="15" height="15"><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  document.body.appendChild(o); return o;
+}
+function rzPaint() {
+  if (!rz || !geo) return; const o = rzOverlay(), r = $('#priceCanvas').getBoundingClientRect(), fxE = rz.vis0 / visible, fy = rz.yUsed ? rz.fy : 1;
+  const L = geo.left, T = geo.plotTop, W = geo.plotW, H = geo.plotH, m = 10;
+  let x1 = rz.ax - (rz.ax - L) * fxE, x2 = x1 + W * fxE, y1 = rz.ay - (rz.ay - T) * fy, y2 = y1 + H * fy; // dónde queda la vista que tenías al presionar
+  x1 = Math.max(L + m, x1); x2 = Math.min(L + W - m, x2); y1 = Math.max(T + m, y1); y2 = Math.min(T + H - m, y2);
+  o.style.left = r.left + 'px'; o.style.top = r.top + 'px'; o.style.width = r.width + 'px'; o.style.height = r.height + 'px';
+  o.style.setProperty('--x1', x1 + 'px'); o.style.setProperty('--x2', x2 + 'px'); o.style.setProperty('--y1', y1 + 'px'); o.style.setProperty('--y2', y2 + 'px');
+  o.style.setProperty('--ax', rz.ax + 'px'); o.style.setProperty('--ay', rz.ay + 'px'); o.style.setProperty('--px', rz.cx + 'px'); o.style.setProperty('--py', rz.cy + 'px');
+}
+function rzApply() {
+  const n = candles.length; if (!n || !geo) return;
+  const V = clamp(rz.vis0 / rz.fx, 15, 400), step = geo.plotW / V, start = rz.iA + .5 - (rz.ax - geo.left) / step;
+  visible = V; pan = n - (start + V);
+  if (rz.yUsed) { const range = (rz.pr0.max - rz.pr0.min) / rz.fy, u = (rz.ay - geo.plotTop) / geo.plotH, max = rz.pA + u * range; priceMan = {min: max - range, max}; updateAutoBtn(); }
+  render(); rzPaint();
+}
+function rzLoop() {
+  cancelAnimationFrame(rzRaf); let last = performance.now();
+  const step = now => { if (!rz) { rzRaf = 0; return; } const dt = Math.min(48, now - last); last = now;
+    const k = REDUCED || liteMode() ? 1 : 1 - Math.pow(.00002, dt / 1000);
+    rz.fx += (rz.tx - rz.fx) * k; rz.fy += (rz.ty - rz.fy) * k; rzApply();
+    const settled = Math.abs(rz.tx - rz.fx) < 1e-4 && Math.abs(rz.ty - rz.fy) < 1e-4;
+    if (rz.done && settled) { rzEnd(true); return; } rzRaf = requestAnimationFrame(step); };
+  rzRaf = requestAnimationFrame(step);
+}
+function rzStart() {
+  if (!rz || rz.on) return; rz.on = true; clearTimeout(rz.timer); cross = null; area.classList.add('rz-on');
+  const o = rzOverlay(); rzPaint(); requestAnimationFrame(() => o.classList.add('show')); if (navigator.vibrate) try { navigator.vibrate(8); } catch {}
+  rzLoop();
+}
+function rzEnd(finished) {
+  cancelAnimationFrame(rzRaf); rzRaf = 0; area.classList.remove('rz-on');
+  const o = document.getElementById('rzOv'); if (o) { o.classList.remove('show'); setTimeout(() => { if (!rz) o.remove(); }, 260); }
+  rz = null; if (finished) scheduleRender();
+}
+area.addEventListener('pointerdown', e => {
+  if (e.pointerType !== 'mouse' || e.button !== 2 || !geo || !candles.length || e.target.closest(RZ_SKIP)) return;
+  const pt = local(e); if (pt.x < geo.left || pt.x > geo.left + geo.plotW || pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH) return;
+  e.stopImmediatePropagation(); stopMotion(); if (rz) rzEnd(false);
+  try { area.setPointerCapture(e.pointerId); } catch {}
+  rz = {id: e.pointerId, x0: e.clientX, y0: e.clientY, ax: pt.x, ay: pt.y, cx: pt.x, cy: pt.y, on: false, done: false, vis0: visible, iA: IDX(pt.x), pA: PRICE(pt.y), pr0: {min: geo.min, max: geo.max}, fx: 1, fy: 1, tx: 1, ty: 1, yUsed: false, menu: null};
+  rz.timer = setTimeout(rzStart, 230);
+}, true);
+area.addEventListener('pointermove', e => {
+  if (!rz || e.pointerId !== rz.id) return; e.stopImmediatePropagation();
+  const dx = e.clientX - rz.x0, dy = e.clientY - rz.y0, pt = local(e); rz.cx = pt.x; rz.cy = pt.y;
+  if (!rz.on) { if (Math.hypot(dx, dy) > 5) rzStart(); else return; }
+  rz.tx = clamp(Math.exp(dx / 190), .04, 26); if (Math.abs(dy) > 4) rz.yUsed = true; rz.ty = clamp(Math.exp(-dy / 190), .05, 25);
+  rzPaint();
+}, true);
+const rzUp = e => {
+  if (!rz || e.pointerId !== rz.id) return; e.stopImmediatePropagation(); clearTimeout(rz.timer); try { area.releasePointerCapture(e.pointerId); } catch {}
+  if (rz.on) { rzSkipMenu = performance.now() + 450; rz.done = true; if (!rzRaf) rzEnd(true); return; }
+  const mn = rz.menu; rz = null;
+  if (mn) { const t = document.elementFromPoint(mn.x, mn.y) || area; t.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: mn.x, clientY: mn.y, button: 2})); } // Linux/Mac: el menú se pidió al presionar; sale al soltar si no hubo zoom
+};
+area.addEventListener('pointerup', rzUp, true); area.addEventListener('pointercancel', rzUp, true);
+area.addEventListener('contextmenu', e => {
+  if (rz) { e.preventDefault(); e.stopImmediatePropagation(); if (!rz.on) rz.menu = {x: e.clientX, y: e.clientY}; return; }
+  if (performance.now() < rzSkipMenu) { e.preventDefault(); e.stopImmediatePropagation(); } // Windows: el menú llega al soltar; tras un zoom no sale
+}, true);
 function startPinch() {
   if (gest) clearTimeout(gest.timer); gest = null; cross = null; preview = null; brushLive = null;
   const [a, b] = [...ptrs.values()], r = $('#priceCanvas').getBoundingClientRect(), cx = (a.x + b.x) / 2 - r.left;
@@ -5003,13 +5096,13 @@ function openAcctDialog(anchor) {
     const st = num($('#acStart').value); let cu = num($('#acCur').value);
     if (!(st > 0)) { toast('Escribe tu capital inicial en dólares'); return; }
     if (!Number.isFinite(cu)) cu = st;
-    state.acct = sanAcct({start: st, cur: cu, auto: $('#acAuto').checked}); save(); renderAcct(); close(); toast('Barra de la cuenta actualizada');
+    state.acct = sanAcct({start: st, cur: cu, auto: $('#acAuto').checked, ex: $('#acAuto').checked ? 'yes' : 'no'}); save(); renderAcct(); close(); toast('Barra de la cuenta actualizada');
   };
 }
 document.addEventListener('click', e => { const a = e.target.closest('[data-acct-open]'); if (a) { e.preventDefault(); openAcctDialog(a); } });
 window.addEventListener('message', e => { // Nexus Lens (lens.js) avisa el equity de tu exchange conectado
   if (e.origin !== location.origin || !e.data || e.data.cct !== 'equity') return;
-  const v = +e.data.value; if (!Number.isFinite(v) || v < 0 || !state.acct || state.acct.auto === false) return;
+  const v = +e.data.value; if (!Number.isFinite(v) || v < 0 || !state.acct || state.acct.auto === false || state.acct.ex !== 'yes') return;
   const A = state.acct; if (A.cur === Math.round(v * 100) / 100 && A.start > 0) return;
   state.acct = sanAcct({start: A.start > 0 ? A.start : v, cur: v, auto: true}); save(); renderAcct();
 });
@@ -5839,8 +5932,27 @@ window.CCT_split = s => splitSym(s);
 window.CCTCloudPriv = {uid: () => uid || '', ready: () => !!(uid && db && fbUser), token: async force => { try { return fbUser ? await fbUser.getIdToken(!!force) : ''; } catch { return ''; } }, // token de sesión: el servidor lo verifica (nunca cree un uid suelto)
  get: async n => { const sn = await db.doc(`users/${uid}/data/${n}`).get(); return sn.exists ? sn.data() : null; }, set: (n, o) => db.doc(`users/${uid}/data/${n}`).set(o)};
 function exSub() { const x = window.CCTExchange && CCTExchange.info(), s = x && CCTExchange.snap(); $$('[data-ex-sub]').forEach(el => { el.textContent = x ? `${x.name} conectado · ${s && s.err ? 'revisa la conexión' : Number.isFinite(s && s.equity) ? 'saldo $' + s.equity.toLocaleString('es-MX', {maximumFractionDigits: 2}) : 'leyendo saldo…'}` : 'Conecta BingX, Binance, Bybit o cualquier otro'; }); }
-if (window.CCTExchange) CCTExchange.onChange(s => { exSub(); if (acctMenu) paintAcctMenu(); if (Number.isFinite(s.equity) && s.equity >= 0 && !s.err && !(state.acct && state.acct.auto === false)) { const v = Math.round(s.equity * 100) / 100, A = state.acct || {}; if (A.cur !== v || !(A.start > 0)) { state.acct = sanAcct({start: A.start > 0 ? A.start : v, cur: v, auto: true}); save(); if (typeof renderAcct === 'function') renderAcct(); } } }); // el saldo real de tu exchange alimenta la barra de saldo de la cuenta
+/* Saldo de la cuenta desde el exchange: al conectar tu exchange se pregunta UNA vez si quieres que su saldo llene la barra de la cuenta
+   (widget de abajo del gráfico). Si dices que sí, se actualiza solo; si no, la barra queda como la tengas. */
+let exAskShown = false;
+function askExBalance(v) {
+  if (exAskShown || document.querySelector('.ex-ask')) return; exAskShown = true;
+  const x = CCTExchange.info(), m = document.createElement('div'); m.className = 'acct-pop ex-ask'; m.setAttribute('role', 'dialog');
+  m.innerHTML = `<b>¿Usar el saldo de ${esc(x ? x.name : 'tu exchange')}?</b><small>La barra de saldo de abajo del gráfico se llenará sola con tu saldo real ($${v.toLocaleString('en-US', {maximumFractionDigits: 2})}) y se irá actualizando. Puedes cambiarlo cuando quieras tocando la barra.</small><div class="ac-btns"><button class="small-button" data-exa="no" type="button">Ahora no</button><button class="primary" data-exa="yes" type="button">Sí, activarlo</button></div>`;
+  document.body.appendChild(m);
+  const an = $('#stAcct'); if (an && an.getClientRects().length) { const r = an.getBoundingClientRect(); m.classList.add('from-anchor'); m.style.right = 'auto'; m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.bottom = (innerHeight - r.top + 10) + 'px'; }
+  m.onclick = e => { const b = e.target.closest('[data-exa]'); if (!b) return; const A = state.acct || {};
+    if (b.dataset.exa === 'yes') { const q = Math.round(v * 100) / 100; state.acct = sanAcct({start: q, cur: q, auto: true, ex: 'yes'}); toast('Listo: la barra de saldo usa tu exchange'); }
+    else state.acct = sanAcct({...A, auto: false, ex: 'no'});
+    save(); renderAcct(); uxOut(m); };
+}
+if (window.CCTExchange) CCTExchange.onChange(s => { exSub(); if (acctMenu) paintAcctMenu(); if (!(Number.isFinite(s.equity) && s.equity >= 0 && !s.err) || !CCTExchange.connected()) return;
+  const v = Math.round(s.equity * 100) / 100, A = state.acct || {};
+  if (A.ex === 'no' || (A.ex !== 'yes' && A.auto === false)) return;
+  if (A.ex !== 'yes') { if (A.start > 0 && A.cur > 0 && A.auto !== false && Math.abs(A.cur - v) < .01) { state.acct = sanAcct({...A, ex: 'yes'}); save(); return; } askExBalance(v); return; } // aún no decides: se pregunta una vez
+  if (A.cur !== v || !(A.start > 0)) { state.acct = sanAcct({start: A.start > 0 ? A.start : v, cur: v, auto: true, ex: 'yes'}); save(); if (typeof renderAcct === 'function') renderAcct(); } }); // el saldo real de tu exchange alimenta la barra de saldo de la cuenta
 function renderAccount() {
+  document.body.classList.toggle('signed-in', !!fbUser); // Exchange, Tu IA y demás opciones de cuenta solo con la sesión iniciada
   exSub(); if (fbUser && window.CCTExchange) CCTExchange.cloudSync(uid); if (fbUser && window.CCTRadar && renderAccount.rUid !== uid) { renderAccount.rUid = uid; CCTRadar.cloudLoad(); }
   const box = $('#accountBox'), top = $('#accountBtn');
   if (window.CCTPlans) CCTPlans.setUser(fbUser);

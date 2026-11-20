@@ -91,7 +91,7 @@
 :root.vx-space body .bottom-nav button.active{color:var(--s-text)}
 :root.vx-space body .bottom-nav button.active span{filter:drop-shadow(0 0 8px color-mix(in srgb,var(--s-acc) 60%,transparent))!important}
 :root.vx-space body .bottom-nav::before{background:var(--s-sel)!important;border-color:color-mix(in srgb,var(--s-acc) 30%,transparent)!important;box-shadow:none!important;border-radius:999px!important}
-:root.vx-space body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn){animation:none!important;
+:root.vx-space body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn){animation:none!important;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2Q13.2 10.8 22 12Q13.2 13.2 12 22Q10.8 13.2 2 12Q10.8 10.8 12 2Z' fill='%23c9b8ff'/%3E%3C/svg%3E")!important;
   background-size:9px 9px!important;background-position:right calc(var(--gxx) - 4.5px) top calc(var(--gxy) - 4.5px)!important}
 

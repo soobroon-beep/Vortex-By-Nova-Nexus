@@ -1633,25 +1633,25 @@ body.rp-picking #chartArea{cursor:crosshair}
 
 /* ───────── Liquidaciones: botón «pro» con fondo de galaxia (estrellas que pasan), sin la etiqueta PRO · celular y escritorio ───────── */
 .prem-btn .prem-tag{display:none!important}
-#chartView #liqBtn.gx-lock{position:relative;overflow:hidden;isolation:isolate;gap:6px;color:rgba(238,240,255,.92)!important;font-weight:650;letter-spacing:.15px;text-shadow:none;
+#chartView :is(#liqBtn,#layoutBtn).gx-lock{position:relative;overflow:hidden;isolation:isolate;gap:6px;color:rgba(238,240,255,.92)!important;font-weight:650;letter-spacing:.15px;text-shadow:none;
   border:1px solid transparent!important;
   background:radial-gradient(90% 140% at 18% 0%,rgba(124,77,255,.16),transparent 62%) padding-box,radial-gradient(80% 140% at 100% 100%,rgba(56,96,200,.12),transparent 64%) padding-box,linear-gradient(135deg,#0a0b16,#0d0e1f 55%,#0a0d1a) padding-box,linear-gradient(120deg,rgba(167,139,250,.38),rgba(255,255,255,.1) 45%,rgba(129,140,248,.32)) border-box!important;
   box-shadow:none!important;filter:none!important;transition:box-shadow .25s,color .2s}
-#chartView #liqBtn.gx-lock .ic{color:#b9acf5!important;filter:none}
-#chartView #liqBtn.gx-lock::before,#chartView #liqBtn.gx-lock::after{content:''!important;position:absolute;inset:0;z-index:-1;pointer-events:none;transform:none;background-repeat:repeat}
+#chartView :is(#liqBtn,#layoutBtn).gx-lock .ic{color:#b9acf5!important;filter:none}
+#chartView :is(#liqBtn,#layoutBtn).gx-lock::before,#chartView :is(#liqBtn,#layoutBtn).gx-lock::after{content:''!important;position:absolute;inset:0;z-index:-1;pointer-events:none;transform:none;background-repeat:repeat}
 /* estrellas que pasan despacio (blancas, casi sin color) */
-#chartView #liqBtn.gx-lock::before{background-image:radial-gradient(1px 1px at 6px 5px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 18px 22px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1px 1px at 27px 11px,rgba(214,204,255,.7),transparent 70%),radial-gradient(1px 1px at 39px 30px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1.2px 1.2px at 52px 4px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 58px 19px,rgba(196,212,255,.6),transparent 70%),radial-gradient(1px 1px at 71px 33px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1px 1px at 84px 13px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 93px 26px,rgba(214,204,255,.7),transparent 70%),radial-gradient(1px 1px at 104px 7px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1.1px 1.1px at 113px 31px,rgba(255,255,255,.8),transparent 70%),radial-gradient(0.8px 0.8px at 33px 2px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 76px 2px,rgba(196,212,255,.6),transparent 70%),radial-gradient(0.8px 0.8px at 98px 17px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 12px 34px,rgba(214,204,255,.7),transparent 70%),radial-gradient(0.8px 0.8px at 47px 16px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 66px 8px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 118px 20px,rgba(196,212,255,.6),transparent 70%);background-size:124px 38px;opacity:.85;animation:liqStars 26s steps(120) infinite!important}
+#chartView :is(#liqBtn,#layoutBtn).gx-lock::before{background-image:radial-gradient(1px 1px at 6px 5px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 18px 22px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1px 1px at 27px 11px,rgba(214,204,255,.7),transparent 70%),radial-gradient(1px 1px at 39px 30px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1.2px 1.2px at 52px 4px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 58px 19px,rgba(196,212,255,.6),transparent 70%),radial-gradient(1px 1px at 71px 33px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1px 1px at 84px 13px,rgba(255,255,255,.8),transparent 70%),radial-gradient(1px 1px at 93px 26px,rgba(214,204,255,.7),transparent 70%),radial-gradient(1px 1px at 104px 7px,rgba(255,255,255,.5),transparent 70%),radial-gradient(1.1px 1.1px at 113px 31px,rgba(255,255,255,.8),transparent 70%),radial-gradient(0.8px 0.8px at 33px 2px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 76px 2px,rgba(196,212,255,.6),transparent 70%),radial-gradient(0.8px 0.8px at 98px 17px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 12px 34px,rgba(214,204,255,.7),transparent 70%),radial-gradient(0.8px 0.8px at 47px 16px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 66px 8px,rgba(255,255,255,.5),transparent 70%),radial-gradient(0.8px 0.8px at 118px 20px,rgba(196,212,255,.6),transparent 70%);background-size:124px 38px;opacity:.85;animation:liqStars 26s linear infinite!important}
 /* galaxia muy tenue: una nebulosa que se desliza y unas pocas estrellas que titilan */
-#chartView #liqBtn.gx-lock::after{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='38' viewBox='0 0 160 38'%3E%3Cg fill='none' stroke='%23c4b5fd' stroke-opacity='.32' stroke-width='.6' stroke-linecap='round'%3E%3Cpath d='M14 27 L30 17 L46 21 L58 9 L74 13'/%3E%3Cpath d='M46 21 L52 31'/%3E%3Cpath d='M104 30 L116 18 L132 22 L146 8'/%3E%3Cpath d='M116 18 L122 6'/%3E%3C/g%3E%3Cg fill='%23fff'%3E%3Ccircle cx='14' cy='27' r='1.1'/%3E%3Ccircle cx='30' cy='17' r='1.4'/%3E%3Ccircle cx='46' cy='21' r='1.1'/%3E%3Ccircle cx='58' cy='9' r='1.6'/%3E%3Ccircle cx='74' cy='13' r='1'/%3E%3Ccircle cx='52' cy='31' r='.9'/%3E%3Ccircle cx='104' cy='30' r='1'/%3E%3Ccircle cx='116' cy='18' r='1.5'/%3E%3Ccircle cx='132' cy='22' r='1.1'/%3E%3Ccircle cx='146' cy='8' r='1.3'/%3E%3Ccircle cx='122' cy='6' r='.9'/%3E%3C/g%3E%3Cg fill='%23e9d5ff'%3E%3Ccircle cx='58' cy='9' r='3' opacity='.18'/%3E%3Ccircle cx='116' cy='18' r='3' opacity='.16'/%3E%3C/g%3E%3C/svg%3E"),radial-gradient(1.5px 1.5px at 20px 14px,rgba(255,255,255,.85),transparent 70%),radial-gradient(1.4px 1.4px at 66px 27px,rgba(230,220,255,.75),transparent 70%),radial-gradient(1.3px 1.3px at 92px 9px,rgba(255,255,255,.7),transparent 70%),radial-gradient(70px 24px at 50% 55%,rgba(139,92,246,.13),transparent 70%);background-size:160px 38px,110px 38px,110px 38px,110px 38px,150px 38px;background-position:0 50%,0 0,0 0,0 0,0 0;animation:liqConst 40s steps(160) infinite,liqTwinkle 3.6s ease-in-out infinite!important}
+#chartView :is(#liqBtn,#layoutBtn).gx-lock::after{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='38' viewBox='0 0 160 38'%3E%3Cg fill='none' stroke='%23c4b5fd' stroke-opacity='.32' stroke-width='.6' stroke-linecap='round'%3E%3Cpath d='M14 27 L30 17 L46 21 L58 9 L74 13'/%3E%3Cpath d='M46 21 L52 31'/%3E%3Cpath d='M104 30 L116 18 L132 22 L146 8'/%3E%3Cpath d='M116 18 L122 6'/%3E%3C/g%3E%3Cg fill='%23fff'%3E%3Ccircle cx='14' cy='27' r='1.1'/%3E%3Ccircle cx='30' cy='17' r='1.4'/%3E%3Ccircle cx='46' cy='21' r='1.1'/%3E%3Ccircle cx='58' cy='9' r='1.6'/%3E%3Ccircle cx='74' cy='13' r='1'/%3E%3Ccircle cx='52' cy='31' r='.9'/%3E%3Ccircle cx='104' cy='30' r='1'/%3E%3Ccircle cx='116' cy='18' r='1.5'/%3E%3Ccircle cx='132' cy='22' r='1.1'/%3E%3Ccircle cx='146' cy='8' r='1.3'/%3E%3Ccircle cx='122' cy='6' r='.9'/%3E%3C/g%3E%3Cg fill='%23e9d5ff'%3E%3Ccircle cx='58' cy='9' r='3' opacity='.18'/%3E%3Ccircle cx='116' cy='18' r='3' opacity='.16'/%3E%3C/g%3E%3C/svg%3E"),radial-gradient(1.5px 1.5px at 20px 14px,rgba(255,255,255,.85),transparent 70%),radial-gradient(1.4px 1.4px at 66px 27px,rgba(230,220,255,.75),transparent 70%),radial-gradient(1.3px 1.3px at 92px 9px,rgba(255,255,255,.7),transparent 70%),radial-gradient(70px 24px at 50% 55%,rgba(139,92,246,.13),transparent 70%);background-size:160px 38px,110px 38px,110px 38px,110px 38px,150px 38px;background-position:0 50%,0 0,0 0,0 0,0 0;animation:liqConst 40s linear infinite,liqTwinkle 3.6s ease-in-out infinite!important}
 @keyframes liqConst{to{background-position:-160px 50%,-110px 0,-110px 0,-110px 0,-150px 0}}
-#chartView #liqBtn.gx-lock:hover{color:#fff!important;box-shadow:0 0 12px rgba(139,92,246,.22)!important}
-#chartView #liqBtn.gx-lock.on{color:#fff!important;box-shadow:0 0 0 1px rgba(196,181,253,.28),0 0 12px rgba(139,92,246,.25)!important;
+#chartView :is(#liqBtn,#layoutBtn).gx-lock:hover{color:#fff!important;box-shadow:0 0 12px rgba(139,92,246,.22)!important}
+#chartView :is(#liqBtn,#layoutBtn).gx-lock.on{color:#fff!important;box-shadow:0 0 0 1px rgba(196,181,253,.28),0 0 12px rgba(139,92,246,.25)!important;
   background:radial-gradient(90% 140% at 18% 0%,rgba(124,77,255,.28),transparent 62%) padding-box,radial-gradient(80% 140% at 100% 100%,rgba(56,96,200,.22),transparent 64%) padding-box,linear-gradient(135deg,#0e0d22,#141233 55%,#0e1328) padding-box,linear-gradient(120deg,rgba(196,181,253,.6),rgba(255,255,255,.18) 45%,rgba(165,180,252,.5)) border-box!important}
-#chartView #liqBtn.gx-lock.on .ic{color:#e4dcff!important}
+#chartView :is(#liqBtn,#layoutBtn).gx-lock.on .ic{color:#e4dcff!important}
 @keyframes liqStars{to{background-position:-120px 0}}
 @keyframes liqStars2{to{background-position:-110px 0}}
 @keyframes liqTwinkle{0%,100%{opacity:.6}50%{opacity:1}}
-@media (prefers-reduced-motion:reduce){#chartView #liqBtn.gx-lock::before,#chartView #liqBtn.gx-lock::after{animation:none!important}}
+@media (prefers-reduced-motion:reduce){#chartView :is(#liqBtn,#layoutBtn).gx-lock::before,#chartView :is(#liqBtn,#layoutBtn).gx-lock::after{animation:none!important}}
 
 /* ───────── Mi seguimiento: el color de cada moneda es un punto a la izquierda, todos en la misma columna (sin franja ni fondo de color) ───────── */
 #watchRows .watch-row:not(.sec-head):not(.sec-row)::before{content:'';flex:none;width:10px;height:10px;margin:0 -5px 0 2px;border-radius:50%;background:transparent}
@@ -1699,33 +1699,33 @@ body:not(.light) :is(.cfg-dlg,.pc-dlg,.rk-dlg,.dz-box,.row-menu,.pop-menu,.tag-p
 .px-in .px-mic.on::after{content:attr(data-t);position:absolute;bottom:calc(100% + 4px);left:50%;translate:-50% 0;font-size:10px;font-weight:700;color:#f06b79;white-space:nowrap}
 
 /* ───────── Planes: lo premium BLOQUEADO lleva un fondo de galaxia discreto (pocas estrellas que pasan despacio); desbloqueado se ve normal ───────── */
-.gx-lock:not(#liqBtn){
+.gx-lock:not(#liqBtn):not(#layoutBtn){
   background-color:#0a0a16!important;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='90'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='18' cy='14' r='.6' opacity='.55'/%3E%3Ccircle cx='96' cy='62' r='.5' opacity='.4'/%3E%3Ccircle cx='150' cy='22' r='.7' fill='%23d6ccff' opacity='.5'/%3E%3Ccircle cx='200' cy='74' r='.5' opacity='.35'/%3E%3Ccircle cx='60' cy='80' r='.45' opacity='.3'/%3E%3C/g%3E%3C/svg%3E"),radial-gradient(70% 120% at 12% 0%,rgba(124,77,255,.13),transparent 65%),radial-gradient(60% 120% at 100% 100%,rgba(56,96,200,.09),transparent 68%)!important;
   background-size:220px 90px,100% 100%,100% 100%!important;background-repeat:repeat,no-repeat,no-repeat!important;
   border-color:rgba(167,139,250,.22)!important;box-shadow:none!important;
-  animation:gxDrift 60s steps(220) infinite}
-.gx-lock:not(#liqBtn) :is(b,strong,.tn,span:not(.prem-tag)){color:#ece8fb}
-.gx-lock:not(#liqBtn) small{color:rgba(225,215,255,.6)}
+  animation:gxDrift 60s linear infinite}
+.gx-lock:not(#liqBtn):not(#layoutBtn) :is(b,strong,.tn,span:not(.prem-tag)){color:#ece8fb}
+.gx-lock:not(#liqBtn):not(#layoutBtn) small{color:rgba(225,215,255,.6)}
 @keyframes gxDrift{to{background-position:-220px 0,0 0,0 0}}
 @media (prefers-reduced-motion:reduce){.gx-lock{animation:none!important}}
 /* barra derecha, barra del celular y barra de dibujo: sin fondo. El icono normal con la estrella dorada del cursor Estrella en la esquina:
    la estrella late apenas (±6 %, como el cursor) y su halo de luz dorado-magenta respira alrededor. No gira. */
-:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn){--gxx:9px;--gxy:9px;animation:none!important;border-color:transparent!important;box-shadow:none!important;background-color:transparent!important;background-image:none!important}
+:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn){--gxx:9px;--gxy:9px;animation:none!important;border-color:transparent!important;box-shadow:none!important;background-color:transparent!important;background-image:none!important}
 /* La estrella y su halo van en una capa aparte que solo cambia de escala: la GPU la anima sola (antes se re-dibujaba el SVG del fondo en cada cuadro) */
-:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn)::before{content:''!important;display:block!important;position:absolute;z-index:2;pointer-events:none;width:31px;height:31px;
+:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn)::before{content:''!important;display:block!important;position:absolute;z-index:2;pointer-events:none;width:31px;height:31px;
   right:calc(var(--gxx) - 15.5px);top:calc(var(--gxy) - 15.5px);border:0!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border-radius:0!important;
   background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3CradialGradient id='b'%3E%3Cstop offset='0' stop-color='%23fffbe8'/%3E%3Cstop offset='.35' stop-color='%23ffe08a'/%3E%3Cstop offset='1' stop-color='%23ffb43a'/%3E%3C/radialGradient%3E%3C/defs%3E%3Cpath d='M12 1Q13.3 10.7 23 12Q13.3 13.3 12 23Q10.7 13.3 1 12Q10.7 10.7 12 1Z' fill='url(%23b)'/%3E%3Ccircle cx='12' cy='12' r='1.3' fill='%23fff'/%3E%3C/svg%3E") center/51% 51% no-repeat,url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3CradialGradient id='h'%3E%3Cstop offset='0' stop-color='%23ffd666' stop-opacity='.5'/%3E%3Cstop offset='.45' stop-color='%23ff4fd8' stop-opacity='.16'/%3E%3Cstop offset='1' stop-color='%238b5cff' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='12' fill='url(%23h)'/%3E%3C/svg%3E") center/100% 100% no-repeat!important;
   animation:gxBreathe 1.65s ease-in-out infinite;will-change:scale}
-.bottom-nav button.gx-lock:not(#liqBtn){--gxx:calc(50% - 12px);--gxy:10px}
+.bottom-nav button.gx-lock:not(#liqBtn):not(#layoutBtn){--gxx:calc(50% - 12px);--gxy:10px}
 @keyframes gxBreathe{0%,100%{scale:.8}50%{scale:1}}
-:root.vx-space body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn)::before{content:none!important;display:none!important}
-html.vx-lite :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn)::before{animation:none!important;scale:.9}
+:root.vx-space body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn)::before{content:none!important;display:none!important}
+html.vx-lite :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn)::before{animation:none!important;scale:.9}
 @media (prefers-reduced-motion:reduce){:is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock{animation:none!important}}
 /* categoría «Nova Nexus ©» del explorador de indicadores: fondo de galaxia delicado, como el botón de Liquidaciones */
 .ib-cats :is([data-ibcat="nova"],[data-ibcat="pro"]){position:relative;color:#ece8fb!important;border:1px solid rgba(167,139,250,.22)!important;
   background-color:#0a0a16!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='12' cy='9' r='.6' opacity='.6'/%3E%3Ccircle cx='58' cy='29' r='.5' opacity='.4'/%3E%3Ccircle cx='96' cy='13' r='.65' fill='%23d6ccff' opacity='.55'/%3E%3Ccircle cx='80' cy='34' r='.45' opacity='.35'/%3E%3C/g%3E%3C/svg%3E"),radial-gradient(80% 140% at 10% 0%,rgba(124,77,255,.2),transparent 65%),radial-gradient(70% 140% at 100% 100%,rgba(56,96,200,.14),transparent 68%)!important;
-  background-size:120px 40px,100% 100%,100% 100%!important;background-repeat:repeat,no-repeat,no-repeat!important;animation:gxDrift2 40s steps(120) infinite}
+  background-size:120px 40px,100% 100%,100% 100%!important;background-repeat:repeat,no-repeat,no-repeat!important;animation:gxDrift2 40s linear infinite}
 .ib-cats [data-ibcat="nova"] svg{color:#c9b6ff}.ib-cats [data-ibcat="pro"] svg{color:#ffd666}
 .ib-cats :is([data-ibcat="nova"],[data-ibcat="pro"]).on{border-color:rgba(196,181,253,.45)!important;box-shadow:0 0 12px rgba(139,92,246,.18)}
 @keyframes gxDrift2{to{background-position:-120px 0,0 0,0 0}}
@@ -2439,3 +2439,40 @@ html.vx-lite :is(.pop-menu,.pbar-pop,.cfg-overlay,.sheet,.acct-menu){box-shadow:
 .sym-row .coin-icon{width:26px;height:26px;font-size:14px}
 .chart-symhead .symbol-button .coin-icon{width:28px;height:28px;font-size:15px}
 @media(max-width:760px){.chart-symhead .symbol-button .coin-icon{width:26px;height:26px;font-size:14px}}
+
+/* ───────── Premium bloqueado en las barras de iconos (derecha, izquierda y la de abajo del celular) ─────────
+   Sin la estrellita dorada: el icono se ve normal y SOLO al pasar el cursor, mantenerlo encima o tocarlo aparece
+   un círculo morado de galaxia con estrellas que se deslizan (como el botón de Liquidaciones). Las estrellas solo se animan
+   mientras el círculo se ve, y con transform/opacity: fluido a la frecuencia de la pantalla. */
+:root body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn),
+:root.vx-space body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn){isolation:isolate}
+:root body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn)::before,
+:root.vx-space body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn)::before{
+  content:''!important;display:block!important;position:absolute;z-index:-1;pointer-events:none;
+  left:50%;top:50%;right:auto;width:42px;height:42px;border-radius:50%!important;translate:-50% -50%;scale:.55;opacity:0;
+  border:1px solid rgba(167,139,250,.42)!important;box-shadow:0 0 14px rgba(124,77,255,.28)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='8' cy='9' r='.7' opacity='.85'/%3E%3Ccircle cx='27' cy='29' r='.55' opacity='.6'/%3E%3Ccircle cx='45' cy='14' r='.8' fill='%23d6ccff' opacity='.8'/%3E%3Ccircle cx='62' cy='31' r='.5' opacity='.55'/%3E%3Ccircle cx='72' cy='6' r='.6' opacity='.7'/%3E%3Ccircle cx='36' cy='4' r='.45' opacity='.5'/%3E%3C/g%3E%3C/svg%3E") 0 0/80px 40px repeat,
+    radial-gradient(90% 90% at 25% 15%,rgba(124,77,255,.55),transparent 65%),radial-gradient(80% 80% at 90% 95%,rgba(56,96,200,.4),transparent 65%),#0c0b1e!important;
+  transition:opacity .2s ease,scale .32s cubic-bezier(.2,.9,.25,1.25);animation:gxHoverStars 9s linear infinite!important;animation-play-state:paused!important;will-change:opacity,scale}
+:root body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn):is(:hover,:focus-visible,:active)::before{opacity:1;scale:min(var(--dk,1),1.18);animation-play-state:running!important}
+:root body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock:not(#liqBtn):not(#layoutBtn):is(:hover,:focus-visible,:active){color:#ece6ff!important}
+:root body .rail-btn.gx-lock:not(#liqBtn):not(#layoutBtn)::before{width:34px;height:34px}
+@keyframes gxHoverStars{to{background-position:-80px 0,0 0,0 0,0 0}}
+html.vx-lite body :is(.rr-btn,.bottom-nav button,.rail-btn).gx-lock::before{animation:none!important}
+@media (hover:none){:root body .bottom-nav button.gx-lock:not(#liqBtn)::before{transition-duration:.12s,.2s}}
+/* Opciones de cuenta (Exchange, Tu IA…) solo con la sesión iniciada */
+body:not(.signed-in) .needs-login{display:none!important}
+body:not(.signed-in) #settingsView .sg:not(:has(.sg-row:not(.needs-login))){display:none}
+
+/* Zoom con clic derecho mantenido: mira en el punto presionado y esquinas que muestran cuánto te acercas o alejas */
+.rz-ov{position:fixed;z-index:60;pointer-events:none;opacity:0;transition:opacity .18s ease}
+.rz-ov.show{opacity:1}
+.rz-ov .rz-c{position:absolute;width:16px;height:16px;border:0 solid rgba(255,255,255,.75);will-change:transform;transition:none}
+.rz-ov .rz-c.tl{left:0;top:0;transform:translate(var(--x1),var(--y1));border-left-width:1.5px;border-top-width:1.5px}
+.rz-ov .rz-c.tr{left:-16px;top:0;transform:translate(var(--x2),var(--y1));border-right-width:1.5px;border-top-width:1.5px}
+.rz-ov .rz-c.bl{left:0;top:-16px;transform:translate(var(--x1),var(--y2));border-left-width:1.5px;border-bottom-width:1.5px}
+.rz-ov .rz-c.br{left:-16px;top:-16px;transform:translate(var(--x2),var(--y2));border-right-width:1.5px;border-bottom-width:1.5px}
+.rz-ov .rz-a{position:absolute;left:-13px;top:-13px;transform:translate(var(--ax),var(--ay));color:#fff;filter:drop-shadow(0 0 6px rgba(190,170,255,.7))}
+.rz-ov .rz-p{position:absolute;left:-7.5px;top:-7.5px;transform:translate(var(--px),var(--py));color:rgba(255,255,255,.85)}
+.light .rz-ov .rz-c{border-color:rgba(20,30,50,.6)}.light .rz-ov .rz-a,.light .rz-ov .rz-p{color:#1b2333;filter:none}
+#chartArea.rz-on,#chartArea.rz-on *{cursor:none!important}

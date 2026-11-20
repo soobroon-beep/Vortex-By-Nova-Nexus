@@ -8,6 +8,10 @@ window.CCT_CHANGELOG = [
     'Modo Completo a la frecuencia de tu pantalla (hasta 120 Hz) para que todo se mueva más fluido. El modo Ligero sigue igual.',
     'Tus colores guardados aparecen en todas las paletas de la app: dibujos, indicadores, velas y aspecto del gráfico.',
     'Los planes ya no salen al abrir: usa el gráfico libremente y solo verás los planes al tocar algo premium o desde tu perfil.',
+    'Mantén presionado el clic derecho sobre el gráfico y mueve el ratón para acercar o alejar con suavidad (clic derecho corto = menú de siempre).',
+    'El precio se mueve en vivo con cada operación del mercado, no cada 2 segundos.',
+    'Lo premium se ve normal y solo al pasar el cursor aparece su brillo de galaxia; animaciones de Liquidaciones, Diseño y Nova Nexus más fluidas.',
+    'Al conectar tu exchange puedes activar que su saldo llene la barra de la cuenta. Exchange y Tu IA solo salen con la sesión iniciada.',
     'Nexus Lens integrado con el mismo estilo de VORTEX, modo Ligero, zoom más suave y monedas más compactas en Mi seguimiento.'
   ]},
   {v: '3.39', d: '17 nov 2026', t: 'VORTEX publicada: planes y precios', items: [
