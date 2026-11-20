@@ -34,7 +34,7 @@ export async function bingxInvite(env, uid, fetchFn = fetch) {
   try {
     const r = await fetchFn(`https://open-api.bingx.com/openApi/agent/v1/account/inviteRelationCheck?${q}&signature=${sig}`, {headers: {'X-BX-APIKEY': key}});
     const j = await r.json(); if (j.code !== 0) return {ok: false, invited: false, msg: String(j.msg || 'BingX no respondió')};
-    const d = j.data || {}; return {ok: true, invited: d.inviteResult === true || d.inviteResult === 'true', deposit: !!d.deposit, trade: !!d.trade};
+    const d = j.data || {}, bal = parseFloat(d.balanceVolume); return {ok: true, invited: d.inviteResult === true || d.inviteResult === 'true', deposit: !!d.deposit, trade: !!d.trade, bal: Number.isFinite(bal) ? Math.round(bal * 100) / 100 : null}; // balanceVolume = activos netos del referido en USDT
   } catch { return {ok: false, invited: false, msg: 'BingX sin respuesta'}; }
 }
 
@@ -553,6 +553,7 @@ async function domRun(env, now = Date.now()) {
 const hitsMem = new Map(); // límites por cuenta/IP en memoria (no gastan escrituras)
 function allowHit(key, max, winMs, now = Date.now()) { const h = (hitsMem.get(key) || []).filter(t => now - t < winMs); if (h.length >= max) { hitsMem.set(key, h); return false; } h.push(now); hitsMem.set(key, h); if (hitsMem.size > 20000) hitsMem.clear(); return true; }
 const testAllowed = id => allowHit('test:' + id, 3, 60e3);
+export const BX_MIN_USD = 100;
 export async function planRoute(req, env, path, b, json, fetchFn = fetch) {
   const who = await verifyIdToken(b.idToken, {fetchFn}); if (!who) return json({ok: false, error: 'Inicia sesión con Google para verificar tu plan', login: true}, 401);
   if (!allowHit('plan:' + who.uid, 6, 60e3)) return json({ok: false, error: 'Demasiados intentos; espera un minuto'}, 429);
@@ -563,9 +564,20 @@ export async function planRoute(req, env, path, b, json, fetchFn = fetch) {
     const claim = await S.mget('bx:' + bx); if (claim && claim.uid && claim.uid !== who.uid) return json({ok: false, invited: false, taken: true, error: 'Ese UID de BingX ya activó Infinity en otra cuenta'}, 409);
     const r = await bingxInvite(env, bx, fetchFn); if (r.error) return json({ok: false, error: r.error}, 400);
     if (!r.ok || !r.invited) return json(r);
-    await S.mset('bx:' + bx, {uid: who.uid, at: Date.now()});
-    const tier = await syncPlan(sa, who.uid, {refTier: 'infinity', bx, bxOk: Date.now()}, fetchFn);
-    return json({ok: true, invited: true, tier});
+    /* Saldo mínimo: Infinity gratis pide al menos $100 en la cuenta de BingX (el dinero es del usuario, para que haga trading;
+       solo evita que se creen cuentas vacías una y otra vez). Se vuelve a revisar cada mes (refEnd). Mientras junta el saldo: 7 días de Plus, una sola vez. */
+    const now = Date.now(), MIN = BX_MIN_USD, bal = r.bal;
+    if (bal != null && bal >= MIN) {
+      await S.mset('bx:' + bx, {uid: who.uid, at: (claim && claim.at) || now, chk: now, bal, trial: claim && claim.trial || 0});
+      const tier = await syncPlan(sa, who.uid, {refTier: 'infinity', bx, bxOk: now, refEnd: now + 31 * 864e5, bxBal: bal}, fetchFn);
+      return json({ok: true, invited: true, tier, bal, min: MIN, refEnd: now + 31 * 864e5});
+    }
+    if (bal == null) return json({ok: false, invited: true, error: 'BingX no dio el saldo de tu cuenta; inténtalo en un rato'}, 502);
+    const tr = await S.mget('trial:' + who.uid), used = !!(tr || (claim && claim.trial)), trialEnd = tr ? +tr.end || 0 : used ? 0 : now + 7 * 864e5; // la prueba se da una vez por cuenta y por UID
+    if (!used) await S.mset('trial:' + who.uid, {end: trialEnd, bx});
+    await S.mset('bx:' + bx, {uid: who.uid, at: (claim && claim.at) || now, chk: now, bal, trial: (claim && claim.trial) || now});
+    const tier = await syncPlan(sa, who.uid, Object.assign({refTier: 'free', bx, bxBal: bal, refEnd: 0}, used ? {} : {trialTier: 'plus', trialEnd}), fetchFn);
+    return json({ok: true, invited: true, need: true, bal, min: MIN, tier, trialEnd, trialUsed: !!used});
   }
   return json({error: 'No encontrado'}, 404);
 }

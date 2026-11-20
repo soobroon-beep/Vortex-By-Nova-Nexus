@@ -7,17 +7,21 @@
   const RANGE = 96, K = 150, C = 12, M = 0.1; // alcance en px, crecimiento máximo y resorte (misma sensación que el original)
   function dock(rail, sel, MAX, gsel, range, key) { // MAX: cuánto crece el icono bajo el cursor
     if (!rail) return;
-    let mouse = Infinity, raf = 0, last = 0; const st = new Map();
+    let mouse = Infinity, raf = 0, last = 0, mids = null; const st = new Map();
+    // Las posiciones de los iconos se miden UNA vez al entrar (y al cambiar de tamaño la ventana), no en cada cuadro:
+    // antes se leía getBoundingClientRect() de cada icono justo después de escribir su escala, lo que obligaba al navegador
+    // a recalcular toda la página en cada cuadro y se sentía un brinco/glitch al pasar el ratón.
+    const measure = () => { mids = new Map(); for (const b of rail.querySelectorAll(sel)) { const r = b.getBoundingClientRect(); mids.set(b, r.top + r.height / 2); } };
     const glyph = b => b.querySelector(gsel || ':scope > svg, :scope > img, :scope > .ic, :scope > i'), kOf = b => key ? key(b) : b;
     function frame(now) {
       const dt = Math.min(1 / 30, (now - last) / 1000 || 1 / 60); last = now; let busy = mouse !== Infinity;
       for (const b of rail.querySelectorAll(sel)) {
         const g = glyph(b); if (!g) continue; const kk = kOf(b); let s = st.get(kk); if (!s) st.set(kk, s = {x: 1, v: 0});
-        let target = 1; if (mouse !== Infinity) { const r = b.getBoundingClientRect(), d = Math.abs(mouse - (r.top + r.height / 2)); target = 1 + (MAX - 1) * Math.max(0, 1 - d / (range || RANGE)); }
+        let target = 1; if (mouse !== Infinity) { if (!mids || !mids.has(b)) measure(); const d = Math.abs(mouse - mids.get(b)); target = 1 + (MAX - 1) * Math.max(0, 1 - d / (range || RANGE)); }
         for (let i = 0; i < 4; i++) { const a = (K * (target - s.x) - C * s.v) / M, h = dt / 4; s.v += a * h; s.x += s.v * h; }
         const vOnly = b.classList.contains('theme-sw'); // sol/luna: ya usan transform para girar al cambiar de tema → crecen con la variable --dk (CSS «scale»)
         if (Math.abs(s.x - 1) < .003 && Math.abs(s.v) < .02 && target === 1) { s.x = 1; s.v = 0; if (g.style.transform || b.style.getPropertyValue('--dk')) { if (!vOnly) g.style.transform = ''; b.style.zIndex = ''; b.style.removeProperty('--dk'); } continue; }
-        busy = true; if (!vOnly) { g.style.transition = 'none'; g.style.transform = `scale(${s.x.toFixed(3)})`; } b.style.setProperty('--dk', s.x.toFixed(3)); b.style.zIndex = s.x > 1.001 ? '3' : ''; // sin will-change: así el icono vectorial se vuelve a dibujar nítido en cada tamaño (no se pixela)
+        busy = true; if (!vOnly) { g.style.transition = 'none'; g.style.transform = `scale(${s.x.toFixed(3)})`; } b.style.setProperty('--dk', s.x.toFixed(3)); { const z = s.x > 1.001 ? '3' : ''; if (b.style.zIndex !== z) b.style.zIndex = z; } // sin will-change: así el icono vectorial se vuelve a dibujar nítido en cada tamaño (no se pixela)
       }
       raf = busy ? requestAnimationFrame(frame) : 0;
     }
@@ -34,6 +38,8 @@
       mouse = e.clientY; go();
     });
     rail.addEventListener('mouseleave', () => { mouse = Infinity; go(); });
+    rail.addEventListener('mouseenter', () => { mids = null; });
+    window.addEventListener('resize', () => { mids = null; }); window.addEventListener('scroll', () => { mids = null; }, true);
     resets.push(snap);
   }
   let ignore = null; const resets = [];

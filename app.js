@@ -73,12 +73,24 @@ const CTYPES = [['candles', 'Velas', 'c_candles'], ['hollow', 'Velas huecas', 'c
 const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', bybitf: 'Bybit Perpetuos', okx: 'OKX Spot', okxf: 'OKX Perpetuos', coinbase: 'Coinbase', bingx: 'BingX Spot', bingxf: 'BingX Perpetuos', kucoin: 'KuCoin', gate: 'Gate.io', mexc: 'MEXC', bitget: 'Bitget', htx: 'HTX', kraken: 'Kraken', dom: 'Dominancia USDT/BTC'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
 const CURSOR_MODES = ['Cruz', 'Flecha', 'Estrella']; // tipo de puntero sobre el gráfico (la estrella deja estela al mantener presionado: star-cursor.js)
 const CHART_DEF = {bg: '#07090e', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1, cursor: 'Cruz', alertCol: '', alertA: 28, alertS: 'Puntos', alertW: 1,
-  posCol: '', posA: 90, posS: 'Sólida', posW: 1, tpCol: '#20bf9f', tpA: 90, tpS: 'Guiones', tpW: 1, slCol: '#f06b79', slA: 90, slS: 'Guiones', slW: 1, liqCol: '#f0b90b', liqA: 55, liqS: 'Puntos', liqW: 1, ordCol: '#548fff', ordA: 90, ordS: 'Guiones', ordW: 1}; // líneas de tus operaciones (entrada, TP, SL, liquidación y órdenes)
+  posCol: '', posA: 90, posS: 'Sólida', posW: 1, tpCol: '#20bf9f', tpA: 90, tpS: 'Guiones', tpW: 1, slCol: '#f06b79', slA: 90, slS: 'Guiones', slW: 1, liqCol: '#f0b90b', liqA: 55, liqS: 'Puntos', liqW: 1, ordCol: '#548fff', ordA: 90, ordS: 'Guiones', ordW: 1};
+/* Colores de subida y bajada de TODA la app (no es el tema): velas, volumen, %, Mi seguimiento, mini gráficos, P&L…
+   Cada combinación trae una versión para modo oscuro y otra para modo claro. Se pueden cambiar a mano después en Aspecto del gráfico. */
+const UPDN = {
+  clasico: {n: 'Clásico', up: '#089981', down: '#f23645', upL: '#089981', downL: '#f23645'},
+  mono: {n: 'Blanco y gris', up: '#e9edf3', down: '#5e6878', upL: '#1d2330', downL: '#9aa3b2'},
+  azul: {n: 'Azul y naranja', up: '#3b8cff', down: '#ff8a2a', upL: '#1f6fe0', downL: '#e8711a'},
+  neon: {n: 'Neón', up: '#00e5a0', down: '#ff3d71', upL: '#00a874', downL: '#e0245a'},
+  galaxia: {n: 'Galaxia', up: '#5ad1ff', down: '#b56bff', upL: '#1c9fd6', downL: '#8a3fe0'},
+  oro: {n: 'Oro y vino', up: '#f0c04a', down: '#c2405c', upL: '#b8860b', downL: '#a3304a'},
+  menta: {n: 'Menta y coral', up: '#5ee6b4', down: '#ff7a6b', upL: '#13a37a', downL: '#e05545'}
+}; // líneas de tus operaciones (entrada, TP, SL, liquidación y órdenes)
 const TL_KINDS = ['pos', 'tp', 'sl', 'liq', 'ord'], TL_DASH = {'Sólida': [], Guiones: [6, 4], Puntos: [2, 4]};
 function sanChartStyle(c) {
   const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
   for (const k of ['bg', 'grid', 'up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick', 'cross', 'alertCol']) if (typeof c[k] === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(c[k])) o[k] = c[k];
   for (const k of ['gridH', 'gridV', 'hollow']) if (typeof c[k] === 'boolean') o[k] = c[k];
+  if (typeof c.pal === 'string' && UPDN[c.pal] && c.pal !== 'clasico') o.pal = c.pal; // combinación de subida/bajada elegida en Personalización
   if (Number.isFinite(+c.crossA) && c.crossA !== '') o.crossA = Math.max(5, Math.min(100, Math.round(+c.crossA)));
   if (Number.isFinite(+c.crossW) && c.crossW !== '') o.crossW = Math.max(1, Math.min(4, Math.round(+c.crossW)));
   if (['Guiones', 'Sólida', 'Puntos'].includes(c.crossS)) o.crossS = c.crossS;
@@ -159,7 +171,20 @@ const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
 const OLD_BG = /^#(0d1019|101725|090e19)$/i; // fondos por defecto anteriores: pasan al tema nuevo más oscuro
 const tlSty = k => { const c = cstyle(); return {col: c[k + 'Col'] || CHART_DEF[k + 'Col'] || '', a: (+c[k + 'A'] || CHART_DEF[k + 'A'] || 90) / 100, w: +c[k + 'W'] || 1, d: TL_DASH[c[k + 'S']] || TL_DASH[CHART_DEF[k + 'S']] || []}; }; // estilo de cada línea de tus operaciones (Aspecto del gráfico)
-const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle || {}); if (OLD_BG.test(o.bg || '')) o.bg = CHART_DEF.bg; if (!(state.chartStyle && state.chartStyle.bg) && document.body.classList.contains('light')) o.bg = ''; return o; }; // fondo por defecto #07090e (el tema claro conserva el suyo)
+const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle || {}); { const P = UPDN[o.pal], cs = state.chartStyle || {}, lt = document.body.classList.contains('light'); if (P) { if (!cs.up) o.up = lt ? P.upL : P.up; if (!cs.down) o.down = lt ? P.downL : P.down; } } if (OLD_BG.test(o.bg || '')) o.bg = CHART_DEF.bg; if (!(state.chartStyle && state.chartStyle.bg) && document.body.classList.contains('light')) o.bg = ''; return o; }; // fondo por defecto #07090e (el tema claro conserva el suyo)
+let updnKey = '';
+const txtOn = c => { const m = /^#?([\da-f]{6})/i.exec(String(c)); if (!m) return '#fff'; const n = parseInt(m[1], 16); return (.299 * (n >> 16) + .587 * (n >> 8 & 255) + .114 * (n & 255)) / 255 > .66 ? '#10151f' : '#fff'; }; // texto legible sobre colores claros (p. ej. velas blancas)
+function syncUpDown() { // los verdes/rojos de la interfaz (--green / --red) siguen a los colores de las velas cuando no son los de siempre
+  const c = cstyle(), up = String(c.up || '').slice(0, 7), dn = String(c.down || '').slice(0, 7), lt = document.body.classList.contains('light'), k = up + dn + lt;
+  if (k === updnKey) return; updnKey = k; const def = up.toLowerCase() === CHART_DEF.up && dn.toLowerCase() === CHART_DEF.down;
+  for (const el of [document.documentElement, document.body]) for (const [v, col] of [['--green', up], ['--red', dn], ['--up', up], ['--down', dn]]) { if (def && v.length > 4) el.style.removeProperty(v); else if (def) el.style.removeProperty(v); else el.style.setProperty(v, col, 'important'); }
+  document.documentElement.classList.toggle('vx-updn', !def);
+  try { if (typeof renderWatch === 'function') renderWatch(); } catch {}
+}
+function setUpDown(id) { // elegir una combinación: borra los colores puestos a mano en las velas para que se vea la combinación completa
+  if (!UPDN[id]) return; const cs = Object.assign({}, state.chartStyle || {}); for (const k of ['up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick']) delete cs[k];
+  if (id === 'clasico') delete cs.pal; else cs.pal = id; state.chartStyle = sanChartStyle(cs); save(); syncUpDown(); scheduleRender(); toast('Colores: ' + UPDN[id].n);
+}
 /* Preferencias de interfaz que también viajan a la cuenta: altura de paneles, tamaño de paneles, opciones del dibujo (imán, bloquear…) y color/ícono de la app */
 function sanUi(u) {
   const q = u && typeof u === 'object' && !Array.isArray(u) ? u : {}, o = {};
@@ -3395,7 +3420,7 @@ function cssVars() {
   const c = getComputedStyle(document.body), v = n => c.getPropertyValue(n).trim();
   return (cssCache = {k, text: v('--muted'), line: v('--line'), bg: v('--bg'), draw: v('--draw') || '#e9c36e', fg: v('--text'), getPropertyValue: n => c.getPropertyValue(n)});
 }
-function render() { if (raf) { cancelAnimationFrame(raf); raf = 0; } /* un solo dibujo por cuadro */ let mv = !!(glideRaf || inertiaRaf); try { mv = mv || !!(gest || pinch); } catch {} if (mv && window.VXTheme && VXTheme.busy) VXTheme.busy(); /* mientras mueves el gráfico, el fondo animado espera */ renderCore(); syncLegend(); syncLegToggle(); if (objTreeOn) objTreeSync(); if (candles.length && window.CCT_splashDone) CCT_splashDone(); } // ya hay velas: termina la animación de apertura
+function render() { if (raf) { cancelAnimationFrame(raf); raf = 0; } /* un solo dibujo por cuadro */ let mv = !!(glideRaf || inertiaRaf); try { mv = mv || !!(gest || pinch); } catch {} if (mv && window.VXTheme && VXTheme.busy) VXTheme.busy(); /* mientras mueves el gráfico, el fondo animado espera */ syncUpDown(); renderCore(); syncLegend(); syncLegToggle(); if (objTreeOn) objTreeSync(); if (candles.length && window.CCT_splashDone) CCT_splashDone(); } // ya hay velas: termina la animación de apertura
 /* Reordenar paneles: mantén pulsado el NOMBRE de un indicador (RSI, MACD, un script en panel…) y arrástralo hacia arriba o abajo; al soltar queda guardado.
    Solo se mueve el nombre/panel elegido; los botones y el resto de la leyenda no cambian. */
 (() => {
@@ -3832,11 +3857,11 @@ function renderCore() {
   if (ly > plotTop && ly < plotTop + plotH) {
     const col = lastC.c >= lastC.o ? up : down;
     g.strokeStyle = col; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(left, ly); g.lineTo(w - right + 2, ly); g.stroke(); g.setLineDash([]);
-    g.fillStyle = col; g.fillRect(w - right + 2, ly - 9, right - 3, 18); g.fillStyle = '#fff'; g.fillText(fmt(lastC.c), w - right + 5, ly + 3.5);
+    g.fillStyle = col; g.fillRect(w - right + 2, ly - 9, right - 3, 18); g.fillStyle = txtOn(col); g.fillText(fmt(lastC.c), w - right + 5, ly + 3.5);
     // tiempo que falta para que cierre la vela actual (texto pequeño debajo del precio)
     const cd = candleCountdown(lastC); if (cd != null && ly + 9 + 14 < plotTop + plotH + 14) {
       const f0 = g.font; g.font = '9.5px system-ui'; let tx = fmtCountdown(cd, true); if (g.measureText(tx).width > right - 8) tx = fmtCountdown(cd, false);
-      g.globalAlpha = .55; g.fillStyle = col; g.fillRect(w - right + 2, ly + 9, right - 3, 13); g.globalAlpha = 1; g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText(tx, w - right + 2 + (right - 3) / 2, ly + 19); g.textAlign = 'left'; g.font = f0;
+      g.globalAlpha = .55; g.fillStyle = col; g.fillRect(w - right + 2, ly + 9, right - 3, 13); g.globalAlpha = 1; g.fillStyle = txtOn(col); g.textAlign = 'center'; g.fillText(tx, w - right + 2 + (right - 3) / 2, ly + 19); g.textAlign = 'left'; g.font = f0;
     }
   }
   if (vpvr) drawVPVRTags(vpvr); // etiquetas de POC / VAH / VAL en la escala de precios
@@ -5179,6 +5204,9 @@ function renderCustom() {
   const chev = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
   box.innerHTML = ``
     + `<div class="pref-row">${ic('#f5a623', state.light ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>' : '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>')}<div class="pref-l"><b>Tema claro</b><small>${state.light ? 'Activo · apágalo para el tema oscuro' : 'Ahora usas el tema oscuro'}</small></div><div class="pref-c"><button type="button" class="toggle${state.light ? ' on' : ''}" data-cu="theme" role="switch" aria-checked="${!!state.light}" aria-label="Tema claro"></button></div></div>`
+    + (() => { const cur = (state.chartStyle || {}).pal || 'clasico', lt = state.light, man = !!((state.chartStyle || {}).up || (state.chartStyle || {}).down);
+        return `<div class="pref-row updn-row">${ic('#20bf9f', '<path d="M4 17l5-6 4 3 7-8"/><path d="M15 6h5v5"/>')}<div class="pref-l"><b>Colores de subida y bajada</b><small>Velas, volumen, porcentajes y toda la app. ${man ? 'Tienes colores puestos a mano en Aspecto del gráfico: elegir una combinación los reemplaza.' : 'Puedes ajustarlos a mano en Aspecto del gráfico.'}</small></div></div>`
+          + `<div class="updn-grid" role="radiogroup" aria-label="Colores de subida y bajada">${Object.entries(UPDN).map(([k, P]) => `<button type="button" class="updn${!man && cur === k ? ' on' : ''}" data-cu="updn" data-v="${k}" role="radio" aria-checked="${!man && cur === k}"><span class="updn-sw"><i style="background:${lt ? P.upL : P.up}"></i><i style="background:${lt ? P.downL : P.down}"></i></span><span class="updn-c"><svg viewBox="0 0 30 18" width="30" height="18" aria-hidden="true"><rect x="3" y="6" width="5" height="8" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M5.5 3v3M5.5 14v2" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/><rect x="12" y="4" width="5" height="9" rx="1" fill="${lt ? P.downL : P.down}"/><path d="M14.5 1.5v2.5M14.5 13v3" stroke="${lt ? P.downL : P.down}" stroke-width="1.3"/><rect x="21" y="3" width="5" height="10" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M23.5 1v2M23.5 13v3" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/></svg></span><small>${esc(P.n)}</small></button>`).join('')}</div>`; })()
     + `<button type="button" class="pref-row pref-link" data-cu="style">${ic('#548fff', '<path d="M6 20V10M12 20V4M18 20v-7"/>')}<div class="pref-l"><b>Aspecto del gráfico</b><small>Colores de velas, fondo, cuadrícula, cursor y línea de alertas</small></div><div class="pref-c">${chev}</div></button>`
     + `<div class="pref-row">${ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>')}<div class="pref-l"><b>Barra de herramientas favoritas</b><small>Tus herramientas de dibujo con estrella, siempre a la mano</small></div><div class="pref-c"><button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button></div></div>`
     + (isDesktop() ? '' : `<div class="pref-row fb-mode-row"><span class="sg-ic" style="--c:transparent"></span><div class="pref-l"><b>Cápsula del gráfico en el celular</b><small>${FB.mode === 'flotante' ? 'Flotante: la cápsula (temporalidad, estrella y menú) se mueve a donde quieras' : 'Fija: la cápsula va en vertical arriba del logo VORTEX y se abre hacia arriba'}</small></div><div class="pref-c"><div class="seg-mini" role="radiogroup" aria-label="Estilo de la barra de favoritos en el celular">${[['fija', 'Fija'], ['flotante', 'Flotante']].map(([v, n]) => `<button type="button" role="radio" aria-checked="${(FB.mode || 'fija') === v}" class="${(FB.mode || 'fija') === v ? 'on' : ''}" data-cu="favmode" data-v="${v}">${n}</button>`).join('')}</div></div></div>`);
@@ -5189,6 +5217,7 @@ function renderCustom() {
     const b = e.target.closest('[data-cu]'); if (!b) return; const k = b.dataset.cu;
     if (k === 'theme') { state.light = !state.light; save(); theme(); renderCustom(); }
     else if (k === 'style') openChartStyle();
+    else if (k === 'updn') { setUpDown(b.dataset.v); renderCustom(); }
     else if (k === 'fav') { setFavBar(!FB.show); renderCustom(); }
     else if (k === 'favmode') { const v = b.dataset.v === 'flotante' ? 'flotante' : 'fija'; if (FB.mode !== v) { FB.mode = v; if (v === 'fija') FB.show = true; setFbOpen(false); syncUi(); renderFavBar(); if (window.CCT_pillPos) CCT_pillPos(); toast(v === 'fija' ? 'Fija: la cápsula queda en vertical arriba del logo VORTEX' : 'Flotante: la cápsula vuelve a moverse a donde quieras'); } renderCustom(); }
   });
@@ -5242,7 +5271,7 @@ function openNews() {
 renderPrefs();
 
 /* ───────── Tema, exportar e importar ───────── */
-window.addEventListener('cct-theme', () => { try { if (typeof render === 'function' && candles) render(); } catch {} });
+window.addEventListener('cct-theme', () => { try { updnKey = ''; syncUpDown(); if (typeof render === 'function' && candles) render(); } catch {} });
 function theme() { if (typeof pushPaneTheme === 'function') pushPaneTheme(); document.body.classList.toggle('light', !!state.light); document.documentElement.style.colorScheme = state.light ? 'light' : 'dark'; render(); }
 const srcBtn = $('#sourceSetting');
 function paintSource() { if (srcBtn) srcBtn.textContent = SOURCES[state.source] || 'Binance Spot'; const sl = $('#srcLabel'); if (sl) sl.textContent = (SOURCES[dataSrc || srcOf(state.symbol)] || 'Binance Spot').toUpperCase() + ' ▾'; }
@@ -6069,7 +6098,7 @@ async function onUser(user) {
   if (!user) {
     try { localStorage.removeItem(LASTUID); } catch {}
     if (uid) { uid = null; stateUid = null; lastRemote = ''; scriptsRemote = ''; applyState(readLocal(STORE)); scripts = withCatalog(readScripts()); renderScripts(); } // vuelve al estado local sin sesión; los datos de la cuenta no se quedan visibles
-    proForget(); syncStatus = ''; renderAccount(); showWelcome(); return;
+    proForget(); if (window.CCTExchange && CCTExchange.forget) CCTExchange.forget(); if (window.CCTOwnAI) CCTOwnAI.forget(); try { localStorage.removeItem('cct_lens_cache_v2'); } catch {} syncStatus = ''; renderAccount(); showWelcome(); return;
   }
   const firstLogin = !uid; uid = user.uid; try { localStorage.setItem(LASTUID, uid); } catch {} setTimeout(loadProCode, 0);
   if (firstLogin && !isDesktop() && !PANE) switchView('chartView'); // recién iniciaste sesión: directo al gráfico

@@ -36,14 +36,22 @@
   });
   document.addEventListener('change', e => { if (e.target && e.target.id === 'oaProv') { const O = L().OWN, p = e.target.value; draft = Object.assign(read(), {provider: p, key: '', model: p ? O[p].model : '', url: p ? O[p].url : ''}); models = []; msg = {t: '', c: ''}; paint(); } });
   /* Tu IA en tu cuenta: la guardas en un dispositivo y aparece en los demás donde inicies sesión (documento privado users/<tú>/data/ownai). */
-  const C = () => window.CCTCloudPriv; let pulled = false;
+  const C = () => window.CCTCloudPriv; let pulled = '';
+  const OWNER = 'cct_ownai_uid', owner = () => { try { return localStorage.getItem(OWNER) || ''; } catch { return ''; } };
+  function forget() { // Tu IA es POR CUENTA: al cerrar sesión (o entrar con otra cuenta) la clave de la cuenta anterior no se queda en este navegador
+    pulled = ''; if (L()) L().ownSave(null); try { localStorage.removeItem('cct_ownai_at'); localStorage.removeItem(OWNER); } catch {} sub(); paint();
+  }
+  window.CCTOwnAI = {forget};
   async function push(c) { try { if (C() && C().ready()) await C().set('ownai', c && c.on ? {on: true, provider: c.provider, key: c.key, model: c.model, url: c.url || '', at: Date.now()} : {on: false, at: Date.now()}); } catch {} }
   async function pull() {
-    if (pulled || !C() || !C().ready() || !L()) return; pulled = true;
-    try { const d = await C().get('ownai'), loc = L().ownLoad(), lat = +(localStorage.getItem('cct_ownai_at') || 0);
+    const uid = C() && C().ready() && C().uid ? C().uid() : ''; if (!uid || pulled === uid || !L()) return; pulled = uid;
+    try { const d = await C().get('ownai'); let loc = L().ownLoad(), lat = +(localStorage.getItem('cct_ownai_at') || 0); const ow = owner();
+      if (loc.on && (ow ? ow !== uid : !(d && d.on && d.key === loc.key))) { L().ownSave(null); lat = 0; try { localStorage.removeItem('cct_ownai_at'); } catch {} loc = L().ownLoad(); } // la clave de este navegador es de otra cuenta: no se usa ni se sube aquí
+      try { localStorage.setItem(OWNER, uid); } catch {}
       if (d && (d.at || 0) > lat) { if (d.on && d.key && L().OWN[d.provider]) L().ownSave({on: true, provider: d.provider, key: d.key, model: d.model, url: d.url}); else if (!d.on) L().ownSave(null); try { localStorage.setItem('cct_ownai_at', String(d.at || Date.now())); } catch {} sub(); paint(); }
       else if (!d && loc.on) push(loc); // ya la tenías en este dispositivo: se sube a tu cuenta
-    } catch { pulled = false; }
+      sub(); paint();
+    } catch { pulled = ''; }
   }
   const stamp = () => { try { localStorage.setItem('cct_ownai_at', String(Date.now())); } catch {} };
   document.addEventListener('vx-ownai', e => { stamp(); push(e.detail); });

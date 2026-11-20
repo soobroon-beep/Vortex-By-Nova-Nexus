@@ -134,7 +134,8 @@
       else if (rl === 'infinity') act = on(tx('infinity') + ' activo');
       else act = `<div class="pl-act">${payBtn('infinity')}</div><div class="pl-or"><span>o gratis con mi código de BingX</span></div>
         <ol class="pl-steps"><li><b>Crea tu cuenta en BingX con mi código</b><small>Código de referido <button type="button" class="pl-code" data-pl-copy title="Copiar código">${BX_CODE} ${svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>', 13)}</button></small><a class="pl-btn ghost" href="${BX}" target="_blank" rel="noopener noreferrer">${svg(TIERS.infinity.ic, 16)} Abrir cuenta en BingX</a></li>
-        <li><b>Escribe tu UID de BingX</b><small>Lo ves en tu perfil de BingX. Solo lo usamos para comprobar que entraste con el código.</small>${!user ? `<button type="button" class="pl-btn ghost" data-pl-login>Inicia sesión con Google primero</button>` : `<div class="pl-uid"><input inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Ej. 123456789" value="${esc(st.bx || '')}" data-pl-uid aria-label="UID de BingX"><button type="button" class="pl-btn ghost" data-pl-uidok>Verificar</button></div>`}<small class="pl-msg" data-pl-uidmsg>${st.bx ? 'UID guardado: pendiente de verificar.' : ''}</small></li></ol>`;
+        <li><b>Ten al menos $100 USD en tu cuenta de BingX</b><small>Ese dinero es tuyo y es para que hagas trading: no se me paga nada. Solo lo pedimos para evitar que se creen cuentas vacías una y otra vez. Cada mes se revisa que tu cuenta siga activa.</small></li>
+        <li><b>Escribe tu UID de BingX</b><small>Lo ves en tu perfil de BingX. Lo usamos para comprobar que entraste con el código y tu saldo mínimo. Si aún no llegas a $100, te damos 7 días del plan Plus mientras recargas.</small>${!user ? `<button type="button" class="pl-btn ghost" data-pl-login>Inicia sesión con Google primero</button>` : `<div class="pl-uid"><input inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Ej. 123456789" value="${esc(st.bx || '')}" data-pl-uid aria-label="UID de BingX"><button type="button" class="pl-btn ghost" data-pl-uidok>Verificar</button></div>`}<small class="pl-msg" data-pl-uidmsg>${st.bxNeed ? needMsg(st.bxBal, st.trialEnd) : st.bx ? 'UID guardado: pendiente de verificar.' : ''}</small></li></ol>`;
     }
     const price = k === 'free' ? '<div class="pl-price"><b>$0</b><span>para siempre</span></div>' : `<div class="pl-price"><b>${fmtAmt(curP()[k], curP().currency)}</b><span>${curP().currency.toUpperCase()} / mes${k === 'infinity' ? ' · o gratis con BingX' : ''}</span></div>`;
     return `<section class="pl-col ${t.c}${cur ? ' cur' : ''}"><canvas class="pl-bg" data-fx="${k}" aria-hidden="true"></canvas><header><span class="pl-ic">${svg(t.ic, 22)}</span><div><b>${k === 'free' ? t.n : tx(k)}</b><small>${t.sub}</small></div>${cur ? '<em class="pl-now">Tu plan</em>' : ''}</header>
@@ -249,10 +250,19 @@
      La app solo lo lee de ahí: ya no basta con escribir «infinity» en el navegador para desbloquear, y con ese mismo plan
      Firestore deja leer el código de los indicadores Nova Nexus PRO. */
   const idToken = async () => { try { const P = root.CCTCloudPriv; return P && P.token ? await P.token() : ''; } catch { return ''; } };
+  function docTier(d, now = Date.now()) { // mismo cálculo que el servidor (planTier): el referido vale hasta refEnd y la prueba de Plus hasta trialEnd
+    if (d.by === 'creador') return 'infinity';
+    const has = d.refTier || d.payTier || d.trialTier; if (!has) return TIERS[d.tier] ? d.tier : 'free';
+    const ref = TIERS[d.refTier] && (!d.refEnd || +d.refEnd > now) ? d.refTier : 'free', pay = TIERS[d.payTier] && +d.payEnd > now - 864e5 ? d.payTier : 'free', tr = TIERS[d.trialTier] && +d.trialEnd > now ? d.trialTier : 'free';
+    return [ref, pay, tr].reduce((a, b) => RANK[b] > RANK[a] ? b : a, 'free');
+  }
   async function refreshServer() {
     const fb = root.firebase; if (!user || !fb || !fb.firestore) return;
     try {
-      const sn = await fb.firestore().doc('plans/' + user.uid).get(), d = sn.exists ? sn.data() || {} : {}, t = TIERS[d.tier] ? d.tier : 'free';
+      const sn = await fb.firestore().doc('plans/' + user.uid).get(), d = sn.exists ? sn.data() || {} : {}, t = docTier(d);
+      st.trialEnd = +d.trialEnd || 0; st.refEnd = +d.refEnd || 0;
+      // Infinity por BingX se revisa cada mes: unos días antes de vencer (o si estás en la prueba de Plus esperando recargar) se vuelve a verificar solo
+      const now = Date.now(), bx = d.bx || st.bx; if (bx && (now - (st.autoChk || 0)) > 6 * 36e5 && ((d.refTier === 'infinity' && (!d.refEnd || d.refEnd - now < 5 * 864e5)) || (+d.trialEnd > now && d.refTier !== 'infinity'))) { st.autoChk = now; save(st); setTimeout(() => verifyBingx(String(bx), true), 1200); }
       if (st.uid !== user.uid || st.tier !== t || !st.srv) { st = Object.assign(st, {tier: t, uid: user.uid, at: Date.now(), srv: 1}); save(st); badge(); if (ov && !ov.hidden) render(); }
     } catch {} // sin conexión: se queda el último plan leído del servidor para esta cuenta
   }
@@ -315,13 +325,20 @@
     if (user) go(); else payReturn.pending = go;
   }
 
-  async function verifyBingx(uid) {
-    say('bx', 'Verificando con BingX…');
+  const fdt = t => new Date(t).toLocaleDateString('es-MX', {day: 'numeric', month: 'long'});
+  function needMsg(bal, trialEnd) { // tu UID sí es referido pero tu cuenta tiene menos de $100
+    const b = Number.isFinite(+bal) ? '$' + (+bal).toFixed(2) : 'menos de $100';
+    return `Tu cuenta de BingX sí entró con el código ✓. Para Infinity necesitas al menos $100 USD en ella (ahora tienes ${b}). Esos $100 son tuyos, para que hagas trading: solo evitan cuentas repetidas, y cada mes se revisa que sigas activo. ` + (trialEnd > Date.now() ? `Mientras tanto tienes el plan Plus de prueba hasta el ${fdt(trialEnd)}. Cuando recargues, vuelve a tocar «Verificar».` : 'Cuando recargues, vuelve a tocar «Verificar».');
+  }
+  async function verifyBingx(uid, quiet) {
+    if (!quiet) say('bx', 'Verificando tu cuenta y tu saldo con BingX…');
     try {
       const r = await fetch(SRV + '/plan/bingx', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({uid, idToken: await idToken()})}); const j = await r.json();
-      if (j.invited) { grant(j.tier || 'infinity', {bx: uid, bxOk: Date.now()}); toast('Infinity activado · bienvenido'); return; }
-      persist(); say('bx', j.taken ? 'Ese UID de BingX ya activó Infinity en otra cuenta de VORTEX.' : j.login ? 'Inicia sesión con Google primero.' : j.setup ? 'UID guardado. La verificación con BingX se activará muy pronto.' : j.ok ? 'Ese UID no aparece registrado con el código ' + BX_CODE + '.' : (j.error || 'BingX no respondió: inténtalo en un rato.'), !j.setup);
-    } catch { persist(); say('bx', 'UID guardado. No se pudo conectar con el servidor: inténtalo más tarde.', true); }
+      if (j.invited && j.need) { st = Object.assign(st, {bx: uid, bxNeed: 1, bxBal: j.bal, trialEnd: j.trialEnd || 0}); save(st); grant(j.tier || 'free', {bx: uid}); say('bx', needMsg(j.bal, j.trialEnd), false); if (!quiet) toast(j.trialEnd > Date.now() ? 'Te faltan $' + Math.max(0, 100 - (j.bal || 0)).toFixed(2) + ' en BingX · tienes Plus de prueba' : 'Necesitas $100 en tu cuenta de BingX para Infinity'); return; }
+      if (j.invited) { st = Object.assign(st, {bxNeed: 0, bxBal: j.bal, refEnd: j.refEnd || 0}); grant(j.tier || 'infinity', {bx: uid, bxOk: Date.now()}); if (!quiet) toast('Infinity activado · bienvenido'); return; }
+      if (quiet) return;
+      persist(); if (quiet) return; say('bx', j.taken ? 'Ese UID de BingX ya activó Infinity en otra cuenta de VORTEX.' : j.login ? 'Inicia sesión con Google primero.' : j.setup ? 'UID guardado. La verificación con BingX se activará muy pronto.' : j.ok ? 'Ese UID no aparece registrado con el código ' + BX_CODE + '.' : (j.error || 'BingX no respondió: inténtalo en un rato.'), !j.setup);
+    } catch { persist(); if (!quiet) say('bx', 'UID guardado. No se pudo conectar con el servidor: inténtalo más tarde.', true); }
   }
   const exportPlan = () => ({tier: st.tier || 'free', uid: st.uid || '', at: st.at || 0, yt: st.yt || 0, bx: st.bx || '', bxOk: st.bxOk || 0});
   function persist() { if (root.CCT_planSave) try { root.CCT_planSave(exportPlan()); } catch {} }

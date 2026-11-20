@@ -45,7 +45,9 @@
     const r = await fetch(VAULT_SRV + path, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(Object.assign({idToken}, body))}), j = await r.json().catch(() => ({}));
     if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j;
   }
-  let cfg = load(), ex = null, ccxtP = null, snap = {equity: NaN, free: NaN, positions: [], orders: [], at: 0, err: ''}, subs = [], pollT = 0, busy = false, busyAt = 0, soonT = 0, soonAt = 0, cloudUid = '';
+  /* El exchange es POR CUENTA: lo guardado en este dispositivo lleva el uid de su dueño y solo se usa cuando esa cuenta inicia sesión
+     (antes, al entrar con otra cuenta de Google en el mismo navegador, aparecía el exchange y el saldo de la cuenta anterior). */
+  let pend = load(), cfg = null, ex = null, ccxtP = null, snap = {equity: NaN, free: NaN, positions: [], orders: [], at: 0, err: ''}, subs = [], pollT = 0, busy = false, busyAt = 0, soonT = 0, soonAt = 0, cloudUid = '';
   let storeSeq = 0;
   const storeLocal = () => { // cifrado; si el navegador no deja (modo privado muy estricto), se guarda como antes para no perder la conexión
     const my = ++storeSeq, c = cfg;
@@ -181,15 +183,25 @@
       await C.set(DOC, {box, v: 2, at: cfg.at || Date.now()}); return true;
     } catch { return false; }
   }
-  async function cloudSync(uid) { // al iniciar sesión: si tu cuenta ya tiene un exchange guardado, se usa aquí sin volver a pedirlo
+  async function cloudSync(uid) { // al iniciar sesión: se usa el exchange de ESA cuenta (el de su nube o el de este dispositivo si es suyo)
     const C = root.CCTCloudPriv; if (!C || !C.ready() || !uid || cloudUid === uid) return; cloudUid = uid;
+    if (cfg && cfg.uid !== uid) forget(), cloudUid = uid; // venía de otra cuenta
     try {
-      await unlocked; // primero se abre la copia cifrada de este dispositivo (para comparar fechas)
-      const d = await C.get(DOC); let rc = null, legacy = false;
+      await unlocked;
+      const d = await C.get(DOC); if (cloudUid !== uid) return; let rc = null, legacy = false;
       if (d && d.box) { try { rc = JSON.parse((await vault('/vault/open', {box: d.box})).data); } catch { rc = null; } }
-      else if (d && d.cfg) { try { rc = JSON.parse(d.cfg); legacy = true; } catch {} } // forma vieja en texto plano: se usa y se reemplaza por la cifrada
-      if (rc && rc.id && rc.apiKey && (!cfg || (rc.at || 0) >= (cfg.at || 0))) { const same = cfg && cfg.id === rc.id && cfg.apiKey === rc.apiKey; cfg = rc; storeLocal(); ex = null; if (!same) { lensLink(); toast(`${nameOf(cfg.id)} conectado desde tu cuenta`); } startPoll(); paint(); if (legacy) cloudSave(); }
-      else if (cfg && (!rc || legacy || (cfg.at || 0) > (rc.at || 0))) cloudSave();
+      else if (d && d.cfg) { try { rc = JSON.parse(d.cfg); legacy = true; } catch {} }
+      if (cloudUid !== uid) return;
+      if (!(rc && rc.id && rc.apiKey)) rc = null; else rc.uid = uid;
+      let loc = pend && pend.id && pend.apiKey ? pend : null;
+      if (loc && loc.uid !== uid && !(rc && !loc.uid && rc.apiKey === loc.apiKey)) loc = null; // lo del dispositivo es de otra cuenta (o sin dueño y no coincide con la nube): no se usa
+      const pick = rc && (!loc || (rc.at || 0) >= (loc.at || 0)) ? rc : loc;
+      if (!pick) { if (pend && pend.uid !== uid) { pend = null; try { localStorage.removeItem(LS); } catch {} } if (cfg) forget(), cloudUid = uid; return; }
+      const same = cfg && cfg.id === pick.id && cfg.apiKey === pick.apiKey;
+      cfg = Object.assign({}, pick, {uid}); pend = cfg; storeLocal(); ex = null;
+      if (!same) { lensLink(); toast(`${nameOf(cfg.id)} conectado desde tu cuenta`); }
+      startPoll(); setTimeout(checkPerms, 1500); emit(); paint();
+      if (legacy || pick === loc && (!rc || (loc.at || 0) > (rc.at || 0))) cloudSave();
     } catch {}
   }
   /* Nexus Lens ya es parte de VORTEX (lens.js): lee este mismo exchange con history() y onChange(); no hace falta copiarle la clave */
@@ -284,12 +296,13 @@
   }
   const permWarn = () => { if (!perms || !cfg || !cfg.trade) return ''; const need = cfg.market === 'spot' ? perms.spot : perms.futures; if (need) return ''; return cfg.market === 'spot' ? 'Tu clave de Binance no tiene «Habilitar trading spot y de margen»: puede leer pero no operar.' : 'Tu clave de Binance no tiene «Habilitar futuros»: puede leer pero no operar. Edítala en Binance › Gestión de API (si tu cuenta de Futuros se abrió después de crear la clave, crea una nueva).' + (perms.ip ? '' : ' Si Binance te pide restringir por IP para activarlo, avísame: el puente no tiene una IP fija.'); };
   async function connect(c) {
+    const C = root.CCTCloudPriv, uid = C && C.uid ? C.uid() : ''; if (!uid) throw new Error('Inicia sesión con Google para conectar tu exchange');
     const t = await make(c); t.checkRequiredCredentials();
     await t.fetchBalance(); // prueba real: si la clave no sirve, aquí falla
-    cfg = Object.assign({}, c, {at: Date.now()}); ex = t; storeLocal(); const cloud = await cloudSave(); lensLink(); startPoll(); await checkPerms();
+    cfg = Object.assign({}, c, {at: Date.now(), uid}); pend = cfg; cloudUid = uid; ex = t; storeLocal(); const cloud = await cloudSave(); lensLink(); startPoll(); await checkPerms();
     return cloud;
   }
-  async function disconnect() { cfg = null; ex = null; clearTimeout(pollT); snap = {equity: NaN, free: NaN, positions: [], orders: [], at: 0, err: ''}; storeLocal(); await cloudSave(); emit(); }
+  async function disconnect() { cfg = null; pend = null; ex = null; clearTimeout(pollT); snap = {equity: NaN, free: NaN, positions: [], orders: [], at: 0, err: ''}; storeLocal(); await cloudSave(); emit(); }
 
   /* ───────── Ventana: lista de exchanges → claves → conectado ───────── */
   let ov = null, step = 'list', pickId = '', q = '', all = null;
@@ -366,12 +379,14 @@
   document.addEventListener('click', e => { if (e.target.closest('[data-ex-open]')) { e.preventDefault(); open(); } });
   /* Al abrir: la clave cifrada de este dispositivo se abre con la llave del navegador; la forma vieja (texto plano) se cifra en ese momento */
   const unlocked = (async () => {
-    if (cfg) { storeLocal(); return; }
+    if (pend) return; // forma vieja sin cifrar: se decide en cloudSync
     let o = null; try { o = JSON.parse(localStorage.getItem(LS) || 'null'); } catch {}
     if (!o || o.v !== 'enc1') return;
-    try { const c = await decLocal(o); if (c && c.id && c.apiKey && !cfg) { cfg = c; startPoll(); setTimeout(checkPerms, 1500); emit(); } } catch {}
+    try { const c = await decLocal(o); if (c && c.id && c.apiKey) pend = c; } catch {}
   })();
-  if (cfg) { startPoll(); setTimeout(checkPerms, 1500); }
+  function forget() { // al cerrar sesión (o abrir sin sesión): ningún exchange queda activo ni visible
+    cloudUid = ''; if (!cfg) return; cfg = null; ex = null; clearTimeout(pollT); snap = {equity: NaN, free: NaN, positions: [], orders: [], at: 0, err: ''}; lensLink(); emit();
+  }
 
-  root.CCTExchange = {open, close, refresh, refreshSoon, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, protections, setTpSl, removeTpSl, baseOf, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, history, snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
+  root.CCTExchange = {forget, open, close, refresh, refreshSoon, order, closePosition, cancel, canTrade, cloudSync, connected: () => !!cfg, protections, setTpSl, removeTpSl, baseOf, permWarn: () => permWarn(), checkPerms, info: () => cfg ? {id: cfg.id, name: nameOf(cfg.id), market: cfg.market, trade: !!cfg.trade} : null, history, snap: () => snap, onChange: f => { subs.push(f); }, FEATURED};
 })(typeof self !== 'undefined' ? self : this);

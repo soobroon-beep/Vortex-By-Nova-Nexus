@@ -12,11 +12,14 @@ window.CCT_CHANGELOG = [
     'El precio se mueve en vivo con cada operación del mercado, no cada 2 segundos.',
     'Lo premium se ve normal y solo al pasar el cursor aparece su brillo de galaxia; animaciones de Liquidaciones, Diseño y Nova Nexus más fluidas.',
     'Al conectar tu exchange puedes activar que su saldo llene la barra de la cuenta. Exchange y Tu IA solo salen con la sesión iniciada.',
+    'Colores de subida y bajada: elige entre 7 combinaciones en Personalización (velas, volumen, porcentajes y toda la app).',
+    'Tu exchange, Tu IA y tu historial de Nexus Lens son solo de tu cuenta: otra cuenta en el mismo navegador ya no los ve.',
     'Nexus Lens integrado con el mismo estilo de VORTEX, modo Ligero, zoom más suave y monedas más compactas en Mi seguimiento.'
   ]},
   {v: '3.39', d: '17 nov 2026', t: 'VORTEX publicada: planes y precios', items: [
     'Página oficial pública de VORTEX.',
     'Tres planes: Gratis (todo el gráfico, dibujos, indicadores gratuitos, noticias y alertas), Plus e Infinity.',
+    'Infinity gratis con BingX: cuenta con el código YCXE5W y al menos $100 en ella (tu dinero, para operar). Si aún no llegas, 7 días de Plus mientras recargas; se revisa cada mes.',
     'Pago seguro dentro de la app y precios en la moneda de tu país. Infinity también se activa gratis con tu cuenta de BingX y el código YCXE5W.',
     'Tu plan y la opción de mejorarlo están en tu perfil.'
   ]},

@@ -80,8 +80,9 @@
   }
 
   /* ───────── Carga del historial ───────── */
-  function readCache(id) { try { const c = JSON.parse(localStorage.getItem(CACHE) || 'null'); return c && c.ex === id && Array.isArray(c.trades) ? c : null; } catch { return null; } }
-  function writeCache(d) { try { localStorage.setItem(CACHE, JSON.stringify({trades: d.trades.slice(-1500), at: d.at, src: d.src, spot: d.spot, ex: d.ex})); } catch {} }
+  const cuid = () => { try { const C = root.CCTCloudPriv; return C && C.uid ? C.uid() : ''; } catch { return ''; } }; // el historial guardado es de UNA cuenta: otra cuenta en este navegador no lo ve
+  function readCache(id) { try { const c = JSON.parse(localStorage.getItem(CACHE) || 'null'); return c && c.ex === id && c.uid && c.uid === cuid() && Array.isArray(c.trades) ? c : null; } catch { return null; } }
+  function writeCache(d) { try { const u = cuid(); if (!u) return; localStorage.setItem(CACHE, JSON.stringify({trades: d.trades.slice(-1500), at: d.at, src: d.src, spot: d.spot, ex: d.ex, uid: u})); } catch {} }
   async function load(force) {
     if (demo) { D = DEMO.data(); compute(); return paint(); }
     const X = EX(), info = exInfo();

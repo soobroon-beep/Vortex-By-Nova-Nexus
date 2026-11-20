@@ -17,7 +17,9 @@
   const cloudKeep = it => { const o = {}; for (const k of ['id', 'src', 'sym', 'side', 'qty', 'entry', 'exit', 'pnl', 'fees', 'lev', 'why', 'tOpen', 'tClose', 'sl', 'tp', 'r', 'tags', 'note']) if (it[k] != null) o[k] = it[k]; return o; };
   function cloudMirror() {
     clearTimeout(cloudT); cloudT = setTimeout(async () => {
-      const C = root.CCTCloudPriv; if (!C || !C.ready()) return;
+      const C = root.CCTCloudPriv; if (!C || !C.ready()) return; const u = C.uid ? C.uid() : '';
+      if (!u) return; if (J.owner && J.owner !== u) { J = {items: [], seen: [], open: {}, tags: [], owner: u}; try { localStorage.setItem(LS, JSON.stringify(J)); } catch {} } // el diario de este navegador era de otra cuenta: no se mezcla
+      if (!J.owner) J.owner = u;
       try {
         const d = await C.get('journal'); let cloud = []; try { cloud = d && d.items ? JSON.parse(d.items) : []; } catch {}
         const map = new Map(); for (const it of (Array.isArray(cloud) ? cloud : [])) if (it && it.id) map.set(it.id, it); for (const it of J.items) if (it && it.id) map.set(it.id, cloudKeep(it));

@@ -103,10 +103,13 @@ export async function fsMerge(sa, path, data, fetchFn = fetch) {
    y payTier + payEnd (plan pagado con Stripe, lo verifica vortex-pay). «tier» es el mejor vigente; las reglas de Firestore
    además revisan payEnd, así que un pago vencido deja de abrir el código PRO aunque nadie actualice el documento. */
 export const PLAN_RANK = {free: 0, plus: 1, infinity: 2};
+/* refTier vale mientras no pase refEnd (se renueva cada mes al volver a verificar el UID de BingX con su saldo mínimo);
+   trialTier + trialEnd = la prueba de 7 días de Plus que se da mientras el referido junta los $100 de su cuenta. */
 export function planTier(d, now = Date.now()) {
   if (!d) return 'free'; if (d.by === 'creador') return 'infinity';
-  const ref = PLAN_RANK[d.refTier] ? d.refTier : 'free', pay = PLAN_RANK[d.payTier] && +d.payEnd > now - 864e5 ? d.payTier : 'free';
-  return PLAN_RANK[pay] > PLAN_RANK[ref] ? pay : ref;
+  const ref = PLAN_RANK[d.refTier] && (!d.refEnd || +d.refEnd > now) ? d.refTier : 'free', pay = PLAN_RANK[d.payTier] && +d.payEnd > now - 864e5 ? d.payTier : 'free';
+  const trial = PLAN_RANK[d.trialTier] && +d.trialEnd > now ? d.trialTier : 'free';
+  return [ref, pay, trial].reduce((a, b) => PLAN_RANK[b] > PLAN_RANK[a] ? b : a, 'free');
 }
 export async function syncPlan(sa, uid, patch, fetchFn = fetch) {
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(uid)) throw new Error('uid inválido');

@@ -139,7 +139,7 @@ async function saJson() {
 
 test('plan Infinity por BingX: lo verifica y lo escribe el servidor; un UID no sirve para dos cuentas; sin sesión no', async () => {
   const w = await W(), fs = fakeFirestore(), env = {KV: memKV(), DB: memD1(), FB_SA: await saJson(), BINGX_AGENT_KEY: 'k', BINGX_AGENT_SECRET: 's'}, call = caller(w, env), real = globalThis.fetch;
-  globalThis.fetch = FB.withJwks(async (url, init) => { const r = await fs.handler(url, init); if (r) return r; if (String(url).includes('bingx')) return new Response(JSON.stringify({code: 0, data: {inviteResult: true, existInvitee: true}})); throw new Error('fetch inesperado ' + url); });
+  globalThis.fetch = FB.withJwks(async (url, init) => { const r = await fs.handler(url, init); if (r) return r; if (String(url).includes('bingx')) return new Response(JSON.stringify({code: 0, data: {inviteResult: true, existInvitee: true, balanceVolume: '150.5'}})); throw new Error('fetch inesperado ' + url); });
   try {
     assert.strictEqual((await call('/plan/bingx', {uid: '12345678'})).status, 401, 'sin sesión no se da ningún plan');
     const r = await call('/plan/bingx', {uid: '12345678', idToken: await FB.mint('Ana111')});
@@ -151,6 +151,23 @@ test('plan Infinity por BingX: lo verifica y lo escribe el servidor; un UID no s
   } finally { globalThis.fetch = real; }
 });
 
+test('Infinity por BingX pide $100 de saldo: con menos se dan 7 días de Plus (una sola vez) y al recargar pasa a Infinity', async () => {
+  const w = await W(), fs = fakeFirestore(), env = {KV: memKV(), DB: memD1(), FB_SA: await saJson(), BINGX_AGENT_KEY: 'k', BINGX_AGENT_SECRET: 's'}, call = caller(w, env), real = globalThis.fetch;
+  let bal = '35.2';
+  globalThis.fetch = FB.withJwks(async (url, init) => { const r = await fs.handler(url, init); if (r) return r; if (String(url).includes('bingx')) return new Response(JSON.stringify({code: 0, data: {inviteResult: true, balanceVolume: bal}})); throw new Error('fetch inesperado ' + url); });
+  try {
+    const r = await call('/plan/bingx', {uid: '87654321', idToken: await FB.mint('Caro333')});
+    assert.strictEqual(r.j.need, true, JSON.stringify(r.j)); assert.strictEqual(r.j.bal, 35.2); assert.strictEqual(r.j.min, 100); assert.strictEqual(r.j.tier, 'plus', 'prueba de Plus');
+    assert.ok(r.j.trialEnd > Date.now() + 6.9 * 864e5 && r.j.trialEnd < Date.now() + 7.1 * 864e5, '7 días');
+    assert.deepStrictEqual(fs.docs.get('plans/Caro333').refTier, {stringValue: 'free'});
+    const again = await call('/plan/bingx', {uid: '87654321', idToken: await FB.mint('Caro333')});
+    assert.strictEqual(again.j.trialUsed, true); assert.strictEqual(again.j.trialEnd, r.j.trialEnd, 'la prueba no se reinicia');
+    bal = '120';
+    const ok = await call('/plan/bingx', {uid: '87654321', idToken: await FB.mint('Caro333')});
+    assert.strictEqual(ok.j.tier, 'infinity'); assert.ok(ok.j.refEnd > Date.now() + 30 * 864e5, 'se vuelve a revisar en un mes');
+  } finally { globalThis.fetch = real; }
+});
+
 test('plans/{uid}: el plan vigente sale del creador, el referido o un pago no vencido', async () => {
   const {planTier} = await import('../worker/fbauth.mjs'), now = Date.now();
   assert.strictEqual(planTier({by: 'creador'}), 'infinity');
@@ -159,6 +176,9 @@ test('plans/{uid}: el plan vigente sale del creador, el referido o un pago no ve
   assert.strictEqual(planTier({payTier: 'infinity', payEnd: now - 3 * 864e5}), 'free', 'pago vencido');
   assert.strictEqual(planTier({refTier: 'infinity', payTier: 'plus', payEnd: now + 864e5}), 'infinity', 'el mejor de los dos');
   assert.strictEqual(planTier(null), 'free');
+  assert.strictEqual(planTier({refTier: 'infinity', refEnd: now - 1000}), 'free', 'referido sin revisar en el mes');
+  assert.strictEqual(planTier({refTier: 'free', trialTier: 'plus', trialEnd: now + 864e5}), 'plus', 'prueba vigente');
+  assert.strictEqual(planTier({trialTier: 'plus', trialEnd: now - 1}), 'free', 'prueba vencida');
 });
 
 test('bóveda: cifra tus claves atadas a tu cuenta; otra cuenta no las puede abrir', async () => {
