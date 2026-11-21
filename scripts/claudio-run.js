@@ -15,10 +15,11 @@ async function get(path, fx) {
   for (const b of BASES) { try { const r = await fx(b + path); if (r.ok) return await r.json(); last = 'HTTP ' + r.status; if (r.status === 400) break; } catch (e) { last = e.message; } }
   throw new Error(last || 'sin respuesta');
 }
-function makeFeed(fx, now) {
+function makeFeed(fx, now, tf) { // tf: temporalidad del agente (Claudio/Felipe 1h · Claudia 5m)
+  tf = tf || '1h';
   const cache = new Map();
   return {
-    candles: async (sym, n) => { const k = sym + n; if (!cache.has(k)) { const raw = await get(`/klines?symbol=${encodeURIComponent(sym)}&interval=1h&limit=${Math.min(1000, Math.max(100, n | 0))}`, fx); cache.set(k, raw.filter(d => d[6] < (now || Date.now())).map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}))); } return cache.get(k); },
+    candles: async (sym, n) => { const k = sym + n; if (!cache.has(k)) { const raw = await get(`/klines?symbol=${encodeURIComponent(sym)}&interval=${tf}&limit=${Math.min(1000, Math.max(100, n | 0))}`, fx); cache.set(k, raw.filter(d => d[6] < (now || Date.now())).map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}))); } return cache.get(k); },
     book: async sym => { const d = await get(`/depth?symbol=${encodeURIComponent(sym)}&limit=20`, fx); return {t: now || Date.now(), bids: d.bids.map(x => [+x[0], +x[1]]), asks: d.asks.map(x => [+x[0], +x[1]])}; }
   };
 }
@@ -41,11 +42,12 @@ async function main() {
   if (!raw) { console.log('FIREBASE_SERVICE_ACCOUNT no está configurado: no hay nada que hacer. (Ver INSTALL.md → Claudio)'); return; }
   let admin; try { admin = require('firebase-admin'); } catch { console.log('Falta firebase-admin (npm i --no-save firebase-admin)'); process.exit(1); }
   admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); const db = admin.firestore(), now = Date.now();
-  const feed = makeFeed(null, now), evaluate = K.jevEvaluator({apiKey: process.env.JEV_API_KEY || '', model: process.env.JEV_MODEL || 'jev-latest'});
+  const feeds = {}, feedOf = tf => feeds[tf] || (feeds[tf] = makeFeed(null, now, tf)), evaluate = K.jevEvaluator({apiKey: process.env.JEV_API_KEY || '', model: process.env.JEV_MODEL || 'jev-latest'});
   let n = 0;
   /* Agentes autónomos: Claudio y Felipe (mismo núcleo, otra estrategia y otros números). Cada uno tiene su configuración en tu documento «botlab»
      (botlab.claudio / botlab.felipe) y su sesión en data/<agente>_server. Felipe arranca encendido solo si Claudio está encendido y nunca se configuró. */
-  const AGENTS = [{key: 'claudio', K, syms: R.symbols()}, {key: 'felipe', K: K.felipe, syms: K.FELIPE.symbols}];
+  // Claudia 5 minutos: gemela de Claudio en velas de 5 min, con su propia sesión (data/claudia_server). Agregarla no toca a Claudio ni a Felipe.
+  const AGENTS = [{key: 'claudio', K, syms: R.symbols()}, {key: 'felipe', K: K.felipe, syms: K.FELIPE.symbols}, {key: 'claudia', K: K.claudia, syms: R.symbols()}];
   for (const u of await db.collection('users').listDocuments()) {
     let items = null; try { const bd = await u.collection('data').doc('botlab').get(); if (bd.exists) items = JSON.parse(bd.data().items || '{}') || {}; } catch {}
     let claudioOn = false;
@@ -54,13 +56,13 @@ async function main() {
       let legacy = null; if (A.key === 'claudio') { try { const cd = await u.collection('data').doc('claudio').get(); if (cd.exists) legacy = cd.data(); } catch {} }
       let cfg = app && app.cfg && (!legacy || (app.cfg.at || 0) >= (legacy.at || 0)) ? app.cfg : (legacy || null);
       if (A.key === 'claudio') claudioOn = !!(cfg && cfg.enabled);
-      if (A.key === 'felipe' && !cfg && claudioOn) cfg = {enabled: true, capital: 10000, at: 0, auto: true};
+      if ((A.key === 'felipe' || A.key === 'claudia') && !cfg && claudioOn) cfg = {enabled: true, capital: 10000, at: 0, auto: true};
       if (!cfg || !cfg.enabled) continue;
       const sd = await u.collection('data').doc(A.key + '_server').get(); let prev = null; if (sd.exists) { try { prev = JSON.parse(sd.data().s || 'null'); } catch {} }
       prev = A.K.newer(prev, app && app.s);
       try {
         const now2 = now, s = A.K.prepare(cfg, prev, now2, A.syms);
-        if (MODE === 'nightly') A.K.nightly(s, now2); else await A.K.step(s, feed, evaluate, now2);
+        if (MODE === 'nightly') A.K.nightly(s, now2); else await A.K.step(s, feedOf(A.K.TF), evaluate, now2);
         await u.collection('data').doc(A.key + '_server').set({s: compact(s), summary: summary(s, A.K), updatedAt: admin.firestore.FieldValue.serverTimestamp()}); n++;
         const sm = summary(s, A.K); console.log(`${A.K.NAME}: ${MODE} · patrimonio ${sm.equity.toFixed(2)} · ${sm.trades} operaciones · ${sm.open} abiertas · evaluador ${sm.by || '—'}${sm.kill ? ' · KILL' : ''}${sm.halted ? ' · DETENIDO' : ''}${sm.minConf ? ' · umbral ' + Math.round(sm.minConf * 100) + ' %' : ''}`);
         console.log(`  ${A.K.NAME} esperando/decidiendo: ${waitWhy(s)}`);

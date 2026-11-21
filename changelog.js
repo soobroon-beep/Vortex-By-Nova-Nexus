@@ -3,6 +3,10 @@
    Los arreglos y ajustes pequeños NO se anotan aquí: se suman al último bloque «Mejoras» sin crear versión nueva. */
 window.CCT_CHANGELOG = [
   {v: '3.43', d: '19 nov 2026', t: 'Mejoras del gráfico', items: [
+    'Nuevo bot en Nova Bot Lab: Claudia 5 minutos, gemela de Claudio (mismas reglas y la misma mejora automática) operando en velas de 5 minutos, con su propio historial.',
+    'Ahora puedes dibujar sobre cualquier panel: oscilador, RSI, MACD y tus scripts.',
+    'Configuración › Preferencias: cursor, cuenta atrás de la vela, aviso de conexión, confirmar antes de borrar, pantalla encendida, precio en la pestaña y hora y formato. Personalización queda solo para cómo se ve.',
+    'Los botones de Estilo de la app tienen cada uno su propio estilo: Clásico, minimal y ESPACIAL (robótico).',
     'Avisos más simples: primero activas las notificaciones y se despliegan las opciones; eliges una sola vez qué te avisamos y al final dónde (VORTEX o Discord). En Discord eliges cuáles de esos avisos se envían.',
     'Nuevo en Avisos: volumen, vibración y horario sin sonido.',
     'En la PC con VORTEX minimizada los avisos llegan en su momento; ya no salen todos juntos al volver a abrirla.',

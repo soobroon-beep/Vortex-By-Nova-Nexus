@@ -208,7 +208,8 @@ function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estil
   if (o.ds != null && o.ds !== 'dash' && o.ds !== 'dot') delete o.ds;
   if (o.ts != null) { const v = Math.round(+o.ts); if (Number.isFinite(v)) o.ts = Math.max(8, Math.min(36, v)); else delete o.ts; }
   if (o.label != null) { o.label = String(o.label).slice(0, 80); if (!o.label) delete o.label; }
-  if (o.sp != null) { const v = +o.sp; if (Number.isFinite(v) && v > 0) o.sp = v; else delete o.sp; } // Long/Short: precio del stop puesto a mano
+  if (o.pane != null && !(typeof o.pane === 'string' && /^[A-Za-z0-9:_.-]{1,60}$/.test(o.pane))) delete o.pane; // dibujo sobre un panel (oscilador, RSI…)
+  if (o.sp != null) { const v = +o.sp; if (Number.isFinite(v) && (v > 0 || o.pane)) o.sp = v; else delete o.sp; } // en un panel los valores pueden ser negativos (MACD…) // Long/Short: precio del stop puesto a mano
   if (o.gc != null && !hex(o.gc)) delete o.gc; if (o.rc != null && !hex(o.rc)) delete o.rc; // Long/Short: color del objetivo y del stop
   for (const k of ['nt', 'no', 'ns', 'nr']) if (o[k] !== true) delete o[k]; // Long/Short: ocultar título / texto del objetivo / texto del stop
   if (o.lock !== true) delete o.lock; if (o.hide !== true) delete o.hide;
@@ -366,6 +367,7 @@ let pineLastMs = 0, pineRes = {}, pineBusy = {}, pineDirty = {}, pineLast = 0, p
 const PINE_MAX = 6;
 let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null, multi = [];
 let paneMan = {}, paneHit = []; // escala vertical manual por panel (oscilador, RSI…) y su zona táctil; se llena al dibujar
+let dPanes = [], drawPaneKey = null; // paneles donde se puede DIBUJAR (oscilador, RSI, MACD, scripts…) con su escala · el panel del dibujo que estás haciendo
 let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
 let lastBfTop = '';
 let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0, wsPing = 0, dataSrc = 'binance', dataSym = '';
@@ -2915,7 +2917,7 @@ function pickTool(k) {
   if (DOPT.hide) { DOPT.hide = false; saveDopt(); render(); }
   startTool(k);
 }
-function cancelTool() { drawTool = ''; pending = null; pending2 = null; multi = []; preview = null; updateDrawUI(); scheduleRender(); }
+function cancelTool() { drawTool = ''; drawPaneKey = null; pending = null; pending2 = null; multi = []; preview = null; updateDrawUI(); scheduleRender(); }
 /* ───────── Barra flotante permanente de herramientas favoritas (estilo TradingView) ─────────
    Muestra tus favoritas (★) siempre a mano sobre el gráfico: se mueve arrastrando el asa y con clic derecho se oculta;
    para mostrarla otra vez, clic derecho sobre el gráfico. Posición, visibilidad y favoritas se guardan en tu cuenta. Solo en computadora. */
@@ -3156,7 +3158,15 @@ const X = i => geo.left + (i - geo.start + .5) * geo.step;
 const IDX = x => (x - geo.left) / geo.step + geo.start - .5;
 const Y = p => geo.plotTop + (geo.max - p) / (geo.max - geo.min) * geo.plotH;
 const PRICE = y => geo.max - (y - geo.plotTop) / geo.plotH * (geo.max - geo.min);
+/* ───────── Dibujar sobre los paneles (oscilador, RSI, MACD, scripts…) ─────────
+   Un dibujo de panel guarda «pane» (la clave del panel) y sus puntos en los VALORES de ese panel (no en precio). Para medirlo, moverlo o
+   pintarlo se cambia un momento la escala (geo) a la del panel: así funcionan TODAS las herramientas igual que en el gráfico de precio. */
+const dPaneOf = k => k ? dPanes.find(q => q.key === k) || null : null;
+const dPaneAt = pt => geo && pt.x >= geo.left && pt.x < geo.w - geo.right - 4 ? dPanes.find(q => pt.y >= q.top0 && pt.y < q.top0 + q.H) || null : null;
+function withPane(k, fn) { const q = dPaneOf(k); if (!k || !q || !geo) return fn(null); const g0 = geo; geo = Object.assign({}, g0, {plotTop: q.top, plotH: q.h, min: q.mn, max: q.mx}); try { return fn(q); } finally { geo = g0; } }
+const inPaneCtx = (d, fn) => d && d.pane ? (dPaneOf(d.pane) ? withPane(d.pane, fn) : null) : fn(null); // un dibujo de panel cuyo panel no está a la vista no se mide ni se toca
 function snapPoint(pt) {
+  if (drawPaneKey && dPaneOf(drawPaneKey) && !snapPoint._in) { snapPoint._in = true; try { return withPane(drawPaneKey, () => { const i = Math.round(IDX(pt.x)); return {t: timeOfIdx(i), p: PRICE(pt.y)}; }); } finally { snapPoint._in = false; } } // en un panel: el valor del panel (sin imán de velas)
   const i = Math.round(IDX(pt.x)); let p = PRICE(pt.y);
   const c = candles[i];
   if (c && DOPT.magnet) { let best = null, bd = 14; for (const v of [c.o, c.h, c.l, c.c]) { const dd = Math.abs(Y(v) - pt.y); if (dd < bd) { bd = dd; best = v; } } if (best != null) p = best; }
@@ -3282,9 +3292,9 @@ function distToDrawing(d, pt) {
   return Math.min(...dLv(d).map(lv => Math.abs(pt.y - Y(dFibPrice(d, lv)))), dOpt(d, 'tl') ? segDist(pt, a, b) : 1e9);
 }
 const b_price = (d, lv) => d.b.p - (d.b.p - d.a.p) * lv;
-function hitTest(pt) { if (DOPT.lock || DOPT.hide) return null; const arr = getDrawings(); for (let i = arr.length - 1; i >= 0; i--) if (!arr[i].hide && distToDrawing(arr[i], pt) < 13) return arr[i]; return null; }
+function hitTest(pt) { if (DOPT.lock || DOPT.hide) return null; const arr = getDrawings(); for (let i = arr.length - 1; i >= 0; i--) if (!arr[i].hide && (inPaneCtx(arr[i], () => distToDrawing(arr[i], pt)) ?? 1e9) < 13) return arr[i]; return null; }
 function withLastStyle(d) { const st = (state.lastStyle || {})[tplKind(d)]; if (st) for (const [k, v] of Object.entries(st)) if (k !== 'k' && v != null && d[k] == null) d[k] = v; return d; } // última configuración usada en esa herramienta
-function commitDrawing(a, b, c) {
+function commitDrawing(a, b, c) { const k = drawPaneKey; if (k && dPaneOf(k) && !commitDrawing._in) { commitDrawing._in = true; try { return withPane(k, () => commitDrawing(a, b, c)); } finally { commitDrawing._in = false; } }
   const one = ONEPT.includes(drawTool), three = THREEPT.includes(drawTool);
   if (!one) {
     const A = px(a), B = px(b); if (Math.hypot(A.x - B.x, A.y - B.y) < 8) { toast('Los puntos están muy cerca'); pending = null; preview = null; updateDrawUI(); scheduleRender(); return; }
@@ -3298,6 +3308,7 @@ function commitDrawing(a, b, c) {
     if (!txt) { drawTool = ''; pending = null; preview = null; updateDrawUI(); render(); return; }
     d.text = txt;
   }
+  if (drawPaneKey && dPaneOf(drawPaneKey)) d.pane = drawPaneKey; drawPaneKey = null; // dibujado sobre un panel
   withLastStyle(d); snapDraw(); setDrawings([...getDrawings(), d]);
   selectedId = DOPT.stay ? null : d.id; if (!DOPT.stay) drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); render();
 }
@@ -3310,6 +3321,7 @@ function rdp(P, eps) {
 }
 function commitMulti() {
   const M = MULTI[drawTool], pts = multi.slice(0, M.n), d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: drawTool, a: pts[0], pts};
+  if (drawPaneKey && dPaneOf(drawPaneKey)) d.pane = drawPaneKey; drawPaneKey = null;
   withLastStyle(d); snapDraw(); setDrawings([...getDrawings(), d]);
   selectedId = DOPT.stay ? null : d.id; if (!DOPT.stay) drawTool = ''; multi = []; pending = null; preview = null; updateDrawUI(); render();
 }
@@ -3598,7 +3610,7 @@ function renderCore() {
   const text = css.text, line = css.line, bg = css.bg, drawCol = css.draw, fg = css.fg;
   syncNovaCols(); const CS = cstyle(), up = CS.up, down = CS.down;
   g.clearRect(0, 0, w, h); if (CS.bg) { g.fillStyle = CS.bg; g.fillRect(0, 0, w, h); }
-  const gridCol = CS.grid || line; grips = []; paneHit = []; { const sk = state.symbol + '|' + state.interval; if (paneMan._k !== sk) { paneMan = {_k: sk}; for (const [k, v] of Object.entries(paneManSaved)) paneMan[k] = {min: v[0], max: v[1]}; } }
+  const gridCol = CS.grid || line; grips = []; paneHit = []; dPanes = []; { const sk = state.symbol + '|' + state.interval; if (paneMan._k !== sk) { paneMan = {_k: sk}; for (const [k, v] of Object.entries(paneManSaved)) paneMan[k] = {min: v[0], max: v[1]}; } }
   const n = candles.length; if (!n) { geo = null; return; }
 
   const pineKeyNow = `${state.symbol}|${state.interval}|${candles[0].t}`;
@@ -3742,7 +3754,7 @@ function renderCore() {
   }
   if (stdOn('liqmap') && ind.lm) drawLiqMap(ind.lm, lo, hi);
   if (vpvr) drawVPVR(vpvr); // detrás de las velas, como en TradingView
-  if (!DOPT.hide) for (const d of getDrawings()) if (d.bk) drawShape(d, d.id === selectedId, drawCol, text); // dibujos enviados «detrás de las velas» desde el árbol de objetos
+  if (!DOPT.hide) for (const d of getDrawings()) if (d.bk && !d.pane) drawShape(d, d.id === selectedId, drawCol, text); // dibujos enviados «detrás de las velas» desde el árbol de objetos
   // velas
   const barW = clamp(step * .66, 1.5, 16), limeBars = !!(state.indicators.nnLiq && state.indicators.nnLiqBars && ind.liq);
   if (stdOn('volume') && candles.length) { // volumen en el mismo panel de las velas: barras al fondo (detrás de las velas), ocupan el ~18 % inferior
@@ -3810,8 +3822,10 @@ function renderCore() {
   if (nn && (state.indicators.nnIa || state.indicators.nnTp)) drawNovaSignals(nn, lo, hi, n);
   if (nn && nn.smc && state.indicators.nnSmc) drawNovaStruct(nn.smc);
   // dibujos del usuario
-  if (!DOPT.hide) for (const d of getDrawings()) if (!d.bk) drawShape(d, d.id === selectedId, drawCol, text);
+  if (!DOPT.hide) for (const d of getDrawings()) if (!d.bk && !d.pane) drawShape(d, d.id === selectedId, drawCol, text);
+  const paneDraw = !!(drawPaneKey && dPaneOf(drawPaneKey)); // si estás dibujando sobre un panel, la vista previa se pinta ahí (más abajo)
   const dPre = drawTool && !isBrushTool(drawTool) ? withLastStyle({id: '_', type: drawTool}) : {}, preCol = dPre.col || drawCol; // mientras se dibuja ya sale con el color, grosor y ajustes de la última vez
+  const drawPreview = () => {
   if (pending2) drawShape({id: '_', type: 'trend', a: pending2.a, b: pending2.b, col: dPre.col, lw: dPre.lw, ds: dPre.ds}, false, drawCol, text);
   if (preview) drawShape({...dPre, a: preview.a, b: preview.b, c: preview.c}, false, drawCol, text);
   if (brushLive && brushLive.length > 1) drawBrush({type: 'brush', ...dBrushO(), pts: brushLive, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, hl: drawTool === 'highlighter'}, false, drawCol);
@@ -3821,6 +3835,7 @@ function renderCore() {
     g.fillStyle = preCol; for (const q of multi) { const P = px(q); g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
   }
   if (pending) { const P = px(pending); g.fillStyle = preCol; g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
+  }; if (!paneDraw) drawPreview();
   g.restore();
 
   // asas de agarre: barra derecha (escala de precio) e inferior (escala de tiempo)
@@ -3989,7 +4004,7 @@ function renderCore() {
   }
   // RSI
   if (rsiH) {
-    const top = geo.rsiTop + 4, height = rsiH - 12;
+    const top = geo.rsiTop + 4, height = rsiH - 12; dPanes.push({key: 'rsi', top0: geo.rsiTop, H: rsiH, top, h: height, mn: 0, mx: 100});
     g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.rsiTop); g.lineTo(w - right + 2, geo.rsiTop); g.stroke();
     const lastR = [...ind.rsi].reverse().find(x => x != null);
     { const tx = `RSI ${sp('rsi', 'len')}`; g.fillStyle = text; legLabel(tx, left + 4, top + 16, {t: 'std', key: 'rsi'}); }
@@ -4002,6 +4017,10 @@ function renderCore() {
   }
   panelKeys.forEach((k, idx) => k.startsWith('pine:') ? drawPinePane(pr.find(x => 'pine:' + x.p.sid === k), botY[k], hBot[idx], lo, hi, {left, w, right, line, text, step, plotW}) : drawSubPanel(k, botY[k], hBot[idx], lo, hi, {left, w, right, line, text}));
   pTop.forEach((x, idx) => drawPinePane(x, topY['pine:' + x.p.sid], hTop[idx], lo, hi, {left, w, right, line, text, step, plotW}));
+  /* dibujos sobre los paneles (y la vista previa si estás dibujando en uno): cada uno con la escala y el recorte de su panel */
+  if (dPanes.length) { const one = (q, fn) => { g.save(); g.beginPath(); g.rect(left, q.top0, plotW, q.H); g.clip(); try { fn(); } finally { g.restore(); } };
+    if (!DOPT.hide) for (const d of getDrawings()) if (d.pane && !d.hide) inPaneCtx(d, q => one(q, () => drawShape(d, d.id === selectedId, drawCol, text)));
+    if (paneDraw) withPane(drawPaneKey, q => one(q, drawPreview)); }
   if (pTop.length) { g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, plotTop); g.lineTo(w - right + 2, plotTop); g.stroke(); }
   if (vpOn) drawNovaVP(ind.vp, fg);
   if (state.indicators.nnLiq && ind.liq) drawNovaLiqTable(fg);
@@ -4055,7 +4074,7 @@ function drawSubPanel(key, top0, H, lo, hi, o) {
   if (key === 'macd') { const m = Math.max(Math.abs(mn), Math.abs(mx)) || 1; mn = -m; mx = m; } // el cero queda al centro
   if (mx === mn) { mx += 1; mn -= 1; }
   const pad = key === 'stoch' || (PD && PD.range) ? 0 : (mx - mn) * .08; mn -= pad; mx += pad;
-  { const pm = paneMan[key]; if (pm) { mn = pm.min; mx = pm.max; } paneHit.push({key, top0, H, mn, mx}); }
+  { const pm = paneMan[key]; if (pm) { mn = pm.min; mx = pm.max; } paneHit.push({key, top0, H, mn, mx}); dPanes.push({key, top0, H, top: top0 + 4, h: H - 10, mn, mx}); }
   const Yp = v => top + (mx - v) / (mx - mn) * height;
   g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip(); // incluye el eje derecho para que se vean los niveles y la escala
   g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
@@ -4303,8 +4322,8 @@ function drawLevels(d) {
   return L;
 }
 function drawSelTags(fallCol) {
-  if (DOPT.hide) return;
-  const d = selectedId ? getDrawings().find(x => x.id === selectedId) : null;
+  if (DOPT.hide || drawPaneKey) return;
+  const d = selectedId ? getDrawings().find(x => x.id === selectedId) : null; if (d && d.pane) return; // los niveles de un dibujo de panel no son precios: no van en la escala de precios
   let lv = drawLevels(d);
   if (!lv.length && (preview || pending)) { const dP = drawTool ? withLastStyle({id: '_', type: drawTool}) : {}; lv = preview ? drawLevels({...dP, ...preview, type: drawTool || 'trend'}) : drawLevels({type: 'label', a: pending, col: dP.col}); }
   if (!lv.length) return;
@@ -4805,12 +4824,12 @@ area.addEventListener('pointerdown', e => { stopMotion();
     gest.mode = onPriceAxis ? 'scaleY' : 'scaleX'; gest.min0 = geo.min; gest.max0 = geo.max; gest.vis0 = visible; gest.pan1 = pan; cross = null;
   } else if (isBrushTool(drawTool) && (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH || pt.x < geo.left || pt.x > geo.left + geo.plotW)) { gest.mode = 'ignore'; toast('El pincel dibuja sobre el gráfico de precio'); }
   else if (isBrushTool(drawTool)) { gest.mode = 'brush'; selectedId = null; brushLive = [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]; gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); }
-  else if (drawTool) gest.start = snapPoint(pt);
+  else if (drawTool) { if (!pending && !pending2 && !multi.length) { const dp = dPaneAt(pt); drawPaneKey = dp ? dp.key : null; } gest.start = snapPoint(pt); } // tocar dentro de un panel = dibujar sobre ese panel
   else if (selectedId && gest.mode === 'pending') {
     const d = getDrawings().find(x => x.id === selectedId);
-    const hnd = d && handlesOf(d).find(hh => Math.hypot(hh.x - pt.x, hh.y - pt.y) < 24);
-    if (hnd) { gest.mode = 'handle'; gest.handle = hnd.key; }
-    else if (d && !d.lock && !DOPT.lock && !DOPT.hide && !d.hide && distToDrawing(d, pt) < 18) startDMove(d, pt);
+    const hnd = d && inPaneCtx(d, () => handlesOf(d).find(hh => Math.hypot(hh.x - pt.x, hh.y - pt.y) < 24));
+    if (hnd) { gest.mode = 'handle'; gest.handle = hnd.key; gest.dpk = d.pane || null; }
+    else if (d && !d.lock && !DOPT.lock && !DOPT.hide && !d.hide && (inPaneCtx(d, () => distToDrawing(d, pt)) ?? 1e9) < 18) { gest.dpk = d.pane || null; inPaneCtx(d, () => startDMove(d, pt)); }
   }
   if (gest.mode === 'pending' && !drawTool && !PANE && trHit.length) { // botones y líneas de las operaciones demo
     const b = trHit.find(q => !q.line && pt.x >= q.x && pt.x <= q.x + q.w && pt.y >= q.y && pt.y <= q.y + q.h);
@@ -4881,11 +4900,11 @@ area.addEventListener('pointermove', e => {
   else if (gest.mode === 'dmove') {
     if (!gest.moved) return; const d = getDrawings().find(x => x.id === gest.dm.id); if (!d) return;
     if (!gest.dm.snap) { gest.dm.snap = true; const arr = getDrawings(); drawHist.u.push(JSON.stringify(arr.map(x => x.id === d.id ? gest.dm.orig : x))); if (drawHist.u.length > 60) drawHist.u.shift(); drawHist.r.length = 0; } // deshacer vuelve a la posición anterior
-    applyDMove(d, pt); updateDrawUI(); scheduleRender();
+    inPaneCtx(d, () => applyDMove(d, pt)); updateDrawUI(); scheduleRender();
   }
   else if (gest.mode === 'handle') {
     const arr = getDrawings(), d = arr.find(x => x.id === selectedId); if (!d) return;
-    const s = snapPoint(pt);
+    const s = d.pane ? inPaneCtx(d, () => { const i = Math.round(IDX(pt.x)); return {t: timeOfIdx(i), p: PRICE(pt.y)}; }) : snapPoint(pt); if (!s) return;
     if (gest.handle === 's' && (d.type === 'long' || d.type === 'short')) { const dir = Math.sign(d.b.p - d.a.p) || 1, p = dir > 0 ? Math.min(s.p, d.a.p - 1e-9 * Math.abs(d.a.p)) : Math.max(s.p, d.a.p + 1e-9 * Math.abs(d.a.p)); d.sp = p; }
     else if (d.type === 'horizontal') d.a = {t: d.a.t, p: s.p}; else if (d.type === 'vertical') d.a = {t: s.t, p: d.a.p}; else if (/^p\d+$/.test(gest.handle) && d.pts) { d.pts[+gest.handle.slice(1)] = s; d.a = d.pts[0]; } else d[gest.handle] = s;
     scheduleRender();
@@ -4922,7 +4941,7 @@ function endPointer(e, cancelled) {
   if (gs.mode === 'trmove') { const d = trDrag; trDrag = null; if (gs.moved && d && d.p != null && window.CCTTrade) CCTTrade.moveLine(d.id, d.kind, d.p); else scheduleRender(); return; }
   if (gs.mode === 'almove') { if (gs.moved && gs.al.p != null) askMoveAlert(gs.al.id, gs.al.p); else { alDrag = null; scheduleRender(); } return; }
   if (gs.mode === 'handle') { save(); render(); return; }
-  if (gs.mode === 'dmove') { if (gs.moved) { save(); updateDrawUI(); render(); return; } selectedId = gs.picked ? gs.dm.id : (distToDrawing(getDrawings().find(x => x.id === gs.dm.id) || {}, local(e)) < 13 ? selectedId : null); updateDrawUI(); render(); return; }
+  if (gs.mode === 'dmove') { if (gs.moved) { save(); updateDrawUI(); render(); return; } selectedId = gs.picked ? gs.dm.id : ((x => x ? inPaneCtx(x, () => distToDrawing(x, local(e))) ?? 1e9 : 1e9)(getDrawings().find(x => x.id === gs.dm.id)) < 13 ? selectedId : null); updateDrawUI(); render(); return; }
   if (gs.paneMoved) savePaneMan(gs.paneMoved);
   if (gs.mode === 'scaleP') { if (gs.moved) savePaneMan(gs.pane.key); if (!gs.moved) { const now = Date.now(); if (now - lastAxisTap < 320) { lastAxisTap = 0; delete paneMan[gs.pane.key]; savePaneMan(gs.pane.key); render(); } else lastAxisTap = now; } return; } // doble toque = escala automática
   if (gs.mode === 'scaleY' || gs.mode === 'scaleX') {
@@ -5310,26 +5329,26 @@ function renderCustom() {
   const sw2 = (k, on, t) => `<button type="button" class="toggle${on ? ' on' : ''}" data-sw2="${k}" role="switch" aria-checked="${!!on}" aria-label="${t}"></button>`;
   const vx = window.VXTheme ? VXTheme.get() : 'clasico', lite = !!(window.VXTheme && VXTheme.lite()), desk = isDesktop();
   const VXN = {clasico: 'Clásico · el estilo de siempre', minimal: 'Minimal · limpio y plano', espacial: 'Espacial · galaxia y estrellas'};
-  const cur = effCursor();
   box.innerHTML = ``
     /* 1 · Estilo y tema */
     + sec('Estilo y tema', 'Cómo se ve VORTEX')
     + `<div class="pref-list cu-list">`
-    + `<div class="pref-row vx-pick-row" id="cuStyle">${ic('#a9b4ff', '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M3.5 9.5h17M9 9.5v10"/>')}<div class="pref-l"><b>Estilo de la app</b><small id="cuStyleEx">${VXN[vx]}</small></div><div class="vx-seg" role="group" aria-label="Estilo de la app">${[['clasico', 'Clásico'], ['minimal', 'Minimal'], ['espacial', 'Espacial']].map(([k, n]) => `<button type="button" data-vx-pick="${k}" class="${vx === k ? 'on' : ''}" aria-pressed="${vx === k}">${n}</button>`).join('')}</div></div>`
+    + `<div class="pref-row vx-pick-row" id="cuStyle">${ic('#a9b4ff', '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M3.5 9.5h17M9 9.5v10"/>')}<div class="pref-l"><b>Estilo de la app</b><small id="cuStyleEx">${VXN[vx]}</small></div></div>`
+    + `<div class="stc-row" role="radiogroup" aria-label="Estilo de la app">`
+    + `<button type="button" class="stc cl${vx === 'clasico' ? ' on' : ''}" data-vx-pick="clasico" role="radio" aria-checked="${vx === 'clasico'}"><span class="stc-s"><i></i>Aa</span><b>Clásico</b><em class="stc-ck" aria-hidden="true"></em></button>`
+    + `<button type="button" class="stc mi${vx === 'minimal' ? ' on' : ''}" data-vx-pick="minimal" role="radio" aria-checked="${vx === 'minimal'}"><span class="stc-s">aa<u></u></span><b>minimal</b><em class="stc-ck" aria-hidden="true"></em></button>`
+    + `<button type="button" class="stc sp${vx === 'espacial' ? ' on' : ''}" data-vx-pick="espacial" role="radio" aria-checked="${vx === 'espacial'}"><span class="stc-stars" aria-hidden="true"></span><span class="stc-s"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="5" y="6" width="14" height="11" rx="3"/><path d="M8.5 11h7" stroke-width="2.4" stroke-linecap="round"/><path d="M12 3v3M3 11.5h2M19 11.5h2"/></svg></span><b>ESPACIAL</b><em class="stc-ck" aria-hidden="true"></em></button>`
+    + `</div>`
     + row(ic('#f5a623', state.light ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>' : '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'), 'Tema claro', state.light ? 'Activo · apágalo para el tema oscuro' : 'Ahora usas el tema oscuro', `<button type="button" class="toggle${state.light ? ' on' : ''}" data-cu="theme" role="switch" aria-checked="${!!state.light}" aria-label="Tema claro"></button>`)
     + `<div class="pref-row vx-pick-row" id="cuPerf">${ic('#20bf9f', '<path d="M4.5 16.5a8 8 0 1 1 15 0"/><path d="m12 13.5 4-4.5"/><circle cx="12" cy="14" r="1.3"/>')}<div class="pref-l"><b>Rendimiento</b><small id="cuPerfEx">${lite ? 'Ligero · sin cristal ni fondo animado, igual de fluido (hasta 120 Hz)' : 'Completo · cristal, fondo animado y todo a la frecuencia de tu pantalla (hasta 120 Hz)'}</small></div><div class="vx-seg" data-perf role="group" aria-label="Rendimiento de la app"><button type="button" data-vx-perf="full" class="${lite ? '' : 'on'}" aria-pressed="${!lite}">Completo</button><button type="button" data-vx-perf="lite" class="${lite ? 'on' : ''}" aria-pressed="${lite}">Ligero</button></div></div>`
     + `</div>`
     /* 2 · Gráfico */
-    + sec('Gráfico', 'Colores, cursor y lo que ves sobre las velas')
+    + sec('Gráfico', 'Colores y aspecto')
     + `<div class="pref-list cu-list">`
     + (() => { const curP = (state.chartStyle || {}).pal || 'clasico', lt = state.light, man = !!((state.chartStyle || {}).up || (state.chartStyle || {}).down);
         return `<div class="pref-row updn-row">${ic('#20bf9f', '<path d="M4 17l5-6 4 3 7-8"/><path d="M15 6h5v5"/>')}<div class="pref-l"><b>Colores del mercado</b><small>Subida y bajada en velas, volumen y porcentajes de toda la app.${man ? ' Tienes colores propios en Aspecto del gráfico; elegir una paleta los reemplaza.' : ''}</small></div></div>`
           + `<div class="updn-grid" role="radiogroup" aria-label="Colores del mercado">${Object.entries(UPDN).map(([k, P]) => `<button type="button" class="updn${!man && curP === k ? ' on' : ''}" data-cu="updn" data-v="${k}" role="radio" aria-checked="${!man && curP === k}"><span class="updn-c"><svg viewBox="0 0 30 18" width="30" height="18" aria-hidden="true"><rect x="3" y="6" width="5" height="8" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M5.5 3v3M5.5 14v2" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/><rect x="12" y="4" width="5" height="9" rx="1" fill="${lt ? P.downL : P.down}"/><path d="M14.5 1.5v2.5M14.5 13v3" stroke="${lt ? P.downL : P.down}" stroke-width="1.3"/><rect x="21" y="3" width="5" height="10" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M23.5 1v2M23.5 13v3" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/></svg></span><small>${esc(P.n)}</small></button>`).join('')}</div>`; })()
-    + row(ic('#9fb4ff', '<path d="M12 3c.6 4.6 1.4 5.4 6 6-4.6.6-5.4 1.4-6 6-.6-4.6-1.4-5.4-6-6 4.6-.6 5.4-1.4 6-6z"/>'), 'Cursor', `${CURSOR_TXT[cur][0]}${!cursorPicked() && vx === 'espacial' ? ' (el del estilo Espacial)' : ''} · ${CURSOR_TXT[cur][1]}`, '', 'cur-row')
-    + `<div class="cur-grid" role="radiogroup" aria-label="Cursor">${CURSOR_MODES.map(k => `<button type="button" class="cur-opt${cur === k ? ' on' : ''}" data-cur-pick="${k}" role="radio" aria-checked="${cur === k}" title="${esc(CURSOR_TXT[k][1])}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CURSOR_IC[k]}</svg>${esc(CURSOR_TXT[k][0])}</button>`).join('')}</div>`
     + `<button type="button" class="pref-row pref-link" data-cu="style">${ic('#548fff', '<path d="M6 20V10M12 20V4M18 20v-7"/>')}<div class="pref-l"><b>Aspecto del gráfico</b><small>Velas, fondo, cuadrícula, color del cursor, alertas y líneas de tus operaciones</small></div><div class="pref-c">${chev}</div></button>`
-    + row(ic('#f6d27a', '<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M10 3h4"/>'), 'Cuenta atrás de la vela', 'Dentro de la etiqueta del precio', sw2('cd', PR.cd !== 'off', 'Cuenta atrás de la vela'))
-    + row(ic('#20bf9f', '<path d="M5 12.5a10 10 0 0 1 14 0M8 15.5a5.5 5.5 0 0 1 8 0"/><circle cx="12" cy="18.5" r="1.2" fill="currentColor"/>'), 'Aviso de conexión', 'Naranja al conectar, verde en vivo, rojo sin conexión', sw2('conn', PR.conn !== 'off', 'Aviso de conexión'))
     + `</div>`
     /* 3 · Herramientas */
     + sec('Herramientas', 'Tus favoritas siempre a la mano')
@@ -5337,9 +5356,21 @@ function renderCustom() {
     + row(ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>'), 'Barra de herramientas favoritas', 'Tus herramientas de dibujo con estrella', `<button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button>`)
     + (desk ? '' : `<div class="pref-row fb-mode-row"><span class="sg-ic" style="--c:transparent"></span><div class="pref-l"><b>Cápsula del gráfico</b><small>${FB.mode === 'flotante' ? 'Flotante: la mueves a donde quieras' : 'Fija: en vertical arriba del logo VORTEX'}</small></div><div class="pref-c"><div class="seg-mini" role="radiogroup" aria-label="Estilo de la cápsula">${[['fija', 'Fija'], ['flotante', 'Flotante']].map(([v, n]) => `<button type="button" role="radio" aria-checked="${(FB.mode || 'fija') === v}" class="${(FB.mode || 'fija') === v ? 'on' : ''}" data-cu="favmode" data-v="${v}">${n}</button>`).join('')}</div></div></div>`)
     + `</div>`
-    /* 4 · Interfaz */
-    + sec('Interfaz', 'Comodidad del día a día')
-    + `<div class="pref-list cu-list">`
+    + `</div>`;
+  renderGenPrefs();
+}
+/* Preferencias de uso en Configuración (antes en Personalización): cursor, cuenta atrás, aviso de conexión, confirmar, pantalla y pestaña */
+function renderGenPrefs() {
+  const box = $('#genPrefBox'); if (!box) return;
+  const ic = (c, d) => `<span class="sg-ic" style="--c:${c}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg></span>`;
+  const row = (icn, t, sm, ctl, cls) => `<div class="pref-row${cls ? ' ' + cls : ''}">${icn}<div class="pref-l"><b>${t}</b>${sm ? `<small>${sm}</small>` : ''}</div>${ctl ? `<div class="pref-c">${ctl}</div>` : ''}</div>`;
+  const sw2 = (k, on, t) => `<button type="button" class="toggle${on ? ' on' : ''}" data-sw2="${k}" role="switch" aria-checked="${!!on}" aria-label="${t}"></button>`;
+  const vx = window.VXTheme ? VXTheme.get() : 'clasico', desk = isDesktop(), cur = effCursor();
+  box.innerHTML = `<div class="pref-list cu-list gen-list">`
+    + row(ic('#9fb4ff', '<path d="M12 3c.6 4.6 1.4 5.4 6 6-4.6.6-5.4 1.4-6 6-.6-4.6-1.4-5.4-6-6 4.6-.6 5.4-1.4 6-6z"/>'), 'Cursor', `${CURSOR_TXT[cur][0]}${!cursorPicked() && vx === 'espacial' ? ' (el del estilo Espacial)' : ''} · ${CURSOR_TXT[cur][1]}`, '', 'cur-row')
+    + `<div class="cur-grid" role="radiogroup" aria-label="Cursor">${CURSOR_MODES.map(k => `<button type="button" class="cur-opt${cur === k ? ' on' : ''}" data-cur-pick="${k}" role="radio" aria-checked="${cur === k}" title="${esc(CURSOR_TXT[k][1])}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CURSOR_IC[k]}</svg>${esc(CURSOR_TXT[k][0])}</button>`).join('')}</div>`
+    + row(ic('#f6d27a', '<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M10 3h4"/>'), 'Cuenta atrás de la vela', 'Dentro de la etiqueta del precio', sw2('cd', PR.cd !== 'off', 'Cuenta atrás de la vela'))
+    + row(ic('#20bf9f', '<path d="M5 12.5a10 10 0 0 1 14 0M8 15.5a5.5 5.5 0 0 1 8 0"/><circle cx="12" cy="18.5" r="1.2" fill="currentColor"/>'), 'Aviso de conexión', 'Naranja al conectar, verde en vivo, rojo sin conexión', sw2('conn', PR.conn !== 'off', 'Aviso de conexión'))
     + row(ic('#f06b79', '<path d="M4 7h16M4 7v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7M9 11h6"/>'), 'Confirmar antes de borrar', 'Pregunta antes de borrar alertas', sw2('conf', PR.conf !== 'off', 'Confirmar antes de borrar'))
     + ('wakeLock' in navigator ? row(ic('#f5b942', '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2"/>'), 'Pantalla siempre encendida', 'Con el gráfico abierto no se apaga ni se bloquea', sw2('wake', PR.wake === 'on', 'Pantalla siempre encendida')) : '')
     + (desk ? row(ic('#548fff', '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17M7 7h.01"/>'), 'Precio en la pestaña', 'El precio en vivo en el título de la ventana', sw2('tabPx', PR.tabPx === 'on', 'Precio en la pestaña')) : '')
@@ -5358,11 +5389,11 @@ function tabTitle() {
   const n = candles.length; if (n) { const c = candles[n - 1].c, o = n > 1 ? candles[n - 1].o : c; document.title = `${fmt(c)} ${c >= o ? '▲' : '▼'} ${symOf(state.symbol).replace(/USDT$/, '')} · VORTEX`; }
   tabT = setTimeout(tabTitle, 1000);
 }
-setTimeout(() => { wakeSync(); tabTitle(); }, 0);
+setTimeout(() => { wakeSync(); tabTitle(); renderGenPrefs(); }, 0);
+document.addEventListener('click', e => { const cp = e.target.closest('[data-cur-pick]'); if (cp) setCursorMode(cp.dataset.curPick); }); // cursor (en Configuración › Preferencias)
 {
   const cv = $('#customView');
   if (cv) cv.addEventListener('click', e => {
-    const cp = e.target.closest('[data-cur-pick]'); if (cp) { setCursorMode(cp.dataset.curPick); return; }
     if (e.target.closest('[data-vx-pick],[data-vx-perf]')) { setTimeout(renderCustom, 30); return; }
     const b = e.target.closest('[data-cu]'); if (!b) return; const k = b.dataset.cu;
     if (k === 'theme') { state.light = !state.light; save(); theme(); renderCustom(); }
@@ -5981,7 +6012,7 @@ function drawPinePane(x, top0, H, lo, hi, o) {
   const rg = CCTPineDraw.range(r, lo, hi); let mn = rg ? rg.min : 0, mx = rg ? rg.max : 1;
   if (mx === mn) { mx += 1; mn -= 1; } let pad = (mx - mn) * .08; mn -= pad; mx += pad;
   const pkey = 'pine:' + x.p.sid, pm = paneMan[pkey]; if (pm) { mn = pm.min; mx = pm.max; pad = 0; }
-  paneHit.push({key: pkey, top0, H, mn, mx});
+  paneHit.push({key: pkey, top0, H, mn, mx}); dPanes.push({key: pkey, top0, H, top: top0 + 4, h: H - 10, mn, mx});
   const Yp = v => top + (mx - v) / (mx - mn) * height;
   g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip();
   g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
@@ -6515,6 +6546,7 @@ window.CCT_bot = {
   key: () => 'cct_botlab_v1' + (uid ? '_' + uid : ''),
   cloud: () => (uid && db && fbUser) ? {get: async () => { const sn = await db.doc(`users/${uid}/data/botlab`).get(); return sn.exists ? (sn.data().items || null) : null; }, set: str => db.doc(`users/${uid}/data/botlab`).set({items: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}), server: async () => { const sn = await db.doc(`users/${uid}/data/botlab_server`).get(); if (!sn.exists) return null; const d = sn.data(); return {results: d.results || null, paper: d.paper || null}; }} : null,
   felipe: () => (uid && db && fbUser) ? {server: async () => { const sn = await db.doc(`users/${uid}/data/felipe_server`).get(); if (!sn.exists) return null; const d = sn.data(); let s = null; try { s = d.s ? JSON.parse(d.s) : null; } catch {} return {s, summary: d.summary || null, at: d.updatedAt && d.updatedAt.toMillis ? d.updatedAt.toMillis() : null}; }} : null, // Felipe: sesión que escribe el servidor (scripts/claudio-run.js)
+  claudia: () => (uid && db && fbUser) ? {server: async () => { const sn = await db.doc(`users/${uid}/data/claudia_server`).get(); if (!sn.exists) return null; const d = sn.data(); let s = null; try { s = d.s ? JSON.parse(d.s) : null; } catch {} return {s, summary: d.summary || null, at: d.updatedAt && d.updatedAt.toMillis ? d.updatedAt.toMillis() : null}; }} : null, // Claudia 5 minutos: sesión que escribe el servidor (scripts/claudio-run.js)
   claudio: () => (uid && db && fbUser) ? {cfg: async () => { const sn = await db.doc(`users/${uid}/data/claudio`).get(); return sn.exists ? sn.data() : null; }, setCfg: o => db.doc(`users/${uid}/data/claudio`).set(Object.assign({}, o, {updatedAt: firebase.firestore.FieldValue.serverTimestamp()}), {merge: true}), server: async () => { const sn = await db.doc(`users/${uid}/data/claudio_server`).get(); if (!sn.exists) return null; const d = sn.data(); let s = null; try { s = d.s ? JSON.parse(d.s) : null; } catch {} return {s, summary: d.summary || null, at: d.updatedAt && d.updatedAt.toMillis ? d.updatedAt.toMillis() : null}; }} : null, // Claudio: config (la escribe la app) y sesión (la escribe el servidor)
   chart: () => ({symbol: symOf(state.symbol), interval: state.interval, n: candles.length, from: candles.length ? candles[0].t : null, to: candles.length ? candles[candles.length - 1].t : null}),
   seek(t) { if (!candles.length) return; pan = Math.max(0, Math.round(candles.length - 1 - idxOfTime(t) + visible * .25)); scheduleRender(); },

@@ -33,7 +33,7 @@
     if (st.cfg.enabled) tick();
   }
   const binBook = async sym => { const r = await fetch(`https://api.binance.com/api/v3/depth?symbol=${encodeURIComponent(sym)}&limit=20`); if (!r.ok) throw new Error('HTTP ' + r.status); const d = await r.json(); return {t: Date.now(), bids: d.bids.map(x => [+x[0], +x[1]]), asks: d.asks.map(x => [+x[0], +x[1]])}; };
-  const binCandles = async (sym, n) => { if (H().history) return H().history(sym, '1h', n); const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(sym)}&interval=1h&limit=${Math.min(1000, n)}`); if (!r.ok) throw new Error('HTTP ' + r.status); const now = Date.now(); return (await r.json()).filter(d => d[6] < now).map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})); };
+  const binCandles = async (sym, n) => { if (H().history) return H().history(sym, K.TF, n); const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(sym)}&interval=${K.TF}&limit=${Math.min(1000, n)}`); if (!r.ok) throw new Error('HTTP ' + r.status); const now = Date.now(); return (await r.json()).filter(d => d[6] < now).map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})); };
   async function tick() { // el mismo núcleo que el servidor, en tu navegador (solo PC)
     if (st.busy || !st.cfg.enabled || !matchMedia('(min-width:1024px)').matches) return; st.busy = true; paint();
     try {
@@ -68,7 +68,7 @@
     const sp = pts ? (() => { const w = 60, h = 26, a = pts.length > 40 ? pts.filter((_, i) => i % Math.ceil(pts.length / 40) === 0).concat([pts[pts.length - 1]]) : pts, ys = a.map(p => p[1]), lo = Math.min(...ys), hi = Math.max(...ys), t0 = a[0][0], t1 = a[a.length - 1][0] || t0 + 1, d = a.map((p, i) => (i ? 'L' : 'M') + ((p[0] - t0) / (t1 - t0 || 1) * w).toFixed(1) + ' ' + (h - 2 - (p[1] - lo) / (hi - lo || 1) * (h - 4)).toFixed(1)).join(''); return `<svg class="bd-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="${col}" stroke-width="1.6"/></svg>`; })() : '';
     const ps = s && s.positions ? Object.entries(s.positions) : [], sh = ps.length && ps[0][1].side === 'short';
     const openB = ps.length ? `<em class="bl-open s-${sh ? 'short' : 'long'}" title="${esc(ps.map(([k, p]) => `${p.side === 'short' ? 'SHORT' : 'LONG'} abierta en ${k.replace('USDT', '')}`).join(' · '))}"><i></i>${ps.length > 1 ? ps.length + ' abiertas' : sh ? 'Short' : 'Long'}</em>` : '';
-    return `<div class="bl-row"><button type="button" class="bl-row-m" data-a="${A.key}">${AV(34, on)}<span class="bl-row-n"><b>${NAME}${openB}</b><small>${SYMS.length} monedas · 1h · ${esc(on ? 'En vivo' : label)}</small></span>${sp}<span class="bl-row-v ${stt ? cls(stt.retPct) : ''}">${stt ? pct(stt.retPct) : '—'}</span><span class="bl-row-go">›</span></button><button type="button" class="bl-tg ${(st.cfg || {}).enabled && !(st.cfg || {}).kill ? 'on' : ''}" data-a="clToggle" title="Encender / apagar" aria-pressed="${!!(st.cfg || {}).enabled}"><i></i></button></div>`;
+    return `<div class="bl-row"><button type="button" class="bl-row-m" data-a="${A.key}">${AV(34, on)}<span class="bl-row-n"><b>${NAME}${openB}</b><small>${SYMS.length} monedas · ${K.TF} · ${esc(on ? 'En vivo' : label)}</small></span>${sp}<span class="bl-row-v ${stt ? cls(stt.retPct) : ''}">${stt ? pct(stt.retPct) : '—'}</span><span class="bl-row-go">›</span></button><button type="button" class="bl-tg ${(st.cfg || {}).enabled && !(st.cfg || {}).kill ? 'on' : ''}" data-a="clToggle" title="Encender / apagar" aria-pressed="${!!(st.cfg || {}).enabled}"><i></i></button></div>`;
   }
   function liveRow() { // para el Torneo de bots
     const s = st.s; if (!s || !(st.cfg && st.cfg.enabled) || st.cfg.kill) return null; const x = K.stats(s);
@@ -131,7 +131,7 @@
   }
   function paint() {
     if (!root || !root.isConnected || !root.querySelector(VSEL)) return; const box = root.querySelector(VSEL), s = st.s, c = st.cfg || {}, [k, label] = status();
-    const ctl = `<div class="cl-ctl"><span class="cl-chip k-${k}">${esc(label)}</span><small class="bl-dim">${st.mode === 'cuenta' ? 'Guardado en tu cuenta · corre en tu navegador con VORTEX abierto y en el servidor cada hora' : 'Sin sesión iniciada: solo avanza con VORTEX abierto en esta PC'} · ${s && s.lastT ? 'última vela ' + ago(s.lastT) + ' · próxima decisión en ' + Math.max(1, Math.ceil((Math.floor(Date.now() / 36e5) * 36e5 + 36e5 - Date.now()) / 6e4)) + ' min' : 'primera decisión al cerrar la vela de 1 h'}</small>
+    const ctl = `<div class="cl-ctl"><span class="cl-chip k-${k}">${esc(label)}</span><small class="bl-dim">${st.mode === 'cuenta' ? 'Guardado en tu cuenta · corre en tu navegador con VORTEX abierto y en el servidor cada hora' : 'Sin sesión iniciada: solo avanza con VORTEX abierto en esta PC'} · ${s && s.lastT ? 'última vela ' + ago(s.lastT) + ' · próxima decisión en ' + Math.max(1, Math.ceil((Math.floor(Date.now() / K.IV) * K.IV + K.IV - Date.now()) / 6e4)) + ' min' : 'primera decisión al cerrar la vela de ' + (K.TF === '5m' ? '5 min' : '1 h')}</small>
       <div class="cl-btns">${c.enabled ? `<button class="bl-btn ghost" data-cl="off">Apagar</button>` : `<button class="bl-btn" data-cl="on">Encender a ${NAME}</button>`}
       ${c.enabled ? (c.kill ? `<button class="bl-btn ghost" data-cl="unkill">Quitar interruptor</button>` : `<button class="bl-btn cl-kill" data-cl="kill">Interruptor de emergencia</button>`) : ''}
       ${s && s.halted ? `<button class="bl-btn ghost" data-cl="resume">Reanudar tras drawdown</button>` : ''}<button class="bl-btn ghost" data-cl="reset">Reiniciar</button>${c.enabled ? `<button class="bl-btn ghost" data-cl="tick" ${st.busy ? 'disabled' : ''}>${st.busy ? 'Leyendo el mercado…' : 'Actualizar ahora'}</button>` : `<button class="bl-btn ghost" data-cl="reload">Actualizar</button>`}</div></div>`;
@@ -142,7 +142,7 @@
       + '<p class="bl-foot">Simulación con capital virtual: ' + NAME + ' no envía órdenes reales ni usa tus claves de exchange. Los resultados simulados no garantizan resultados reales. No es asesoría financiera.</p>';
   }
   function view(r, headFn) {
-    root = r; head = headFn; r.innerHTML = headFn(NAME, `Bot · ${SYMS.length} monedas · 1h${A.key === 'felipe' ? ' · rupturas' : ''}`, 'lib', '', AV(36)) + `<div class="cl-view" data-ag="${A.key}"></div>`;
+    root = r; head = headFn; r.innerHTML = headFn(NAME, `Bot · ${SYMS.length} monedas · ${K.TF}${A.key === 'felipe' ? ' · rupturas' : ''}`, 'lib', '', AV(36)) + `<div class="cl-view" data-ag="${A.key}"></div>`;
     if (!r['__cl_' + A.key]) { r['__cl_' + A.key] = true; r.addEventListener('click', onClick); }
     paint(); if (!st.loaded || Date.now() - st.loaded > 6e4) load();
     clearInterval(timer); timer = setInterval(() => { if (!root || !root.querySelector(VSEL)) return clearInterval(timer); tick(); }, 5 * 6e4);
@@ -183,4 +183,6 @@
   window.CCTClaudioUI = makeAgent({key: 'claudio', K: K0, syms: RS.symbols(), color: '#7c5cff', img: 'robot', research: true});
   /* Felipe: hermano de Claudio con otra estrategia (rupturas con volumen) y su propio aprendizaje (umbral y monedas a evitar) */
   if (K0.felipe) window.CCTFelipeUI = makeAgent({key: 'felipe', K: K0.felipe, syms: K0.FELIPE.symbols, color: '#ff8a3d', img: 'cohete', research: false, defOn: true});
+  /* Claudia 5 minutos: gemela de Claudio (mismas reglas, misma investigación y misma auto-mejora) en velas de 5 min; su propia sesión e historial */
+  if (K0.claudia) window.CCTClaudiaUI = makeAgent({key: 'claudia', K: K0.claudia, syms: RS.symbols(), color: '#ff5fa8', img: 'astronauta', research: true, defOn: true});
 })();

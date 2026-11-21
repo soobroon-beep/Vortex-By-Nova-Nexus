@@ -252,14 +252,14 @@ async function run() {
     if (conn[APP] === false) return false;
     let su; try { su = await src.auth().getUserByEmail(nbUser.email); } catch { return false; }
     const now = Date.now();
-    let items, claudioSrv = null, felipeSrv = null;
+    let items, claudioSrv = null, felipeSrv = null, claudiaSrv = null;
     if (APP === 'novahub') {
       const d = (await sdb.collection('users').doc(su.uid).get()).data();
       if (!d) return false; items = novahubItems(d);
     } else {
       const base = sdb.collection('users').doc(su.uid).collection('data'), g = async id => (await base.doc(id).get()).data() || null;
-      const [cct, scripts, botlab, botlabServer, claudioServer, journal, vigia, felipeServer] = await Promise.all(['cct_mobile', 'scripts', 'botlab', 'botlab_server', 'claudio_server', 'journal', 'vigia', 'felipe_server'].map(g));
-      items = vortexItems({ state: vortexState(cct), scripts, botlab, botlabServer, claudioServer, journal, vigia, felipeServer }); claudioSrv = claudioServer; felipeSrv = felipeServer;
+      const [cct, scripts, botlab, botlabServer, claudioServer, journal, vigia, felipeServer, claudiaServer] = await Promise.all(['cct_mobile', 'scripts', 'botlab', 'botlab_server', 'claudio_server', 'journal', 'vigia', 'felipe_server', 'claudia_server'].map(g));
+      items = vortexItems({ state: vortexState(cct), scripts, botlab, botlabServer, claudioServer, journal, vigia, felipeServer }); claudioSrv = claudioServer; felipeSrv = felipeServer; claudiaSrv = claudiaServer;
       const bp = parseJSON(unpack(botlab && botlab.items)), bots = list(Array.isArray(bp) ? bp : bp && bp.bots), linkSt = {};
       // Un cerebro queda ligado a su bot por el ID del bot, no por el nombre ni la temporalidad: si los cambias, sigue conectado.
       const botBrains = (await uref.collection('brains').where('kind', '==', 'bot').get()).docs.map(d => ({ ref: d.ref, d: d.data() }));
@@ -292,9 +292,9 @@ async function run() {
       }
     }
     if (APP === 'vortex') { // Claudio y Felipe (agentes autónomos): su revisión nocturna va a su propio cerebro de bot, como los demás bots
-      for (const [key, name, srv] of [['claudio', 'Claudio', claudioSrv], ['felipe', 'Felipe', felipeSrv]]) {
+      for (const [key, name, srv] of [['claudio', 'Claudio', claudioSrv], ['felipe', 'Felipe', felipeSrv], ['claudia', 'Claudia 5 minutos', claudiaSrv]]) {
         try { const t = agentReport(name, srv); if (!t) continue; const bref = uref.collection('brains').doc('bot-' + key), snap = await bref.get();
-          if (!snap.exists) await bref.set({ name: 'Bot · ' + name, kind: 'bot', bot: { id: key, name, auto: true }, icon: 'bot', color: key === 'felipe' ? '#ff8a3d' : '#7c5cff', desc: `Cerebro de ${name}, agente autónomo de Nova Bot Lab: recibe cada noche su revisión (calibración, aciertos y lo que aprendió).`, autoLearn: true, createdAt: now, updatedAt: now });
+          if (!snap.exists) await bref.set({ name: 'Bot · ' + name, kind: 'bot', bot: { id: key, name, auto: true }, icon: 'bot', color: key === 'felipe' ? '#ff8a3d' : key === 'claudia' ? '#ff5fa8' : '#7c5cff', desc: `Cerebro de ${name}, agente autónomo de Nova Bot Lab: recibe cada noche su revisión (calibración, aciertos y lo que aprendió).`, autoLearn: true, createdAt: now, updatedAt: now });
           const nref = bref.collection('notes').doc('analisis'), old = (await nref.get()).data(); if (old && old.text === t.text) continue;
           await nref.set({ id: 'analisis', text: clip(t.text, 4000), kind: 'estrategia', master: false, author: '', tags: ['bot', 'análisis', 'automático', key], at: t.at, createdAt: (old && old.createdAt) || now, updatedAt: now });
           console.log(`Revisión de ${name} enviada a su cerebro.`);

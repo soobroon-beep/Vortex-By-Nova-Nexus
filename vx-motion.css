@@ -120,3 +120,41 @@ body.light #connPill{color:#0b1220;background:rgba(255,255,255,.75)}
 body.light .vxa-dlg{background:rgba(255,255,255,.9)}
 #customView .pref-row .pref-l{flex:1;min-width:0;text-align:left}
 #customView .cu-sec:first-child{margin-top:8px}
+#genPrefBox .pref-row .pref-l,.gen-fmt .pref-row .pref-l{flex:1;min-width:0;text-align:left}
+#genPrefBox{margin-bottom:10px}
+
+/* ───────── Estilo de la app: cada botón con su propia personalidad ───────── */
+.stc-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:0 14px 14px}
+#customView .stc{position:relative;height:92px;display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:0!important;overflow:hidden;cursor:pointer;color:var(--text)!important;transition:transform .18s var(--vxm-spring),box-shadow .3s,border-color .3s!important;animation:none!important;filter:none!important}
+#customView .stc:active{transform:scale(.95)}
+#customView .stc b{font-size:12.5px;line-height:1;position:relative;z-index:1}
+.stc-s{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:5px;height:30px}
+.stc-ck{position:absolute;top:7px;right:7px;width:16px;height:16px;border-radius:50%;opacity:0;transform:scale(.4);transition:all .3s var(--vxm-spring);background:var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 12.5 4 4 8-9'/%3E%3C/svg%3E") center/10px no-repeat;z-index:2}
+#customView .stc.on .stc-ck{opacity:1;transform:none}
+/* Clásico: tarjeta sólida, esquinas redondas, botón azul relleno, letra del sistema */
+#customView .stc.cl{border-radius:16px!important;border:1px solid #2a3446!important;background:linear-gradient(160deg,#18202f,#0e131d)!important;font-family:system-ui,-apple-system,'Segoe UI',sans-serif!important}
+.stc.cl .stc-s{font-weight:800;font-size:15px;color:#fff;padding:0 12px;border-radius:9px;background:linear-gradient(180deg,#6aa0ff,#3f7bf0);box-shadow:0 4px 12px -4px rgba(84,143,255,.8),inset 0 1px 0 rgba(255,255,255,.35)}
+.stc.cl .stc-s i{width:7px;height:7px;border-radius:50%;background:#20bf9f;box-shadow:0 0 6px #20bf9f}
+#customView .stc.cl b{font-weight:700}
+#customView .stc.cl.on{border-color:#548fff!important;box-shadow:0 0 0 2px rgba(84,143,255,.35),0 10px 24px -12px rgba(84,143,255,.8)!important}
+/* Minimal: plano, sin relleno, línea fina, letra Geist ligera en minúsculas */
+#customView .stc.mi{border-radius:6px!important;border:1px solid rgba(255,255,255,.14)!important;background:transparent!important;font-family:'Geist',system-ui,sans-serif!important}
+.stc.mi .stc-s{flex-direction:column;gap:3px;font-weight:300;font-size:19px;letter-spacing:.02em;color:var(--text)}
+.stc.mi .stc-s u{display:block;width:26px;height:1px;background:currentColor;opacity:.6}
+#customView .stc.mi b{font-weight:400;letter-spacing:.12em;font-size:11.5px;color:var(--muted)!important}
+#customView .stc.mi .stc-ck{background-color:var(--text);border-radius:2px;filter:invert(0)}
+#customView .stc.mi.on{border-color:var(--text)!important}
+#customView .stc.mi.on b{color:var(--text)!important}
+/* Espacial: casco robótico, esquinas cortadas, borde de neón, estrellas y letra Space Grotesk en mayúsculas */
+#customView .stc.sp{border:0!important;border-radius:0!important;background:#05060c!important;font-family:'Space Grotesk',ui-monospace,monospace!important;clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px)}
+.stc.sp::before{content:"";position:absolute;inset:0;padding:1px;background:linear-gradient(130deg,#22d3ee,#8b5cf6 45%,#ec4899);clip-path:inherit;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.75}
+.stc-stars{position:absolute;inset:0;background-image:radial-gradient(1px 1px at 12% 22%,#fff,transparent),radial-gradient(1px 1px at 78% 18%,#c4b5fd,transparent),radial-gradient(1px 1px at 30% 78%,#93c5fd,transparent),radial-gradient(1.4px 1.4px at 88% 70%,#fff,transparent),radial-gradient(1px 1px at 55% 40%,#f9a8d4,transparent),radial-gradient(1px 1px at 8% 60%,#fff,transparent);opacity:.8;animation:stcTw 3.5s ease-in-out infinite alternate}
+@keyframes stcTw{to{opacity:.35;transform:translateX(-3px)}}
+.stc.sp .stc-s{color:#7ae7ff;filter:drop-shadow(0 0 6px rgba(34,211,238,.7))}
+#customView .stc.sp b{font-weight:700;letter-spacing:.28em;font-size:10.5px;color:#c9d4ff!important;text-shadow:0 0 8px rgba(139,92,246,.9);margin-right:-.28em}
+#customView .stc.sp .stc-ck{background-color:#8b5cf6;border-radius:3px}
+#customView .stc.sp.on::before{opacity:1}
+#customView .stc.sp.on{box-shadow:none!important;background:radial-gradient(120% 90% at 50% 120%,rgba(139,92,246,.35),transparent 60%),#05060c!important}
+body.light #customView .stc.cl{background:linear-gradient(160deg,#fff,#eef2f8)!important;border-color:#d5dce8!important;color:#0b1220!important}
+body.light #customView .stc.mi{border-color:rgba(0,0,0,.18)!important}
+@media (prefers-reduced-motion:reduce){.stc-stars{animation:none}}

@@ -18,7 +18,7 @@
      P = {name, style, limits (se mezclan con los de Claudio), calibA (calibración inicial), adaptive (Felipe: aprende su propio umbral y qué monedas evitar)} */
   function build(P) {
   P = P || {}; const NAME = P.name || 'Claudio';
-  const VERSION = '1.0.0', IV = 36e5, TF = '1h';
+  const TFS = {'5m': 3e5, '15m': 9e5, '1h': 36e5, '4h': 144e5}, TF = TFS[P.tf] ? P.tf : '1h', VERSION = '1.0.0', IV = TFS[TF]; // temporalidad del agente (Claudio y Felipe: 1h; Claudia: 5m)
   /* ───────── Límites de riesgo (código, no modelo) ───────── */
   const LIMITS = Object.freeze(Object.assign({
     maxDrawdownPct: 15,     // drawdown máximo de la cuenta: al tocarlo se cierran posiciones y se bloquean entradas
@@ -361,6 +361,9 @@
   /* Felipe: hermano de Claudio con otra estrategia (rupturas con volumen) y otros números; además aprende su umbral y qué monedas evitar */
   const FELIPE = {name: 'Felipe', style: 'breakout', calibA: 1.4, adaptive: true, symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'DOGEUSDT', 'LINKUSDT', 'AVAXUSDT', 'SUIUSDT', 'ADAUSDT'],
     limits: {maxDrawdownPct: 12, maxPositionPct: 15, maxDailyLossPct: 2.5, maxOpen: 4, kellyFraction: 0.2, minQuality: 2, minDirConf: 0.72, maxToxic: 0.45, slAtr: 2, tpAtr: 4.5, maxBars: 36, tradeHighVol: true}};
-  const API = build({}); API.make = build; API.felipe = build(FELIPE); API.FELIPE = FELIPE;
+  /* Claudia 5 minutos: gemela EXACTA de Claudio (mismas reglas, mismos límites, mismo universo y la misma auto-mejora nocturna),
+     solo que lee y opera velas de 5 minutos. Tiene su propia sesión (data/claudia_server): no toca el historial de Claudio ni de Felipe. */
+  const CLAUDIA = {name: 'Claudia 5 minutos', tf: '5m'};
+  const API = build({}); API.make = build; API.felipe = build(FELIPE); API.FELIPE = FELIPE; API.claudia = build(CLAUDIA); API.CLAUDIA = CLAUDIA;
   return API;
 });
