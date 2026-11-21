@@ -30,24 +30,34 @@
     if (cv) return;
     cv = document.createElement('canvas'); cv.id = 'vxStars'; cv.setAttribute('aria-hidden', 'true');
     document.body.insertBefore(cv, document.body.firstChild);
-    ctx = cv.getContext('2d');
+    ctx = cv.getContext('2d', { alpha: true, desynchronized: true });
     try { still = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
     addEventListener('resize', size);
     document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); else if (cur === 'espacial') go(); });
   }
   function size() {
     if (!cv) return;
-    DPR = Math.min(window.devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
+    // las estrellas son puntitos: con 1–1.25 píxeles por punto se ven igual y la tarjeta gráfica mueve 2–4 veces menos píxeles
+    DPR = Math.min(window.devicePixelRatio || 1, 1.25); W = innerWidth; H = innerHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
-    var n = Math.round(Math.min(420, W * H / 3200)); stars = [];
+    var n = Math.round(Math.min(340, W * H / 3600)); stars = [];
     for (var i = 0; i < n; i++) {
       var z = Math.random(); // profundidad: las lejanas son más chicas, tenues y lentas
       var c = Math.random(), tint = c < .68 ? 0 : c < .8 ? 1 : c < .9 ? 2 : 3; // blancas y algunas moradas, azules y rosas
       stars.push({ x: Math.random() * W, y: Math.random() * H, r: .45 + z * z * 1.15, a: .3 + z * .6, v: 1.2 + z * 5.5, t: Math.random() * 6.28, f: .4 + Math.random() * 1.2, c: tint });
     }
-    draw(0);
+    sprites = {}; draw(0);
   }
   var TINT_D = ['255,255,255', '196,181,253', '147,197,253', '249,168,212'], TINT_L = ['40,50,110', '109,40,217', '37,99,235', '219,39,119'];
+  /* Cada estrella se pinta copiando una «calcomanía» ya dibujada (con su halo) en vez de trazar círculos y armar colores en cada cuadro */
+  var sprites = {};
+  function sprite(light, c, big) {
+    var k = (light ? 'l' : 'd') + c + (big ? 'b' : 's'); if (sprites[k]) return sprites[k];
+    var S = big ? 24 : 6, o = document.createElement('canvas'); o.width = o.height = S; var x = o.getContext('2d'), T = (light ? TINT_L : TINT_D)[c], h = S / 2;
+    if (big) { var gr = x.createRadialGradient(h, h, 0, h, h, h); gr.addColorStop(0, 'rgba(' + T + ',1)'); gr.addColorStop(.12, 'rgba(' + T + ',1)'); gr.addColorStop(.16, 'rgba(' + T + ',.16)'); gr.addColorStop(1, 'rgba(' + T + ',0)'); x.fillStyle = gr; x.fillRect(0, 0, S, S); }
+    else { x.fillStyle = 'rgba(' + T + ',1)'; x.beginPath(); x.arc(h, h, h, 0, 6.2832); x.fill(); }
+    return (sprites[k] = o);
+  }
   var shoot = null, nextShoot = 4;
   function draw(dt) {
     var light = document.body.classList.contains('light'), T = light ? TINT_L : TINT_D, k = light ? .6 : 1;
@@ -55,11 +65,12 @@
     for (var i = 0; i < stars.length; i++) {
       var s = stars[i];
       if (dt) { s.x -= s.v * dt; s.y += s.v * .18 * dt; s.t += s.f * dt; if (s.x < -2) { s.x = W + 2; s.y = Math.random() * H; } if (s.y > H + 2) s.y = -2; }
-      var a = s.a * k * (.65 + .35 * Math.sin(s.t));
-      ctx.fillStyle = 'rgba(' + T[s.c] + ',' + a.toFixed(3) + ')';
-      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.2832); ctx.fill();
-      if (s.r > 1.15 && !light) { ctx.fillStyle = 'rgba(' + T[s.c] + ',' + (a * .12).toFixed(3) + ')'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r * 3.2, 0, 6.2832); ctx.fill(); } // halo suave de las más cercanas
+      var a = s.a * k * (.65 + .35 * Math.sin(s.t)), big = s.r > 1.15 && !light;
+      ctx.globalAlpha = a;
+      if (big) { var R = s.r / .14; ctx.drawImage(sprite(light, s.c, true), s.x - R, s.y - R, R * 2, R * 2); } // núcleo + halo suave en una sola copia
+      else ctx.drawImage(sprite(light, s.c, false), s.x - s.r, s.y - s.r, s.r * 2, s.r * 2);
     }
+    ctx.globalAlpha = 1;
     // estrella fugaz de vez en cuando (cada 7–16 s), muy sutil
     if (dt) {
       nextShoot -= dt;
@@ -72,10 +83,12 @@
       }
     }
   }
-  var busyUntil = 0; // mientras mueves o haces zoom al gráfico el fondo se queda quieto: así el cristal no se recalcula y el gráfico va fluido
+  var busyUntil = 0; // mientras mueves o haces zoom al gráfico el fondo se queda quieto: así el gráfico tiene toda la potencia
+  /* Las estrellas se mueven MUY despacio (1–7 px por segundo): con 30 cuadros por segundo se ven idénticas y así el gráfico, los menús y
+     el desplazamiento corren a la frecuencia completa de tu pantalla (60, 90, 120 o 144 Hz) sin competir con el fondo. */
   function loop(t) {
     raf = requestAnimationFrame(loop);
-    if (t - last < 7 || t < busyUntil) return; // modo Completo: a la frecuencia de la pantalla (hasta ~144 Hz); en Ligero este fondo no se anima
+    if (t - last < 32 || t < busyUntil) return;
     var dt = last ? Math.min(.1, (t - last) / 1000) : 0; last = t; draw(dt);
   }
   function go() { if (!cv) { mk(); size(); } if (still || isLite()) { stop(); draw(0); return; } if (!raf) { last = 0; raf = requestAnimationFrame(loop); } }
@@ -122,15 +135,17 @@
 
   /* ───── Cursor «Estrella» del gráfico: se enciende solo en el tema Espacial ───── */
   var prevCur = null, wrapped = false;
+  function picked() { try { return !!(window.CCT_cursorPicked && window.CCT_cursorPicked()); } catch (e) { return false; } }
   function starCursor(on) {
     var C = window.CCTStarCursor; if (!C || !C.setMode) return;
     if (!wrapped) { // si la app vuelve a poner «Cruz» mientras está el tema Espacial, se queda la estrella
       var orig = C.setMode; wrapped = true;
-      C.setMode = function (m) { prevCur = m; return orig.call(C, cur === 'espacial' && m === 'Cruz' ? 'Estrella' : m); };
+      // la estrella es solo el cursor POR DEFECTO del tema: si elegiste otro (incluso «Cruz») se respeta
+      C.setMode = function (m) { prevCur = m; return orig.call(C, cur === 'espacial' && m === 'Cruz' && !picked() ? 'Estrella' : m); };
       C._vxOrig = orig;
     }
     if (prevCur === null) prevCur = C.mode || 'Cruz';
-    C._vxOrig.call(C, on && prevCur === 'Cruz' ? 'Estrella' : prevCur);
+    C._vxOrig.call(C, on && prevCur === 'Cruz' && !picked() ? 'Estrella' : prevCur);
   }
 
   /* ───── Selector en Configuración → Personalización ───── */
@@ -191,7 +206,7 @@
     if (cur === 'espacial') go();
     paintPerf();
   }
-  var PNAMES = { full: 'Completo · todas las animaciones y el cristal, a la frecuencia de tu pantalla (hasta 120 Hz)', lite: 'Ligero · menos efectos, ideal para equipos o celulares lentos' };
+  var PNAMES = { full: 'Completo · cristal, fondo animado y todo a la frecuencia de tu pantalla (hasta 120 Hz)', lite: 'Ligero · sin cristal ni fondo animado, igual de fluido (hasta 120 Hz)' };
   function paintPerf() {
     document.querySelectorAll('[data-vx-perf]').forEach(function (b) { var on = b.getAttribute('data-vx-perf') === perf; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
     var ex = document.getElementById('cuPerfEx'); if (ex) ex.textContent = PNAMES[perf];

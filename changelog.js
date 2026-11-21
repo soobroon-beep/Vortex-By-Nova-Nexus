@@ -3,9 +3,18 @@
    Los arreglos y ajustes pequeños NO se anotan aquí: se suman al último bloque «Mejoras» sin crear versión nueva. */
 window.CCT_CHANGELOG = [
   {v: '3.43', d: '19 nov 2026', t: 'Mejoras del gráfico', items: [
+    'Avisos más simples: primero activas las notificaciones y se despliegan las opciones; eliges una sola vez qué te avisamos y al final dónde (VORTEX o Discord). En Discord eliges cuáles de esos avisos se envían.',
+    'Nuevo en Avisos: volumen, vibración y horario sin sonido.',
+    'En la PC con VORTEX minimizada los avisos llegan en su momento; ya no salen todos juntos al volver a abrirla.',
+    'Las notificaciones muestran solo el icono de la app y el texto (sin el icono viejo de colores).',
+    'Una sola etiqueta de precio en vivo; la cuenta atrás de la vela va dentro de ella.',
+    'Aviso de conexión: naranja «Conectando», verde «En vivo» (y se quita) y rojo «Sin conexión».',
+    'Todas las ventanas y menús aparecen con animación. Borrar una alerta ahora pide confirmación.',
+    'Cursor nuevo «Órbita» y el cursor se puede cambiar también en el estilo Espacial. Espacial más fluido y 120 Hz en cualquier modo (también en Ligero).',
+    'Personalización ordenada por secciones (Estilo y tema, Gráfico, Herramientas, Interfaz) con ajustes nuevos: cuenta atrás de la vela, aviso de conexión, confirmar antes de borrar, pantalla siempre encendida y precio en la pestaña.',
+    'Nexus Pixel entiende lo que le pides: cambiar colores (velas, fondo, soportes y resistencias…), poner o quitar indicadores, cambiar temporalidad o moneda, cursor y tema; si falta el color te lo pregunta.',
     'Árbol de objetos: abajo a la izquierda, junto al imán, el candado y el ojo. Ve todos tus dibujos e indicadores, pásalos adelante o atrás, ocúltalos o bórralos.',
     'Al seleccionar un dibujo, la columna de precios marca sus niveles: inicio y fin de una línea, entrada, take profit y stop de un Long/Short, los extremos de un Fibonacci, etc.',
-    'Modo Completo a la frecuencia de tu pantalla (hasta 120 Hz) para que todo se mueva más fluido. El modo Ligero sigue igual.',
     'Tus colores guardados aparecen en todas las paletas de la app: dibujos, indicadores, velas y aspecto del gráfico.',
     'Los planes ya no salen al abrir: usa el gráfico libremente y solo verás los planes al tocar algo premium o desde tu perfil.',
     'Mantén presionado el clic derecho sobre el gráfico y mueve el ratón para acercar o alejar con suavidad (clic derecho corto = menú de siempre).',

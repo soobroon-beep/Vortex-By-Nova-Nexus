@@ -173,7 +173,9 @@
 :root.vx-space body.light .bottom-nav button.active span{color:var(--gl)}
 
 /* lo seleccionado lleva el degradado de galaxia que se mueve despacio */
-@keyframes vxGal{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+/* el brillo de los botones activos ya no repinta el fondo en cada cuadro (era lo que trababa el tema): ahora el color «respira»
+   con hue-rotate, que la tarjeta gráfica anima sola sin tocar el hilo principal */
+@keyframes vxGal{0%,100%{filter:hue-rotate(0deg)}50%{filter:hue-rotate(-28deg)}}
 :root.vx-space body :is(.right-rail .rr-btn.active,#toolRail .rail-btn.on,.timeframes button.active,.ctab.on,.pop-tabs button.active,.nw-tabs button.on,.nw-chips button.on){
   color:#fff!important;border-color:transparent!important;
   background:linear-gradient(120deg,rgba(139,92,246,.55),rgba(59,130,246,.45),rgba(236,72,153,.4),rgba(139,92,246,.55)) 0 0/200% 100%!important;

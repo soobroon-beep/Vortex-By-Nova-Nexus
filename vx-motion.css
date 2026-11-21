@@ -1,0 +1,122 @@
+/* VORTEX · Movimiento y piezas nuevas (nov 2026)
+   1) Animación de entrada/salida para TODO menú, ventana o panel que aparece (vx-motion.js la aplica sola).
+   2) Avisos en pasos (activar → qué te avisamos → sonido → dónde: VORTEX o Discord).
+   3) Aviso de conexión en vivo (conectando / en vivo / sin conexión).
+   4) Personalización ordenada y ajustes nuevos.
+   Respeta «reducir movimiento» del sistema y el modo Ligero. */
+
+:root{--vxm-ease:cubic-bezier(.16,1,.3,1);--vxm-spring:cubic-bezier(.34,1.42,.5,1);--vxm-dur:.34s}
+
+/* ───────── 1 · Entradas ───────── */
+@keyframes vxmPop{0%{opacity:0;scale:.9;translate:0 10px;filter:blur(8px)}55%{filter:blur(0)}100%{opacity:1;scale:1;translate:0 0;filter:none}}
+@keyframes vxmDrop{0%{opacity:0;scale:.96 .9;translate:0 -8px;filter:blur(6px)}100%{opacity:1;scale:1;translate:0 0;filter:none}}
+@keyframes vxmRise{0%{opacity:0;translate:0 26px;scale:.97}100%{opacity:1;translate:0 0;scale:1}}
+@keyframes vxmFade{0%{opacity:0}100%{opacity:1}}
+@keyframes vxmSide{0%{opacity:0;translate:-10px 0;scale:.97;filter:blur(5px)}100%{opacity:1;translate:0 0;scale:1;filter:none}}
+@keyframes vxmGlint{0%{opacity:0;background-position:130% 0}30%{opacity:1}100%{opacity:0;background-position:-30% 0}}
+@keyframes vxmOut{to{opacity:0;scale:.95;translate:0 6px;filter:blur(4px)}}
+.vxm-in{animation:vxmPop var(--vxm-dur) var(--vxm-ease) both!important;transform-origin:var(--vxm-o,50% 0%)}
+.vxm-in.vxm-drop{animation-name:vxmDrop!important}
+.vxm-in.vxm-rise{animation-name:vxmRise!important;animation-timing-function:var(--vxm-ease)!important}
+.vxm-in.vxm-fade{animation-name:vxmFade!important;animation-duration:.22s!important}
+.vxm-in.vxm-side{animation-name:vxmSide!important}
+.vxm-out{animation:vxmOut .16s ease-in forwards!important;pointer-events:none!important}
+/* destello de luz que cruza la ventana al abrirse (muy sutil, estilo VORTEX) */
+.vxm-glint::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;border-radius:inherit;background:linear-gradient(105deg,transparent 38%,rgba(170,190,255,.10) 45%,rgba(255,255,255,.16) 50%,rgba(170,190,255,.08) 55%,transparent 62%) 0 0/260% 100% no-repeat;animation:vxmGlint .9s .05s var(--vxm-ease) both}
+/* hijos de menús y listas: aparecen escalonados */
+.vxm-stagger>*{animation:vxmRise .38s var(--vxm-ease) both;animation-delay:calc(var(--i,0) * 22ms + 40ms)}
+/* la hoja de Indicadores/Dibujar (escritorio): entrada con resorte */
+@media(min-width:1024px){
+  .sheet{transition:transform .46s var(--vxm-ease),opacity .26s ease,filter .3s ease!important;filter:blur(6px)}
+  .sheet.open{filter:none}
+  .sheet:not(.open){transform:translate(-50%,-44%) scale(.94)!important}
+}
+.sheet-backdrop.open{animation:vxmFade .3s ease both}
+html.vx-lite .vxm-in,html.vx-lite .vxm-stagger>*{animation-duration:.18s!important;filter:none!important}
+html.vx-lite .vxm-glint::after{display:none}
+@media (prefers-reduced-motion:reduce){.vxm-in,.vxm-stagger>*,.vxm-out{animation:none!important}.vxm-glint::after{display:none}}
+
+/* ───────── 2 · Avisos ───────── */
+.nt-closed{margin:14px 2px 4px;padding:16px;border:1px dashed var(--line);border-radius:16px;color:var(--muted);font-size:13px;line-height:1.5;text-align:center}
+.nt-closed p{margin:0}.nt-closed b{color:var(--text)}.nt-closed small{display:block;margin-top:8px;opacity:.85}
+.nt-reveal>*{animation:vxmRise .5s var(--vxm-ease) both}
+.nt-reveal>*:nth-child(2){animation-delay:.03s}.nt-reveal>*:nth-child(3){animation-delay:.07s}.nt-reveal>*:nth-child(4){animation-delay:.1s}.nt-reveal>*:nth-child(5){animation-delay:.13s}.nt-reveal>*:nth-child(6){animation-delay:.16s}.nt-reveal>*:nth-child(7){animation-delay:.19s}
+.nt-in{animation:vxmDrop .36s var(--vxm-ease) both}
+.nt-step{display:flex;align-items:center;gap:10px;margin:22px 4px 10px}
+.nt-step b{display:block;font-size:13.5px;letter-spacing:.1px}.nt-step small{display:block;color:var(--muted);font-size:11.5px;margin-top:1px}
+.nt-num{flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;font-size:11.5px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),#8b5cf6);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent),0 4px 14px rgba(84,143,255,.35)}
+.nt-chips{display:flex;flex-wrap:wrap;gap:6px}
+.nt-chip{height:30px;padding:0 13px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);font:inherit;font-size:12.5px;font-weight:650;cursor:pointer;transition:background .2s,color .2s,border-color .2s,transform .15s}
+.nt-chip:active{transform:scale(.95)}
+.nt-chip.on{color:#fff;border-color:color-mix(in srgb,var(--accent) 70%,transparent);background:color-mix(in srgb,var(--accent) 26%,transparent)}
+.nt-chip.on::before{content:"";display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;background:currentColor;vertical-align:1px}
+.nt-dc-chips{padding:0 14px 12px}
+.nt-dest{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.nt-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:14px;border-radius:16px;border:1px solid var(--line);background:linear-gradient(145deg,rgba(255,255,255,.05),rgba(255,255,255,.01)),var(--surface);color:var(--text);font:inherit;text-align:left;cursor:pointer;transition:border-color .25s,background .25s,transform .15s,box-shadow .25s}
+.nt-card:active{transform:scale(.97)}
+.nt-card b{font-size:14px}.nt-card small{color:var(--muted);font-size:11.5px;line-height:1.35}
+.nt-card-ic{display:grid;place-items:center;width:38px;height:38px;margin-bottom:6px;border-radius:12px;color:var(--muted);background:rgba(255,255,255,.05);transition:color .25s,background .25s}
+.nt-card.on{border-color:color-mix(in srgb,var(--accent) 60%,transparent);background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 16%,transparent),rgba(255,255,255,.01)),var(--surface);box-shadow:0 8px 26px -12px color-mix(in srgb,var(--accent) 60%,transparent)}
+.nt-card.on .nt-card-ic{color:#fff;background:color-mix(in srgb,var(--accent) 40%,transparent)}
+.nt-card.dc.on{border-color:rgba(124,135,255,.6);background:linear-gradient(145deg,rgba(124,135,255,.18),rgba(255,255,255,.01)),var(--surface);box-shadow:0 8px 26px -12px rgba(124,135,255,.7)}
+.nt-card.dc.on .nt-card-ic{background:rgba(124,135,255,.45)}
+.nt-check{position:absolute;top:12px;right:12px;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--line);transition:all .25s var(--vxm-spring)}
+.nt-card.on .nt-check{border-color:transparent;background:var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 12.5 4 4 8-9'/%3E%3C/svg%3E") center/13px no-repeat;transform:scale(1.08)}
+.nt-card.dc.on .nt-check{background-color:#7c87ff}
+.nt-dc{margin-top:10px}
+.nt-dc .pref-row:first-child{min-height:0;padding-bottom:8px}
+.nt-warn{color:#f5b942!important}
+.nt-range{width:150px;accent-color:var(--accent)}
+.nt-time{height:30px;padding:0 8px;border-radius:9px;border:1px solid var(--line);background:var(--raised);color:var(--text);font:inherit;font-size:13px;color-scheme:dark}
+body.light .nt-time{color-scheme:light}
+.nt-to{margin:0 6px;color:var(--muted);font-size:12px}
+.nt-test{display:flex;align-items:center;gap:10px}.nt-test>div:first-child{flex:1}
+.nt-test-b{display:flex;gap:6px;flex:none}
+@media(max-width:420px){.nt-dest{grid-template-columns:1fr 1fr;gap:8px}.nt-card{padding:12px}.nt-range{width:120px}.nt-test{flex-wrap:wrap}}
+
+/* ───────── 3 · Aviso de conexión ───────── */
+#connPill{position:absolute;left:50%;top:12px;z-index:40;display:flex;white-space:nowrap;max-width:calc(100% - 24px);align-items:center;gap:8px;height:30px;padding:0 14px 0 11px;border-radius:999px;font-size:12px;font-weight:650;letter-spacing:.2px;color:#fff;pointer-events:none;
+  translate:-50% 0;background:rgba(10,14,22,.62);-webkit-backdrop-filter:blur(14px) saturate(140%);backdrop-filter:blur(14px) saturate(140%);border:1px solid rgba(255,255,255,.1);box-shadow:0 10px 30px -10px rgba(0,0,0,.6);
+  transition:opacity .35s ease,translate .5s var(--vxm-ease),border-color .35s,box-shadow .35s}
+#connPill[hidden]{display:flex!important;opacity:0;translate:-50% -14px}
+#connPill i{position:relative;width:8px;height:8px;border-radius:50%;background:var(--cc)}
+#connPill i::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--cc);opacity:.6;animation:connRing 1.3s ease-out infinite}
+#connPill.wait{--cc:#f5a623;border-color:rgba(245,166,35,.45);box-shadow:0 0 22px -6px rgba(245,166,35,.55)}
+#connPill.live{--cc:#20bf9f;border-color:rgba(32,191,159,.5);box-shadow:0 0 22px -6px rgba(32,191,159,.6)}
+#connPill.live i::after{animation-iteration-count:2}
+#connPill.off{--cc:#f06b79;border-color:rgba(240,107,121,.55);box-shadow:0 0 22px -6px rgba(240,107,121,.6)}
+#connPill .cp-dots::after{content:"";display:inline-block;width:1.2em;text-align:left;animation:connDots 1.2s steps(4) infinite}
+@keyframes connRing{0%{transform:scale(.6);opacity:.8}100%{transform:scale(2.1);opacity:0}}
+@keyframes connDots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+body.light #connPill{color:#0b1220;background:rgba(255,255,255,.75)}
+@media(max-width:1023px){#connPill{top:98px}}
+
+/* ───────── 4 · Personalización y ajustes ───────── */
+.cu-sec{margin:20px 4px 8px;display:flex;align-items:baseline;gap:8px}
+.cu-sec b{font-size:10.5px;font-weight:750;letter-spacing:1.1px;text-transform:uppercase;color:var(--muted)}
+.cu-sec small{font-size:11px;color:var(--muted);opacity:.7}
+.cur-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:2px 14px 14px}
+.cur-opt{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 4px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--muted);font:inherit;font-size:11.5px;font-weight:650;cursor:pointer;transition:all .2s}
+.cur-opt svg{width:26px;height:26px}
+.cur-opt.on{color:var(--text);border-color:color-mix(in srgb,var(--accent) 60%,transparent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.cur-opt[data-cur-pick="Orbita"] svg{color:#9fb4ff}
+.ui-seg{display:flex;gap:4px}
+/* salidas (uxOut) con el mismo lenguaje: se encoge un poco y se desenfoca */
+.ux-out{transition:opacity .16s ease,transform .16s ease,filter .16s ease!important;filter:blur(3px)}
+
+/* ───────── Confirmación propia (borrar alerta, etc.) ───────── */
+.vxa-back{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:18px;background:rgba(3,6,12,.48);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:vxmFade .2s ease both}
+.vxa-dlg{width:min(340px,100%);padding:22px 20px 16px;border-radius:22px;text-align:center;color:var(--text);background:rgba(12,16,26,.82);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid rgba(255,255,255,.1);box-shadow:0 30px 80px -20px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.06);animation:vxmPop .36s var(--vxm-spring) both}
+.vxa-ic{display:inline-grid;place-items:center;width:46px;height:46px;margin-bottom:10px;border-radius:50%;color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent);box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 7%,transparent)}
+.vxa-ic.danger{color:#f06b79;background:rgba(240,107,121,.15);box-shadow:0 0 0 6px rgba(240,107,121,.07)}
+.vxa-dlg b{display:block;font-size:16px;margin-bottom:6px}
+.vxa-dlg p{margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.45;word-break:break-word}
+.vxa-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.vxa-btns button{height:40px;border-radius:12px;font:inherit;font-weight:700;font-size:13.5px;cursor:pointer;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);transition:transform .12s,filter .2s,background .2s}
+.vxa-btns button:active{transform:scale(.96)}
+.vxa-ok{border-color:transparent!important;background:var(--accent)!important;color:#fff!important}
+.vxa-ok.danger{background:linear-gradient(135deg,#f06b79,#e0245a)!important;box-shadow:0 8px 22px -8px rgba(240,107,121,.7)}
+.vxa-back.vxa-out{animation:vxmFade .18s ease reverse both}.vxa-back.vxa-out .vxa-dlg{animation:vxmOut .16s ease-in both}
+body.light .vxa-dlg{background:rgba(255,255,255,.9)}
+#customView .pref-row .pref-l{flex:1;min-width:0;text-align:left}
+#customView .cu-sec:first-child{margin-top:8px}

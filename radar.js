@@ -84,7 +84,7 @@ Aprendizaje previo: ${lessons(st)}`};
   async function pullServer() { try { const r = await fetch(PUSH_SRV + '/radar/state'); if (r.ok) { srv = await r.json(); paint(); } } catch {} }
   async function run(force) {
     if (serverMode()) { await pullServer(); return; }
-    const h = root.CCT_host, SC = root.CCTScreener; if (!S.on || busy || !h || !SC || (typeof document !== 'undefined' && document.hidden && !force)) return;
+    const h = root.CCT_host, SC = root.CCTScreener; if (!S.on || busy || !h || !SC) return; // también con la app minimizada: el aviso sale a su hora
     busy = true; status = 'Revisando el top 50…'; paint();
     try {
       await followUp(h);

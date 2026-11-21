@@ -71,7 +71,7 @@ function sanDiscord(a) { // Discord: webhook del canal #vortex, invitación al s
 }
 const CTYPES = [['candles', 'Velas', 'c_candles'], ['hollow', 'Velas huecas', 'c_hollow'], ['ha', 'Heikin Ashi', 'c_ha'], ['bars', 'Barras OHLC', 'c_bars'], ['hlc', 'Barras HLC', 'c_hlc'], ['line', 'Línea', 'c_line'], ['area', 'Área', 'c_area'], ['step', 'Línea escalonada', 'c_step']];
 const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', bybitf: 'Bybit Perpetuos', okx: 'OKX Spot', okxf: 'OKX Perpetuos', coinbase: 'Coinbase', bingx: 'BingX Spot', bingxf: 'BingX Perpetuos', kucoin: 'KuCoin', gate: 'Gate.io', mexc: 'MEXC', bitget: 'Bitget', htx: 'HTX', kraken: 'Kraken', dom: 'Dominancia USDT/BTC'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
-const CURSOR_MODES = ['Cruz', 'Flecha', 'Estrella']; // tipo de puntero sobre el gráfico (la estrella deja estela al mantener presionado: star-cursor.js)
+const CURSOR_MODES = ['Cruz', 'Flecha', 'Estrella', 'Órbita']; // tipo de puntero sobre el gráfico (la estrella deja estela al mantener presionado: star-cursor.js)
 const CHART_DEF = {bg: '#07090e', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1, cursor: 'Cruz', alertCol: '', alertA: 28, alertS: 'Puntos', alertW: 1,
   posCol: '', posA: 90, posS: 'Sólida', posW: 1, tpCol: '#20bf9f', tpA: 90, tpS: 'Guiones', tpW: 1, slCol: '#f06b79', slA: 90, slS: 'Guiones', slW: 1, liqCol: '#f0b90b', liqA: 55, liqS: 'Puntos', liqW: 1, ordCol: '#548fff', ordA: 90, ordS: 'Guiones', ordW: 1};
 /* Colores del mercado (alcista / bajista) de TODA la app (no es el tema): velas, volumen, %, Mi seguimiento, mini gráficos, P&L…
@@ -339,6 +339,21 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let toastTimer;
 /* Menús y ventanas de ajustes: se desvanecen al cerrarse (la entrada la pone glass.css) */
+/* Confirmación propia de VORTEX (en vez de la ventanita gris del navegador): cristal oscuro, animada, con Enter/Esc. Devuelve una promesa. */
+function vxAsk(o) {
+  o = o || {}; if (PR && PR.conf === 'off' && !o.always) return Promise.resolve(true);
+  return new Promise(res => {
+    const b = document.createElement('div'); b.className = 'vxa-back'; b.setAttribute('role', 'presentation');
+    b.innerHTML = `<div class="vxa-dlg" role="alertdialog" aria-modal="true" aria-labelledby="vxaT"><span class="vxa-ic${o.danger ? ' danger' : ''}" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${o.danger ? '<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/>' : '<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.5"/>'}</svg></span><b id="vxaT">${esc(o.title || '¿Seguro?')}</b>${o.text ? `<p>${esc(o.text)}</p>` : ''}<div class="vxa-btns"><button type="button" class="vxa-no">${esc(o.no || 'Cancelar')}</button><button type="button" class="vxa-ok${o.danger ? ' danger' : ''}">${esc(o.ok || 'Aceptar')}</button></div></div>`;
+    document.body.appendChild(b);
+    const done = v => { document.removeEventListener('keydown', key, true); b.classList.add('vxa-out'); setTimeout(() => b.remove(), 180); res(v); };
+    const key = e => { if (e.key === 'Escape') { e.preventDefault(); done(false); } else if (e.key === 'Enter') { e.preventDefault(); done(true); } };
+    document.addEventListener('keydown', key, true);
+    b.addEventListener('click', e => { if (e.target === b || e.target.closest('.vxa-no')) done(false); else if (e.target.closest('.vxa-ok')) done(true); });
+    setTimeout(() => { const ok = b.querySelector('.vxa-ok'); if (ok) ok.focus(); }, 30);
+  });
+}
+window.CCT_ask = vxAsk;
 function uxOut(el, ms = 150) { if (!el || el.classList.contains('ux-out')) return; el.classList.add('ux-out'); if (el.id) el.removeAttribute('id'); el.style.pointerEvents = 'none'; setTimeout(() => el.remove(), ms); }
 function toast(msg) { if (cfgLive) return; const el = $('#toast'); el.textContent = msg; el.style.display = 'block'; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.style.display = 'none', 2400); }
 function updateStatus(ok, msg) { $('#connection').textContent = '● ' + msg; $('#connection').className = 'connection ' + (ok ? 'online' : 'offline'); }
@@ -372,7 +387,7 @@ function switchView(id) {
     id = 'chartView';
   }
   if (id === 'alertsView' && currentView !== id && !SUB_VIEWS.includes(currentView)) alBackTo = currentView;
-  currentView = id; if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); }
+  currentView = id; try { wakeSync(); } catch {} if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); }
   if (id === 'lensView' && window.CCTLens) CCTLens.open();
   $$('.view').forEach(x => x.classList.toggle('active', x.id === id));
   $$('.bottom-nav button').forEach(x => x.classList.toggle('active', x.dataset.view === id));
@@ -760,28 +775,49 @@ let selAlertId = null, alDrag = null, alConfirm = null; // alerta seleccionada e
 const alDiscordReady = () => { try { return !!(window.CCT_discordStore && CCT_discordStore.get().url); } catch { return false; } };
 const TONE_SEQ = {beep: [[880, 0, .6, 'sine']], chime: [[988, 0, .35, 'sine'], [1319, .16, .55, 'sine']], pulse: [[440, 0, .14, 'triangle'], [440, .22, .14, 'triangle'], [440, .44, .14, 'triangle']], alarm: [[780, 0, .18, 'square'], [620, .2, .18, 'square'], [780, .4, .18, 'square']]};
 function alertBeep(force, tone) { // el sonido elegido en Configuración; force = prueba
-  if (!force && PR.sound === 'off') return;
-  try { const A = window.AudioContext || window.webkitAudioContext, c = new A(); for (const [f, t0, d, ty] of TONE_SEQ[tone || PR.tone] || TONE_SEQ.beep) { const o = c.createOscillator(), g = c.createGain(); o.type = ty; o.frequency.value = f; o.connect(g); g.connect(c.destination); const t = c.currentTime + t0; g.gain.setValueAtTime(ty === 'square' ? .08 : .2, t); g.gain.exponentialRampToValueAtTime(.001, t + d); o.start(t); o.stop(t + d + .02); } setTimeout(() => { try { c.close(); } catch {} }, 1500); } catch {}
+  if (!force && (PR.sound === 'off' || quietNow())) return;
+  const vk = (PR.vol || 70) / 70; // volumen elegido en Avisos (70 = el de siempre)
+  try { const A = window.AudioContext || window.webkitAudioContext, c = new A(); for (const [f, t0, d, ty] of TONE_SEQ[tone || PR.tone] || TONE_SEQ.beep) { const o = c.createOscillator(), g = c.createGain(); o.type = ty; o.frequency.value = f; o.connect(g); g.connect(c.destination); const t = c.currentTime + t0; g.gain.setValueAtTime(Math.max(.002, (ty === 'square' ? .08 : .2) * vk), t); g.gain.exponentialRampToValueAtTime(.001, t + d); o.start(t); o.stop(t + d + .02); } setTimeout(() => { try { c.close(); } catch {} }, 1500); } catch {}
+}
+function quietNow() { try { const q = CCTPrefs.parts(Date.now(), PR.tz); return CCTPrefs.inQuiet(PR, q.h * 60 + q.mi); } catch { return false; } } // horario sin sonido (Avisos)
+function buzz(p) { if (PR.vib === 'off' || quietNow()) return; try { navigator.vibrate && navigator.vibrate(p || [200, 100, 200]); } catch {} }
+/* ───────── Avisos que llegan «atrasados» ─────────
+   Con VORTEX minimizada en la PC el navegador frena los relojes de la página; antes, al volver, salían de golpe todos los avisos
+   que no se habían mostrado (con su sonido y su notificación cada uno). Ahora:
+   · la app sigue revisando aunque esté minimizada (más despacio, pero a tiempo) y avisa en ese momento;
+   · lo que se calcule en los primeros segundos al volver (ya viejo) NO suena ni manda notificaciones: se junta en un solo mensaje. */
+const NG = {hidAt: document.hidden ? Date.now() : 0, visAt: 0, away: 0, held: [], t: 0};
+document.addEventListener('visibilitychange', () => { if (document.hidden) NG.hidAt = Date.now(); else { NG.visAt = Date.now(); NG.away = NG.hidAt ? NG.visAt - NG.hidAt : 0; NG.hidAt = 0; } });
+const ngLate = () => !document.hidden && NG.away > 20000 && Date.now() - NG.visAt < 10000;
+function ngFlush() { const n = NG.held.length; if (!n) return; const last = NG.held[n - 1]; NG.held = []; toast(n === 1 ? 'Mientras no estabas · ' + last : `Mientras no estabas: ${n} avisos (están en Alertas › Historial) · ${last}`); }
+const appDest = () => !PR.n || PR.n.app !== false; // «¿Dónde te avisamos?» › En la app
+/* Un solo camino para avisar en la app: mensaje, sonido, vibración y notificación del sistema */
+function appAlert(msg, title, body, tag, o) {
+  o = o || {}; if (!appDest()) return;
+  if (ngLate()) { NG.held.push(o.short || msg); clearTimeout(NG.t); NG.t = setTimeout(ngFlush, 1500); return; }
+  if (!document.hidden) toast(msg);
+  if (!o.mute) { alertBeep(); buzz(o.vib); }
+  if (!o.noSys) sysNotify(title, body, tag);
 }
 // Notificación del sistema. En Android/PWA «new Notification()» no existe: se usa el service worker. La etiqueta (tag) evita duplicados
 // si el servidor de avisos con la app cerrada (push.js) manda el mismo aviso.
 function sysNotify(title, body, tag) {
   try {
     if (!window.Notification || Notification.permission !== 'granted') return;
-    const opts = {body, tag, renotify: true, icon: 'icons/i01-192.png', badge: 'icons/notif-badge-96.png', vibrate: [200, 100, 200], data: {url: location.href.split('#')[0] + '#alerts'}};
+    const opts = {body, tag, renotify: true, badge: 'icons/notif-badge-96.png', silent: quietNow() || PR.sound === 'off', vibrate: PR.vib === 'off' || quietNow() ? [] : [200, 100, 200], data: {url: location.href.split('#')[0] + '#alerts'}};
     if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.ready.then(r => r.showNotification(title, opts)).catch(() => {});
     else new Notification(title, opts);
   } catch {}
 }
 const dcSend = (k, o) => { if (window.CCTDiscord && PR.n.discord) CCTDiscord.alert(k, o); }; // Discord solo si se quiere recibir ahí
 const alNotify = (a, kind) => { const n = a.notify || 'both'; return {app: n !== 'discord', dc: n !== 'app' && !!PR.n.discord}; }; // dónde avisar: app, Discord o ambos. Con «Enviar avisos a Discord» apagado en Ajustes no sale nada a Discord
-window.CCT_discordOn = () => !!(PR && PR.n && PR.n.discord); // interruptor general de Discord (lo usan bots, servidor y avisos)
+window.CCT_discordOn = kind => !!(PR && PR.n && PR.n.discord) && (!kind || PR.n[kind] !== false); // Discord encendido (y, si se pide, ese tipo de aviso también encendido arriba en «Qué te avisamos»)
 function fireAlert(a, price) {
   const msg = `${base(a.symbol)} ${a.dir === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`, dir0 = a.dir;
   a.firedAt = Date.now(); a.firedPrice = price;
   if (a.repeat === 'every') { if (a.cond) a.wait = true; else a.dir = a.dir === 'up' ? 'down' : 'up'; } else a.on = false; // «todo el tiempo»: el cruce normal vigila el sentido contrario; ascendente/descendente espera a que el precio vuelva
-  const n = alNotify(a); if (!PR.n.price) n.app = false; // «Alertas de precio» apagado = no avisar en la app; Discord sigue según su propio interruptor
-  if (n.app) { toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} sysNotify('VORTEX · Alerta', msg, 'al-' + a.id); }
+  const n = alNotify(a); if (PR.n.price === false) { n.app = false; n.dc = false; } // «Alertas de precio» apagado = no avisa en ningún lado
+  if (n.app) appAlert(msg, 'VORTEX · Alerta', msg, 'al-' + a.id);
   if (n.dc && window.CCTDiscord) CCTDiscord.alert('price', {symbol: base(a.symbol), dir: dir0, level: a.price, price, note: a.note, text: msg});
 }
 function checkAlerts(sym, price) {
@@ -878,7 +914,11 @@ $('#alAdd').onclick = () => openAlertDialog({symbol: state.symbol});
 $('#alertsView').addEventListener('click', e => {
   const d = e.target.closest('[data-al-del]'), r = e.target.closest('[data-al-re]'), ed = e.target.closest('[data-al-ed]');
   if (ed) { const a = state.alerts.find(x => x.id === ed.dataset.alEd); if (a && a.kind !== 'ind') openAlertDialog({edit: a}); else if (a) toast('Para cambiar una alerta con indicador, créala de nuevo'); return; }
-  if (d) { state.alerts = state.alerts.filter(a => a.id !== d.dataset.alDel); save(); renderAlerts(); }
+  if (d) { // borrar pide confirmación (se puede apagar en Ajustes › Confirmar antes de borrar)
+    const id = d.dataset.alDel, a = state.alerts.find(x => x.id === id); if (!a) return;
+    const what = a.kind === 'ind' ? `${base(a.symbol)} · ${a.label || 'indicador'}` : `${base(a.symbol)} ${a.dir === 'up' ? '≥' : '≤'} ${fmt(a.price)}`;
+    vxAsk({title: '¿Borrar esta alerta?', text: what + (a.note ? ' · ' + a.note : ''), ok: 'Borrar', danger: true}).then(yes => { if (!yes) return; state.alerts = state.alerts.filter(x => x.id !== id); save(); renderAlerts(); scheduleRender(); toast('Alerta borrada'); });
+  }
   if (r) { const a = state.alerts.find(x => x.id === r.dataset.alRe), p = curPrice(a?.symbol); if (a && a.kind === 'ind') { a.on = true; a.firedAt = 0; a.firedInfo = ''; lastClosedBar(a.symbol, a.interval).then(t => { if (t != null) a.lastBar = t; save(); renderAlerts(); }); } else if (a) { if (!a.cond) a.dir = Number.isFinite(p) ? (a.price > p ? 'up' : 'down') : a.dir; a.on = true; a.firedAt = 0; a.firedPrice = null; a.wait = false; if (a.expired) { a.expired = false; a.exp = 0; } save(); renderAlerts(); checkAlertsPoll(); } }
 });
 
@@ -903,8 +943,7 @@ function moveCheck(sym, price, now) {
 function fireMove(sym, dir, ch, lbl, price) {
   const msg = `${base(sym)} ${dir === 'up' ? 'sube' : 'cae'} ${Math.abs(ch).toFixed(1)}% en ${lbl} · ${fmt(price)}`;
   moveLog.unshift({t: Date.now(), s: sym, d: dir, c: +ch.toFixed(2), w: lbl, p: price}); moveLog = moveLog.slice(0, 30); try { localStorage.setItem(MOVE_LOG_KEY, JSON.stringify(moveLog)); } catch {}
-  toast('Movimiento brusco: ' + msg); if (PR.sound !== 'off') { alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} } // sonido y vibración: van con «Activar notificaciones»
-  sysNotify('VORTEX · Movimiento brusco', msg, 'mv-' + sym + '-' + dir);
+  appAlert('Movimiento brusco: ' + msg, 'VORTEX · Movimiento brusco', msg, 'mv-' + sym + '-' + dir, {short: msg});
   dcSend('move', {symbol: base(sym), dir, pct: ch, win: lbl, price, text: msg});
   renderMoveAlerts();
 }
@@ -965,8 +1004,8 @@ function closedIdx(cs, lastClosedT) { for (let i = cs.length - 1; i >= 0; i--) i
 function fireInd(a, info) {
   a.firedAt = Date.now(); a.firedInfo = info; if (a.repeat === 'once') a.on = false;
   const msg = `${base(a.symbol)} ${a.interval} · ${a.label}${info ? ' · ' + info : ''}${a.note ? ' · ' + a.note : ''}`;
-  const n = alNotify(a); if (!PR.n.ind) n.app = false; // igual que en precio: apagar la app no apaga Discord
-  if (n.app) { toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} sysNotify('VORTEX · Alerta', msg, 'in-' + a.id); }
+  const n = alNotify(a); if (PR.n.ind === false) { n.app = false; n.dc = false; } // igual que en precio: apagado = no avisa en ningún lado
+  if (n.app) appAlert(msg, 'VORTEX · Alerta', msg, 'in-' + a.id);
   if (n.dc && window.CCTDiscord) CCTDiscord.alert('ind', {symbol: base(a.symbol), interval: a.interval, label: a.label, info, note: a.note, text: msg});
 }
 async function lastClosedBar(sym, itv) {
@@ -1031,13 +1070,11 @@ if (window.CCTTradeWatch && CCTTradeWatch.host) CCTTradeWatch.host({
     return out;
   },
   notify(title, body, tag, kind) {
-    toast(body);
-    if (PR.sound !== 'off') { alertBeep(); try { navigator.vibrate && navigator.vibrate(kind === 'liqN' || kind === 'liq' || kind === 'sl' ? [120, 60, 120, 60, 120] : [200, 100, 200]); } catch {} }
-    if (!(window.VortexPush && VortexPush.on)) sysNotify(title, body, tag); // con los avisos de app cerrada encendidos la notificación del sistema la manda el servidor (misma etiqueta, sin duplicados)
+    appAlert(body, title, body, tag, {vib: kind === 'liqN' || kind === 'liq' || kind === 'sl' ? [120, 60, 120, 60, 120] : [200, 100, 200], noSys: !!(window.VortexPush && VortexPush.on)}); // con los avisos de app cerrada encendidos la notificación del sistema la manda el servidor (misma etiqueta, sin duplicados)
   }
 });
 if (window.CCTTradeWatch && CCTTradeWatch.onChange) CCTTradeWatch.onChange(() => renderWatch());
-setInterval(() => { if (!document.hidden) indAlertTick(); }, 15000);
+setInterval(() => indAlertTick(), 15000); // también con la app minimizada: así el aviso sale a su hora y no todos juntos al volver
 setTimeout(indAlertTick, 4000);
 
 /* Diálogo "Alerta con indicador" */
@@ -1368,6 +1405,7 @@ async function loadCandles(silent = false) {
     if (e.name === 'AbortError') return false;
     if (!silent && srcOf(sym) === 'dom') { setFeedback(e.message || 'Sin datos de dominancia'); render(); return; }
     if (!silent) { setFeedback(`No se pudieron cargar las velas de ${SOURCES[srcOf(sym)] || 'Binance'}${srcOf(sym) !== 'binance' ? ' ni de Binance Spot' : ''}. No se muestran datos simulados.`); render(); }
+    if (!CONN.live) connShow('off');
   }
 }
 /* ───────── Repetición de mercado (replay): eliges un punto del pasado y las velas avanzan una a una, como en vivo ───────── */
@@ -1431,7 +1469,35 @@ function replayBar() {
   document.addEventListener('keydown', e => { if (!replay || /input|textarea|select/i.test((e.target.tagName || ''))) return; if (e.key === ' ') { e.preventDefault(); replayPlay(); } else if (e.key === 'ArrowRight' && e.shiftKey) { e.preventDefault(); replayStep(1); } else if (e.key === 'Escape') replayExit(true); });
   const b = $('#replayBtn'); if (b) b.addEventListener('click', replayStart);
 }
-function setLive(on) { $('#liveDot').classList.toggle('on', !!on); }
+function setLive(on) { $('#liveDot').classList.toggle('on', !!on); connLive(!!on); }
+/* ───────── Aviso de conexión en vivo ─────────
+   Naranja «Conectando…» mientras todavía no llega el precio real; verde «En vivo» un momento cuando conecta (y se va);
+   rojo «Sin conexión» si no hay internet o el exchange no responde. Ya en vivo no se queda nada en pantalla. (Se puede apagar en Ajustes) */
+const CONN = {st: '', live: false, waitT: 0, offT: 0, hideT: 0, seen: false};
+function connEl() {
+  let el = $('#connPill'); if (el) return el; const ca = $('#chartArea'); if (!ca) return null;
+  el = document.createElement('div'); el.id = 'connPill'; el.hidden = true; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); el.innerHTML = '<i></i><span></span>'; ca.appendChild(el); return el;
+}
+function connShow(st) {
+  const el = connEl(); if (!el) return; clearTimeout(CONN.hideT); CONN.st = st;
+  if (PR.conn === 'off') { el.hidden = true; return; }
+  const txt = {wait: '<span class="cp-dots">Conectando</span>', live: 'En vivo', off: navigator.onLine === false ? 'Sin internet · reconectando' : 'Sin conexión · reintentando'}[st];
+  el.className = st; el.querySelector('span').outerHTML = `<span>${txt}</span>`; el.hidden = false; CONN.seen = true;
+  if (st === 'live') CONN.hideT = setTimeout(() => { el.hidden = true; CONN.st = ''; }, 1700);
+}
+function connLive(on) {
+  clearTimeout(CONN.waitT); clearTimeout(CONN.offT);
+  if (on) { const was = CONN.live; CONN.live = true; if (!was && CONN.st && CONN.st !== 'live') connShow('live'); return; }
+  CONN.live = false;
+  if (navigator.onLine === false) { connShow('off'); return; }
+  CONN.waitT = setTimeout(() => { if (!CONN.live) connShow('wait'); }, CONN.seen ? 1500 : 0); // un parpadeo de la conexión no muestra nada
+  CONN.offT = setTimeout(() => { if (!CONN.live) connShow('off'); }, 14000);
+}
+function connPaint() { const el = $('#connPill'); if (!el) return; if (PR.conn === 'off') el.hidden = true; else if (!CONN.live && CONN.st) connShow(CONN.st); }
+addEventListener('offline', () => { CONN.live = false; connShow('off'); });
+addEventListener('online', () => { if (!CONN.live) connShow('wait'); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !CONN.live && CONN.st !== 'off') connShow('wait'); });
+setTimeout(() => { if (!CONN.live && !CONN.st) connLive(false); }, 0); // al abrir la app: «Conectando…» hasta que llegue el primer precio real
 function closeWS() { wsGen++; wsOpen = false; clearInterval(wsPing); if (ws) { ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null; try { ws.close(); } catch {} } ws = null; setLive(false); }
 let wsLast = 0, wsReloadAt = 0; // último dato en vivo recibido / última recarga del vigilante
 let tradeBuf = null, tradeT = 0, tradeLastT = 0, tradeLastP = 0;
@@ -1448,11 +1514,11 @@ function connectWS() {
   const ls = sym.toLowerCase(), url = by ? `wss://stream.bybit.com/v5/public/${src === 'bybitf' ? 'linear' : 'spot'}` : ok ? 'wss://ws.okx.com:8443/ws/v5/business' : src === 'binancef' ? `wss://fstream.binance.com/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade` : `wss://stream.binance.com:9443/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade`; // vela + cada operación (aggTrade): el precio se mueve en vivo, no cada 2 s
   tradeBuf = null; tradeLastT = 0; tradeLastP = 0;
   try { ws = new WebSocket(url); } catch { return; }
-  ws.onopen = () => { if (gen === wsGen) { wsOpen = true; wsRetry = 0; setLive(true);
+  ws.onopen = () => { if (gen === wsGen) { wsOpen = true; wsRetry = 0; $('#liveDot').classList.add('on');
     if (by) { ws.send(JSON.stringify({op: 'subscribe', args: [`kline.${BY_IV[tf]}.${sym}`, `publicTrade.${sym}`]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send(JSON.stringify({op: 'ping'})); } catch {} }, 20000); }
     if (ok) { ws.send(JSON.stringify({op: 'subscribe', args: [{channel: 'candle' + OKX_BAR[tf], instId: dashPair(sym) + (src === 'okxf' ? '-SWAP' : '')}]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send('ping'); } catch {} }, 20000); } } };
   ws.onmessage = e => {
-    if (gen !== wsGen) return; wsLast = Date.now();
+    if (gen !== wsGen) return; wsLast = Date.now(); if (!CONN.live) setLive(true); // llegó el primer precio real
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (by) { if (m && typeof m.topic === 'string' && m.topic.startsWith('publicTrade.') && Array.isArray(m.data)) { for (const q of m.data) pushTrade(+q.p, +q.v, +q.T); return; } const d = m && typeof m.topic === 'string' && m.topic.startsWith('kline.') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d.start, o: +d.open, h: +d.high, l: +d.low, c: +d.close, v: +d.volume}); return; }
     if (ok) { const d = m && m.arg && /^candle/.test(m.arg.channel || '') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}); return; }
@@ -1496,7 +1562,7 @@ function recalcSoon(force) {
    En modo Ligero (o con «reducir movimiento») el precio salta directo como siempre. Las alertas usan siempre el dato real. */
 function liveGlideStop() { if (!liveGlide) return; cancelAnimationFrame(liveGlide.raf); const n = candles.length, L = liveGlide; liveGlide = null; if (n && candles[n - 1].t === L.t) candles[n - 1] = L.k; }
 function liveGlideStart(k, last) {
-  if (REDUCED || liteMode() || document.hidden || currentView !== 'chartView' || !Number.isFinite(last.c) || last.c === k.c) { liveGlideStop(); return false; }
+  if (REDUCED || document.hidden || currentView !== 'chartView' || !Number.isFinite(last.c) || last.c === k.c) { liveGlideStop(); return false; }
   const from = last.c; if (liveGlide) cancelAnimationFrame(liveGlide.raf);
   const L = liveGlide = {t: k.t, k, from, to: k.c, t0: performance.now(), raf: 0}, D = 170;
   candles[candles.length - 1] = {...k, c: from};
@@ -1854,7 +1920,7 @@ document.addEventListener('click', e => {
   const cv = e.target.closest('[data-pine-conv]'); if (cv) { const x = scripts.find(y => y.id === cv.dataset.pineConv); if (x && window.CCTConvert) { closeSheet(); if (!candles.length) { toast('Abre un gráfico y espera a que carguen las velas'); return; } CCTConvert.open(x.code, x.name, {replaceId: x.id}); } return; }
   const v = e.target.closest('[data-ib-view]'); if (v) { viewScriptId = v.dataset.ibView; openSheet('script'); return; }
   const fl = e.target.closest('[data-ib-file]'); if (fl) { $('#scriptFile').click(); return; }
-  const d = e.target.closest('[data-ib-del]'); if (d) { const x = scripts.find(y => y.id === d.dataset.ibDel); if (x && confirm(`¿Eliminar «${x.name}» de tus indicadores?`)) { scripts = scripts.filter(y => y.id !== x.id); state.pine = state.pine.filter(q => q.sid !== x.id); delete pineRes[x.id]; save(); saveScripts(); renderScripts(); countIndicators(); scheduleRender(); ibRefresh(); } }
+  const d = e.target.closest('[data-ib-del]'); if (d) { const x = scripts.find(y => y.id === d.dataset.ibDel); if (x) vxAsk({title: '¿Eliminar este indicador?', text: `«${x.name}» se quita de tus indicadores.`, ok: 'Eliminar', danger: true, always: true}).then(y => { if (!y) return; scripts = scripts.filter(y2 => y2.id !== x.id); state.pine = state.pine.filter(q => q.sid !== x.id); delete pineRes[x.id]; save(); saveScripts(); renderScripts(); countIndicators(); scheduleRender(); ibRefresh(); }); }
 });
 function ibRefresh() { const sl = $('#sheetList'); if (sheetMode !== 'indicators' || !sl || !$('#sheet').classList.contains('open')) return; const l = sl.querySelector('.ib-list'), y = l ? l.scrollTop : 0; sl.innerHTML = indBrowser(); const n = sl.querySelector('.ib-list'); if (n) n.scrollTop = y; }
 function syncLiqBtn() { const b = $('#liqBtn'); if (!b) return; const on = !!state.indicators.liqmap; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }
@@ -2767,7 +2833,7 @@ document.addEventListener('click', e => {
   if (k === 'clone') { sbClone(); closePop(); return; } if (k === 'copy') { sbCopy(); closePop(); return; } if (k === 'paste') { sbPaste(); closePop(); return; }
   if (k === 'front') { sbOrder(true); closePop(); return; } if (k === 'back') { sbOrder(false); closePop(); return; } if (k === 'hide') { closePop(); sbHide(); return; }
   if (k === 'undo') undoDrawing(); else if (k === 'redo') redoDrawing();
-  else if (k === 'clear') { closePop(); if (!getDrawings().length) return toast('No hay dibujos'); if (confirm('¿Borrar todos los dibujos de este gráfico? (Ctrl+Z los recupera)')) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); } }
+  else if (k === 'clear') { closePop(); if (!getDrawings().length) return toast('No hay dibujos'); vxAsk({title: '¿Borrar todos los dibujos?', text: 'Se quitan de este gráfico. Ctrl+Z los recupera.', ok: 'Borrar todo', danger: true, always: true}).then(y => { if (y) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); } }); }
 });
 document.addEventListener('change', e => { const i = e.target.closest('#selPop input[type=color]'); if (!i) return; if (window.CCTColors && CCTColors.add(i.value) === true) selPopMineRefresh(); /* «Otro color» se suma solo a Mis colores: así sale en todas las paletas */ if (i.hasAttribute('data-pc-in')) sbSetColor(i.value); else if (i.hasAttribute('data-ptc-in')) patchD({tc: i.value}); else if (i.hasAttribute('data-pgc-in')) patchD({gc: i.value}); else if (i.hasAttribute('data-prc-in')) patchD({rc: i.value}); else if (i.hasAttribute('data-opc-in')) dApplyCol(i.value); });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'sbTxt') { e.preventDefault(); sbEditText(e.target.value); } else if (e.key === 'Enter' && e.target.id === 'sbPrice') { e.preventDefault(); document.querySelector('#selPop [data-sb="priceok"]').click(); } });
@@ -2793,7 +2859,7 @@ const lastOf = gr => (railLast[gr.id] && gr.tools.some(t => t[0] === railLast[gr
 const RAIL_OPTS = [['tree', 'Árbol de objetos: dibujos e indicadores, adelante o atrás', IC.tree], ['magnet', 'Imán: ajusta a máximo, mínimo, apertura y cierre', IC.magnet], ['stay', 'Mantener la herramienta activa después de dibujar', IC.keep], ['lock', 'Bloquear dibujos (no se seleccionan ni se mueven)', IC.lock], ['hide', 'Ver u ocultar dibujos e indicadores', IC.eye], ['clear', 'Borrar dibujos o indicadores', IC.trash]];
 function buildRail() {
   const rail = $('#toolRail'); if (!rail) return;
-  rail.innerHTML = `<button class="rail-btn grp" data-rail="cursor" title="Cursor (Esc)" aria-label="Cursor">${SV(CURSOR_IC[cstyle().cursor] || CURSOR_IC.Cruz)}<i class="caret" data-curfly="1" title="Elegir cursor: cruz, flecha o estrella"></i></button><div class="rail-sep"></div>`
+  rail.innerHTML = `<button class="rail-btn grp" data-rail="cursor" title="Cursor (Esc)" aria-label="Cursor">${SV(CURSOR_IC[effCursor()] || CURSOR_IC.Cruz)}<i class="caret" data-curfly="1" title="Elegir cursor: cruz, flecha o estrella"></i></button><div class="rail-sep"></div>`
     + (FAVS.length ? favTools().map(t => `<button class="rail-btn fav" data-ftool="${t[0]}" title="${esc(t[1])} (favorito)" aria-label="${esc(t[1])}">${SV(t[3])}</button>`).join('') + `<div class="rail-sep"></div>` : '')
     + TOOL_GROUPS.map(gr => { const t = toolOf(lastOf(gr)); return `<button class="rail-btn grp" data-group="${gr.id}" data-last="${t[0]}" title="${esc(t[1])}" aria-label="${esc(gr.name)}">${SV(t[3])}<i class="caret" data-fly="${gr.id}" title="${esc(gr.name)}: ver todas"></i></button>`; }).join('')
     + `<div class="rail-spacer"></div><div class="rail-sep"></div>`
@@ -2823,17 +2889,22 @@ function openFly(id, btn) {
   const r = btn.getBoundingClientRect(); f.style.left = (r.right + 6) + 'px'; f.style.top = Math.max(8, Math.min(innerHeight - f.offsetHeight - 8, r.top)) + 'px';
 }
 const CURSOR_IC = {Cruz: '<path d="M12 3v7M12 14v7M3 12h7M14 12h7"/>', Flecha: IC.cursor, Estrella: '<path d="M12 3c.6 4.6 1.4 5.4 6 6-4.6.6-5.4 1.4-6 6-.6-4.6-1.4-5.4-6-6 4.6-.6 5.4-1.4 6-6z"/><path d="M18.5 15.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z"/>'};
-const CURSOR_TXT = {Cruz: ['Cruz', 'Retícula con líneas de precio y tiempo'], Flecha: ['Flecha', 'Puntero normal, sin líneas'], Estrella: ['Estrella', 'Estrella galáctica que deja estela al mantener presionado']};
+CURSOR_IC['Órbita'] = '<circle cx="12" cy="12" r="1.4" fill="currentColor"/><ellipse cx="12" cy="12" rx="8.5" ry="3.2" transform="rotate(-24 12 12)"/><circle cx="19" cy="8.6" r="1.3" fill="currentColor"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2" opacity=".6"/>';
+const CURSOR_TXT = {Cruz: ['Cruz', 'Retícula con líneas de precio y tiempo'], Flecha: ['Flecha', 'Puntero normal, sin líneas'], Estrella: ['Estrella', 'Estrella galáctica que deja estela al mantener presionado'], 'Órbita': ['Órbita', 'Anillo planetario con una lunita que gira; al presionar se enfoca y suelta una onda']};
+/* El cursor que se ve: el que elegiste; si no elegiste ninguno, el del estilo (Espacial = Estrella, los demás = Cruz) */
+const cursorPicked = () => !!(state.chartStyle && CURSOR_MODES.includes(state.chartStyle.cursor));
+const effCursor = () => cursorPicked() ? state.chartStyle.cursor : (window.VXTheme && VXTheme.get() === 'espacial' ? 'Estrella' : 'Cruz');
+window.CCT_cursorPicked = cursorPicked;
 let curModeShown = '';
 function syncCursorMode(m) { // aplica el tipo de cursor al gráfico (clases CSS + lienzo de la estrella) y al botón de la barra izquierda
   m = CURSOR_MODES.includes(m) ? m : 'Cruz'; if (m === curModeShown) return; curModeShown = m;
   try { window.CCTStarCursor && CCTStarCursor.setMode(m); } catch {}
   const b = document.querySelector('#toolRail [data-rail="cursor"]'); if (b) { const old = b.querySelector('svg'); if (old) old.outerHTML = SV(CURSOR_IC[m]); b.title = `Cursor: ${CURSOR_TXT[m][0]} (Esc)`; }
 }
-function setCursorMode(m) { if (!CURSOR_MODES.includes(m)) return; state.chartStyle = sanChartStyle(Object.assign({}, state.chartStyle || {}, {cursor: m})); if (m === 'Cruz') delete state.chartStyle.cursor; save(); cancelTool(); syncCursorMode(m); scheduleRender(); toast(`Cursor: ${CURSOR_TXT[m][0]}`); }
+function setCursorMode(m) { if (!CURSOR_MODES.includes(m)) return; state.chartStyle = sanChartStyle(Object.assign({}, state.chartStyle || {}, {cursor: m})); save(); cancelTool(); curModeShown = ''; syncCursorMode(m); scheduleRender(); try { renderCustom(); } catch {} toast(`Cursor: ${CURSOR_TXT[m][0]}`); } // se guarda aunque sea «Cruz»: así en el estilo Espacial también puedes cambiar la estrella
 function openCurFly(btn) {
   const old = $('#railFly'); if (old) { const same = old.dataset.g === 'cursor'; if (same) { uxOut(old); return; } old.remove(); }
-  const cur = cstyle().cursor || 'Cruz', f = document.createElement('div'); f.id = 'railFly'; f.className = 'rail-fly'; f.dataset.g = 'cursor';
+  const cur = effCursor(), f = document.createElement('div'); f.id = 'railFly'; f.className = 'rail-fly'; f.dataset.g = 'cursor';
   f.innerHTML = `<h4>Cursor</h4>` + CURSOR_MODES.map(k => `<button data-cur="${k}" title="${esc(CURSOR_TXT[k][1])}" class="${cur === k ? 'on' : ''}"><span class="ti">${SV(CURSOR_IC[k], 20)}</span><span class="tn">${esc(CURSOR_TXT[k][0])}<small class="cur-sub">${esc(CURSOR_TXT[k][1])}</small></span></button>`).join('');
   document.body.appendChild(f);
   const r = btn.getBoundingClientRect(); f.style.left = (r.right + 6) + 'px'; f.style.top = Math.max(8, Math.min(innerHeight - f.offsetHeight - 8, r.top)) + 'px';
@@ -2953,7 +3024,7 @@ function setFavBar(show) { FB.show = !!show; syncUi(); renderFavBar(); toast(FB.
 }
 function clearAllDrawings() {
   if (!getDrawings().length) { toast('No hay dibujos en este gráfico'); return; }
-  if (confirm('¿Borrar todos los dibujos de este gráfico? (Ctrl+Z los recupera)')) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); }
+  vxAsk({title: '¿Borrar todos los dibujos?', text: 'Se quitan de este gráfico. Ctrl+Z los recupera.', ok: 'Borrar todo', danger: true, always: true}).then(y => { if (y) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); } });
 }
 const OPT_MSG = {magnet: ['Imán desactivado', 'Imán activado: se ajusta a máximos, mínimos y cierres'], stay: ['La herramienta se desactiva tras dibujar', 'Herramienta fija: sigue activa tras dibujar'], lock: ['Dibujos desbloqueados', 'Dibujos bloqueados: no se pueden seleccionar'], hide: ['Dibujos visibles', 'Dibujos ocultos']};
 function toggleOpt(k) {
@@ -3259,9 +3330,9 @@ let raf = 0;
 const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 let glideRaf = 0, glideT = null, inertiaRaf = 0;
 function stopMotion() { cancelAnimationFrame(glideRaf); cancelAnimationFrame(inertiaRaf); glideRaf = inertiaRaf = 0; glideT = null; }
-const liteMode = () => document.documentElement.classList.contains('vx-lite'); // Modo ligero: zoom y desplazamiento directos (menos cuadros que dibujar)
+const liteMode = () => document.documentElement.classList.contains('vx-lite'); // Modo ligero: sin cristal ni fondo animado. El gráfico se mueve igual de fluido (a la frecuencia de tu pantalla, hasta 120 Hz) en cualquier modo
 function glide(t) { // t = {visible?, pan?}: se acerca al objetivo con suavizado exponencial
-  if (REDUCED || liteMode()) { if (t.visible != null) visible = t.visible; if (t.pan != null) pan = t.pan; render(); return; }
+  if (REDUCED) { if (t.visible != null) visible = t.visible; if (t.pan != null) pan = t.pan; render(); return; }
   cancelAnimationFrame(inertiaRaf); glideT = Object.assign(glideT || {}, t); if (glideRaf) return;
   let last = performance.now();
   const step = now => {
@@ -3273,7 +3344,7 @@ function glide(t) { // t = {visible?, pan?}: se acerca al objetivo con suavizado
   glideRaf = requestAnimationFrame(step);
 }
 function inertia(v) { // v en velas/ms; se frena con fricción
-  if (REDUCED || liteMode() || Math.abs(v) < .004) return; cancelAnimationFrame(inertiaRaf); let last = performance.now();
+  if (REDUCED || Math.abs(v) < .004) return; cancelAnimationFrame(inertiaRaf); let last = performance.now();
   const step = now => { const dt = Math.min(48, now - last); last = now; pan += v * dt; v *= Math.pow(.0035, dt / 1000);
     render(); if (Math.abs(v) > .0015) inertiaRaf = requestAnimationFrame(step); else inertiaRaf = 0; };
   inertiaRaf = requestAnimationFrame(step);
@@ -3858,11 +3929,14 @@ function renderCore() {
   if (ly > plotTop && ly < plotTop + plotH) {
     const col = lastC.c >= lastC.o ? up : down;
     g.strokeStyle = col; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(left, ly); g.lineTo(w - right + 2, ly); g.stroke(); g.setLineDash([]);
-    g.fillStyle = col; g.fillRect(w - right + 2, ly - 9, right - 3, 18); g.fillStyle = txtOn(col); g.fillText(fmt(lastC.c), w - right + 5, ly + 3.5);
-    // tiempo que falta para que cierre la vela actual (texto pequeño debajo del precio)
-    const cd = candleCountdown(lastC); if (cd != null && ly + 9 + 14 < plotTop + plotH + 14) {
+    /* UNA sola etiqueta de precio (la que se mueve en vivo). La cuenta atrás de la vela va DENTRO de la misma etiqueta, en una segunda línea
+       más chica del mismo color (antes era una segunda cajita más oscura debajo y parecía otra etiqueta de precio que iba más lenta). */
+    const cd = PR.cd === 'off' ? null : candleCountdown(lastC), two = cd != null && ly + 22 < plotTop + plotH + 14, th = two ? 30 : 18, ty0 = ly - 9;
+    g.fillStyle = col; if (g.roundRect) { g.beginPath(); g.roundRect(w - right + 2, ty0, right - 3, th, 3); g.fill(); } else g.fillRect(w - right + 2, ty0, right - 3, th);
+    g.fillStyle = txtOn(col); g.fillText(fmt(lastC.c), w - right + 5, ly + 3.5);
+    if (two) {
       const f0 = g.font; g.font = '9.5px system-ui'; let tx = fmtCountdown(cd, true); if (g.measureText(tx).width > right - 8) tx = fmtCountdown(cd, false);
-      g.globalAlpha = .55; g.fillStyle = col; g.fillRect(w - right + 2, ly + 9, right - 3, 13); g.globalAlpha = 1; g.fillStyle = txtOn(col); g.textAlign = 'center'; g.fillText(tx, w - right + 2 + (right - 3) / 2, ly + 19); g.textAlign = 'left'; g.font = f0;
+      g.globalAlpha = .78; g.textAlign = 'left'; g.fillText(tx, w - right + 5, ly + 16.5); g.globalAlpha = 1; g.font = f0;
     }
   }
   if (vpvr) drawVPVRTags(vpvr); // etiquetas de POC / VAH / VAL en la escala de precios
@@ -4913,7 +4987,7 @@ function rzApply() {
 function rzLoop() {
   cancelAnimationFrame(rzRaf); let last = performance.now();
   const step = now => { if (!rz) { rzRaf = 0; return; } const dt = Math.min(48, now - last); last = now;
-    const k = REDUCED || liteMode() ? 1 : 1 - Math.pow(.00002, dt / 1000);
+    const k = REDUCED ? 1 : 1 - Math.pow(.00002, dt / 1000);
     rz.fx += (rz.tx - rz.fx) * k; rz.fy += (rz.ty - rz.fy) * k; rzApply();
     const settled = Math.abs(rz.tx - rz.fx) < 1e-4 && Math.abs(rz.ty - rz.fy) < 1e-4;
     if (rz.done && settled) { rzEnd(true); return; } rzRaf = requestAnimationFrame(step); };
@@ -5049,7 +5123,7 @@ function openDesigns() {
     else if (a === 'apply' && d) { applyDesign(d); close(); toast('Plantilla aplicada: ' + d.name); }
     else if (a === 'upd' && d) { if (!confirm(`¿Reemplazar «${d.name}» con el gráfico actual?`)) return; designsOp({op: 'upd', id, snap: designSnap()}); refresh(); toast('Plantilla actualizada'); }
     else if (a === 'ren' && d) { const n = (prompt('Nombre de la plantilla:', d.name) || '').trim(); if (!n) return; designsOp({op: 'ren', id, name: n}); refresh(); }
-    else if (a === 'del' && d) { if (!confirm(`¿Borrar la plantilla «${d.name}»?`)) return; designsOp({op: 'del', id}); refresh(); }
+    else if (a === 'del' && d) { vxAsk({title: '¿Borrar esta plantilla?', text: `«${d.name}»`, ok: 'Borrar', danger: true, always: true}).then(y => { if (y) { designsOp({op: 'del', id}); refresh(); } }); }
   });
 }
 { const b = $('#designsBtn'); if (b) b.onclick = openDesigns; }
@@ -5138,7 +5212,7 @@ renderAcct();
 /* ───────── Configuración: preferencias, notificaciones y acerca de ───────── */
 function setPref(k, v, sub) { // guarda una preferencia, la manda a la cuenta y repinta lo que depende de ella
   const n = JSON.parse(JSON.stringify(PR)); if (sub) n.n[k] = v; else n[k] = v; PR = CCTPrefs.sanitize(n);
-  syncUi(); renderPrefs(); try { render(); renderWatch(); updateChartHeader(); renderAlerts(); renderMoveAlerts(); } catch {}
+  syncUi(); renderPrefs(); try { renderCustom(); } catch {} try { render(); renderWatch(); updateChartHeader(); renderAlerts(); renderMoveAlerts(); } catch {}
   if (sub && k === 'discord') { try { window.CCTBotLabSave && CCTBotLabSave(); } catch {} try { window.CCTPushSync && CCTPushSync(); } catch {} } // el cambio llega al servidor y a los bots enseguida
 }
 function renderPrefs() {
@@ -5158,26 +5232,50 @@ function renderPrefs() {
   const soundOn = PR.sound !== 'off', ico = (c, d) => `<span class="sg-ic" style="--c:${c}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg></span>`;
   const irow = (ic, t, sm, ctl, cls) => `<div class="pref-row${cls ? ' ' + cls : ''}">${ic}<div class="pref-l"><b>${t}</b>${sm ? `<small>${sm}</small>` : ''}</div><div class="pref-c">${ctl}</div></div>`;
   const tg = (id, on, t) => `<button type="button" class="toggle${on ? ' on' : ''}" data-sw="${id}" role="switch" aria-checked="${!!on}" aria-label="${t}"></button>`;
+  const tg2 = (id, on, t) => `<button type="button" class="toggle${on ? ' on' : ''}" data-sw2="${id}" role="switch" aria-checked="${!!on}" aria-label="${t}"></button>`; // preferencias «on/off» de primer nivel
   const mOn = window.VortexPush ? VortexPush.master : soundOn, M = state.moveAlerts || {on: true, pct: 2}, S = state.scrPush || {};
   const near = MOVE_LEVELS.reduce((a, l) => Math.abs(l[0] - M.pct) < Math.abs(a[0] - M.pct) ? l : a), sub = 'pref-sub';
-  nb.innerHTML = `<div class="pref-list">`
-    + irow(ico('#f5a623', '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), 'Tono', 'El sonido de tus avisos', `<select class="pref-sel" data-pk="tone" aria-label="Tono" ${mOn ? '' : 'disabled'}>${CCTPrefs.TONES.map(([v, t]) => `<option value="${v}" ${PR.tone === v ? 'selected' : ''}>${t}</option>`).join('')}</select><button type="button" class="pref-play" data-play aria-label="Probar sonido" title="Probar sonido"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg></button>`, mOn ? '' : 'off')
-    + `</div><div class="sg-label">Qué te avisamos</div>${mOn ? '' : '<p class="small-note nt-hint">Enciende «Activar notificaciones» para recibir estos avisos.</p>'}<div class="pref-list${mOn ? '' : ' nt-off'}">`
-    + irow(ico('#548fff', '<path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>'), 'Alertas de precio', 'Cuando el precio toca tu nivel', tg('price', PR.n.price, 'Alertas de precio'))
-    + irow(ico('#b07cff', '<path d="M5 4v16M5 14c3-6 6 2 9-4s4-2 5-3"/>'), 'Alertas de indicador', 'Señales de tus indicadores, también con la app cerrada (al cerrar la vela; puede tardar unos minutos)', tg('ind', PR.n.ind, 'Alertas de indicador'))
-    + irow(ico('#f5b942', '<path d="M3 17l6-6 4 4 8-8"/><circle cx="21" cy="7" r="1.6" fill="currentColor"/><path d="M3 21h18"/>'), 'Mis trades abiertos', 'Ganancia o pérdida, cerca de TP, SL o liquidación, regreso a la entrada y tus niveles. Solo con trades abiertos', tg('trade', PR.n.trade !== false, 'Mis trades abiertos'))
-    + (PR.n.trade !== false ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Avisar cada', 'Escalón de ganancia o pérdida sobre tu margen (ROE, como lo muestra el exchange)', `<select id="tradeStep" class="pref-sel" aria-label="Avisar cada">${(window.CCTTradeWatch ? CCTTradeWatch.STEPS : [10]).map(v => `<option value="${v}" ${(window.CCTTradeWatch ? CCTTradeWatch.step() : 10) === v ? 'selected' : ''}>±${v} %</option>`).join('')}</select>`, sub) : '')
-    + irow(ico('#7c87ff', '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/>'), 'Mis bots (Nova Bot Lab)', 'Cuando un bot encendido compra, vende o cierra, también con la app cerrada', tg('bots', PR.n.bots !== false, 'Mis bots'))
-    + irow(ico('#f06b79', '<path d="M3 12h4l2-6 4 12 2-6h6"/>'), 'Movimientos bruscos', 'Sube o cae fuerte en minutos · top 5 (BTC, ETH, BNB, XRP, SOL)', tg('move', !!M.on, 'Movimientos bruscos'))
-    + (M.on ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Sensibilidad', `También avisa si pasa ±${(M.pct * 2.5).toFixed(M.pct * 2.5 % 1 ? 1 : 0)} % en 1 hora`, `<select id="moveLvl" class="pref-sel" aria-label="Sensibilidad">${MOVE_LEVELS.map(l => `<option value="${l[0]}" ${l[0] === near[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select>`, sub) : '')
-    + irow(ico('#c084fc', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7.5"/>'), 'Grandes oportunidades', 'Nexus Pixel revisa el Screener cada hora, filtra, lo confirma con IA y aprende de los resultados', tg('radar', !!(window.CCTRadar && CCTRadar.on()), 'Grandes oportunidades'))
-    + irow(ico('#20bf9f', '<path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M7 15l3-4 3 2 4-5"/>'), 'Señales del Screener', 'LONG, SHORT y RANGO del top 50 por volumen', tg('scr', !!S.on, 'Señales del Screener'))
-    + (S.on ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Temporalidad 1 hora', 'Al empezar cada hora', tg('scrH1', S.h1 !== false, 'Señales de 1 hora'), sub)
-      + irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Temporalidad 4 horas', 'Cada 4 horas', tg('scrH4', S.h4 !== false, 'Señales de 4 horas'), sub) : '')
-    + `</div><div class="sg-label">Discord</div><div class="pref-list">`
-    + `<button type="button" class="pref-row pref-link" id="alDiscord">${ico('#7c87ff', '<path d="M8 8.5c2.5-1 5.5-1 8 0M7.5 16c3 1.2 6 1.2 9 0"/><circle cx="9.5" cy="12.5" r="1"/><circle cx="14.5" cy="12.5" r="1"/>')}<div class="pref-l"><b>Servidor Nova Nexus</b><small>Unirte y elegir tu canal</small></div><div class="pref-c"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></div></button>`
-    + irow(ico('#7c87ff', '<path d="M4 12h12M12 6l6 6-6 6"/>'), 'Enviar avisos a Discord', 'También llegan al canal #vortex de Nova Nexus', tg('discord', PR.n.discord, 'Enviar avisos a Discord'))
-    + dcPrefRows(irow)
+  /* Avisos, en tres pasos que se despliegan: 1) activar (arriba, push.js) → 2) qué te avisamos → 3) dónde (VORTEX o Discord).
+     Cada tipo de aviso se enciende UNA vez aquí; en Discord solo se filtra cuáles de esos van también para allá. */
+  const D0 = (() => { try { return (window.CCT_discordStore && CCT_discordStore.get()) || {}; } catch { return {}; } })(), dOn = D0.on || {}, dc = !!PR.n.discord, appOn = PR.n.app !== false;
+  const step = (n, t, sm) => `<div class="nt-step"><span class="nt-num">${n}</span><div><b>${t}</b>${sm ? `<small>${sm}</small>` : ''}</div></div>`;
+  const KINDS = [['price', 'Alertas de precio', PR.n.price !== false], ['ind', 'Alertas de indicador', PR.n.ind !== false], ['move', 'Movimientos bruscos', !!M.on], ['bots', 'Mis bots', PR.n.bots !== false]];
+  const dcKinds = KINDS.filter(k => k[2]);
+  const qq = PR.quiet || {on: false, from: '23:00', to: '07:00'};
+  nb.innerHTML = !mOn ? `<div class="nt-closed"><p>Enciende <b>Activar notificaciones</b> y aquí se despliegan las opciones: qué quieres que te avisemos y dónde (en VORTEX o en Discord).</p>${dc ? '<small>Discord sigue recibiendo tus avisos aunque este dispositivo tenga las notificaciones apagadas.</small>' : ''}</div>`
+    : `<div class="nt-reveal">`
+    + step(1, 'Qué te avisamos', 'Elige una sola vez qué avisos quieres recibir')
+    + `<div class="pref-list">`
+    + irow(ico('#548fff', '<path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>'), 'Alertas de precio', 'Cuando el precio toca tu nivel', tg('price', PR.n.price !== false, 'Alertas de precio'))
+    + irow(ico('#b07cff', '<path d="M5 4v16M5 14c3-6 6 2 9-4s4-2 5-3"/>'), 'Alertas de indicador', 'Señales de tus indicadores al cerrar la vela', tg('ind', PR.n.ind !== false, 'Alertas de indicador'))
+    + irow(ico('#f5b942', '<path d="M3 17l6-6 4 4 8-8"/><circle cx="21" cy="7" r="1.6" fill="currentColor"/><path d="M3 21h18"/>'), 'Mis trades abiertos', 'Ganancia, pérdida, TP, SL y liquidación de tus posiciones', tg('trade', PR.n.trade !== false, 'Mis trades abiertos'))
+    + (PR.n.trade !== false ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Avisar cada', 'Escalón de ganancia o pérdida (ROE)', `<select id="tradeStep" class="pref-sel" aria-label="Avisar cada">${(window.CCTTradeWatch ? CCTTradeWatch.STEPS : [10]).map(v => `<option value="${v}" ${(window.CCTTradeWatch ? CCTTradeWatch.step() : 10) === v ? 'selected' : ''}>±${v} %</option>`).join('')}</select>`, sub + ' nt-in') : '')
+    + irow(ico('#7c87ff', '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/>'), 'Mis bots', 'Cuando un bot de Nova Bot Lab compra, vende o cierra', tg('bots', PR.n.bots !== false, 'Mis bots'))
+    + irow(ico('#f06b79', '<path d="M3 12h4l2-6 4 12 2-6h6"/>'), 'Movimientos bruscos', 'Sube o cae fuerte en minutos · BTC, ETH, BNB, XRP y SOL', tg('move', !!M.on, 'Movimientos bruscos'))
+    + (M.on ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Sensibilidad', `También avisa si pasa ±${(M.pct * 2.5).toFixed(M.pct * 2.5 % 1 ? 1 : 0)} % en 1 hora`, `<select id="moveLvl" class="pref-sel" aria-label="Sensibilidad">${MOVE_LEVELS.map(l => `<option value="${l[0]}" ${l[0] === near[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select>`, sub + ' nt-in') : '')
+    + irow(ico('#c084fc', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7.5"/>'), 'Grandes oportunidades', 'Nexus Pixel revisa el Screener, lo confirma con IA y te avisa', tg('radar', !!(window.CCTRadar && CCTRadar.on()), 'Grandes oportunidades'))
+    + irow(ico('#20bf9f', '<path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M7 15l3-4 3 2 4-5"/>'), 'Señales del Screener', 'LONG, SHORT y RANGO del top 50', tg('scr', !!S.on, 'Señales del Screener'))
+    + (S.on ? `<div class="pref-row pref-sub nt-in"><span class="sg-ic pref-ind" aria-hidden="true"></span><div class="pref-l"><b>Temporalidades</b><small>Al empezar cada hora y cada 4 horas</small></div><div class="pref-c nt-chips"><button type="button" class="nt-chip${S.h1 !== false ? ' on' : ''}" data-sw="scrH1" aria-pressed="${S.h1 !== false}">1h</button><button type="button" class="nt-chip${S.h4 !== false ? ' on' : ''}" data-sw="scrH4" aria-pressed="${S.h4 !== false}">4h</button></div></div>` : '')
+    + `</div>`
+    + step(2, 'Sonido', 'Cómo suenan tus avisos')
+    + `<div class="pref-list">`
+    + irow(ico('#f5a623', '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'), 'Tono', '', `<select class="pref-sel" data-pk="tone" aria-label="Tono">${CCTPrefs.TONES.map(([v, t]) => `<option value="${v}" ${PR.tone === v ? 'selected' : ''}>${t}</option>`).join('')}</select><button type="button" class="pref-play" data-play aria-label="Probar sonido" title="Probar sonido"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg></button>`)
+    + irow(ico('#38bdf8', '<path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>'), 'Volumen', `${PR.vol || 70} %`, `<input type="range" class="nt-range" id="ntVol" min="5" max="100" step="5" value="${PR.vol || 70}" aria-label="Volumen de los avisos">`)
+    + irow(ico('#9aa7ba', '<rect x="7" y="3.5" width="10" height="17" rx="2.5"/><path d="M3.5 9v6M20.5 9v6"/>'), 'Vibración', 'En el celular', tg2('vib', PR.vib !== 'off', 'Vibración'))
+    + irow(ico('#a98bff', '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'), 'Horario sin sonido', qq.on ? `De ${qq.from} a ${qq.to}: te avisamos en silencio` : 'Silencia los avisos de noche', tg2('quiet', qq.on, 'Horario sin sonido'))
+    + (qq.on ? `<div class="pref-row pref-sub nt-in"><span class="sg-ic pref-ind" aria-hidden="true"></span><div class="pref-l"><b>Desde / hasta</b></div><div class="pref-c"><input type="time" class="nt-time" id="qFrom" value="${qq.from}" aria-label="Desde"><span class="nt-to">a</span><input type="time" class="nt-time" id="qTo" value="${qq.to}" aria-label="Hasta"></div></div>` : '')
+    + `</div>`
+    + step(3, 'Dónde te avisamos', 'Lo que elegiste arriba llega aquí')
+    + `<div class="nt-dest">`
+    + `<button type="button" class="nt-card${appOn ? ' on' : ''}" data-sw="app" aria-pressed="${appOn}"><span class="nt-card-ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19 12 4l7 15"/><path d="M8.2 12.6c2.4-1.1 5.2-1.1 7.6 0"/><path d="M18.6 3.4l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z" fill="currentColor"/></svg></span><b>VORTEX</b><small>Notificación, sonido y mensaje en la app</small><i class="nt-check" aria-hidden="true"></i></button>`
+    + `<button type="button" class="nt-card dc${dc ? ' on' : ''}" data-sw="discord" aria-pressed="${dc}"><span class="nt-card-ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8.5c2.5-1 5.5-1 8 0M7.5 16c3 1.2 6 1.2 9 0"/><path d="M8.5 6 6 6.6C4.6 9.3 4 12 4.3 15.7 6 17 7.6 17.7 9 18l1-1.7M15.5 6l2.5.6c1.4 2.7 2 5.4 1.7 9.1-1.7 1.3-3.3 2-4.7 2.3l-1-1.7"/><circle cx="9.5" cy="12.5" r="1"/><circle cx="14.5" cy="12.5" r="1"/></svg></span><b>Discord</b><small>${D0.url ? 'A tu canal conectado' : 'Al canal #vortex'}</small><i class="nt-check" aria-hidden="true"></i></button>`
+    + `</div>`
+    + (dc ? `<div class="pref-list nt-dc nt-in"><div class="pref-row"><div class="pref-l"><b>Enviar a Discord solo…</b><small>${dcKinds.length ? 'Toca para elegir cuáles de tus avisos van también a Discord' : 'Enciende arriba algún aviso para enviarlo a Discord'}</small></div></div>`
+        + (dcKinds.length ? `<div class="nt-chips nt-dc-chips">${dcKinds.map(([k, n]) => `<button type="button" class="nt-chip${dOn[k] !== false ? ' on' : ''}" data-dc="${k}" aria-pressed="${dOn[k] !== false}">${n}</button>`).join('')}</div>` : '')
+        + `<div class="pref-row"><div class="pref-l"><b>${D0.url ? 'Tu canal de Discord' : 'Tu propio canal'}</b><small>${D0.url ? 'Conectado · cámbialo o prueba el envío' : 'Opcional: recibe tus avisos en un canal tuyo'}</small></div><div class="pref-c"><button type="button" class="pref-btn" id="alDiscord2">${D0.url ? 'Administrar' : 'Conectar'}</button></div></div>`
+        + (D0.url ? `<div class="pref-row"><div class="pref-l"><b>Señales del Screener ahora</b><small>Mándalas a tu canal en este momento</small></div><div class="pref-c"><button type="button" class="pref-btn" id="dcNow1">1h</button><button type="button" class="pref-btn" id="dcNow4">4h</button></div></div>` : '')
+        + `</div>` : '')
+    + (!appOn && !dc ? `<p class="small-note nt-warn">Elige al menos un lugar: así como está no te llegará ningún aviso.</p>` : '')
     + `</div>`;
   const cl = window.CCT_CHANGELOG || [], cur = cl[0] || {v: '—', d: ''};
   ab.innerHTML = `<div class="about-card"><img data-app-icon class="about-ic" width="52" height="52" alt=""><div class="about-t"><svg class="brand-word wm-sm" viewBox="0 -1 160 45" role="img" aria-label="VORTEX"><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-back" d="M8 22A72 9 0 0 1 152 22"/></g><text x="80" y="29" text-anchor="middle">VORTEX</text><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-gap" d="M152 22A72 9 0 0 1 8 22"/><path class="ring-front" d="M152 22A72 9 0 0 1 8 22"/></g><path class="ring-star" d="M80 .6l1.55 3.75 3.75 1.55-3.75 1.55L80 11.2l-1.55-3.75-3.75-1.55 3.75-1.55z"/></svg><small>Powered by Nova Nexus</small><span class="about-v">Versión ${esc(cur.v)} <span id="buildNo"></span></span></div></div>`
@@ -5188,13 +5286,16 @@ function renderPrefs() {
 {
   const onClick = e => {
     const b = e.target.closest('[data-pk]'); if (b && b.tagName === 'BUTTON') { const v = b.dataset.v; setPref(b.dataset.pk, /^\d+$/.test(v) ? +v : v); return; }
+    const w2 = e.target.closest('[data-sw2]');
+    if (w2) { const k = w2.dataset.sw2; if (k === 'quiet') setPref('quiet', {...(PR.quiet || {}), on: !(PR.quiet && PR.quiet.on)}); else setPref(k, PR[k] === 'off' ? 'on' : 'off'); if (k === 'wake') wakeSync(); if (k === 'tabPx') tabTitle(); if (k === 'conn') connPaint(); return; }
     const w = e.target.closest('[data-sw]');
     if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'radar') { if (window.CCTRadar) { CCTRadar.setOn(!CCTRadar.on()); toast(CCTRadar.on() ? 'Radar encendido: Nexus Pixel te avisará de las grandes oportunidades' : 'Radar apagado'); } renderPrefs(); } else if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); save(); renderPrefs(); renderMoveAlerts(); if (window.VortexPush) VortexPush.sync(true); } else if (k === 'scr' || k === 'scrH1' || k === 'scrH4') { const S = {...(state.scrPush || {})}; if (k === 'scr') S.on = !S.on; else if (k === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false; state.scrPush = sanScrPush(S); save(); renderPrefs(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true); } else { setPref(k, !PR.n[k], true); if (k === 'trade' && window.CCTTradeWatch) { CCTTradeWatch.refresh(); renderWatch(); } if (window.VortexPush) VortexPush.sync(true); }; return; }
     if (e.target.closest('[data-play]')) { const t = $('#notifBox select[data-pk=tone]'); alertBeep(true, t && t.value); return; }
     if (e.target.closest('[data-news]')) openNews();
   };
-  const onChange = e => { if (e.target.id === 'tradeStep') { if (window.CCTTradeWatch) CCTTradeWatch.setStep(+e.target.value); return; } if (e.target.id === 'moveLvl') { state.moveAlerts = sanMoveAlerts({...state.moveAlerts, pct: +e.target.value}); save(); renderPrefs(); if (window.VortexPush) VortexPush.sync(true); return; } const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
+  const onChange = e => { if (e.target.id === 'ntVol') { setPref('vol', +e.target.value); alertBeep(true); return; } if (e.target.id === 'qFrom' || e.target.id === 'qTo') { const v = e.target.value; if (/^\d\d:\d\d$/.test(v)) setPref('quiet', {...(PR.quiet || {}), [e.target.id === 'qFrom' ? 'from' : 'to']: v}); return; } if (e.target.id === 'tradeStep') { if (window.CCTTradeWatch) CCTTradeWatch.setStep(+e.target.value); return; } if (e.target.id === 'moveLvl') { state.moveAlerts = sanMoveAlerts({...state.moveAlerts, pct: +e.target.value}); save(); renderPrefs(); if (window.VortexPush) VortexPush.sync(true); return; } const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
   for (const r of [$('#settingsView'), $('#customView'), $('#notifView')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
+  { const nv = $('#notifView'); if (nv) nv.addEventListener('input', e => { if (e.target.id === 'ntVol') { const sm = e.target.closest('.pref-row') && e.target.closest('.pref-row').querySelector('.pref-l small'); if (sm) sm.textContent = e.target.value + ' %'; } }); }
   // Hora, fecha y formato: se despliega dentro de Personalización › Apariencia (mismo estilo que el resto de la app)
   const fb = $('#cuFmt'), fp = $('#prefsBox');
   if (fb && fp) fb.addEventListener('click', () => { const open = fp.hidden; fp.hidden = !open; fb.setAttribute('aria-expanded', String(open)); if (open) renderPrefs(); });
@@ -5204,18 +5305,65 @@ function renderCustom() {
   const box = $('#customBox'); if (!box) return;
   const ic = (c, d) => `<span class="sg-ic" style="--c:${c}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg></span>`;
   const chev = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+  const sec = (t, sm) => `<div class="cu-sec"><b>${t}</b>${sm ? `<small>${sm}</small>` : ''}</div>`;
+  const row = (icn, t, sm, ctl, cls, attrs) => `<div class="pref-row${cls ? ' ' + cls : ''}"${attrs || ''}>${icn}<div class="pref-l"><b>${t}</b>${sm ? `<small>${sm}</small>` : ''}</div>${ctl ? `<div class="pref-c">${ctl}</div>` : ''}</div>`;
+  const sw2 = (k, on, t) => `<button type="button" class="toggle${on ? ' on' : ''}" data-sw2="${k}" role="switch" aria-checked="${!!on}" aria-label="${t}"></button>`;
+  const vx = window.VXTheme ? VXTheme.get() : 'clasico', lite = !!(window.VXTheme && VXTheme.lite()), desk = isDesktop();
+  const VXN = {clasico: 'Clásico · el estilo de siempre', minimal: 'Minimal · limpio y plano', espacial: 'Espacial · galaxia y estrellas'};
+  const cur = effCursor();
   box.innerHTML = ``
-    + `<div class="pref-row">${ic('#f5a623', state.light ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>' : '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>')}<div class="pref-l"><b>Tema claro</b><small>${state.light ? 'Activo · apágalo para el tema oscuro' : 'Ahora usas el tema oscuro'}</small></div><div class="pref-c"><button type="button" class="toggle${state.light ? ' on' : ''}" data-cu="theme" role="switch" aria-checked="${!!state.light}" aria-label="Tema claro"></button></div></div>`
-    + (() => { const cur = (state.chartStyle || {}).pal || 'clasico', lt = state.light, man = !!((state.chartStyle || {}).up || (state.chartStyle || {}).down);
-        return `<div class="pref-row updn-row">${ic('#20bf9f', '<path d="M4 17l5-6 4 3 7-8"/><path d="M15 6h5v5"/>')}<div class="pref-l"><b>Colores del mercado</b><small>Paleta alcista y bajista para velas, volumen y variaciones en toda la app.${man ? ' Tienes colores personalizados en Aspecto del gráfico; elegir una paleta los reemplaza.' : ''}</small></div></div>`
-          + `<div class="updn-grid" role="radiogroup" aria-label="Colores del mercado">${Object.entries(UPDN).map(([k, P]) => `<button type="button" class="updn${!man && cur === k ? ' on' : ''}" data-cu="updn" data-v="${k}" role="radio" aria-checked="${!man && cur === k}"><span class="updn-c"><svg viewBox="0 0 30 18" width="30" height="18" aria-hidden="true"><rect x="3" y="6" width="5" height="8" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M5.5 3v3M5.5 14v2" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/><rect x="12" y="4" width="5" height="9" rx="1" fill="${lt ? P.downL : P.down}"/><path d="M14.5 1.5v2.5M14.5 13v3" stroke="${lt ? P.downL : P.down}" stroke-width="1.3"/><rect x="21" y="3" width="5" height="10" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M23.5 1v2M23.5 13v3" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/></svg></span><small>${esc(P.n)}</small></button>`).join('')}</div>`; })()
-    + `<button type="button" class="pref-row pref-link" data-cu="style">${ic('#548fff', '<path d="M6 20V10M12 20V4M18 20v-7"/>')}<div class="pref-l"><b>Aspecto del gráfico</b><small>Colores de velas, fondo, cuadrícula, cursor y línea de alertas</small></div><div class="pref-c">${chev}</div></button>`
-    + `<div class="pref-row">${ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>')}<div class="pref-l"><b>Barra de herramientas favoritas</b><small>Tus herramientas de dibujo con estrella, siempre a la mano</small></div><div class="pref-c"><button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button></div></div>`
-    + (isDesktop() ? '' : `<div class="pref-row fb-mode-row"><span class="sg-ic" style="--c:transparent"></span><div class="pref-l"><b>Cápsula del gráfico en el celular</b><small>${FB.mode === 'flotante' ? 'Flotante: la cápsula (temporalidad, estrella y menú) se mueve a donde quieras' : 'Fija: la cápsula va en vertical arriba del logo VORTEX y se abre hacia arriba'}</small></div><div class="pref-c"><div class="seg-mini" role="radiogroup" aria-label="Estilo de la barra de favoritos en el celular">${[['fija', 'Fija'], ['flotante', 'Flotante']].map(([v, n]) => `<button type="button" role="radio" aria-checked="${(FB.mode || 'fija') === v}" class="${(FB.mode || 'fija') === v ? 'on' : ''}" data-cu="favmode" data-v="${v}">${n}</button>`).join('')}</div></div></div>`);
+    /* 1 · Estilo y tema */
+    + sec('Estilo y tema', 'Cómo se ve VORTEX')
+    + `<div class="pref-list cu-list">`
+    + `<div class="pref-row vx-pick-row" id="cuStyle">${ic('#a9b4ff', '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M3.5 9.5h17M9 9.5v10"/>')}<div class="pref-l"><b>Estilo de la app</b><small id="cuStyleEx">${VXN[vx]}</small></div><div class="vx-seg" role="group" aria-label="Estilo de la app">${[['clasico', 'Clásico'], ['minimal', 'Minimal'], ['espacial', 'Espacial']].map(([k, n]) => `<button type="button" data-vx-pick="${k}" class="${vx === k ? 'on' : ''}" aria-pressed="${vx === k}">${n}</button>`).join('')}</div></div>`
+    + row(ic('#f5a623', state.light ? '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/>' : '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'), 'Tema claro', state.light ? 'Activo · apágalo para el tema oscuro' : 'Ahora usas el tema oscuro', `<button type="button" class="toggle${state.light ? ' on' : ''}" data-cu="theme" role="switch" aria-checked="${!!state.light}" aria-label="Tema claro"></button>`)
+    + `<div class="pref-row vx-pick-row" id="cuPerf">${ic('#20bf9f', '<path d="M4.5 16.5a8 8 0 1 1 15 0"/><path d="m12 13.5 4-4.5"/><circle cx="12" cy="14" r="1.3"/>')}<div class="pref-l"><b>Rendimiento</b><small id="cuPerfEx">${lite ? 'Ligero · sin cristal ni fondo animado, igual de fluido (hasta 120 Hz)' : 'Completo · cristal, fondo animado y todo a la frecuencia de tu pantalla (hasta 120 Hz)'}</small></div><div class="vx-seg" data-perf role="group" aria-label="Rendimiento de la app"><button type="button" data-vx-perf="full" class="${lite ? '' : 'on'}" aria-pressed="${!lite}">Completo</button><button type="button" data-vx-perf="lite" class="${lite ? 'on' : ''}" aria-pressed="${lite}">Ligero</button></div></div>`
+    + `</div>`
+    /* 2 · Gráfico */
+    + sec('Gráfico', 'Colores, cursor y lo que ves sobre las velas')
+    + `<div class="pref-list cu-list">`
+    + (() => { const curP = (state.chartStyle || {}).pal || 'clasico', lt = state.light, man = !!((state.chartStyle || {}).up || (state.chartStyle || {}).down);
+        return `<div class="pref-row updn-row">${ic('#20bf9f', '<path d="M4 17l5-6 4 3 7-8"/><path d="M15 6h5v5"/>')}<div class="pref-l"><b>Colores del mercado</b><small>Subida y bajada en velas, volumen y porcentajes de toda la app.${man ? ' Tienes colores propios en Aspecto del gráfico; elegir una paleta los reemplaza.' : ''}</small></div></div>`
+          + `<div class="updn-grid" role="radiogroup" aria-label="Colores del mercado">${Object.entries(UPDN).map(([k, P]) => `<button type="button" class="updn${!man && curP === k ? ' on' : ''}" data-cu="updn" data-v="${k}" role="radio" aria-checked="${!man && curP === k}"><span class="updn-c"><svg viewBox="0 0 30 18" width="30" height="18" aria-hidden="true"><rect x="3" y="6" width="5" height="8" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M5.5 3v3M5.5 14v2" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/><rect x="12" y="4" width="5" height="9" rx="1" fill="${lt ? P.downL : P.down}"/><path d="M14.5 1.5v2.5M14.5 13v3" stroke="${lt ? P.downL : P.down}" stroke-width="1.3"/><rect x="21" y="3" width="5" height="10" rx="1" fill="${lt ? P.upL : P.up}"/><path d="M23.5 1v2M23.5 13v3" stroke="${lt ? P.upL : P.up}" stroke-width="1.3"/></svg></span><small>${esc(P.n)}</small></button>`).join('')}</div>`; })()
+    + row(ic('#9fb4ff', '<path d="M12 3c.6 4.6 1.4 5.4 6 6-4.6.6-5.4 1.4-6 6-.6-4.6-1.4-5.4-6-6 4.6-.6 5.4-1.4 6-6z"/>'), 'Cursor', `${CURSOR_TXT[cur][0]}${!cursorPicked() && vx === 'espacial' ? ' (el del estilo Espacial)' : ''} · ${CURSOR_TXT[cur][1]}`, '', 'cur-row')
+    + `<div class="cur-grid" role="radiogroup" aria-label="Cursor">${CURSOR_MODES.map(k => `<button type="button" class="cur-opt${cur === k ? ' on' : ''}" data-cur-pick="${k}" role="radio" aria-checked="${cur === k}" title="${esc(CURSOR_TXT[k][1])}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CURSOR_IC[k]}</svg>${esc(CURSOR_TXT[k][0])}</button>`).join('')}</div>`
+    + `<button type="button" class="pref-row pref-link" data-cu="style">${ic('#548fff', '<path d="M6 20V10M12 20V4M18 20v-7"/>')}<div class="pref-l"><b>Aspecto del gráfico</b><small>Velas, fondo, cuadrícula, color del cursor, alertas y líneas de tus operaciones</small></div><div class="pref-c">${chev}</div></button>`
+    + row(ic('#f6d27a', '<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M10 3h4"/>'), 'Cuenta atrás de la vela', 'Dentro de la etiqueta del precio', sw2('cd', PR.cd !== 'off', 'Cuenta atrás de la vela'))
+    + row(ic('#20bf9f', '<path d="M5 12.5a10 10 0 0 1 14 0M8 15.5a5.5 5.5 0 0 1 8 0"/><circle cx="12" cy="18.5" r="1.2" fill="currentColor"/>'), 'Aviso de conexión', 'Naranja al conectar, verde en vivo, rojo sin conexión', sw2('conn', PR.conn !== 'off', 'Aviso de conexión'))
+    + `</div>`
+    /* 3 · Herramientas */
+    + sec('Herramientas', 'Tus favoritas siempre a la mano')
+    + `<div class="pref-list cu-list">`
+    + row(ic('#f6d27a', '<path d="M12 3.5 14.6 9l6 .7-4.5 4.1 1.2 5.9L12 16.8 6.7 19.7l1.2-5.9L3.4 9.7l6-.7z"/>'), 'Barra de herramientas favoritas', 'Tus herramientas de dibujo con estrella', `<button type="button" class="toggle${FB.show ? ' on' : ''}" data-cu="fav" role="switch" aria-checked="${!!FB.show}" aria-label="Barra de herramientas favoritas"></button>`)
+    + (desk ? '' : `<div class="pref-row fb-mode-row"><span class="sg-ic" style="--c:transparent"></span><div class="pref-l"><b>Cápsula del gráfico</b><small>${FB.mode === 'flotante' ? 'Flotante: la mueves a donde quieras' : 'Fija: en vertical arriba del logo VORTEX'}</small></div><div class="pref-c"><div class="seg-mini" role="radiogroup" aria-label="Estilo de la cápsula">${[['fija', 'Fija'], ['flotante', 'Flotante']].map(([v, n]) => `<button type="button" role="radio" aria-checked="${(FB.mode || 'fija') === v}" class="${(FB.mode || 'fija') === v ? 'on' : ''}" data-cu="favmode" data-v="${v}">${n}</button>`).join('')}</div></div></div>`)
+    + `</div>`
+    /* 4 · Interfaz */
+    + sec('Interfaz', 'Comodidad del día a día')
+    + `<div class="pref-list cu-list">`
+    + row(ic('#f06b79', '<path d="M4 7h16M4 7v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7M9 11h6"/>'), 'Confirmar antes de borrar', 'Pregunta antes de borrar alertas', sw2('conf', PR.conf !== 'off', 'Confirmar antes de borrar'))
+    + ('wakeLock' in navigator ? row(ic('#f5b942', '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2"/>'), 'Pantalla siempre encendida', 'Con el gráfico abierto no se apaga ni se bloquea', sw2('wake', PR.wake === 'on', 'Pantalla siempre encendida')) : '')
+    + (desk ? row(ic('#548fff', '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17M7 7h.01"/>'), 'Precio en la pestaña', 'El precio en vivo en el título de la ventana', sw2('tabPx', PR.tabPx === 'on', 'Precio en la pestaña')) : '')
+    + `</div>`;
 }
+/* ───────── Ajustes nuevos: pantalla encendida y precio en la pestaña ───────── */
+let wakeLk = null;
+async function wakeSync() {
+  const want = PR.wake === 'on' && !document.hidden && currentView === 'chartView';
+  try { if (want && !wakeLk && navigator.wakeLock) { wakeLk = await navigator.wakeLock.request('screen'); wakeLk.addEventListener('release', () => { wakeLk = null; }); } else if (!want && wakeLk) { await wakeLk.release(); wakeLk = null; } } catch { wakeLk = null; }
+}
+document.addEventListener('visibilitychange', () => wakeSync());
+const TITLE0 = document.title; let tabT = 0;
+function tabTitle() {
+  clearTimeout(tabT); if (PR.tabPx !== 'on' || !isDesktop()) { document.title = TITLE0; return; }
+  const n = candles.length; if (n) { const c = candles[n - 1].c, o = n > 1 ? candles[n - 1].o : c; document.title = `${fmt(c)} ${c >= o ? '▲' : '▼'} ${symOf(state.symbol).replace(/USDT$/, '')} · VORTEX`; }
+  tabT = setTimeout(tabTitle, 1000);
+}
+setTimeout(() => { wakeSync(); tabTitle(); }, 0);
 {
   const cv = $('#customView');
   if (cv) cv.addEventListener('click', e => {
+    const cp = e.target.closest('[data-cur-pick]'); if (cp) { setCursorMode(cp.dataset.curPick); return; }
+    if (e.target.closest('[data-vx-pick],[data-vx-perf]')) { setTimeout(renderCustom, 30); return; }
     const b = e.target.closest('[data-cu]'); if (!b) return; const k = b.dataset.cu;
     if (k === 'theme') { state.light = !state.light; save(); theme(); renderCustom(); }
     else if (k === 'style') openChartStyle();
@@ -5356,7 +5504,7 @@ function convertPine(code, name) { // convertidor profesional (pasos + correcci�
   else addScript(code, name);
 }
 window.CCT_toast = t => toast(t);
-window.CCT_botNotify = (title, body, tag) => { if (PR.n.bots === false) return; toast(title.replace(/^VORTEX · /, '') + ' · ' + body); if (PR.sound !== 'off') { alertBeep(); try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {} } if (!(window.VortexPush && VortexPush.on)) sysNotify(title, body, tag); }; // avisos de tus bots de Nova Bot Lab
+window.CCT_botNotify = (title, body, tag) => { if (PR.n.bots === false) return; appAlert(title.replace(/^VORTEX · /, '') + ' · ' + body, title, body, tag, {vib: [120, 60, 120], noSys: !!(window.VortexPush && VortexPush.on)}); }; // avisos de tus bots de Nova Bot Lab
 function addScript(code, fallbackName, quiet) {
   code = String(code || '').replace(/\r\n?/g, '\n');
   if (!code.trim()) { toast('El script está vacío'); return false; }
@@ -5386,7 +5534,7 @@ function renderScripts() {
 $('#scriptList').addEventListener('click', e => {
   const v = e.target.closest('[data-view-script]'), d = e.target.closest('[data-del-script]');
   if (v) { viewScriptId = v.dataset.viewScript; openSheet('script'); }
-  if (d) { const x = scripts.find(y => y.id === d.dataset.delScript); if (x && confirm(`¿Eliminar "${x.name}"?`)) { scripts = scripts.filter(y => y.id !== x.id); state.pine = state.pine.filter(q => q.sid !== x.id); delete pineRes[x.id]; save(); saveScripts(); renderScripts(); scheduleRender(); } }
+  if (d) { const x = scripts.find(y => y.id === d.dataset.delScript); if (x) vxAsk({title: '¿Eliminar este script?', text: `«${x.name}»`, ok: 'Eliminar', danger: true, always: true}).then(y => { if (!y) return; scripts = scripts.filter(y2 => y2.id !== x.id); state.pine = state.pine.filter(q => q.sid !== x.id); delete pineRes[x.id]; save(); saveScripts(); renderScripts(); scheduleRender(); }); }
 });
 /* ───────── Nova Nexus: un solo indicador con todos sus módulos ───────── */
 const NOVA_GROUPS = [
@@ -6347,7 +6495,7 @@ window.CCT_switchView = id => switchView(id);
 window.CCT_tzInfo = () => ({tz: PR.tz, clock: PR.clock}); // la zona horaria y el formato de hora elegidos (los usa la barra de eventos económicos)
 window.CCT_discordStore = {get: () => state.discord, set: patch => { state.discord = sanDiscord({...state.discord, ...patch, on: {...(state.discord || {}).on, ...(patch.on || {})}, sent: {...(state.discord || {}).sent, ...(patch.sent || {})}}); save(); return state.discord; }};
 /* Radar de Nexus Pixel (radar.js): cómo te avisa */
-window.CCT_radarHost = {notify(title, body, tag) { if (PR.sound !== 'off') { alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200, 100, 300]); } catch {} } toast(title); sysNotify('VORTEX · ' + title, body, tag); }, discord: () => !!(PR.n.discord && alDiscordReady())};
+window.CCT_radarHost = {notify(title, body, tag) { appAlert(title, 'VORTEX · ' + title, body, tag, {vib: [200, 100, 200, 100, 300]}); }, discord: () => !!(PR.n.discord && alDiscordReady())};
 window.CCT_host = {
   interval: () => state.interval,
   async top(n) { try { if (!popAll.length) await loadPopTickers(); } catch {} return popAll.slice(0, n).map(t => ({symbol: t.symbol, price: +t.lastPrice, chg: +t.priceChangePercent})); },
@@ -6484,6 +6632,30 @@ window.CCT_pixel = {
   removeAlert(id) { const n = state.alerts.length; state.alerts = state.alerts.filter(a => a.id !== id); if (state.alerts.length !== n) { save(); renderAlerts(); scheduleRender(); return true; } return false; },
   alerts: () => state.alerts.map(a => ({symbol: a.symbol, price: a.price, dir: a.dir, cond: a.cond, on: a.on, kind: a.kind, label: a.label, note: a.note})),
     cfg: () => sanPixel(state.pixel), opts: PIX_OPT, intervals: () => INTERVALS.slice(),
+  /* Lo que Pixel puede CAMBIAR en la app cuando se lo pides (pixel-cmd.js entiende la frase; aquí se aplica) */
+  setTf(v) { if (!INTERVALS.includes(v)) return false; if (state.interval !== v) { state.interval = v; save(); renderFrames(); clearTransient(); loadCandles(); } return true; },
+  symKey(b) { b = String(b || '').toUpperCase(); if (b === 'USDT.D') return state.symbols.find(k => /USDT\.D|USDTD/.test(k)) || null; return state.symbols.find(k => k === b + 'USDT' || k.startsWith(b + 'USDT@')) || (/^[A-Z0-9]{2,12}$/.test(b) ? b + 'USDT' : null); },
+  indName: k => stdName(k),
+  setInd(k, on, len) {
+    if (!indicatorMeta.some(m => m[0] === k)) return 'no';
+    if (on && PLUS_IND.includes(k) && !planOk('proInd')) return 'plan'; if (on && k === 'liqmap' && !planOk('liq')) return 'plan';
+    state.indicators[k] = !!on; if (state.stdHide) delete state.stdHide[k];
+    if (on && len && STD_SCHEMA[k] && STD_SCHEMA[k].some(x => x[0] === 'len')) state.stdParams = sanStdParams(Object.assign({}, state.stdParams, {[k]: Object.assign({}, (state.stdParams || {})[k], {len})}));
+    save(); renderIndicators(); countIndicators(); if (candles.length) { recalc(); calcNova(); calcExtra(); } if (/^(derivs|oi|funding|lsr|taker)$/.test(k)) dvRefresh(true); scheduleRender(); return 'ok';
+  },
+  look(key, v) { // colores del gráfico: velas, fondo, cuadrícula y cursor
+    const o = Object.assign({}, state.chartStyle || {});
+    if (key === 'grid' && typeof v === 'boolean') { o.gridH = v; o.gridV = v; }
+    else if (['up', 'down', 'bg', 'grid', 'cross'].includes(key) && /^#[0-9a-f]{6}$/i.test(v)) { o[key] = v; if (key === 'up') { delete o.upBorder; delete o.upWick; } if (key === 'down') { delete o.downBorder; delete o.downWick; } }
+    else return false;
+    state.chartStyle = sanChartStyle(o); save(); scheduleRender(); try { renderCustom(); } catch {} return true;
+  },
+  setCtype(v) { if (!CTYPES.some(c => c[0] === v)) return false; state.ctype = v; save(); syncCtypeBtn(); render(); return CTYPES.find(c => c[0] === v)[1]; },
+  setCursor: m => { if (!CURSOR_MODES.includes(m)) return false; setCursorMode(m); return true; },
+  setTheme(light) { if (!!state.light !== !!light) { state.light = !!light; save(); theme(); try { renderCustom(); } catch {} } return true; },
+  setAppStyle: v => { if (window.VXTheme) { VXTheme.set(v); try { renderCustom(); } catch {} return true; } return false; },
+  fit: () => { try { resetChart(); return true; } catch { return false; } },
+  undo: () => { const b = $('#undoDraw'); if (b) { b.click(); return true; } return false; },
   setCfg(c) { state.pixel = sanPixel(Object.assign({}, c, {at: Date.now()})); save(); try { window.dispatchEvent(new CustomEvent('cct-pixel-cfg', {detail: state.pixel})); } catch {} return state.pixel; }
 };
 window.CCT_getAIContext = function () {
@@ -6596,7 +6768,7 @@ if (PANE) {
 }
 setInterval(fetchTicker, 30000);
 setInterval(() => { if (!document.hidden && !PANE) refreshPop(); }, 120000);
-setInterval(() => { if (!document.hidden) checkAlertsPoll(); }, 10000);
+setInterval(() => checkAlertsPoll(), 10000); // sigue revisando con la app minimizada (el navegador lo hace más lento, pero a tiempo)
 setInterval(movePoll, 15000); setTimeout(movePoll, 3000);
 setInterval(() => { if (currentView === 'chartView' && !wsOpen && candles.length && !document.hidden) loadCandles(true); }, 20000);
 })();

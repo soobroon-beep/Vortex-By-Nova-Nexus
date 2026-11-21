@@ -1,7 +1,9 @@
 /* Preferencias de VORTEX (zona horaria, hora, fecha, decimales, separadores, sonido y avisos). Funciones puras: se usan igual en la app y en las pruebas. */
 (function (root) {
   'use strict';
-  const DEF = {tz: 'auto', clock: '24', date: 'dmy', dec: 'auto', sep: 'en', sym: '', sound: 'on', tone: 'beep', n: {price: true, ind: true, trade: true, bots: true, discord: true}};
+  const DEF = {tz: 'auto', clock: '24', date: 'dmy', dec: 'auto', sep: 'en', sym: '', sound: 'on', tone: 'beep', vol: 70, vib: 'on', quiet: {on: false, from: '23:00', to: '07:00'},
+    cd: 'on', tabPx: 'off', wake: 'off', conf: 'on', conn: 'on', n: {price: true, ind: true, trade: true, bots: true, discord: true, app: true}};
+  const HM = v => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
   const TZ = [['auto', 'Automática (la de tu dispositivo)'], ['UTC', 'UTC'], ['America/Mexico_City', 'Ciudad de México'], ['America/New_York', 'Nueva York'], ['America/Bogota', 'Bogotá'], ['America/Argentina/Buenos_Aires', 'Buenos Aires'],
     ['America/Sao_Paulo', 'São Paulo'], ['Europe/London', 'Londres'], ['Europe/Madrid', 'Madrid'], ['Asia/Dubai', 'Dubái'], ['Asia/Singapore', 'Singapur'], ['Asia/Tokyo', 'Tokio'], ['Australia/Sydney', 'Sídney']];
   const TONES = [['beep', 'Pitido'], ['chime', 'Campana'], ['pulse', 'Pulso'], ['alarm', 'Alarma']];
@@ -17,8 +19,16 @@
     if (['', '$', 'US$'].includes(q.sym)) o.sym = q.sym;
     if (['on', 'off'].includes(q.sound)) o.sound = q.sound;
     if (TONES.some(t => t[0] === q.tone)) o.tone = q.tone;
+    if (Number.isFinite(+q.vol) && q.vol !== '' && q.vol !== null) o.vol = Math.max(5, Math.min(100, Math.round(+q.vol / 5) * 5));
+    for (const k of ['vib', 'cd', 'tabPx', 'wake', 'conf', 'conn']) if (['on', 'off'].includes(q[k])) o[k] = q[k];
+    if (q.quiet && typeof q.quiet === 'object') { o.quiet.on = q.quiet.on === true; if (HM(q.quiet.from)) o.quiet.from = q.quiet.from; if (HM(q.quiet.to)) o.quiet.to = q.quiet.to; }
     if (q.n && typeof q.n === 'object') for (const k of Object.keys(o.n)) if (typeof q.n[k] === 'boolean') o.n[k] = q.n[k];
     return o;
+  }
+  /* Horario sin sonido: ¿la hora local (minutos del día) cae dentro? Cruza la medianoche si «desde» > «hasta». */
+  function inQuiet(p, mins) {
+    const q = p && p.quiet; if (!q || !q.on) return false; const m = s => +s.slice(0, 2) * 60 + +s.slice(3, 5), a = m(q.from), b = m(q.to);
+    if (a === b) return false; return a < b ? mins >= a && mins < b : mins >= a || mins < b;
   }
   const SEP = {en: [',', '.'], es: ['.', ','], sp: [' ', ','], none: ['', '.']};
   function formatPrice(n, p) {
@@ -51,6 +61,6 @@
     const dd = p.date === 'iso' ? `${q.y}-${p2(q.mo)}-${p2(q.d)}` : p.date === 'mdy' ? `${MES[q.mo - 1]} ${q.d}` : `${q.d} ${MES[q.mo - 1]}`;
     return `${dd} ${clock(q, p)}`;
   }
-  const api = {DEF, TZ, TONES, sanitize, formatPrice, parts, axisLabel, full};
+  const api = {DEF, TZ, TONES, sanitize, formatPrice, parts, axisLabel, full, inQuiet};
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CCTPrefs = api;
 })(typeof self !== 'undefined' ? self : this);

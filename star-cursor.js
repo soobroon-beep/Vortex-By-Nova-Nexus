@@ -3,7 +3,9 @@
    Al dejar presionado (arrastrar el gráfico o mantener el dedo) deja una estela de luz con chispas
    que se desvanece en dorado → magenta → violeta. Se dibuja en un lienzo fijo encima de todo,
    sin recibir clics, y solo se anima mientras se ve la estrella o queda estela por apagarse.
-   Modos: 'Cruz' (por defecto, la retícula del gráfico), 'Flecha' y 'Estrella'. */
+   Modos: 'Cruz' (por defecto, la retícula del gráfico), 'Flecha', 'Estrella' y 'Órbita'.
+   «Órbita» (nuevo, propio de VORTEX): un punto exacto con un anillo planetario inclinado que lo sigue con un poco de inercia y una lunita
+   que le da vueltas dejando cola de cometa; al presionar el anillo se cierra como un enfoque y suelta una onda. */
 (() => {
   'use strict';
   let mode = 'Cruz', cv = null, g = null, dpr = 1, raf = 0;
@@ -20,7 +22,7 @@
     document.body.appendChild(cv); g = cv.getContext('2d'); size();
     addEventListener('resize', size);
   }
-  function size() { if (!cv) return; dpr = Math.min(2, devicePixelRatio || 1); cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); }
+  function size() { if (!cv) return; dpr = Math.min(1.5, devicePixelRatio || 1); /* 1.5 basta para que la estrella se vea nítida y mueve muchos menos píxeles */ cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); }
 
   // ¿El puntero está sobre el gráfico «limpio» (lienzo), sin herramienta de dibujo ni otro cursor especial?
   function overChart(e) {
@@ -30,18 +32,20 @@
     if (area.classList.contains('drawing') || area.style.cursor) return null; // dibujando o sobre una línea de alerta
     return area;
   }
+  const FX = () => mode === 'Estrella' || mode === 'Órbita';
+  const O = {x: 0, y: 0, vx: 0, vy: 0, a: 0, ok: false}; let pings = [], moon = []; // anillo de «Órbita» (sigue al puntero con inercia), ondas y cola de la luna
   function onMove(e) {
-    if (mode !== 'Estrella') return;
+    if (!FX()) return;
     const was = P.on; P.on = !!overChart(e) || (P.down && e.pointerType !== 'mouse');
     if (P.down && e.pointerType === 'mouse' && !(e.buttons & 1)) P.down = false;
     const nx = e.clientX, ny = e.clientY;
-    if (P.down && P.on) addTrail(was ? P.x : nx, was ? P.y : ny, nx, ny);
+    if (P.down && P.on && mode === 'Estrella') addTrail(was ? P.x : nx, was ? P.y : ny, nx, ny);
     P.x = nx; P.y = ny; kick();
   }
   function onDown(e) {
-    if (mode !== 'Estrella' || !overChart(e)) return;
+    if (!FX() || !overChart(e)) return;
     P.down = true; P.on = true; P.x = e.clientX; P.y = e.clientY; P.t = performance.now();
-    for (let i = 0; i < 10; i++) spark(P.x, P.y, 1.6); // pequeño destello al presionar
+    if (mode === 'Órbita') pings.push({x: P.x, y: P.y, t: P.t}); else for (let i = 0; i < 10; i++) spark(P.x, P.y, 1.6); // pequeño destello al presionar
     kick();
   }
   function onUp(e) { P.down = false; if (e.pointerType !== 'mouse') P.on = false; kick(); }
@@ -108,17 +112,48 @@
       g.fillStyle = body; star4(P.x, P.y, R, R * .26, rot); g.fill();
       g.shadowBlur = 0; g.fillStyle = 'rgba(255,255,255,.95)'; g.beginPath(); g.arc(P.x, P.y, 1.4, 0, Math.PI * 2); g.fill(); // punto exacto del puntero
     }
+    if (mode === 'Órbita') orbit(now, dt);
     g.globalCompositeOperation = 'source-over';
-    if ((P.on && mode === 'Estrella') || trail.length || sparks.length) kick();
+    if ((P.on && FX()) || trail.length || sparks.length || pings.length || moon.length) kick();
     else g.clearRect(0, 0, innerWidth, innerHeight);
+  }
+  /* ── «Órbita» ── */
+  function orbit(now, dt) {
+    const k = Math.min(1, dt / 16);
+    if (!O.ok) { O.x = P.x; O.y = P.y; O.ok = true; }
+    const px = O.x, py = O.y; O.x += (P.x - O.x) * Math.min(1, .34 * k); O.y += (P.y - O.y) * Math.min(1, .34 * k); // el anillo llega un poquito después
+    O.vx = O.vx * .8 + (O.x - px) * .2; O.vy = O.vy * .8 + (O.y - py) * .2;
+    const sp = Math.min(1, Math.hypot(O.vx, O.vy) / 14); O.a += (.0021 + sp * .006) * dt; // la luna acelera si mueves rápido
+    pings = pings.filter(q => now - q.t < 700);
+    g.globalCompositeOperation = 'lighter';
+    for (const q of pings) { const f = (now - q.t) / 700, r = 8 + f * 34; g.strokeStyle = `rgba(122,231,255,${(.55 * (1 - f)).toFixed(3)})`; g.lineWidth = 1.6 * (1 - f) + .4; g.beginPath(); g.arc(q.x, q.y, r, 0, Math.PI * 2); g.stroke(); }
+    if (!P.on) { moon = moon.filter(m => now - m.t < 300); for (const m of moon) { const f = 1 - (now - m.t) / 300; g.fillStyle = `rgba(167,139,250,${(.5 * f).toFixed(3)})`; g.beginPath(); g.arc(m.x, m.y, 1.6 * f, 0, Math.PI * 2); g.fill(); } return; }
+    const tilt = -.42 + Math.max(-.35, Math.min(.35, O.vx * .02)), squash = P.down ? .62 : 1, RX = 15 * squash, RY = 5.4 * squash;
+    // halo muy suave detrás
+    const hg = g.createRadialGradient(O.x, O.y, 0, O.x, O.y, 26); hg.addColorStop(0, 'rgba(122,170,255,.16)'); hg.addColorStop(1, 'rgba(122,170,255,0)'); g.fillStyle = hg; g.beginPath(); g.arc(O.x, O.y, 26, 0, Math.PI * 2); g.fill();
+    // anillo inclinado: mitad de atrás más tenue, mitad de adelante más brillante (efecto planeta)
+    g.save(); g.translate(O.x, O.y); g.rotate(tilt);
+    g.lineWidth = 1.3; g.strokeStyle = 'rgba(159,180,255,.38)'; g.beginPath(); g.ellipse(0, 0, RX, RY, 0, Math.PI, Math.PI * 2); g.stroke();
+    const gr = g.createLinearGradient(-RX, 0, RX, 0); gr.addColorStop(0, 'rgba(122,231,255,.95)'); gr.addColorStop(.5, 'rgba(167,139,250,.95)'); gr.addColorStop(1, 'rgba(255,122,214,.9)');
+    g.lineWidth = 1.7; g.strokeStyle = gr; g.beginPath(); g.ellipse(0, 0, RX, RY, 0, 0, Math.PI); g.stroke();
+    const mx = Math.cos(O.a) * RX, my = Math.sin(O.a) * RY; g.restore();
+    const ct = Math.cos(tilt), st2 = Math.sin(tilt), wx = O.x + mx * ct - my * st2, wy = O.y + mx * st2 + my * ct;
+    moon.push({x: wx, y: wy, t: now}); moon = moon.filter(m => now - m.t < 260);
+    for (const m of moon) { const f = 1 - (now - m.t) / 260; g.fillStyle = `rgba(167,139,250,${(.45 * f).toFixed(3)})`; g.beginPath(); g.arc(m.x, m.y, .5 + 1.6 * f, 0, Math.PI * 2); g.fill(); }
+    const front = Math.sin(O.a) > 0; g.fillStyle = front ? '#ffffff' : 'rgba(220,230,255,.55)'; g.shadowColor = 'rgba(122,231,255,.9)'; g.shadowBlur = front ? 8 : 3; g.beginPath(); g.arc(wx, wy, front ? 2.3 : 1.7, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0;
+    g.globalCompositeOperation = 'source-over';
+    // marcas finas de precisión (arriba, abajo, izquierda, derecha) y el punto exacto
+    g.strokeStyle = 'rgba(220,230,255,.55)'; g.lineWidth = 1; g.beginPath();
+    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) { g.moveTo(P.x + dx * 21, P.y + dy * 21); g.lineTo(P.x + dx * 26, P.y + dy * 26); }
+    g.stroke(); g.fillStyle = '#fff'; g.beginPath(); g.arc(P.x, P.y, 1.6, 0, Math.PI * 2); g.fill();
   }
   function kick() { if (!raf && cv) raf = requestAnimationFrame(frame); }
 
   function setMode(m) {
-    m = ['Cruz', 'Flecha', 'Estrella'].includes(m) ? m : 'Cruz';
-    document.querySelectorAll('.chart-area').forEach(a => { a.classList.toggle('cur-arrow', m === 'Flecha'); a.classList.toggle('cur-star', m === 'Estrella'); });
-    if (m === mode) return; mode = m;
-    if (m === 'Estrella') ensure(); else { P.on = false; P.down = false; }
+    m = ['Cruz', 'Flecha', 'Estrella', 'Órbita'].includes(m) ? m : 'Cruz';
+    document.querySelectorAll('.chart-area').forEach(a => { a.classList.toggle('cur-arrow', m === 'Flecha'); a.classList.toggle('cur-star', m === 'Estrella' || m === 'Órbita'); });
+    if (m === mode) return; mode = m; O.ok = false;
+    if (m === 'Estrella' || m === 'Órbita') ensure(); else { P.on = false; P.down = false; }
     kick();
   }
   addEventListener('pointermove', onMove, {passive: true, capture: true});
