@@ -32,7 +32,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {derivs:true, oi:false, funding:false, lsr:false, taker:false, ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, dchan:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  groups: [], symGroup: {}, symColor: {}, listRev: 0, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], designs: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
+  groups: [], symGroup: {}, symColor: {}, wlists: [], wlCur: '', listRev: 0, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], designs: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9][A-Z0-9_-]{1,24}(@[a-z]{2,12})?$/.test(a.symbol)) return null; // también monedas de otros exchanges (HYPEUSDT@binancef, BTCUSDT@bybit…): antes se borraban y nunca avisaban
@@ -250,7 +250,7 @@ function sanPixel(x) {
     sr: Math.max(1, Math.min(5, Math.round(+q.sr) || 3)), colSup: hex(q.colSup), colRes: hex(q.colRes),
     tips: q.tips !== false, vigia: [0, 5, 15, 30].includes(+q.vigia) && q.vigia != null && q.vigia !== '' ? +q.vigia : 15, completo: Array.isArray(q.completo) && q.completo.filter(k => PIX_OPT.completo.includes(k)).length ? q.completo.filter(k => PIX_OPT.completo.includes(k)) : ['sr', 'trend', 'channel'], at: +q.at || 0};
 }
-const sanTpl = t => ({...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns', 'nr'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {}), ...dSanO(t.o)});
+const sanTpl = t => ({...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns', 'nr'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {}), ...(typeof t.tx === 'string' && t.tx.trim() ? {tx: t.tx.slice(0, 200)} : {}), ...dSanO(t.o)});
 function dSanO(o) { const x = o ? CCTDrawCfg.sanitize(o) : null; return x ? {o: x} : {}; } // ajustes propios de la herramienta (draw-cfg.js)
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
@@ -291,12 +291,23 @@ function merge(s) {
     const sc = {}; if (o.symColor && typeof o.symColor === 'object' && !Array.isArray(o.symColor)) for (const [k, v] of Object.entries(o.symColor)) if (o.symbols.includes(k) && TAGS.some(t => t[0] === v)) sc[k] = v;
     o.symColor = sc; o.listRev = Number.isFinite(+o.listRev) && +o.listRev > 0 ? +o.listRev : 0;
   }
+  { // varias listas de seguimiento (cripto, forex…): la activa vive en symbols/groups/symGroup/symColor; las demás guardadas aquí
+    const okSym = k => typeof k === 'string' && k.length <= 48 && /^[\w.:\/-]+(@[a-z0-9]{2,12})?$/i.test(k), wl = [];
+    if (Array.isArray(o.wlists)) for (const x of o.wlists.slice(0, 20)) {
+      if (!x || typeof x.id !== 'string' || !/^[\w-]{1,24}$/.test(x.id) || wl.some(y => y.id === x.id) || typeof x.name !== 'string' || !x.name.trim()) continue;
+      const sy = Array.isArray(x.symbols) ? [...new Set(x.symbols.filter(okSym))].slice(0, 300) : [], gs = Array.isArray(x.groups) ? x.groups.filter(g => g && typeof g.id === 'string' && /^[\w-]{1,24}$/.test(g.id) && typeof g.name === 'string').slice(0, 30).map(g => ({id: g.id, name: g.name.slice(0, 40), collapsed: !!g.collapsed})) : [];
+      const sg = {}, sc = {}; if (x.symGroup && typeof x.symGroup === 'object') for (const [k, v] of Object.entries(x.symGroup)) if (sy.includes(k) && gs.some(g => g.id === v)) sg[k] = v;
+      if (x.symColor && typeof x.symColor === 'object') for (const [k, v] of Object.entries(x.symColor)) if (sy.includes(k) && TAGS.some(t => t[0] === v)) sc[k] = v;
+      wl.push({id: x.id, name: x.name.trim().slice(0, 30), symbols: sy, groups: gs, symGroup: sg, symColor: sc});
+    }
+    o.wlists = wl; o.wlCur = typeof o.wlCur === 'string' && wl.some(x => x.id === o.wlCur) ? o.wlCur : (wl[0] ? wl[0].id : '');
+  }
   o.layout = ['1', '2v', '2h', '3', '4', '5'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.stdHide = o.stdHide && typeof o.stdHide === 'object' && !Array.isArray(o.stdHide) ? Object.fromEntries(Object.keys(o.stdHide).filter(k => o.stdHide[k] === true && Object.prototype.hasOwnProperty.call(o.indicators, k) && !k.startsWith('nn') && o.indicators[k]).map(k => [k, true])) : {}; // «oculto» (ojito) ≠ «apagado»: sigue activo en Indicadores, solo no se dibuja
   o.designs = sanDesigns(o.designs);
   o.pixel = sanPixel(o.pixel); // personalización de Nexus Pixel (viaja con tu cuenta)
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
-  if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
+  if (!Array.isArray(o.symbols) || (!o.symbols.length && !o.wlists.length)) o.symbols = [...defaults.symbols]; // una lista nueva puede quedar vacía
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
   o.tabs = Array.isArray(o.tabs) ? o.tabs.filter(t => t && typeof t.s === 'string' && /^[\w.:@\-/]{2,40}$/.test(t.s)).slice(0, 8).map((t, i) => Object.assign({id: /^[a-z0-9]{3,12}$/.test(t.id) ? t.id : 't' + i + Date.now().toString(36).slice(-4), s: t.s, i: INTERVALS.includes(t.i) ? t.i : '1h', c: CTYPES.some(x => x[0] === t.c) ? t.c : 'candles'}, typeof t.n === 'string' && t.n.trim() ? {n: t.n.trim().slice(0, 24)} : {}, tabCfgSan(t.cfg))) : [];
   o.tab = typeof o.tab === 'string' ? o.tab.slice(0, 12) : ''; o.tabRev = Number.isFinite(+o.tabRev) ? +o.tabRev : 0;
@@ -323,11 +334,11 @@ const persistLocal = () => { try { localStorage.setItem(storeKey(), JSON.stringi
 let remoteRev = 0; // versión (rev) más reciente que se sabe que hay en la nube
 /* listRev: cuándo se cambió por última vez la lista de seguimiento (orden de monedas y secciones, sección y color de cada una). Al mezclar con la nube gana la lista más reciente:
    antes se usaba siempre el orden de la nube, y si otro dispositivo guardaba al mismo tiempo, el orden que acababas de arrastrar se deshacía. */
-const listSigOf = st => JSON.stringify([st.symbols, st.groups, st.symGroup, st.symColor]);
+const listSigOf = st => JSON.stringify([st.symbols, st.groups, st.symGroup, st.symColor, (st.wlists || []).map(x => [x.id, x.name, x.id === st.wlCur ? 0 : x.symbols, x.id === st.wlCur ? 0 : x.groups, x.id === st.wlCur ? 0 : x.symGroup, x.id === st.wlCur ? 0 : x.symColor]), st.wlCur]);
 let listSig = listSigOf(state);
 /* kAt: cuándo cambió por última vez cada parte de tu configuración (Nexus Pixel, aspecto, IA, avisos…). Al mezclar dos dispositivos que guardaron
    a la vez gana la parte más reciente de cada lado; antes mandaba siempre la nube y, por ejemplo, la personalización de Pixel recién guardada se perdía. */
-const K_SKIP = new Set(['rev', 'listRev', 'kAt', 'symbols', 'groups', 'symGroup', 'symColor', 'drawings', 'designs', 'tabs', 'tab', 'tabRev', 'alerts', 'layout']);
+const K_SKIP = new Set(['rev', 'listRev', 'kAt', 'symbols', 'groups', 'symGroup', 'symColor', 'wlists', 'wlCur', 'drawings', 'designs', 'tabs', 'tab', 'tabRev', 'alerts', 'layout']);
 const kSigOf = v => { let x; try { x = JSON.stringify(v); } catch { return ''; } return x && x.length > 4000 ? x.length + ':' + x.slice(0, 1500) + x.slice(-1500) : x; };
 let kSig = {}; const kBase = () => { kSig = {}; for (const k of Object.keys(state)) if (!K_SKIP.has(k)) kSig[k] = kSigOf(state[k]); }; kBase();
 const kTouch = () => { const now = Date.now(); if (!state.kAt || typeof state.kAt !== 'object' || Array.isArray(state.kAt)) state.kAt = {}; for (const k of Object.keys(state)) { if (K_SKIP.has(k)) continue; const g = kSigOf(state[k]); if (kSig[k] !== g) { kSig[k] = g; state.kAt[k] = now; } } };
@@ -578,7 +589,7 @@ function renderWatch() {
     html.push(`<div class="wl-sec ${g.collapsed ? 'closed' : ''}" data-sec="${g.id}"><span class="sec-grip" title="Arrastra para mover la sección" aria-label="Mover sección">⠿</span><button class="wl-sec-t" data-tog="${g.id}" aria-expanded="${!g.collapsed}"><span class="wl-car">▾</span><span class="wl-nm">${esc(g.name)}</span><small>${items.length}</small></button>${true ? `<span class="wl-sec-ed"><button hidden data-secmv="-1" data-sid="${g.id}" aria-label="Subir sección" ${gi === 0 ? 'disabled' : ''}>▲</button><button hidden data-secmv="1" data-sid="${g.id}" aria-label="Bajar sección" ${gi === state.groups.length - 1 ? 'disabled' : ''}>▼</button><button data-secren="${g.id}" aria-label="Renombrar sección">✎</button><button data-secdel="${g.id}" class="danger" aria-label="Eliminar sección">✕</button></span>` : ''}</div>`);
     if (open) html.push(items.map(watchRow).join('') || (editMode ? '<p class="small-note wl-empty">Sección vacía: arrastra aquí o elige la sección en cada activo.</p>' : ''));
   });
-  domPatch($('#watchRows'), html.join('') || '<p class="small-note">No hay activos con ese nombre.</p>'); // solo cambia lo que cambió: las fotos de las monedas ya no parpadean
+  domPatch($('#watchRows'), html.join('') || (q || state.symbols.length ? '<p class="small-note">No hay activos con ese nombre.</p>' : `<p class="small-note">La lista «${esc(wlName() || 'Mi seguimiento')}» está vacía: toca «Añadir» para poner sus activos (cripto, forex, acciones…).</p>`)); // solo cambia lo que cambió: las fotos de las monedas ya no parpadean
   $('#totalAssets').textContent = state.symbols.length;
   $('#winners').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) > 0).length;
   $('#losers').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) < 0).length;
@@ -684,6 +695,49 @@ $('#watchRows').addEventListener('change', e => { const sel = e.target.closest('
 let suppressClick = 0;
 $('#watchRows').addEventListener('contextmenu', e => { const r = e.target.closest('.watch-row[data-symbol]'); if (!r || e.pointerType === 'touch' || $('#watchRows').classList.contains('wl-dragging')) return; e.preventDefault(); openTagPop(r.dataset.symbol, e.clientX, e.clientY); });
 $('#addSection').onclick = () => { const n = prompt('Nombre de la sección (por ejemplo: BingX)'); if (!n || !n.trim()) return; state.groups.push({id: newSecId(), name: n.trim().slice(0, 40), collapsed: false}); save(); renderWatch(); };
+/* ───────── Varias listas de seguimiento (cripto, forex, acciones…) ─────────
+   La lista activa vive en state.symbols/groups/symGroup/symColor (todo lo demás la usa tal cual); las otras se guardan en state.wlists. */
+const wlNewId = () => 'l' + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36);
+const wlCopy = () => JSON.parse(JSON.stringify({symbols: state.symbols, groups: state.groups, symGroup: state.symGroup, symColor: state.symColor || {}}));
+function wlEnsure() { if (!Array.isArray(state.wlists)) state.wlists = []; if (!state.wlists.length) { const id = wlNewId(); state.wlists.push({id, name: 'Cripto', ...wlCopy()}); state.wlCur = id; } if (!state.wlists.some(x => x.id === state.wlCur)) state.wlCur = state.wlists[0].id; }
+function wlStash() { wlEnsure(); const cur = state.wlists.find(x => x.id === state.wlCur); if (cur) Object.assign(cur, wlCopy()); }
+const wlName = () => { const l = (state.wlists || []).find(x => x.id === state.wlCur); return l ? l.name : ''; };
+function wlAfter() { editMode = false; save(); renderWatch(); try { renderPopular(); } catch {} fetchTicker(); paintWlBtn(); }
+function wlSwitch(id) {
+  wlStash(); const t = state.wlists.find(x => x.id === id); if (!t || id === state.wlCur) return;
+  const c = JSON.parse(JSON.stringify(t)); state.symbols = c.symbols; state.groups = c.groups; state.symGroup = c.symGroup; state.symColor = c.symColor; state.wlCur = id;
+  wlAfter(); toast(`Lista «${t.name}»`);
+}
+function wlCreate() {
+  const n = (prompt('Nombre de la nueva lista (por ejemplo: Forex)', '') || '').trim().slice(0, 30); if (!n) return;
+  wlStash(); if (state.wlists.length >= 20) { toast('Máximo 20 listas'); return; }
+  const id = wlNewId(); state.wlists.push({id, name: n, symbols: [], groups: [], symGroup: {}, symColor: {}});
+  wlSwitch(id); toast(`Lista «${n}» creada: añade sus activos con «Añadir»`);
+}
+function wlRename(id) { wlEnsure(); const l = state.wlists.find(x => x.id === id); if (!l) return; const n = (prompt('Nuevo nombre de la lista', l.name) || '').trim().slice(0, 30); if (!n) return; l.name = n; save(); paintWlBtn(); }
+function wlDelete(id) {
+  wlEnsure(); const l = state.wlists.find(x => x.id === id); if (!l) return; if (state.wlists.length < 2) { toast('Es tu única lista: crea otra antes de borrarla'); return; }
+  vxAsk({title: '¿Borrar esta lista?', text: `«${l.name}» y sus ${id === state.wlCur ? state.symbols.length : l.symbols.length} activos. Tus otras listas no cambian.`, ok: 'Borrar', danger: true, always: true}).then(y => {
+    if (!y) return; if (id === state.wlCur) wlSwitch(state.wlists.find(x => x.id !== id).id);
+    state.wlists = state.wlists.filter(x => x.id !== id); save(); paintWlBtn();
+  });
+}
+function paintWlBtn() { const b = $('#wlListsBtn'); if (!b) return; const n = wlName(); b.querySelector('em').textContent = n || ''; b.querySelector('em').hidden = !n; b.title = n ? `Lista activa: ${n}` : 'Tus listas de seguimiento'; }
+function openWlLists(btn) {
+  const old = document.querySelector('.wl-lists-pop'); if (old) { old.remove(); return; }
+  wlEnsure(); const m = document.createElement('div'); m.className = 'wl-lists-pop'; m.setAttribute('role', 'menu');
+  const draw = () => { m.innerHTML = `<div class="wlp-title">Tus listas</div>${state.wlists.map(l => { const on = l.id === state.wlCur, nn = on ? state.symbols.length : l.symbols.length; return `<div class="wlp-row${on ? ' on' : ''}"><button class="wlp-pick" data-wlp="${l.id}"><span class="wlp-ck">${on ? I('check', 14) : ''}</span><b>${esc(l.name)}</b><small>${nn}</small></button><button class="wlp-ic" data-wlr="${l.id}" title="Renombrar" aria-label="Renombrar">${I('pencil', 14)}</button><button class="wlp-ic" data-wld="${l.id}" title="Borrar" aria-label="Borrar">${I('trash', 14)}</button></div>`; }).join('')}<button class="wlp-new" data-wln="1">＋ Nueva lista…</button><p class="wlp-note">Cada lista guarda sus activos, secciones y colores. Se sincroniza con tu cuenta.</p>`; };
+  draw(); document.body.appendChild(m);
+  const r = btn.getBoundingClientRect(); m.style.top = Math.round(r.bottom + 6) + 'px'; m.style.left = Math.round(Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left))) + 'px';
+  const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); };
+  const away = e => { if (!m.contains(e.target) && !btn.contains(e.target)) close(); };
+  setTimeout(() => document.addEventListener('pointerdown', away, true));
+  m.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const D = b.dataset;
+    if (D.wlp) { close(); wlSwitch(D.wlp); } else if (D.wlr) { close(); wlRename(D.wlr); } else if (D.wld) { close(); wlDelete(D.wld); } else if (D.wln) { close(); wlCreate(); } });
+}
+{ const ha = document.querySelector('#watchView .head-actions'); if (ha && !$('#wlListsBtn')) { const b = document.createElement('button'); b.className = 'small-button wl-lists-btn'; b.id = 'wlListsBtn'; b.type = 'button';
+  b.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg><span>Listas</span><em hidden></em>';
+  ha.insertBefore(b, ha.firstChild); b.onclick = () => openWlLists(b); paintWlBtn(); } }
 
 /* Precios de respaldo: si Binance no contesta, los mismos pares (BTCUSDT…) se toman de Bybit, OKX, BingX o MEXC, en ese orden. */
 async function tickerFallback(plain) {
@@ -2577,7 +2631,7 @@ function patchD(props, snap = true) {
   const d = curDraw(); if (!d) return;
   if (snap) snapDraw();
   let nd = null; setDrawings(getDrawings().map(x => { if (x.id !== d.id) return x; const n = {...x, ...props}; for (const k of Object.keys(props)) if (props[k] == null || props[k] === false) delete n[k]; nd = n; return n; }));
-  if (nd) { const {k, ...st} = tplOf(nd); state.lastStyle = {...(state.lastStyle || {}), [k]: nd.type === 'brush' ? (st.o ? {o: st.o} : {}) : st}; save(); } // el próximo dibujo de este tipo sale con esta configuración
+  if (nd) { const {k, tx, ...st} = tplOf(nd); state.lastStyle = {...(state.lastStyle || {}), [k]: nd.type === 'brush' ? (st.o ? {o: st.o} : {}) : st}; save(); } // el próximo dibujo de este tipo sale con esta configuración
   renderSelBar(); render();
 }
 const sbBrushMode = d => (d && d.type === 'brush') || (!d && isBrushTool(drawTool));
@@ -2640,7 +2694,7 @@ function sbEditText(val) {
 }
 const tplKind = d => isPos(d) ? 'pos' : d.type === 'brush' && d.hl ? 'highlighter' : d.type;
 const tplFits = (t, d) => t.k ? t.k === tplKind(d) || (t.k === 'brush' && d.type === 'brush') : !isPos(d); // las plantillas guardadas antes (sin tipo) valen para todo menos Long/Short
-const tplOf = d => { const o = {k: tplKind(d)}; if (isPos(d)) { for (const f of ['gc', 'rc', 'nt', 'no', 'ns', 'nr']) if (d[f] != null) o[f] = d[f]; } if (d.col) o.col = d.col; const w = d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw; if (w) o.lw = w; if (d.ds) o.ds = d.ds; if (d.tc) o.tc = d.tc; if (d.ts) o.ts = d.ts; if (d.o) o.o = d.o; return o; };
+const tplOf = d => { const o = {k: tplKind(d)}; if (isPos(d)) { for (const f of ['gc', 'rc', 'nt', 'no', 'ns', 'nr']) if (d[f] != null) o[f] = d[f]; } if (d.col) o.col = d.col; const w = d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw; if (w) o.lw = w; if (d.ds) o.ds = d.ds; if (d.tc) o.tc = d.tc; if (d.ts) o.ts = d.ts; if (d.o) o.o = d.o; const tx = SB_TEXT.has(d.type) ? d.text : d.label; if (typeof tx === 'string' && tx.trim()) o.tx = tx; return o; }; // la plantilla guarda también el texto / etiqueta
 function sbSaveTpl() {
   const d = curDraw(); if (!d) return; if ((state.drawTpl || []).filter(t => tplFits(t, d)).length >= 12) { toast('Máximo 12 plantillas de este tipo: borra alguna'); return; }
   const n = (prompt('Nombre de la plantilla:', 'Plantilla ' + ((state.drawTpl || []).filter(t => tplFits(t, d)).length + 1)) || '').trim().slice(0, 24); if (!n) return;
@@ -2649,8 +2703,9 @@ function sbSaveTpl() {
 function sbApplyTpl(i) {
   const d = curDraw(), t = (state.drawTpl || [])[i]; if (!d || !t) return;
   if (!tplFits(t, d)) return;
-  if (isPos(d)) { patchD({col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts, gc: t.gc, rc: t.rc, nt: t.nt, no: t.no, ns: t.ns, nr: t.nr, o: t.o}); return; }
-  patchD(d.type === 'brush' ? {col: t.col, w: Math.round((t.lw || (d.hl ? d.w / 3 : d.w)) * (d.hl ? 3 : 1)), o: t.o} : {col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts, o: t.o});
+  const txt = t.tx ? (SB_TEXT.has(d.type) ? {text: t.tx} : d.type === 'brush' ? {} : {label: t.tx.slice(0, 80)}) : {}; // el texto de la plantilla también se aplica
+  if (isPos(d)) { patchD({col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts, gc: t.gc, rc: t.rc, nt: t.nt, no: t.no, ns: t.ns, nr: t.nr, o: t.o, ...txt}); return; }
+  patchD(d.type === 'brush' ? {col: t.col, w: Math.round((t.lw || (d.hl ? d.w / 3 : d.w)) * (d.hl ? 3 : 1)), o: t.o} : {col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts, o: t.o, ...txt});
   if (d.type === 'brush' && t.col) { state.brush.c = t.col; save(); }
 }
 const isPos = d => !!d && (d.type === 'long' || d.type === 'short');
@@ -2677,17 +2732,17 @@ function popHtml(kind, d) {
   if (kind === 'ds') return `<div class="pp-title">Estilo de línea</div>${sbDsRow(d.ds)}`;
   if (kind === 'txt') return `<div class="pp-title">Texto</div>${isPos(d) ? posToggles(d) : ''}${sbTextBlock(d)}`;
   if (kind === 'tpl') {
-    const list = (state.drawTpl || []).map((t, i) => tplFits(t, d) ? `<div class="pp-tpl"><button class="pp-item" data-ptpl="${i}"><i class="pp-dot" style="background:${t.col || sbDefCol()}"></i><span>${esc(t.n)}</span><small>${t.lw || ''}${t.lw ? 'px' : ''}${t.ds ? ' · ' + (t.ds === 'dash' ? 'discont.' : 'puntos') : ''}</small></button><button class="pp-x" data-ptpl-del="${i}" aria-label="Borrar plantilla">×</button></div>` : '').join('');
-    return `<div class="pp-title">Plantillas de estilo</div><button class="pp-item" data-sb="tplsave">＋ Guardar el estilo actual como plantilla…</button><button class="pp-item" data-sb="tplreset">↺ Restablecer estilo</button>${list ? '<div class="pp-sep"></div>' + list : '<p class="pp-note">Aún no tienes plantillas. Guarda el estilo de este dibujo para aplicarlo en otros.</p>'}`;
+    const list = (state.drawTpl || []).map((t, i) => tplFits(t, d) ? `<div class="pp-tpl"><button class="pp-item" data-ptpl="${i}"><i class="pp-dot" style="background:${t.col || sbDefCol()}"></i><span>${esc(t.n)}</span><small>${t.lw || ''}${t.lw ? 'px' : ''}${t.ds ? ' · ' + (t.ds === 'dash' ? 'discont.' : 'puntos') : ''}${t.tx ? ' · «' + esc(t.tx.slice(0, 14)) + (t.tx.length > 14 ? '…' : '') + '»' : ''}</small></button><button class="pp-x" data-ptpl-del="${i}" aria-label="Borrar plantilla">×</button></div>` : '').join('');
+    return `<div class="pp-title">Plantillas de estilo</div><button class="pp-item" data-sb="tplsave">＋ Guardar estilo y texto como plantilla…</button><button class="pp-item" data-sb="tplreset">↺ Restablecer estilo</button>${list ? '<div class="pp-sep"></div>' + list : '<p class="pp-note">Aún no tienes plantillas. Guarda el estilo de este dibujo para aplicarlo en otros.</p>'}`;
   }
   if (kind === 'set') {
-    const noStyle = SB_NOSTYLE.has(d.type) || brush, hasPrice = d.type === 'horizontal' || d.type === 'hray';
-    if (isPos(d)) return `<div class="pp-title">Ajustes</div>${posColors(d)}<label class="pp-lbl">Grosor</label>${sbLwRow(SB_LW, lw)}<label class="pp-lbl">Estilo</label>${sbDsRow(d.ds)}${dCfgHtml(d)}${posToggles(d)}${sbTextBlock(d)}`;
+    const noStyle = SB_NOSTYLE.has(d.type) || brush;
+    if (isPos(d)) return `<div class="pp-title">Ajustes</div>${dLevelsHtml(d)}${posColors(d)}<label class="pp-lbl">Grosor</label>${sbLwRow(SB_LW, lw)}<label class="pp-lbl">Estilo</label>${sbDsRow(d.ds)}${dCfgHtml(d)}${posToggles(d)}${sbTextBlock(d)}`;
     const lvFirst = CCTDrawCfg.has(d, 'lv'); // herramientas con niveles (Fibonacci, Gann…): sus niveles van arriba, que es lo que más se cambia
     return `<div class="pp-title">Ajustes</div>${lvFirst ? dCfgHtml(d) : ''}<label class="pp-lbl">Color</label>${sbPal('data-pc', col)}`
       + (brush ? `<label class="pp-lbl">Grosor</label>${sbLwRow(SB_BW, lw)}` : noStyle ? '' : `<label class="pp-lbl">Grosor</label>${sbLwRow(SB_LW, lw)}<label class="pp-lbl">Estilo</label>${sbDsRow(d.ds)}`)
       + (lvFirst ? '' : dCfgHtml(d))
-      + (hasPrice ? `<label class="pp-lbl">Precio</label><div class="pp-row"><input class="pp-input" id="sbPrice" inputmode="decimal" value="${d.a.p}"><button class="pp-ok" data-sb="priceok">OK</button></div>` : '')
+      + dLevelsHtml(d)
       + (brush || SB_NOSTYLE.has(d.type) ? '' : sbTextBlock(d));
   }
   if (kind === 'more') {
@@ -2713,6 +2768,30 @@ function renderPop() {
 }
 const sbIc = (k, s = 20) => SV(SBI[k], s);
 function applyBarPos(bar) { if (selPos) { bar.style.left = selPos.x + 'px'; bar.style.top = selPos.y + 'px'; bar.style.bottom = 'auto'; bar.style.transform = 'none'; } }
+/* ───────── Niveles exactos: escribir a mano el precio de cada punto del dibujo (entrada/SL/TP en Long/Short) ───────── */
+const lvFmt = v => Number.isFinite(+v) ? String(+(+v).toPrecision(8)) : '';
+function dLevelKeys(d) { // [clave, nombre, precio] de cada punto con precio que se puede escribir
+  if (!d || d.type === 'brush' || d.type === 'vertical') return [];
+  if (isPos(d)) { const st = Number.isFinite(d.sp) && (d.sp - d.a.p) * (d.b.p - d.a.p) < 0 ? d.sp : d.a.p - (d.b.p - d.a.p) / (dOpt(d, 'rr') || 2);
+    return [['a', 'Entrada', d.a.p], ['sp', 'Stop loss', st], ['b', 'Take profit (objetivo)', d.b.p]]; }
+  if (d.pts && MULTI[d.type]) return d.pts.map((q, i) => ['p' + i, 'Punto ' + (i + 1), q.p]);
+  const ks = ['a', 'b', 'c'].filter(k => d[k] && Number.isFinite(d[k].p));
+  if (ks.length === 1) return [['a', 'Precio', d.a.p]];
+  return ks.map((k, i) => [k, ks.length === 2 ? (i ? 'Punto final' : 'Punto inicial') : 'Punto ' + (i + 1), d[k].p]);
+}
+function dLevelsHtml(d) {
+  const L = dLevelKeys(d); if (!L.length) return '';
+  return `<label class="pp-lbl">${isPos(d) ? 'Niveles exactos' : L.length === 1 ? 'Nivel exacto' : 'Niveles exactos (precio de cada punto)'}</label><div class="pp-lvin">${L.map(([k, n, v]) => `<label class="pp-lvf"><span>${n}</span><input class="pp-input" data-lvk="${k}" inputmode="decimal" value="${lvFmt(v)}"></label>`).join('')}<button class="pp-ok pp-lvok" data-sb="lvok">Aplicar niveles</button></div>`;
+}
+function dApplyLevels() {
+  const d = curDraw(); if (!d) return; const vals = {};
+  for (const i of document.querySelectorAll('#selPop [data-lvk]')) { const v = parseFloat(String(i.value).replace(',', '.')); if (!Number.isFinite(v) || (!d.pane && v <= 0)) { toast('Escribe un precio válido en «' + (i.previousElementSibling || {}).textContent + '»'); i.focus(); return; } vals[i.dataset.lvk] = v; }
+  if (isPos(d)) { const e = vals.a, s = vals.sp, t = vals.b; if ((s - e) * (t - e) >= 0) { toast(t > e ? 'En un Long el stop va debajo de la entrada' : 'En un Short el stop va encima de la entrada'); return; } patchD({a: {...d.a, p: e}, b: {...d.b, p: t}, sp: s}); toast('Niveles aplicados'); return; }
+  const P = {}; if (d.pts && MULTI[d.type]) { const pts = d.pts.map((q, i) => vals['p' + i] != null ? {...q, p: vals['p' + i]} : q); P.pts = pts; P.a = pts[0]; }
+  for (const k of ['a', 'b', 'c']) if (vals[k] != null && d[k]) P[k] = {...d[k], p: vals[k]};
+  patchD(P); toast('Niveles aplicados');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest && e.target.closest('#selPop [data-lvk]')) { e.preventDefault(); dApplyLevels(); } });
 /* ───────── Ajustes propios de cada herramienta (esquema en draw-cfg.js) ─────────
    El panel «Ajustes» añade, debajo de color/grosor/estilo, lo que solo tiene esa herramienta: niveles de Fibonacci,
    fondo, extensiones, textos… Cada cambio queda como «última configuración» de la herramienta y entra en sus plantillas. */
@@ -2857,6 +2936,7 @@ document.addEventListener('click', e => {
   const k = D.sb;
   if (['tpl', 'col', 'txt', 'lw', 'ds', 'set', 'more'].includes(k)) { selPop = selPop === k ? '' : k; if (!selPop) closePop(); else renderPop(); return; }
   if (k === 'txtok') { sbEditText($('#sbTxt').value); return; }
+  if (k === 'lvok') { dApplyLevels(); return; }
   if (k === 'priceok') { const v = parseFloat(String($('#sbPrice').value).replace(',', '.')), d = curDraw(); if (d && v > 0) patchD({a: {...d.a, p: v}}); else toast('Escribe un precio válido'); return; }
   if (k === 'tplsave') { sbSaveTpl(); return; } if (k === 'tplreset') { sbResetStyle(); return; }
   if (k === 'risk') { closePop(); openRisk(curDraw()); return; }
@@ -6071,7 +6151,7 @@ function applyState(data, soft = false) {
   if (sameChart && JSON.stringify(next) === JSON.stringify(state)) return;
   const prevSource = state.source; state = next; listSig = listSigOf(state); kBase(); applyUi(); if (typeof renderTabs === 'function') renderTabs(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource();
   if (sameChart) { drawHist.u.length = drawHist.r.length = 0; updateDrawUI(); } else clearTransient(); // mismo gráfico: se conserva la escala manual, la retícula y lo que se esté dibujando
-  if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader(); renderAcct(); renderMoveAlerts();
+  if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); paintWlBtn(); updateChartHeader(); renderAcct(); renderMoveAlerts();
   if (!sameChart || prevSource !== state.source) { closeWS(); candles = []; ind = {}; loadCandles(); }
   if (window.CCTPlans && state.plan) CCTPlans.importSaved(state.plan);
 }
@@ -6343,13 +6423,13 @@ async function onUser(user) {
       const rl = +st.listRev || 0, ll = +state.listRev || 0;
       if (rr <= (+state.rev || 0)) { // eco viejo o igual a lo que ya tengo: se ignora… salvo que traiga una lista (orden de monedas y secciones) más reciente que la mía
         if (rl <= ll) return;
-        lastRemote = str; try { applyState({...state, symbols: st.symbols, groups: st.groups, symGroup: st.symGroup, symColor: st.symColor, listRev: rl}, true); persistLocal(); } catch {} return;
+        lastRemote = str; try { applyState({...state, symbols: st.symbols, groups: st.groups, symGroup: st.symGroup, symColor: st.symColor, wlists: st.wlists, wlCur: st.wlCur, listRev: rl}, true); persistLocal(); } catch {} return;
       }
       lastRemote = str;
       try {
         const dirty = (() => { try { return !!localStorage.getItem(dirtyKey()); } catch { return false; } })();
         if (dirty) { const merged = reconcile(state, st); applyState(merged, true); persistLocal(); cloudPush(); } // lo que acabas de cambiar aquí todavía no se sube: se mezcla, no se pisa
-        else if (ll > rl) { applyState({...st, symbols: state.symbols, groups: state.groups, symGroup: state.symGroup, symColor: state.symColor, listRev: ll}, true); cloudPush(); } // mi lista es más nueva que la de la nube (otro dispositivo con cambios no relacionados): se conserva y se sube
+        else if (ll > rl) { applyState({...st, symbols: state.symbols, groups: state.groups, symGroup: state.symGroup, symColor: state.symColor, wlists: state.wlists, wlCur: state.wlCur, listRev: ll}, true); cloudPush(); } // mi lista es más nueva que la de la nube (otro dispositivo con cambios no relacionados): se conserva y se sube
         else applyState(st, true);
         persistLocal(); refreshPineAfterSync();
       } catch {}
@@ -6394,7 +6474,11 @@ function reconcile(local, remote) { // mezcla de dos dispositivos que cambiaron 
   const out = JSON.parse(JSON.stringify(remote));
   const L = local || {};
   const lNew = (+L.listRev || 0) >= (+remote.listRev || 0); // la lista más recientemente cambiada manda (orden de monedas y secciones, sección y color)
-  if (lNew && Array.isArray(L.symbols)) {
+  const sameList = (L.wlCur || '') === (remote.wlCur || ''); // si un dispositivo cambió de lista, no se mezclan monedas de listas distintas
+  if (lNew && Array.isArray(L.wlists)) { out.wlists = L.wlists; out.wlCur = L.wlCur || ''; }
+  if (lNew && !sameList && Array.isArray(L.symbols)) { out.symbols = L.symbols; out.groups = L.groups || []; out.symGroup = L.symGroup || {}; out.symColor = L.symColor || {}; out.listRev = +L.listRev || 0; }
+  else if (!lNew && !sameList) { /* manda la lista de la nube tal cual */ }
+  else if (lNew && Array.isArray(L.symbols)) {
     const rs = Array.isArray(remote.symbols) ? remote.symbols : [], rg = Array.isArray(remote.groups) ? remote.groups : [], lg = Array.isArray(L.groups) ? L.groups : [];
     out.symbols = [...L.symbols, ...rs.filter(k => !L.symbols.includes(k))];
     out.groups = [...lg, ...rg.filter(g => g && !lg.some(x => x.id === g.id))];

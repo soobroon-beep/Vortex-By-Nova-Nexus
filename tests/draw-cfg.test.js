@@ -37,6 +37,7 @@ test('sanitize descarta lo que no sea un ajuste simple', () => {
 });
 test('app.js usa el esquema: saneado, plantillas, última configuración y vista previa', () => {
   assert.match(app, /if \(o\.o != null\) \{ const x = CCTDrawCfg\.sanitize\(o\.o\)/);
-  assert.match(app, /if \(d\.o\) o\.o = d\.o; return o; \};/);
+  assert.match(app, /if \(d\.o\) o\.o = d\.o;/);
+  assert.match(app, /const tx = SB_TEXT\.has\(d\.type\) \? d\.text : d\.label; if \(typeof tx === .string. && tx\.trim\(\)\) o\.tx = tx;/); // la plantilla guarda el texto
   assert.match(app, /withLastStyle\(\{id: '_', type: drawTool\}\)/);
 });

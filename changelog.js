@@ -3,6 +3,11 @@
    Los arreglos y ajustes pequeños NO se anotan aquí: se suman al último bloque «Mejoras» sin crear versión nueva. */
 window.CCT_CHANGELOG = [
   {v: '3.43', d: '19 nov 2026', t: 'Mejoras del gráfico', items: [
+    'Mi seguimiento: varias listas (cripto, forex, acciones…) con el botón «Listas» arriba. Cada una guarda sus activos, secciones y colores.',
+    'Ajustes de cada herramienta: niveles exactos. Escribe a mano la entrada, el stop loss y el take profit de Long/Short o el precio de cada punto de líneas, Fibonacci, rectángulos…',
+    'Las plantillas de las herramientas guardan y aplican también el texto, no solo los colores.',
+    'Bots que aprenden (Claudio, Felipe, Claudia 5 minutos): si pasan un día sin encontrar operación (6 h Claudia), bajan un poco su exigencia de confianza (nunca menos de 60 %) hasta volver a operar, y vigilan más monedas. Las reglas de riesgo no cambian y su historial se conserva.',
+    'Arreglos: el Screener ya no se recarga al tocar el gráfico, la lista de seguimiento ya no parpadea, los iconos ya no se ven gigantes al restaurar la ventana y el tema Minimal ya no tiene botones blancos sin contraste.',
     'Configuración › Conectores: avisos a Telegram y a cualquier webhook (también con la app cerrada), calendario económico en Google Calendar (suscripción que se actualiza sola o .ics) e IA en tu computadora con Ollama o LM Studio en Tu IA.',
     'Nuevo bot en Nova Bot Lab: Claudia 5 minutos, gemela de Claudio (mismas reglas y la misma mejora automática) operando en velas de 5 minutos, con su propio historial.',
     'Ahora puedes dibujar sobre cualquier panel: oscilador, RSI, MACD y tus scripts.',

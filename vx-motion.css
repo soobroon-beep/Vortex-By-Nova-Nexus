@@ -181,3 +181,29 @@ body.light #customView .stc.mi{border-color:rgba(0,0,0,.18)!important}
 .cx .dc-btn:disabled{opacity:.45;cursor:default}
 /* al restaurar la ventana: todo aparece ya en su tamaño final (sin el «crecer y encogerse» de los iconos) */
 html.vx-restoring *,html.vx-restoring *::before,html.vx-restoring *::after{transition:none!important;animation-duration:0s!important;animation-delay:0s!important}
+
+/* Niveles exactos en los ajustes de cada herramienta */
+.pp-lvin{display:grid;gap:6px;margin:2px 0 6px}
+.pp-lvf{display:grid;grid-template-columns:minmax(92px,auto) 1fr;align-items:center;gap:8px;font-size:12.5px;opacity:.95}
+.pp-lvf span{opacity:.75}
+.pp-lvf .pp-input{height:30px;font-variant-numeric:tabular-nums}
+.pp-lvok{width:100%;height:32px;margin-top:2px}
+
+/* Mi seguimiento · varias listas */
+.wl-lists-btn{flex-shrink:0}
+.wl-lists-btn em{font-style:normal;font-weight:650;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px;border-radius:999px;background:rgba(127,127,140,.18);font-size:11px}
+.wl-lists-pop{position:fixed;z-index:9000;min-width:230px;max-width:300px;padding:8px;border-radius:12px;background:#15171d;border:1px solid rgba(127,127,140,.25);box-shadow:0 14px 40px rgba(0,0,0,.45)}
+.wl-lists-pop .wlp-title{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.6;padding:4px 6px 6px}
+.wlp-row{display:flex;align-items:center;gap:2px;border-radius:8px}
+.wlp-row.on{background:rgba(127,127,140,.14)}
+.wlp-pick{flex:1;display:flex;align-items:center;gap:8px;min-width:0;padding:8px 6px;border:0;background:none;color:inherit;cursor:pointer;text-align:left;font:inherit}
+.wlp-pick b{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wlp-pick small{opacity:.6;font-variant-numeric:tabular-nums}
+.wlp-ck{width:14px;display:inline-flex}
+.wlp-ic{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;background:none;color:inherit;opacity:.6;cursor:pointer}
+.wlp-ic:hover{opacity:1;background:rgba(127,127,140,.16)}
+.wlp-new{width:100%;margin-top:6px;padding:9px;border:1px dashed rgba(127,127,140,.4);border-radius:8px;background:none;color:inherit;font:inherit;font-weight:600;cursor:pointer}
+.wlp-note{margin:8px 4px 2px;font-size:11px;opacity:.55;line-height:1.35}
+.light .wl-lists-pop{background:#fff;color:#182234}
+:root.vx-min .wl-lists-pop{background:var(--m-fill,#1c1c20);color:var(--m-text,#f4f4f5)}
+:root.vx-min.light .wl-lists-pop,:root.vx-min .light .wl-lists-pop{background:#fff;color:#18181b}
