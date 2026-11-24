@@ -3,6 +3,7 @@
    Los arreglos y ajustes pequeños NO se anotan aquí: se suman al último bloque «Mejoras» sin crear versión nueva. */
 window.CCT_CHANGELOG = [
   {v: '3.43', d: '19 nov 2026', t: 'Mejoras del gráfico', items: [
+    'Configuración › Conectores: avisos a Telegram y a cualquier webhook (también con la app cerrada), calendario económico en Google Calendar (suscripción que se actualiza sola o .ics) e IA en tu computadora con Ollama o LM Studio en Tu IA.',
     'Nuevo bot en Nova Bot Lab: Claudia 5 minutos, gemela de Claudio (mismas reglas y la misma mejora automática) operando en velas de 5 minutos, con su propio historial.',
     'Ahora puedes dibujar sobre cualquier panel: oscilador, RSI, MACD y tus scripts.',
     'Configuración › Preferencias: cursor, cuenta atrás de la vela, aviso de conexión, confirmar antes de borrar, pantalla encendida, precio en la pestaña y hora y formato. Personalización queda solo para cómo se ve.',

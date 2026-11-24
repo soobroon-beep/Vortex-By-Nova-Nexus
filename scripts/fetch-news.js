@@ -37,6 +37,8 @@ const fs = require('fs'), N = require('../news.js');
     if (fast && evs.length) { const k = e => e.t + '|' + e.country + '|' + e.title, m = new Map((cal.events || []).map(e => [k(e), e])); for (const e of evs) m.set(k(e), e); evs.length = 0; evs.push(...m.values()); }
     if (evs.length) { evs.sort((a, b) => a.t - b.t); fs.writeFileSync(__dirname + '/../calendar-data.json', JSON.stringify({at: now, events: evs})); }
   }
+  // calendar.ics: para suscribirse en Google/Apple Calendar u Outlook (Configuración › Conectores); se actualiza solo con cada vuelta
+  try { const c2 = JSON.parse(fs.readFileSync(__dirname + '/../calendar-data.json', 'utf8')); if ((c2.events || []).length) fs.writeFileSync(__dirname + '/../calendar.ics', require('../calendar-ics.js').build(c2.events.filter(e => e.t > now - 7 * 864e5), {minImpact: 'Medium', now})); } catch (e) { status.ics = 'error: ' + e.message; }
   console.log(status, items.length);
   if (!items.length) { console.error('Sin noticias: no se sobrescribe news-data.json'); process.exit(0); }
   fs.writeFileSync(__dirname + '/../news-data.json', JSON.stringify({at: now, status, items}));

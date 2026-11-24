@@ -158,3 +158,24 @@ body.light .vxa-dlg{background:rgba(255,255,255,.9)}
 body.light #customView .stc.cl{background:linear-gradient(160deg,#fff,#eef2f8)!important;border-color:#d5dce8!important;color:#0b1220!important}
 body.light #customView .stc.mi{border-color:rgba(0,0,0,.18)!important}
 @media (prefers-reduced-motion:reduce){.stc-stars{animation:none}}
+
+/* ───────── Conectores (Configuración) ───────── */
+.cx{margin:4px 0 12px;display:grid;gap:10px;animation:vxmDrop .36s var(--vxm-ease) both}
+.cx-card{padding:14px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.025);display:grid;gap:9px}
+.cx-h{display:flex;align-items:center;gap:10px}.cx-h>div{flex:1;min-width:0}.cx-h b{display:block;font-size:14px}.cx-h small{display:block;color:var(--muted);font-size:11.5px;line-height:1.35}
+.cx-ic{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:11px;color:#fff}
+.cx-ic.tg{background:linear-gradient(135deg,#37aee2,#1e96c8)}.cx-ic.wh{background:linear-gradient(135deg,#8b5cf6,#6d28d9)}.cx-ic.gc{background:linear-gradient(135deg,#4285f4,#1a73e8)}.cx-ic.ai{background:linear-gradient(135deg,#20bf9f,#0f766e)}
+.cx-steps{margin:0;padding-left:18px;color:var(--muted);font-size:12px;line-height:1.55}.cx-steps b{color:var(--text)}
+.cx a{color:var(--accent)}
+.cx-row{display:flex;gap:6px}.cx-row .dc-input{flex:1;min-width:0}
+.cx .dc-row{display:flex;flex-wrap:wrap;gap:6px}
+.cx a.dc-btn{text-decoration:none;display:inline-flex;align-items:center}
+.cx-note{color:var(--muted);font-size:11.5px}
+.cx-chips{display:flex;flex-wrap:wrap;gap:6px}
+.cx-msg{margin:0;font-size:12px;color:var(--muted)}.cx-msg.ok{color:#20bf9f}.cx-msg.err{color:#f06b79}
+.cx-p{margin:0;font-size:12px;line-height:1.55;color:var(--muted)}.cx-p code,.cx-fmt pre{font-size:11px;background:rgba(0,0,0,.3);padding:1px 5px;border-radius:5px;color:var(--text);word-break:break-all}
+.cx-fmt summary{cursor:pointer;font-size:12px;color:var(--muted)}.cx-fmt pre{white-space:pre-wrap;padding:8px;margin:6px 0 4px}
+.cx .dc-input{width:100%;box-sizing:border-box;padding:9px 10px;background:var(--raised);border:1px solid var(--line);border-radius:9px;color:var(--text);font-size:12.5px;font-family:inherit}
+.cx .dc-btn{padding:8px 12px;border-radius:9px;border:1px solid var(--line);background:var(--raised);color:var(--text);font-size:12px;font-weight:650;cursor:pointer;gap:6px}
+.cx .dc-btn.pri{background:var(--accent);border-color:transparent;color:#fff}
+.cx .dc-btn:disabled{opacity:.45;cursor:default}

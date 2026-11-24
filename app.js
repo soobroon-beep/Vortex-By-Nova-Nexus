@@ -62,6 +62,14 @@ function sanMoveAlerts(a) { // avisos de movimientos bruscos del precio
   const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {};
   return {on: q.on !== false, pct: Math.max(0.5, Math.min(25, Math.round((+q.pct || 2) * 10) / 10)), sound: q.sound !== false};
 }
+function sanConn(a) { // conectores (Telegram y webhook): se guardan en tu cuenta, privados
+  const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {}, K = ['price', 'ind', 'move', 'trade', 'bots', 'radar'];
+  const kk = o => { const k = o && typeof o.k === 'object' ? o.k : {}; return Object.fromEntries(K.map(x => [x, k[x] !== false])); };
+  const t = q.tg && typeof q.tg === 'object' ? q.tg : {}, w = q.wh && typeof q.wh === 'object' ? q.wh : {};
+  const token = typeof t.token === 'string' && /^\d{5,12}:[A-Za-z0-9_-]{30,60}$/.test(t.token.trim()) ? t.token.trim() : '', chat = typeof t.chat === 'string' && /^(-?\d{3,20}|@[A-Za-z]\w{3,40})$/.test(t.chat.trim()) ? t.chat.trim() : '';
+  let url = ''; try { const u = new URL(String(w.url || '')); if (u.protocol === 'https:' && String(w.url).length < 500) url = String(w.url); } catch {}
+  return {tg: {on: t.on === true && !!(token && chat), token, chat, k: kk(t)}, wh: {on: w.on === true && !!url, url, k: kk(w)}};
+}
 function sanDiscord(a) { // Discord: webhook del canal #vortex, invitación al servidor y qué se envía (se guarda en la cuenta, privada del dueño)
   const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {}, o = q.on && typeof q.on === 'object' ? q.on : {}, sn = q.sent && typeof q.sent === 'object' ? q.sent : {};
   const url = typeof q.url === 'string' && /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/.test(q.url.trim()) ? q.url.trim() : '';
@@ -263,7 +271,7 @@ function merge(s) {
     o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 80).map(t => ({n: t.n.slice(0, 24), ...sanTpl(t)})) : [];
   }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
-  o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.risk = sanRisk(o.risk); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.scrPush = sanScrPush(o.scrPush); o.discord = sanDiscord(o.discord);
+  o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.risk = sanRisk(o.risk); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.scrPush = sanScrPush(o.scrPush); o.discord = sanDiscord(o.discord); o.conn = sanConn(o.conn);
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
   { // Nova Nexus: queda un solo indicador, el completo (Pine, en Mis indicadores). El módulo nativo antiguo se apaga y, si estaba encendido, se pasa al completo para no perderlo
@@ -811,6 +819,7 @@ function sysNotify(title, body, tag) {
     else new Notification(title, opts);
   } catch {}
 }
+const extSend = (kind, title, text) => { try { window.CCTConn && CCTConn.send(kind, title, text); } catch {} }; // Telegram y webhook (connectors.js)
 const dcSend = (k, o) => { if (window.CCTDiscord && PR.n.discord) CCTDiscord.alert(k, o); }; // Discord solo si se quiere recibir ahí
 const alNotify = (a, kind) => { const n = a.notify || 'both'; return {app: n !== 'discord', dc: n !== 'app' && !!PR.n.discord}; }; // dónde avisar: app, Discord o ambos. Con «Enviar avisos a Discord» apagado en Ajustes no sale nada a Discord
 window.CCT_discordOn = kind => !!(PR && PR.n && PR.n.discord) && (!kind || PR.n[kind] !== false); // Discord encendido (y, si se pide, ese tipo de aviso también encendido arriba en «Qué te avisamos»)
@@ -820,6 +829,7 @@ function fireAlert(a, price) {
   if (a.repeat === 'every') { if (a.cond) a.wait = true; else a.dir = a.dir === 'up' ? 'down' : 'up'; } else a.on = false; // «todo el tiempo»: el cruce normal vigila el sentido contrario; ascendente/descendente espera a que el precio vuelva
   const n = alNotify(a); if (PR.n.price === false) { n.app = false; n.dc = false; } // «Alertas de precio» apagado = no avisa en ningún lado
   if (n.app) appAlert(msg, 'VORTEX · Alerta', msg, 'al-' + a.id);
+  if (PR.n.price !== false) extSend('price', 'Alerta de precio', msg);
   if (n.dc && window.CCTDiscord) CCTDiscord.alert('price', {symbol: base(a.symbol), dir: dir0, level: a.price, price, note: a.note, text: msg});
 }
 function checkAlerts(sym, price) {
@@ -946,7 +956,7 @@ function fireMove(sym, dir, ch, lbl, price) {
   const msg = `${base(sym)} ${dir === 'up' ? 'sube' : 'cae'} ${Math.abs(ch).toFixed(1)}% en ${lbl} · ${fmt(price)}`;
   moveLog.unshift({t: Date.now(), s: sym, d: dir, c: +ch.toFixed(2), w: lbl, p: price}); moveLog = moveLog.slice(0, 30); try { localStorage.setItem(MOVE_LOG_KEY, JSON.stringify(moveLog)); } catch {}
   appAlert('Movimiento brusco: ' + msg, 'VORTEX · Movimiento brusco', msg, 'mv-' + sym + '-' + dir, {short: msg});
-  dcSend('move', {symbol: base(sym), dir, pct: ch, win: lbl, price, text: msg});
+  dcSend('move', {symbol: base(sym), dir, pct: ch, win: lbl, price, text: msg}); extSend('move', 'Movimiento brusco', msg);
   renderMoveAlerts();
 }
 async function movePoll() {
@@ -1008,6 +1018,7 @@ function fireInd(a, info) {
   const msg = `${base(a.symbol)} ${a.interval} · ${a.label}${info ? ' · ' + info : ''}${a.note ? ' · ' + a.note : ''}`;
   const n = alNotify(a); if (PR.n.ind === false) { n.app = false; n.dc = false; } // igual que en precio: apagado = no avisa en ningún lado
   if (n.app) appAlert(msg, 'VORTEX · Alerta', msg, 'in-' + a.id);
+  if (PR.n.ind !== false) extSend('ind', 'Alerta con indicador', msg);
   if (n.dc && window.CCTDiscord) CCTDiscord.alert('ind', {symbol: base(a.symbol), interval: a.interval, label: a.label, info, note: a.note, text: msg});
 }
 async function lastClosedBar(sym, itv) {
@@ -1072,6 +1083,7 @@ if (window.CCTTradeWatch && CCTTradeWatch.host) CCTTradeWatch.host({
     return out;
   },
   notify(title, body, tag, kind) {
+    extSend('trade', String(title).replace(/^VORTEX · /, ''), body);
     appAlert(body, title, body, tag, {vib: kind === 'liqN' || kind === 'liq' || kind === 'sl' ? [120, 60, 120, 60, 120] : [200, 100, 200], noSys: !!(window.VortexPush && VortexPush.on)}); // con los avisos de app cerrada encendidos la notificación del sistema la manda el servidor (misma etiqueta, sin duplicados)
   }
 });
@@ -5535,7 +5547,7 @@ function convertPine(code, name) { // convertidor profesional (pasos + correcci�
   else addScript(code, name);
 }
 window.CCT_toast = t => toast(t);
-window.CCT_botNotify = (title, body, tag) => { if (PR.n.bots === false) return; appAlert(title.replace(/^VORTEX · /, '') + ' · ' + body, title, body, tag, {vib: [120, 60, 120], noSys: !!(window.VortexPush && VortexPush.on)}); }; // avisos de tus bots de Nova Bot Lab
+window.CCT_botNotify = (title, body, tag) => { if (PR.n.bots === false) return; extSend('bots', String(title).replace(/^VORTEX · /, ''), body); appAlert(title.replace(/^VORTEX · /, '') + ' · ' + body, title, body, tag, {vib: [120, 60, 120], noSys: !!(window.VortexPush && VortexPush.on)}); }; // avisos de tus bots de Nova Bot Lab
 function addScript(code, fallbackName, quiet) {
   code = String(code || '').replace(/\r\n?/g, '\n');
   if (!code.trim()) { toast('El script está vacío'); return false; }
@@ -6524,9 +6536,11 @@ if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, sav
 /* ───────── Puente para el Screener (screener.js) ───────── */
 window.CCT_switchView = id => switchView(id);
 window.CCT_tzInfo = () => ({tz: PR.tz, clock: PR.clock}); // la zona horaria y el formato de hora elegidos (los usa la barra de eventos económicos)
+window.CCT_connStore = {get: () => state.conn || sanConn(null), set: patch => { state.conn = sanConn(Object.assign({}, state.conn, patch)); save(); return state.conn; }};
+window.CCT_renderPrefs = () => { try { renderPrefs(); } catch {} };
 window.CCT_discordStore = {get: () => state.discord, set: patch => { state.discord = sanDiscord({...state.discord, ...patch, on: {...(state.discord || {}).on, ...(patch.on || {})}, sent: {...(state.discord || {}).sent, ...(patch.sent || {})}}); save(); return state.discord; }};
 /* Radar de Nexus Pixel (radar.js): cómo te avisa */
-window.CCT_radarHost = {notify(title, body, tag) { appAlert(title, 'VORTEX · ' + title, body, tag, {vib: [200, 100, 200, 100, 300]}); }, discord: () => !!(PR.n.discord && alDiscordReady())};
+window.CCT_radarHost = {notify(title, body, tag) { extSend('radar', title, body); appAlert(title, 'VORTEX · ' + title, body, tag, {vib: [200, 100, 200, 100, 300]}); }, discord: () => !!(PR.n.discord && alDiscordReady())};
 window.CCT_host = {
   interval: () => state.interval,
   async top(n) { try { if (!popAll.length) await loadPopTickers(); } catch {} return popAll.slice(0, n).map(t => ({symbol: t.symbol, price: +t.lastPrice, chg: +t.priceChangePercent})); },

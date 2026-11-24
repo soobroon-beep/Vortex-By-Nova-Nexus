@@ -281,9 +281,11 @@
     groq: {name: 'Groq (rápida, plan gratis)', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', vision: false, keyHint: 'gsk_…', site: 'console.groq.com/keys'},
     openrouter: {name: 'OpenRouter (muchos modelos)', url: 'https://openrouter.ai/api/v1', model: 'openrouter/auto', vision: true, keyHint: 'sk-or-…', site: 'openrouter.ai/keys'},
     together: {name: 'Together AI', url: 'https://api.together.xyz/v1', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', vision: false, keyHint: '…', site: 'api.together.xyz'},
+    ollama: {name: 'Ollama (en tu computadora, gratis)', url: 'http://localhost:11434/v1', model: 'llama3.2', vision: false, local: true, keyHint: 'no hace falta', site: 'ollama.com'},
+    lmstudio: {name: 'LM Studio (en tu computadora, gratis)', url: 'http://localhost:1234/v1', model: '', vision: false, local: true, keyHint: 'no hace falta', site: 'lmstudio.ai'},
     custom: {name: 'Otra compatible con OpenAI', url: '', model: '', vision: false, keyHint: '…', site: ''}
   };
-  function ownLoad() { let o = {}; try { o = JSON.parse(lsGet(OWN_KEY) || '{}') || {}; } catch {} const P = OWN[o.provider] ? o.provider : ''; return {on: !!(o.on && P && o.key), provider: P, key: String(o.key || ''), model: String(o.model || (P ? OWN[P].model : '')), url: String(o.url || (P ? OWN[P].url : ''))}; }
+  function ownLoad() { let o = {}; try { o = JSON.parse(lsGet(OWN_KEY) || '{}') || {}; } catch {} const P = OWN[o.provider] ? o.provider : ''; return {on: !!(o.on && P && (o.key || (P && OWN[P].local))), provider: P, key: String(o.key || ''), model: String(o.model || (P ? OWN[P].model : '')), url: String(o.url || (P ? OWN[P].url : ''))}; }
   const ownSave = c => lsSet(OWN_KEY, c ? JSON.stringify(c) : null);
   async function ownModels(c) {
     const P = OWN[c.provider]; if (!P || !c.key) return []; const base = String(c.url || P.url).replace(/\/+$/, '');

@@ -126,11 +126,29 @@ export function sanDc(dc, dcUrl) {
   if (dc && typeof dc === 'object') { const on = dc.on === true; return {on, price: on && dc.price !== false, ind: on && dc.ind !== false}; }
   const on = typeof dcUrl === 'string' && dcUrl.length > 0; return {on, price: on, ind: on};
 }
+/* ───────── Conectores: Telegram y webhook (Configuración › Conectores) ─────────
+   cx = {tg: {token, chat, k: {price, ind, move, trade}}, wh: {url, k: {...}}}. Se guardan con el dispositivo y se usan con la app cerrada. */
+const CX_K = ['price', 'ind', 'move', 'trade'];
+export function sanCx(cx) {
+  const q = cx && typeof cx === 'object' ? cx : {}, o = {}, kk = k => Object.fromEntries(CX_K.map(x => [x, !(k && k[x] === false)]));
+  const t = q.tg || {}; if (typeof t.token === 'string' && /^\d{5,12}:[A-Za-z0-9_-]{30,60}$/.test(t.token) && typeof t.chat === 'string' && /^(-?\d{3,20}|@[A-Za-z]\w{3,40})$/.test(t.chat)) o.tg = {token: t.token, chat: t.chat, k: kk(t.k)};
+  const w = q.wh || {}; try { const u = new URL(String(w.url || '')); if (u.protocol === 'https:' && String(w.url).length < 500 && !/^(localhost|127\.|10\.|192\.168\.|169\.254\.|\[)/.test(u.hostname)) o.wh = {url: String(w.url), k: kk(w.k)}; } catch {}
+  return o;
+}
+const hEsc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c]));
+export async function cxSend(cx, items) { // items: [{kind, title, text}] (como mucho 4 por vuelta)
+  if (!cx || !items.length) return 0; let n = 0;
+  for (const it of items.slice(0, 4)) {
+    if (cx.tg && cx.tg.k[it.kind] !== false) { try { const r = await fetch(`https://api.telegram.org/bot${cx.tg.token}/sendMessage`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({chat_id: cx.tg.chat, text: `<b>VORTEX · ${hEsc(it.title)}</b>\n${hEsc(it.text)}`, parse_mode: 'HTML', disable_web_page_preview: true})}); if (r.ok) n++; } catch (e) { console.warn('telegram', e.message); } }
+    if (cx.wh && cx.wh.k[it.kind] !== false) { try { const r = await fetch(cx.wh.url, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({source: 'vortex', kind: it.kind, title: it.title, text: it.text, at: new Date().toISOString()})}); if (r.ok) n++; } catch (e) { console.warn('webhook', e.message); } }
+  }
+  return n;
+}
 export const dcAllow = (d, kind) => { const c = d && d.dc ? d.dc : sanDc(null, d && d.dcUrl); return !!(c.on && (kind === 'on' || c[kind])); };
 
 /* ───────── lógica de alertas (idéntica a checkAlerts/fireAlert de app.js) ───────── */
 export function evalAlerts(alerts, prices, now = Date.now(), priceOn = true) {
-  const fired = [], dc = []; let changed = false;
+  const fired = [], dc = [], all = []; let changed = false;
   for (const a of alerts) {
     if (!a.on) continue; const price = prices[a.symbol]; if (!Number.isFinite(price)) continue;
     if (a.exp && now > a.exp) { a.on = false; a.expired = true; changed = true; continue; }
@@ -139,11 +157,12 @@ export function evalAlerts(alerts, prices, now = Date.now(), priceOn = true) {
     if (!past) continue;
     const dir0 = a.dir; a.firedAt = now; a.firedPrice = price; changed = true;
     if (a.repeat === 'every') { if (a.cond) a.wait = true; else a.dir = a.dir === 'up' ? 'down' : 'up'; } else a.on = false;
+    all.push(`${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`);
     const nt = a.notify || 'both'; // igual que la app: sin elegir = app y Discord
     if (nt === 'discord' || nt === 'both') dc.push(`${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`); // Discord también con la app cerrada
     if (priceOn && nt !== 'discord') fired.push({title: 'VORTEX · Alerta', body: `${baseOf(a.symbol)} ${dir0 === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`, tag: 'al-' + a.id, url: APP_URL + '#alerts'});
   }
-  return {fired, changed, dc};
+  return {fired, changed, dc, all};
 }
 // closes: precios de cierre de velas de 1 minuto (la última es la actual). Devuelve los avisos y actualiza last (enfriamiento por moneda y sentido)
 export function moveCheck(sym, closes, pct, last, now = Date.now()) {
@@ -283,13 +302,14 @@ async function tickBatch(env, b) {
   const liveTrades = d => (d.trades || []).filter(t => !(t.m && t.m.done)).length && now - (d.syncAt || 0) < TRADE_TTL ? d.trades.filter(t => !(t.m && t.m.done)) : [];
   let sent = 0; const gone = [], changedList = [];
   for (const [id, d] of devs) {
-    const msgs = [], r = evalAlerts(d.alerts || [], prices, now, d.priceOn !== false); msgs.push(...r.fired); let changed = r.changed;
+    const msgs = [], r = evalAlerts(d.alerts || [], prices, now, d.priceOn !== false); msgs.push(...r.fired); let changed = r.changed; const cxI = r.all.map(t => ({kind: 'price', title: 'Alerta de precio', text: t}));
     if (r.dc.length && dcAllow(d, 'price')) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of r.dc.slice(0, 2)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta de precio', description: m, color: 0x548fff}]})}); } catch (e) { console.warn('discord', e.message); } } }
-    if (d.move && d.move.on) { d.moveLast = d.moveLast || {}; for (const s of MOVE_TOP) if (moves[s]) { const m = moveCheck(s, moves[s], d.move.pct, d.moveLast, now); if (m.length) { msgs.push(...m); changed = true; } } }
+    if (d.move && d.move.on) { d.moveLast = d.moveLast || {}; for (const s of MOVE_TOP) if (moves[s]) { const m = moveCheck(s, moves[s], d.move.pct, d.moveLast, now); if (m.length) { msgs.push(...m); cxI.push(...m.map(x => ({kind: 'move', title: 'Movimiento brusco', text: x.body}))); changed = true; } } }
     for (const t of liveTrades(d)) { // tus trades abiertos: escalones de ganancia/pérdida, cerca de TP/SL/liquidación, breakeven y tus niveles
       t.m = t.m || {}; const r2 = TW.evalTrade(t, prices[t.k], t.m, now, {step: d.tradeStep, fmt, url: APP_URL});
-      if (r2.changed) changed = true; msgs.push(...r2.msgs);
+      if (r2.changed) changed = true; msgs.push(...r2.msgs); cxI.push(...r2.msgs.map(x => ({kind: 'trade', title: String(x.title || '').replace(/^VORTEX · /, ''), text: x.body})));
     }
+    if (cxI.length && d.cx) await cxSend(d.cx, cxI); // Telegram y webhook con la app cerrada
     if (d.testAt) { msgs.push({title: 'VORTEX · Prueba con la app cerrada', body: 'Si ves esto con VORTEX cerrada, tus avisos funcionan ✅', tag: 'test2', url: APP_URL + '#alerts'}); delete d.testAt; changed = true; }
     if (msgs.length) { // el cifrado de cada aviso corre en su propia llamada interna
       let sts = []; try { sts = (await self(env, '/int/push', {id, sub: d.sub, msgs: msgs.slice(0, 8)})).sts || []; } catch (e) { sts = ['err: ' + String(e.message).slice(0, 60)]; }
@@ -552,7 +572,7 @@ export default {
       }
       const incoming = (Array.isArray(b.alerts) ? b.alerts : []).map(sanAlert).filter(Boolean).slice(0, MAX_ALERTS);
       const m = mergeAlerts(incoming, cur.alerts, b.since);
-      const d = {sub, lastPush: cur.lastPush, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dc: sanDc(b.dc, b.dcUrl), dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now(),
+      const d = {sub, lastPush: cur.lastPush, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dc: sanDc(b.dc, b.dcUrl), dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now(), cx: b.cx === undefined ? cur.cx || {} : sanCx(b.cx),
         uid, bots: b.bots == null ? cur.bots !== false : b.bots !== false,
         trades: TW.merge(b.trades, cur.trades), indOn: b.indOn == null ? cur.indOn !== false : b.indOn !== false, tradeStep: TW.STEPS.includes(+b.tradeStep) ? +b.tradeStep : TW.DEF_STEP, syncAt: cur.syncAt || 0};
       if (cur.testAt) d.testAt = cur.testAt; // una prueba «con la app cerrada» pendiente no se pierde al sincronizar
@@ -738,7 +758,7 @@ async function indRoute(req, env, path) {
 async function indBatch(env, b) {
   const S = storeOf(env), now = Date.now(), all = b.rs || {}; let sent = 0, fired = 0; const changedList = [];
   for (const [id, d] of await S.getMany((b.ids || []).slice(0, 40))) {
-    if (!d || !d.sub) continue; const rs = Array.isArray(all[id]) ? all[id] : [], msgs = [], dc = []; let changed = false;
+    if (!d || !d.sub) continue; const rs = Array.isArray(all[id]) ? all[id] : [], msgs = [], dc = [], cxI = []; let changed = false;
     for (const r of rs) {
       const a = (d.ind || []).find(x => x.id === r.id); if (!a || !a.on || !(+r.lastBar > (a.lastBar || 0))) continue; // la app ya revisó esa vela (o la alerta se apagó)
       if (!r.hit) { if (+r.lastBar - (a.lastBar || 0) > 6 * 3600e3) { a.lastBar = +r.lastBar; changed = true; } continue; } // sin aviso: solo se anota de vez en cuando (pocas escrituras)
@@ -746,7 +766,9 @@ async function indBatch(env, b) {
       const text = `${baseOf(a.symbol)} ${a.interval} · ${a.label}${a.firedInfo ? ' · ' + a.firedInfo : ''}${a.note ? ' · ' + a.note : ''}`, n = a.notify || 'both';
       if (n !== 'discord' && d.indOn !== false) msgs.push({title: 'VORTEX · Alerta', body: text, tag: 'in-' + a.id, url: APP_URL + '#alerts'});
       if (n !== 'app' && dcAllow(d, 'ind')) dc.push(text);
+      cxI.push({kind: 'ind', title: 'Alerta con indicador', text});
     }
+    if (cxI.length && d.cx) await cxSend(d.cx, cxI);
     if (msgs.length) { try { const sts = (await self(env, '/int/push', {id, sub: d.sub, msgs})).sts || []; sent += sts.filter(x => x >= 200 && x < 300).length; } catch (e) { console.warn('ind push', e.message); } }
     if (dc.length) { const hook = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(d.dcUrl || '') ? d.dcUrl : String(env.DISCORD_WEBHOOK || '').trim(); if (hook) for (const m of dc.slice(0, 2)) { try { await fetch(hook, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({username: 'VORTEX', embeds: [{title: 'Alerta con indicador', description: m, color: 0xb07cff}]})}); } catch {} } }
     if (changed) { d.updated = now; changedList.push([id, d]); }
