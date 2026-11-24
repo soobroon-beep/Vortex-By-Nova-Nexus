@@ -1,0 +1,25 @@
+name: Uso de VORTEX (panel del desarrollador)
+# Cada hora resume cuentas, planes y dispositivos activos en users/<creador>/data/usage (solo el creador lo puede leer).
+# El registro solo muestra conteos (el repo es público).
+on:
+  schedule: [{cron: '23 * * * *'}]
+  push:
+    branches: [main]
+    paths: ['scripts/usage.js', '.github/workflows/usage.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: usage, cancel-in-progress: false}
+jobs:
+  resumir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12 >/dev/null 2>&1
+      - name: Resumir
+        run: node scripts/usage.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

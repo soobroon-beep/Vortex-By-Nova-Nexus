@@ -49,6 +49,27 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Uso de VORTEX (panel del desarrollador): cada dispositivo deja un «latido» con datos mínimos (sin correo ni nombre):
+    // cuándo se vio, desde cuándo, tipo de dispositivo, si es app instalada, zona horaria e idioma. Si hay sesión, el uid (solo el propio).
+    // Nadie lo puede leer salvo el creador; lo resume cada hora el trabajo programado (scripts/usage.js).
+    function isCreator() {
+      return request.auth != null && exists(/databases/$(database)/documents/plans/$(request.auth.uid))
+          && get(/databases/$(database)/documents/plans/$(request.auth.uid)).data.get('by', '') == 'creador';
+    }
+    function presOk(d) {
+      return d.keys().hasOnly(['at', 'first', 'uid', 'dev', 'pwa', 'tz', 'lang', 'ver', 'n', 'plan', 'src'])
+          && d.at == request.time && d.uid is string && (d.uid == '' || (request.auth != null && d.uid == request.auth.uid))
+          && d.dev in ['pc', 'm', 'tab'] && d.pwa is bool && d.tz is string && d.tz.size() <= 48 && d.lang is string && d.lang.size() <= 12
+          && d.ver is string && d.ver.size() <= 12 && d.n is int && d.plan is string && d.plan.size() <= 12 && d.src is string && d.src.size() <= 60;
+    }
+    match /presence/{dev} {
+      allow read: if isCreator();
+      allow create: if dev.matches('^[A-Za-z0-9]{16,32}$') && presOk(request.resource.data) && request.resource.data.first == request.time && request.resource.data.n == 1;
+      allow update: if presOk(request.resource.data) && request.resource.data.first == resource.data.first
+                    && request.resource.data.n >= resource.data.n && request.resource.data.n <= resource.data.n + 1;
+      allow delete: if false;
+    }
+
     // Cualquier otra ruta, bloqueada.
     match /{document=**} {
       allow read, write: if false;

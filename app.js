@@ -6288,7 +6288,8 @@ if (window.CCTTrade) {
 /* Puente para exchange.js: documentos privados de tu cuenta (Firestore) y separador de pares */
 window.CCT_split = s => splitSym(s);
 window.CCTCloudPriv = {uid: () => uid || '', ready: () => !!(uid && db && fbUser), token: async force => { try { return fbUser ? await fbUser.getIdToken(!!force) : ''; } catch { return ''; } }, // token de sesión: el servidor lo verifica (nunca cree un uid suelto)
- get: async n => { const sn = await db.doc(`users/${uid}/data/${n}`).get(); return sn.exists ? sn.data() : null; }, set: (n, o) => db.doc(`users/${uid}/data/${n}`).set(o)};
+ get: async n => { const sn = await db.doc(`users/${uid}/data/${n}`).get(); return sn.exists ? sn.data() : null; }, set: (n, o) => db.doc(`users/${uid}/data/${n}`).set(o),
+ pres: async since => (await db.collection('presence').where('at', '>', new Date(since)).orderBy('at', 'desc').limit(400).get()).docs.map(d => { const x = d.data(); return {...x, id: d.id, at: x.at && x.at.toMillis ? x.at.toMillis() : 0, first: x.first && x.first.toMillis ? x.first.toMillis() : 0}; })}; // dispositivos en línea (solo el creador: reglas «presence»)
 function exSub() { const x = window.CCTExchange && CCTExchange.info(), s = x && CCTExchange.snap(); $$('[data-ex-sub]').forEach(el => { el.textContent = x ? `${x.name} conectado · ${s && s.err ? 'revisa la conexión' : Number.isFinite(s && s.equity) ? 'saldo $' + s.equity.toLocaleString('es-MX', {maximumFractionDigits: 2}) : 'leyendo saldo…'}` : 'Conecta BingX, Binance, Bybit o cualquier otro'; }); }
 /* Saldo de la cuenta desde el exchange: al conectar tu exchange se pregunta UNA vez si quieres que su saldo llene la barra de la cuenta
    (widget de abajo del gráfico). Si dices que sí, se actualiza solo; si no, la barra queda como la tengas. */

@@ -3,6 +3,10 @@
    Los arreglos y ajustes pequeños NO se anotan aquí: se suman al último bloque «Mejoras» sin crear versión nueva. */
 window.CCT_CHANGELOG = [
   {v: '3.43', d: '19 nov 2026', t: 'Mejoras del gráfico', items: [
+    'Conectores más limpios: una fila de iconos (Telegram, Webhook, Calendario, IA local) y al tocar uno se abre solo su configuración. Preferencias ahora vive dentro de su propio botón.',
+    'Listas de seguimiento con emoji: al crear o editar una lista eliges su emoji (todos los del sistema y banderas) para distinguirlas de un vistazo.',
+    'Pestañas del gráfico: arrástralas con el mouse para cambiarlas de lugar, o usa Mover a la izquierda / derecha (clic derecho; en celular, mantén presionada la pestaña).',
+    'Arreglos: los menús de la barra izquierda ya no se animan dos veces y el aviso de conexión ya no parpadea «Conectando…» al volver a la app o cambiar de moneda.',
     'Mi seguimiento: varias listas (cripto, forex, acciones…) con el botón «Listas» arriba. Cada una guarda sus activos, secciones y colores.',
     'Ajustes de cada herramienta: niveles exactos. Escribe a mano la entrada, el stop loss y el take profit de Long/Short o el precio de cada punto de líneas, Fibonacci, rectángulos…',
     'Las plantillas de las herramientas guardan y aplican también el texto, no solo los colores.',
