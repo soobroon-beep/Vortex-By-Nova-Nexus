@@ -188,7 +188,22 @@
     const slD = atr * LIMITS.slAtr, b = LIMITS.tpAtr / LIMITS.slAtr, fr = kelly(p, b); if (!(slD > 0) || fr <= 0) return null;
     const qty = Math.min(equity * fr / slD, equity * LIMITS.maxPositionPct / 100 / px); return qty > 0 ? {qty, slD, frac: fr} : null;
   }
-  /* Condiciones de ejecución (código): solo entra con setup_quality ≥ 2, confianza > 0,80, risk_state = safe y sin flujo tóxico. */
+  /* ───────── Anti-sequía (destrabar) ─────────
+     La recalibración nocturna hace «honestas» las probabilidades: con el mercado de lado casi nunca pasan del 80 %, y el agente se quedaba
+     días sin operar aunque sus mejores señales seguían siendo buenas. Si lleva más de DROUGHT_H horas sin abrir (24 h en 1h · 6 h en 5m), el umbral baja al percentil 85
+     de SUS PROPIAS confianzas recientes (o sea: toma solo su ~15 % de señales más fuertes), nunca por debajo de DROUGHT_FLOOR (60 %).
+     Todo lo demás sigue igual: calidad ≥ 2, riesgo «safe», sin flujo tóxico, sin crisis, ¼ Kelly, topes de drawdown y pérdida diaria.
+     En cuanto vuelve a operar, el umbral regresa a su valor normal. Determinista y causal (usa solo predicciones ya hechas). */
+  const DROUGHT_FLOOR = 0.60, DROUGHT_H = P.droughtH || (IV <= 9e5 ? 6 : 24);
+  function lastEntryT(s) { let t = s.startT || 0; for (const p of Object.values(s.positions || {})) if (p.entryT > t) t = p.entryT; const L = s.ledger || []; if (L.length && L[L.length - 1].entryT > t) t = L[L.length - 1].entryT; return t; }
+  function droughtConf(s, base, t) {
+    const hrs = (t - lastEntryT(s)) / 36e5; if (!(hrs > DROUGHT_H)) return {minConf: base, on: false, hrs};
+    const cs = []; for (let i = s.preds.length - 1; i >= 0 && cs.length < 400; i--) { const q = s.preds[i]; if (q.dir && q.dir !== 'neutral' && isNum(q.conf)) cs.push(q.conf); }
+    if (cs.length < 40) return {minConf: base, on: false, hrs};
+    cs.sort((a, b) => a - b); const p85 = cs[Math.floor(cs.length * 0.85)];
+    return {minConf: r(clamp(Math.min(base, p85), DROUGHT_FLOOR, base), 4), on: true, hrs};
+  }
+  /* Condiciones de ejecución (código): solo entra con setup_quality ≥ 2, confianza > 0,80 (o el umbral anti-sequía), risk_state = safe y sin flujo tóxico. */
   function decide(sym, e, st, ctx) {
     const pos = ctx.pos, out = {sym, action: 'hold', why: ''};
     if (!e) return Object.assign(out, {why: 'Evaluación inválida o ausente'});
@@ -276,13 +291,16 @@
       const states = [];
       for (const sym of avail) { const i = idx[sym].get(T); if (i == null || i < 80) continue; try { const st = buildState(sym, data[sym].slice(Math.max(0, i - 299), i + 1), {t: closeT, book: T === lastTs ? books[sym] : null, pos: s.positions[sym], equity: pf.equity}); if (st) states.push(st); } catch (e) { ev(s, closeT, 'datos', e.message); } }
       if (states.length) {
+        const baseC = P.adaptive && s.adapt ? s.adapt.minConf : LIMITS.minDirConf, dr = droughtConf(s, baseC, closeT);
+        if (dr.on !== !!(s.drought && s.drought.on)) ev(s, closeT, 'aprendizaje', dr.on ? `Anti-sequía: ${Math.round(dr.hrs)} h sin operar · umbral de confianza ${r(baseC * 100, 0)} % → ${r(dr.minConf * 100, 0)} % (su 15 % de señales más fuertes; mismas reglas de riesgo).` : `Volvió a operar: umbral de confianza de nuevo en ${r(baseC * 100, 0)} %.`);
+        s.drought = {on: dr.on, minConf: dr.minConf, base: baseC, t: closeT};
         const res = await evaluate(states, pf, s.calib); s.stats.calls++; s.stats.ms += res.ms || 0; if (res.error) s.stats.fallbacks++; s.lastBy = res.by;
         for (const st of states) {
           const e = res.ev[st.sym], prevReg = (s.decisions[st.sym] || {}).regime;
           if (e && isNum(e.pUp)) { s.preds.push({t: closeT, sym: st.sym, pUp: e.pUp, z: e.z, regime: e.regime, q: e.quality, dir: e.direction, conf: e.dirConf, px: st.f.px, atr: st.f.atr, act: null, o: null}); }
           // escalada: confianza baja + cambio de régimen a crisis ⇒ revisión profunda (Opus) y sin entradas en ese símbolo
           if (e && e.dirConf < LIMITS.escalateBelow && e.regime === 'crisis' && prevReg && prevReg !== 'crisis' && !s.escalations[st.sym]) { s.escalations[st.sym] = {t: closeT, from: prevReg, conf: e.dirConf, open: true}; ev(s, closeT, 'escalada', `${st.sym}: confianza ${r(e.dirConf * 100, 0)} % y régimen ${prevReg} → crisis. Se escala a revisión profunda (Opus 5.5); sin entradas hasta que se revise.`); }
-          const d = s.kill || s.halted ? {sym: st.sym, action: 'hold', why: s.kill ? 'Interruptor de emergencia' : 'Detenido por drawdown'} : decide(st.sym, e, st, {pos: s.positions[st.sym], equity: pf.equity, escalated: !!(s.escalations[st.sym] && s.escalations[st.sym].open), minConf: P.adaptive && s.adapt ? s.adapt.minConf : null, muted: !!(P.adaptive && s.adapt && s.adapt.muted && s.adapt.muted[st.sym])});
+          const d = s.kill || s.halted ? {sym: st.sym, action: 'hold', why: s.kill ? 'Interruptor de emergencia' : 'Detenido por drawdown'} : decide(st.sym, e, st, {pos: s.positions[st.sym], equity: pf.equity, escalated: !!(s.escalations[st.sym] && s.escalations[st.sym].open), minConf: dr.minConf, muted: !!(P.adaptive && s.adapt && s.adapt.muted && s.adapt.muted[st.sym])});
           if (s.preds.length && s.preds[s.preds.length - 1].sym === st.sym && s.preds[s.preds.length - 1].t === closeT) s.preds[s.preds.length - 1].act = d.action;
           s.decisions[st.sym] = Object.assign({t: closeT, by: res.by, px: st.f.px, tokens: st.tokens, book: st.book, state: st.text}, e || {}, {action: d.action, why: d.why});
           if (d.action === 'enter') s.pending[st.sym] = {type: 'enter', sym: st.sym, side: d.side, qty: d.qty, slD: d.slD, why: d.why};
@@ -347,6 +365,7 @@
   /* Aplica la configuración del operador (encendido, reinicio, interruptor, reanudar) sobre la sesión. Igual en la app y en el servidor. */
   function prepare(cfg, prev, now, symbols) {
     cfg = cfg || {}; let s = prev;
+    if (s && Array.isArray(symbols) && symbols.length) { const add = symbols.filter(x => !s.symbols.includes(x)); if (add.length) { s.symbols = s.symbols.concat(add); s.events.push({t: now, kind: 'inicio', text: `Universo ampliado: ${add.join(', ')} (se conserva todo el historial).`}); } } // monedas nuevas sin reiniciar nada
     if (!s || (cfg.resetAt && cfg.resetAt > (s.createdAt || 0))) { s = newSession({startT: now, capital: +cfg.capital > 0 ? +cfg.capital : 10000, symbols}); s.createdAt = now; s.events.push({t: now, kind: 'inicio', text: `${NAME} encendido con ${s.capital} USDT virtuales · universo: ${s.symbols.join(', ')}`}); }
     if (!!cfg.kill !== !!s.kill) { s.kill = !!cfg.kill; s.events.push({t: now, kind: 'riesgo', text: s.kill ? 'Interruptor de emergencia ACTIVADO: se cierran posiciones y no hay entradas.' : 'Interruptor de emergencia desactivado.'}); }
     if (cfg.resume && s.halted && cfg.resume > (s.resumedAt || 0)) { s.halted = false; s.resumedAt = cfg.resume; s.peak = portfolioOf(s).equity; s.events.push({t: now, kind: 'riesgo', text: 'Reanudado por el operador tras el límite de drawdown (nuevo pico = patrimonio actual).'}); }
@@ -356,7 +375,7 @@
   function slim(s) { if (!s) return s; const o = Object.assign({}, s); o.preds = s.preds.slice(-700); o.events = s.events.slice(-150); o.curve = thin(s.curve.slice(), 300); return o; }
   /* Elige la sesión más avanzada entre dos copias (la del navegador y la del servidor) */
   function newer(a, b) { if (!a) return b || null; if (!b) return a; if ((a.createdAt || 0) !== (b.createdAt || 0)) return (a.createdAt || 0) > (b.createdAt || 0) ? a : b; return (b.lastT || 0) > (a.lastT || 0) ? b : a; }
-  return {NAME, P, prepare, slim, newer, VERSION, TF, IV, LIMITS, CALIB_BOUNDS, REGIMES, buildState, bookFeatures, jevSchema, jevRequest, parseJev, localEval, jevEvaluator, kelly, sizeOrder, decide, preOrderCheck, portfolioOf, newSession, step, stats, nightly, verify, estTokens, adaptLearn};
+  return {NAME, P, prepare, slim, newer, VERSION, TF, IV, LIMITS, droughtConf, DROUGHT_FLOOR, DROUGHT_H, CALIB_BOUNDS, REGIMES, buildState, bookFeatures, jevSchema, jevRequest, parseJev, localEval, jevEvaluator, kelly, sizeOrder, decide, preOrderCheck, portfolioOf, newSession, step, stats, nightly, verify, estTokens, adaptLearn};
   }
   /* Felipe: hermano de Claudio con otra estrategia (rupturas con volumen) y otros números; además aprende su umbral y qué monedas evitar */
   const FELIPE = {name: 'Felipe', style: 'breakout', calibA: 1.4, adaptive: true, symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'DOGEUSDT', 'LINKUSDT', 'AVAXUSDT', 'SUIUSDT', 'ADAUSDT'],
