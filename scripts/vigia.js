@@ -17,6 +17,9 @@ const URL0 = process.env.VIGIA_URL || 'https://vortex-nexus.pages.dev/';
 const OWNER = 'a8d56a29aa7c5208d7748a84e75e4b14c713c521136174e8a652b7a76ac19b28'; // sha-256 del correo del creador (el mismo de plans.js)
 const HOOK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/;
 const MAX_ITEMS = 150, MISS_TO_RESOLVE = 2;
+/* Los servidores de GitHub están en EE. UU. y Binance.com BLOQUEA a EE. UU. (HTTP 451 «ubicación restringida»).
+   Esos errores salen solo en la revisión, no a tus usuarios en México/Latam: antes se reportaban como fallas reales («errores de Binance»). */
+const GEO = /Binance HTTP (451|403)|restricted location|eligibility|api\.binance\.com|stream\.binance\.com|fstream\.binance|fapi\.binance/i;
 const SKIP = /borrar|elimin|desconect|cerrar sesi|salir|reset|restablec|comprar|vender|cerrar posici|importar|exportar|limpiar|quitar|papelera|cancelar orden|iniciar sesi|google|instalar|descargar|discord\.gg|unirme/i;
 
 /* ───────── utilidades puras (tests/vigia.test.js) ───────── */
@@ -73,9 +76,9 @@ async function probe(browser, dev) {
   const ctx = await browser.newContext({ viewport: dev.vp, isMobile: dev.mobile, hasTouch: dev.mobile, deviceScaleFactor: dev.mobile ? 2 : 1, locale: 'es-MX', timezoneId: 'America/Mexico_City' });
   const page = await ctx.newPage(); let where = 'al cargar';
   const origin = new URL(URL0).origin;
-  page.on('pageerror', e => add({ area: 'Código', kind: 'js', sev: 'alta', title: 'Error de código ' + where, sig: e.message, ev: `${e.message}\n${String(e.stack || '').split('\n').slice(1, 3).join('\n')}` }));
-  page.on('console', m => { if (m.type() !== 'error') return; const t = m.text(); if (/Failed to load resource|favicon|ERR_BLOCKED|net::ERR_|google|gstatic|firebase.*offline|Cross-Origin-Opener/i.test(t)) return; add({ area: 'Código', kind: 'console', sev: 'media', title: 'Error en la consola ' + where, sig: t, ev: t }); });
-  page.on('response', r => { const u = r.url(); if (r.status() >= 500 || (r.status() >= 400 && u.startsWith(origin) && !/favicon/.test(u))) add({ area: 'Servidor', kind: 'http', sev: r.status() >= 500 ? 'alta' : 'media', title: `Respuesta ${r.status()} de ${new URL(u).host}`, sig: r.status() + ' ' + new URL(u).host + new URL(u).pathname.replace(/\d+/g, 'N'), ev: `${r.status()} ${u.split('?')[0]}` }); });
+  page.on('pageerror', e => !GEO.test(String(e.message) + String(e.stack || '')) && add({ area: 'Código', kind: 'js', sev: 'alta', title: 'Error de código ' + where, sig: e.message, ev: `${e.message}\n${String(e.stack || '').split('\n').slice(1, 3).join('\n')}` }));
+  page.on('console', m => { if (m.type() !== 'error') return; const t = m.text(); if (/Failed to load resource|favicon|ERR_BLOCKED|net::ERR_|google|gstatic|firebase.*offline|Cross-Origin-Opener/i.test(t) || GEO.test(t)) return; add({ area: 'Código', kind: 'console', sev: 'media', title: 'Error en la consola ' + where, sig: t, ev: t }); });
+  page.on('response', r => { const u = r.url(); if (GEO.test(u)) return; if (r.status() >= 500 || (r.status() >= 400 && u.startsWith(origin) && !/favicon/.test(u))) add({ area: 'Servidor', kind: 'http', sev: r.status() >= 500 ? 'alta' : 'media', title: `Respuesta ${r.status()} de ${new URL(u).host}`, sig: r.status() + ' ' + new URL(u).host + new URL(u).pathname.replace(/\d+/g, 'N'), ev: `${r.status()} ${u.split('?')[0]}` }); });
   await page.addInitScript(() => { try { sessionStorage.setItem('cct_welcome', '1'); } catch (e) {} window.__lt = []; try { new PerformanceObserver(l => { for (const e of l.getEntries()) window.__lt.push(Math.round(e.duration)); }).observe({ type: 'longtask', buffered: true }); } catch (e) {} });
 
   const t0 = Date.now();
@@ -206,7 +209,7 @@ async function main() {
     if (!mo.beat || now - mo.beat > 40 * 6e4) uniq.push({ area: 'Tareas automáticas', kind: 'motor', sev: 'alta', title: 'El Motor del servidor está detenido (alertas, bots y Screener)', sig: 'motor parado', ev: mo.beat ? `Último latido hace ${Math.round((now - mo.beat) / 6e4)} min` : 'Sin latido registrado', where: 'servidor', fix: 'Lanzar a mano «Motor del servidor» en GitHub Actions (Run workflow).' });
     const cd = (await db.doc('candles/BTCUSDT_1h').get()).data();
     if (!cd || now - (cd.at || 0) > 3 * 3600e3) uniq.push({ area: 'Datos de mercado', kind: 'candles', sev: 'media', title: 'Las velas de VORTEX no se están guardando', sig: 'velas propias', ev: cd ? `Última actualización hace ${((now - cd.at) / 3600e3).toFixed(1)} h (fuente ${cd.src})` : 'Aún no hay velas guardadas', where: 'servidor' });
-    else if (cd.src && cd.src !== 'binance') uniq.push({ area: 'Datos de mercado', kind: 'source', sev: 'baja', title: `Binance no respondió al servidor: las velas salen de ${cd.src}`, sig: 'fuente respaldo', ev: `Fuente actual: ${cd.src}`, where: 'servidor' });
+    // (Que el Motor use Bybit/OKX en vez de Binance es normal: corre en servidores de EE. UU., que Binance bloquea. Ya no se reporta como falla.)
   } catch (e) { console.log('No se pudo revisar la salud del servidor'); }
   const ref = db.collection('users').doc(uid).collection('data').doc('vigia'), prev = (await ref.get()).data() || {};
   const { items, fresh } = merge(prev.items, uniq, now), learn = learnOf(items);

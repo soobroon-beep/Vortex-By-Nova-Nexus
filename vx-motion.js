@@ -43,16 +43,18 @@
   }
   function add(el, extra, glint) {
     if (glint) { try { if (getComputedStyle(el).position === 'static') glint = false; } catch (e) { glint = false; } } // el destello necesita una caja posicionada (nunca se cambia su posición)
+    el.classList.remove('vxm-done'); const own = oneShot(el);
     const cls = ['vxm-in'].concat(extra ? [extra] : [], glint ? ['vxm-glint'] : []);
     el.classList.add.apply(el.classList, cls);
-    const done = e => { if (e && e.target !== el) return; el.classList.remove.apply(el.classList, cls); el.removeEventListener('animationend', done); };
+    let fin = false; const done = e => { if (fin || (e && e.target !== el)) return; fin = true; if (own) el.classList.add('vxm-done'); el.classList.remove.apply(el.classList, cls); el.removeEventListener('animationend', done); }; // vxm-done: al quitar la entrada, la animación propia de la ventana (uxIn…) NO se vuelve a reproducir (antes se veía «dos veces»)
     el.addEventListener('animationend', done); setTimeout(done, 1200); // al terminar se quita: no estorba a sus propias transiciones de cierre
   }
+  function oneShot(el) { try { const c = getComputedStyle(el); return c.animationName !== 'none' && !/infinite/.test(c.animationIterationCount); } catch (e) { return false; } } // tiene su propia entrada (no un bucle)
   function stagger(el) { // opciones de un menú: en cascada (solo listas cortas)
     const kids = [...el.children].filter(c => /^(BUTTON|A|LABEL|LI)$/.test(c.tagName) || c.classList.contains('pp-item') || c.classList.contains('setting-row'));
     if (kids.length < 3 || kids.length > 28 || kids.length !== el.children.length && kids.length < 4) return;
-    kids.forEach((c, i) => c.style.setProperty('--i', Math.min(i, 14)));
-    el.classList.add('vxm-stagger'); setTimeout(() => { el.classList.remove('vxm-stagger'); kids.forEach(c => c.style.removeProperty('--i')); }, 1000);
+    const own = kids.filter(oneShot); kids.forEach((c, i) => c.style.setProperty('--i', Math.min(i, 14)));
+    el.classList.add('vxm-stagger'); setTimeout(() => { own.forEach(c => c.classList.add('vxm-done')); el.classList.remove('vxm-stagger'); kids.forEach(c => c.style.removeProperty('--i')); }, 1000);
   }
   const seen = new WeakSet(), byCls = new Map(); // lo que se vuelve a crear muy seguido (p. ej. al repintar) no se anima otra vez
   function check(el) {

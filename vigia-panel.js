@@ -43,7 +43,7 @@
   }
 
   function card(o) {
-    const op = open1 === o.id, acts = o.status === 'nuevo' ? `<button type="button" class="vg-btn ok" data-vg="aprobado" data-id="${o.id}">Aplicar</button><button type="button" class="vg-btn" data-vg="descartado" data-id="${o.id}">Descartar</button>`
+    const op = open1 === o.id, acts = o.status === 'nuevo' ? `<button type="button" class="vg-btn ok" data-vg="aprobado" data-id="${o.id}" title="Lo marca como aprobado. No cambia la app: el arreglo lo hace Claude cuando se lo pidas">Aprobar</button><button type="button" class="vg-btn" data-vg="descartado" data-id="${o.id}">Descartar</button>`
       : o.status === 'resuelto' ? '' : `<button type="button" class="vg-btn" data-vg="nuevo" data-id="${o.id}">Deshacer</button>`;
     return `<article class="vg-card s-${esc(o.sev)}${op ? ' open' : ''}" data-open="${o.id}">
       <div class="vg-top"><span class="vg-sev">${SEVN[o.sev] || 'Media'}</span><span class="vg-area">${esc(o.area)}</span><span class="vg-when">${o.seen > 1 ? 'visto ' + o.seen + ' veces · ' : ''}${when(o.last)}</span></div>
@@ -61,7 +61,7 @@
         ${doc.stats ? `<small>Botones probados: ${Object.entries(doc.stats).map(([k, v]) => k + ' ' + (v.botones || 0)).join(' · ')}</small>` : ''}</div>
       <div class="vg-tabs" role="tablist">${TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${n}<i>${cnt(k)}</i></button>`).join('')}</div>
       <div class="vg-list">${list.length ? list.map(card).join('') : `<div class="vg-empty">${tab === 'nuevo' ? 'Nada pendiente. Todo en orden.' : 'Vacío por ahora.'}</div>`}</div>
-      ${tab === 'aprobado' && list.length ? '<p class="vg-hint">Lo aprobado se aplica primero en la versión de pruebas (dev). Pídeselo a Claude con: «aplica lo aprobado del Vigía».</p>' : ''}
+      ${tab === 'aprobado' && list.length ? '<p class="vg-hint">Lo aprobado se aplica primero en la versión de pruebas (dev). «Aprobar» no arregla nada por sí solo: es tu visto bueno. Pídele a Claude «aplica lo aprobado del Vigía» y él hace los cambios.</p>' : ''}
       <div class="vg-dc"><b>Resumen diario en Discord</b><small>Pega el webhook de un canal <u>privado</u> (Ajustes del canal › Integraciones › Webhooks). No uses #vortex: ese canal es público.</small>
         <div class="vg-dc-row"><input type="password" id="vgHook" placeholder="https://discord.com/api/webhooks/…" value="${esc(doc.hook || '')}" autocomplete="off" spellcheck="false"><button type="button" class="vg-btn ok" data-vg-hook>Guardar</button></div></div>`;
     row();

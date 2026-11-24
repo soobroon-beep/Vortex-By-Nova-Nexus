@@ -21,6 +21,7 @@
 .vxm-in.vxm-fade{animation-name:vxmFade!important;animation-duration:.22s!important}
 .vxm-in.vxm-side{animation-name:vxmSide!important}
 .vxm-out{animation:vxmOut .16s ease-in forwards!important;pointer-events:none!important}
+.vxm-done:not(.vxm-in):not(.vxm-out):not(.ux-out){animation:none!important}
 /* destello de luz que cruza la ventana al abrirse (muy sutil, estilo VORTEX) */
 .vxm-glint::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;border-radius:inherit;background:linear-gradient(105deg,transparent 38%,rgba(170,190,255,.10) 45%,rgba(255,255,255,.16) 50%,rgba(170,190,255,.08) 55%,transparent 62%) 0 0/260% 100% no-repeat;animation:vxmGlint .9s .05s var(--vxm-ease) both}
 /* hijos de menús y listas: aparecen escalonados */

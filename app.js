@@ -1485,7 +1485,9 @@ async function loadCandles(silent = false) {
     if (r.fallback && !silent) toast(`${SOURCES[srcOf(sym)] || 'Binance'} no respondió: el gráfico usa ${r.src === 'vortex' ? 'las velas guardadas de VORTEX' : SOURCES[r.src] || r.src} mientras tanto`);
     recalc(); setTimeout(() => dvRefresh(), 0);
     if (!silent) { stopMotion(); visible = defaultVisible(); pan = 0; const ca = $('#chartArea'); if (ca) { ca.classList.remove('swap-in'); void ca.offsetWidth; ca.classList.add('swap-in'); } }
-    setFeedback(''); updateChartHeader(); render(); connectWS(); return true;
+    setFeedback(''); updateChartHeader(); render();
+    if (!(silent && ws && wsOpen && wsFor === state.symbol + '|' + state.interval + '|' + (dataSrc || 'binance') && Date.now() - wsLast < 10000)) connectWS(); // la conexión en vivo sigue sana: no se corta solo por refrescar velas
+    return true;
   } catch (e) {
     if (e.name === 'AbortError') return false;
     if (!silent && srcOf(sym) === 'dom') { setFeedback(e.message || 'Sin datos de dominancia'); render(); return; }
@@ -1583,12 +1585,16 @@ addEventListener('offline', () => { CONN.live = false; connShow('off'); });
 addEventListener('online', () => { if (!CONN.live) connShow('wait'); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !CONN.live && CONN.st !== 'off') connShow('wait'); });
 setTimeout(() => { if (!CONN.live && !CONN.st) connLive(false); }, 0); // al abrir la app: «Conectando…» hasta que llegue el primer precio real
-function closeWS() { wsGen++; wsOpen = false; clearInterval(wsPing); if (ws) { ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null; try { ws.close(); } catch {} } ws = null; setLive(false); }
+function closeWS(quiet) { wsGen++; wsOpen = false; clearInterval(wsPing); clearTimeout(wsQuietT); if (ws) { ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null; try { ws.close(); } catch {} } ws = null; wsFor = ''; if (!quiet) setLive(false); }
+/* Reconexión «silenciosa»: al cambiar de moneda o al refrescar, el aviso no pasa a «Conectando…» si el nuevo flujo llega en menos de 8 s
+   (antes cada vuelta a la app, cada recarga de respaldo y cada cambio de moneda cerraba la conexión y el aviso parpadeaba). */
+let wsQuietT = 0, wsFor = '';
 let wsLast = 0, wsReloadAt = 0; // último dato en vivo recibido / última recarga del vigilante
 let tradeBuf = null, tradeT = 0, tradeLastT = 0, tradeLastP = 0;
 let liveGlide = null;
 function connectWS() {
-  closeWS(); wsLast = Date.now();
+  const wasLive = CONN.live; closeWS(wasLive); wsLast = Date.now();
+  if (wasLive) { const g0 = wsGen; wsQuietT = setTimeout(() => { if (g0 === wsGen && Date.now() - wsLast > 7000) setLive(false); }, 8000); }
   if (typeof WebSocket === 'undefined') return;
   const gen = wsGen, src = dataSrc || 'binance', sym = (dataSym && src !== srcOf(state.symbol) ? dataSym : '') || symOf(state.symbol), tf = state.interval;
   if (src === 'dom') { setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH.dom.get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 60000); return; }
@@ -1599,6 +1605,7 @@ function connectWS() {
   const ls = sym.toLowerCase(), url = by ? `wss://stream.bybit.com/v5/public/${src === 'bybitf' ? 'linear' : 'spot'}` : ok ? 'wss://ws.okx.com:8443/ws/v5/business' : src === 'binancef' ? `wss://fstream.binance.com/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade` : `wss://stream.binance.com:9443/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade`; // vela + cada operación (aggTrade): el precio se mueve en vivo, no cada 2 s
   tradeBuf = null; tradeLastT = 0; tradeLastP = 0;
   try { ws = new WebSocket(url); } catch { return; }
+  wsFor = state.symbol + '|' + tf + '|' + src;
   ws.onopen = () => { if (gen === wsGen) { wsOpen = true; wsRetry = 0; $('#liveDot').classList.add('on');
     if (by) { ws.send(JSON.stringify({op: 'subscribe', args: [`kline.${BY_IV[tf]}.${sym}`, `publicTrade.${sym}`]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send(JSON.stringify({op: 'ping'})); } catch {} }, 20000); }
     if (ok) { ws.send(JSON.stringify({op: 'subscribe', args: [{channel: 'candle' + OKX_BAR[tf], instId: dashPair(sym) + (src === 'okxf' ? '-SWAP' : '')}]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send('ping'); } catch {} }, 20000); } } };
