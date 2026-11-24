@@ -34,6 +34,11 @@ const defaults = {
   indicators: {derivs:true, oi:false, funding:false, lsr:false, taker:false, ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, dchan:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
   groups: [], symGroup: {}, symColor: {}, wlists: [], wlCur: '', listRev: 0, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], designs: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
 };
+function sanTcast(t) { // Trades a Discord (solo el desarrollador): webhook del canal, qué trades y qué incluir
+  t = t && typeof t === 'object' && !Array.isArray(t) ? t : {};
+  const hook = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/;
+  return {on: t.on === true, url: typeof t.url === 'string' && hook.test(t.url.trim()) ? t.url.trim() : '', real: t.real !== false, demo: t.demo === true, shot: t.shot !== false, close: t.close === true, wait: [0, 10, 20, 45].includes(+t.wait) ? +t.wait : 20, note: typeof t.note === 'string' ? t.note.slice(0, 300) : '', name: typeof t.name === 'string' ? t.name.slice(0, 32) : ''};
+}
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9][A-Z0-9_-]{1,24}(@[a-z]{2,12})?$/.test(a.symbol)) return null; // también monedas de otros exchanges (HYPEUSDT@binancef, BTCUSDT@bybit…): antes se borraban y nunca avisaban
   const base0 = {id: a.id, symbol: a.symbol, on: a.on !== false, note: String(a.note || '').slice(0, 140), created: +a.created || 0, firedAt: +a.firedAt || 0};
@@ -271,7 +276,7 @@ function merge(s) {
     o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 80).map(t => ({n: t.n.slice(0, 24), ...sanTpl(t)})) : [];
   }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
-  o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.risk = sanRisk(o.risk); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.scrPush = sanScrPush(o.scrPush); o.discord = sanDiscord(o.discord); o.conn = sanConn(o.conn);
+  o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.risk = sanRisk(o.risk); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.scrPush = sanScrPush(o.scrPush); o.discord = sanDiscord(o.discord); o.tcast = sanTcast(o.tcast); o.conn = sanConn(o.conn);
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
   { // Nova Nexus: queda un solo indicador, el completo (Pine, en Mis indicadores). El módulo nativo antiguo se apaga y, si estaba encendido, se pasa al completo para no perderlo
@@ -6720,6 +6725,34 @@ window.CCT_bot = {
     const x = scripts.find(y => y.id === sid); if (!x) return {ok: false, error: {msg: 'No encuentro ese indicador'}}; const inst = state.pine.find(p => p.sid === sid);
     return pineRunFull(x.code, {cs, inputs: inst && inst.inputs, interval: itv, symbol: sym, name: x.name, timeLimitMs: 30000, alertCap: 30000, logLabels: true});
   },
+  toast: m => toast(m)
+};
+/* ───────── Trades a Discord (modo desarrollador, trade-cast.js): captura del gráfico con los niveles del trade ───────── */
+window.CCT_tradeHost = {
+  cur: () => ({key: state.symbol, base: baseOnly(state.symbol), tf: state.interval, n: candles.length}),
+  candles: () => candles.slice(-300),
+  async klines(key, tf, n) { const r = await fetchKlinesAny(key, tf, null, n || 200); return r.cs; },
+  base: k => baseOnly(k), sym: k => symOf(k), fmt: p => fmt(p), pair: k => pairLbl(k), tf: () => state.interval,
+  /* captura del gráfico abierto (velas, indicadores, dibujos) con líneas de entrada / SL / TP; null si no hay gráfico */
+  shot(marks, maxW) {
+    if (!candles.length) return null;
+    const cv = $('#priceCanvas'), view = $('#chartView'), prev = currentView; if (!cv || !view) return null;
+    const hidden = !cv.getBoundingClientRect().width, css = view.style.cssText, wasActive = view.classList.contains('active');
+    try {
+      if (hidden) { view.classList.add('active'); view.style.cssText = css + `;position:fixed!important;left:-10000px!important;top:0!important;width:${Math.max(900, innerWidth)}px!important;height:${Math.max(560, innerHeight - 130)}px!important;visibility:visible!important;pointer-events:none!important`; }
+      currentView = 'chartView'; renderCore();
+      const cssW = cv.getBoundingClientRect().width; if (!cv.width || !cssW) return null;
+      const k = Math.min(1, (maxW || 1280) / cv.width), w = Math.round(cv.width * k), h = Math.round(cv.height * k), dpr = cv.width / cssW, o = document.createElement('canvas'); o.width = w; o.height = h;
+      const g2 = o.getContext('2d'), bg = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#0b0e11'; g2.fillStyle = bg; g2.fillRect(0, 0, w, h); g2.drawImage(cv, 0, 0, w, h);
+      for (const m of marks || []) { if (!(m.p > 0)) continue; const out = m.p > geo.max ? '▲ ' : m.p < geo.min ? '▼ ' : '', y = (out ? (m.p > geo.max ? geo.plotTop + 14 : geo.plotTop + geo.plotH - 14) : Y(m.p)) * dpr * k; // fuera de la vista: etiqueta en el borde con flecha g2.save(); g2.strokeStyle = m.c; g2.lineWidth = Math.max(1.5, 2 * k * dpr / 2); g2.setLineDash(m.dash ? [8, 6] : []); if (!out) { g2.beginPath(); g2.moveTo(0, y); g2.lineTo(w, y); g2.stroke(); } g2.setLineDash([]);
+        const tx = `${out}${m.t} ${fmt(m.p)}`, fs = Math.round(Math.max(12, 13 * dpr * k)); g2.font = `700 ${fs}px Inter, system-ui, sans-serif`; const tw = g2.measureText(tx).width + 14; g2.fillStyle = m.c; g2.beginPath(); g2.roundRect ? g2.roundRect(10, y - fs * .85, tw, fs * 1.7, 6) : g2.rect(10, y - fs * .85, tw, fs * 1.7); g2.fill(); g2.fillStyle = '#fff'; g2.textBaseline = 'middle'; g2.fillText(tx, 17, y + 1); g2.restore(); }
+      return o;
+    } catch { return null; }
+    finally { currentView = prev; if (hidden) { view.style.cssText = css; if (!wasActive) view.classList.remove('active'); } }
+  },
+  get: () => state.tcast || {}, set: patch => { state.tcast = sanTcast({...(state.tcast || {}), ...patch}); save(); },
+  discordUrl: () => (state.discord || {}).url || '',
+  owner: () => !!(window.CCTPlans && CCTPlans.owner),
   toast: m => toast(m)
 };
 /* ───────── Ganchos para la pestaña IA (solo lectura del gráfico + motor Pine existente; no cambian nada más) ───────── */
