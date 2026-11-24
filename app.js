@@ -18,7 +18,7 @@ if (window.CCTMarkets && CCTMarkets.setStore) CCTMarkets.setStore(async (sym, tf
 const IV_MS = {'1m':6e4,'5m':3e5,'15m':9e5,'30m':18e5,'1h':36e5,'4h':144e5,'1d':864e5,'1w':6048e5,'1M':2592e6};
 const INTERVALS = Object.keys(IV_MS);
 const PANE = /[?&]pane=/.test(location.search); // gráficos extra (2.º a 5.º): la misma app dentro de un iframe, con su propio estado y sin sincronizar
-const PANE_N = Math.min(5, Math.max(2, +((/[?&]pane=(\d)/.exec(location.search) || [])[1]) || 2));
+const PANE_N = Math.min(10, Math.max(2, +((/[?&]pane=(\d+)/.exec(location.search) || [])[1]) || 2)); // hasta 10 gráficos
 const STORE = PANE ? 'cct_pane' + PANE_N + '_v1' : 'cct_mobile_v1';
 const ONEPT = ['horizontal', 'vertical', 'text', 'marker', 'hray', 'crossline', 'note', 'label', 'arrowup', 'arrowdown', 'flag', 'check', 'xmark', 'star', 'arrowleft', 'arrowright'], THREEPT = ['channel', 'fibext', 'pitchfork', 'triangle', 'parallelogram'];
 /* Patrones de varios puntos: se toca cada punto en orden (n = cuántos) */
@@ -307,7 +307,7 @@ function merge(s) {
     }
     o.wlists = wl; o.wlCur = typeof o.wlCur === 'string' && wl.some(x => x.id === o.wlCur) ? o.wlCur : (wl[0] ? wl[0].id : '');
   }
-  o.layout = ['1', '2v', '2h', '3', '4', '5'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
+  o.layout = ['1', '2v', '2h', '3', '4', '5', '6', '7', '8', '9', '10'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.stdHide = o.stdHide && typeof o.stdHide === 'object' && !Array.isArray(o.stdHide) ? Object.fromEntries(Object.keys(o.stdHide).filter(k => o.stdHide[k] === true && Object.prototype.hasOwnProperty.call(o.indicators, k) && !k.startsWith('nn') && o.indicators[k]).map(k => [k, true])) : {}; // «oculto» (ojito) ≠ «apagado»: sigue activo en Indicadores, solo no se dibuja
   o.designs = sanDesigns(o.designs);
   o.pixel = sanPixel(o.pixel); // personalización de Nexus Pixel (viaja con tu cuenta)
@@ -328,12 +328,12 @@ let uid = cloudEnabled ? lsGet(LASTUID) : null, fbUser = null, auth = null, db =
 const TAGS = [['#f23645', 'Rojo'], ['#ff9800', 'Naranja'], ['#fbc02d', 'Amarillo'], ['#089981', 'Verde'], ['#00bcd4', 'Cian'], ['#2962ff', 'Azul'], ['#9c27b0', 'Morado'], ['#e91e63', 'Rosa']];
 const storeKey = () => uid ? `${STORE}_${uid}` : STORE;
 const readLocal = key => { try { return JSON.parse(lsGet(key) || '{}'); } catch { return {}; } };
-const LAY_KEY = 'cct_layout_pref_v1', LAY_OK = ['1', '2v', '2h', '3', '4', '5']; // el diseño (1 a 5 gráficos) depende de la pantalla de cada dispositivo: se guarda aquí y no lo pisa la nube
+const LAY_KEY = 'cct_layout_pref_v1', LAY_OK = ['1', '2v', '2h', '3', '4', '5', '6', '7', '8', '9', '10']; // el diseño (1 a 5 gráficos) depende de la pantalla de cada dispositivo: se guarda aquí y no lo pisa la nube
 let layoutNow = null; // diseño en uso en este dispositivo (se actualiza al elegirlo)
 const withLocalLayout = o => { const lp = lsGet(LAY_KEY) || layoutNow; return lp && LAY_OK.includes(lp) && o && typeof o === 'object' ? {...o, layout: lp} : o; };
 let state = merge(withLocalLayout(readLocal(storeKey()))), stateUid = uid; // stateUid: de qué cuenta viene el estado en memoria
 let PR = CCTPrefs.sanitize((state.ui || {}).prefs); // preferencias: zona horaria, decimales, sonido y avisos (viajan a la cuenta)
-if (PANE) { document.body.classList.add('pane'); const q = new URLSearchParams(location.search); if (!lsGet(STORE)) { state.symbol = /^[A-Z0-9]{5,15}$/.test(q.get('sym') || '') ? q.get('sym') : ['ETHUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'][PANE_N - 1]; } state.light = q.get('light') === '1'; }
+if (PANE) { document.body.classList.add('pane'); const q = new URLSearchParams(location.search); if (!lsGet(STORE)) { state.symbol = /^[A-Za-z0-9_.:-]{2,40}(@[a-z]{2,12})?$/.test(q.get('sym') || '') ? q.get('sym') : ['ETHUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'LINKUSDT', 'AVAXUSDT', 'SUIUSDT'][PANE_N - 1]; } state.light = q.get('light') === '1'; }
 const dirtyKey = () => uid ? `${STORE}_dirty_${uid}` : null;
 const persistLocal = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch {} };
 let remoteRev = 0; // versión (rev) más reciente que se sabe que hay en la nube
@@ -5267,6 +5267,11 @@ if (PANE) { window.addEventListener('message', e => { if (e.origin === location.
 else window.addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.cct === 'proReq') { const m = proMap(); if (Object.keys(m).length && e.source) try { e.source.postMessage({cct: 'proCode', map: m}, location.origin); } catch {} } });
 window.CCT_proReload = () => loadProCode();
 if (PANE) window.addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.cct === 'refresh') { closeWS(); loadCandles(true); fetchTicker(); } });
+if (PANE) window.addEventListener('message', e => { // el principal configura este gráfico: plantilla (indicadores) y moneda
+  if (e.origin !== location.origin || !e.data || e.data.cct !== 'paneSetup') return; const d = e.data;
+  if (d.snap && typeof d.snap === 'object') { try { applyDesign({snap: d.snap}); } catch {} }
+  if (typeof d.sym === 'string' && /^[A-Za-z0-9_.:-]{2,40}(@[a-z]{2,12})?$/.test(d.sym) && d.sym !== state.symbol) { state.symbol = d.sym; save(); clearTransient(); closeWS(); candles = []; ind = {}; updateChartHeader(); loadCandles(); }
+});
 if (!PANE) window.addEventListener('message', e => { const m = e.data; if (e.origin !== location.origin || !m || m.cct !== 'designs' || !['add', 'del', 'ren', 'upd'].includes(m.op)) return; designsOp({op: m.op, id: typeof m.id === 'string' ? m.id : '', name: m.name, snap: m.snap}); });
 function renderDesigns() {
   const box = document.querySelector('.dz-box .dz-list'); if (!box) return; const list = designsList();
@@ -5445,6 +5450,7 @@ function renderPrefs() {
     + `</div>`;
   const cl = window.CCT_CHANGELOG || [], cur = cl[0] || {v: '—', d: ''};
   ab.innerHTML = `<div class="about-card"><img data-app-icon class="about-ic" width="52" height="52" alt=""><div class="about-t"><svg class="brand-word wm-sm" viewBox="0 -1 160 45" role="img" aria-label="VORTEX"><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-back" d="M8 22A72 9 0 0 1 152 22"/></g><text x="80" y="29" text-anchor="middle">VORTEX</text><g transform="rotate(-7 80 22)" fill="none" stroke-linecap="round"><path class="ring-gap" d="M152 22A72 9 0 0 1 8 22"/><path class="ring-front" d="M152 22A72 9 0 0 1 8 22"/></g><path class="ring-star" d="M80 .6l1.55 3.75 3.75 1.55-3.75 1.55L80 11.2l-1.55-3.75-3.75-1.55 3.75-1.55z"/></svg><small>Powered by Nova Nexus</small><span class="about-v">Versión ${esc(cur.v)} <span id="buildNo"></span></span></div></div>`
+    + instBtnHtml()
     + `<div class="sg-label">Novedades</div><div class="cl-list">${cl.map((r, i) => `<details class="cl-ver"${i === 0 ? ' open' : ''}><summary><span class="cl-v">${esc(r.v)}</span><span class="cl-h"><b>${esc(r.t || 'Versión ' + r.v)}</b><small>${esc(r.d)}</small></span>${i === 0 ? '<span class="cl-new">Nuevo</span>' : ''}<svg class="cl-chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><ul>${r.items.map(it => `<li>${esc(it)}</li>`).join('')}</ul></details>`).join('')}</div>`;
   if (window.CCTAppIcons) try { CCTAppIcons.apply(CCTAppIcons.selected); } catch {}
   if (window.caches && caches.keys) caches.keys().then(k => { const m = k.map(x => /^cct-shell-v(\d+)$/.exec(x)).filter(Boolean).map(x => +x[1]).sort((a, b) => b - a)[0]; const e = $('#buildNo'); if (e && m) e.textContent = '· compilación ' + m; }).catch(() => {});
@@ -5508,6 +5514,24 @@ function renderCustom() {
 }
 /* Preferencias de uso en Configuración (antes en Personalización): cursor, cuenta atrás, aviso de conexión, confirmar, pantalla y pestaña */
 document.addEventListener('click', e => { const b = e.target.closest('#setPrefs'); if (!b) return; const w = $('#prefWrap'); if (!w) return; w.hidden = !w.hidden; b.setAttribute('aria-expanded', String(!w.hidden)); if (!w.hidden) { renderGenPrefs(); setTimeout(() => w.scrollIntoView({block: 'nearest', behavior: 'smooth'}), 30); } }); // Preferencias: dentro de su botón, no todo desplegado
+/* Botón «Instalar aplicación en PC / en celular» debajo de Acerca de: detecta el dispositivo; si ya está instalada, no sale */
+let instEv = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); instEv = e; const b = $('#aboutInstall'); if (b) b.hidden = false; });
+addEventListener('appinstalled', () => { instEv = null; const b = $('#aboutInstall'); if (b) b.hidden = true; });
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const phoneLike = () => matchMedia('(pointer:coarse)').matches && Math.min(screen.width, screen.height) < 900;
+function instBtnHtml() {
+  if (isStandalone()) return '';
+  const m = phoneLike(), ic = m ? '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>' : '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>';
+  return `<button type="button" class="about-inst" id="aboutInstall"><span class="ai-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic}</svg></span><span class="ai-t"><b>Instalar aplicación en ${m ? 'celular' : 'PC'}</b><small>${m ? 'Ábrela desde tu pantalla de inicio, a pantalla completa' : 'En su propia ventana, desde el escritorio o la barra de tareas'}</small></span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>`;
+}
+document.addEventListener('click', async e => {
+  if (!e.target.closest('#aboutInstall')) return;
+  if (instEv) { const ev = instEv; instEv = null; try { await ev.prompt(); const r = await ev.userChoice; toast(r.outcome === 'accepted' ? 'Instalando VORTEX…' : 'Instalación cancelada'); } catch { toast('Usa el menú del navegador › Instalar aplicación'); } return; }
+  const m = phoneLike();
+  vxAsk({title: `Instalar en ${m ? 'celular' : 'PC'}`, text: isIOS() ? 'En Safari toca Compartir (el cuadro con la flecha) › «Añadir a pantalla de inicio» › Añadir.' : m ? 'En Chrome abre el menú ⋮ › «Instalar aplicación» (o «Añadir a pantalla de inicio»).' : 'En Chrome o Edge toca el ícono de instalar en la barra de direcciones (la pantalla con flecha) o abre el menú ⋮ › «Instalar VORTEX».', ok: 'Entendido', always: true});
+});
 function renderGenPrefs() {
   const box = $('#genPrefBox'); if (!box) return;
   const ic = (c, d) => `<span class="sg-ic" style="--c:${c}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg></span>`;
@@ -6733,6 +6757,7 @@ window.CCT_tradeHost = {
   cur: () => ({key: state.symbol, base: baseOnly(state.symbol), tf: state.interval, n: candles.length}),
   candles: () => candles.slice(-300),
   async klines(key, tf, n) { const r = await fetchKlinesAny(key, tf, null, n || 200); return r.cs; },
+  levels: k => { const b = CCTTradeWatch.stripBase(baseOnly(k)), out = []; for (const [kk, arr] of Object.entries(state.drawings || {})) { if (CCTTradeWatch.stripBase(baseOnly(kk)) !== b || !Array.isArray(arr)) continue; for (const d of arr) if (d && (d.type === 'horizontal' || d.type === 'hray') && d.a && +d.a.p > 0) out.push(+d.a.p); } return out; }, // tus soportes y resistencias dibujados
   base: k => baseOnly(k), sym: k => symOf(k), fmt: p => fmt(p), pair: k => pairLbl(k), tf: () => state.interval,
   /* captura del gráfico abierto (velas, indicadores, dibujos) con líneas de entrada / SL / TP; null si no hay gráfico */
   shot(marks, maxW) {
@@ -6942,11 +6967,24 @@ const LAYOUTS = [
   ['4', 'Cuatro · cuadrícula', LR(3.5, 3.5, 8, 8) + LR(12.5, 3.5, 8, 8) + LR(3.5, 12.5, 8, 8) + LR(12.5, 12.5, 8, 8)],
   ['5', 'Cinco · dos arriba y tres abajo', LR(3, 3.5, 8.6, 8) + LR(12.4, 3.5, 8.6, 8) + LR(3, 12.5, 5.4, 8) + LR(9.3, 12.5, 5.4, 8) + LR(15.6, 12.5, 5.4, 8)]
 ];
-const LAY_PANES = {'1': 0, '2v': 1, '2h': 1, '3': 2, '4': 3, '5': 4}, LAY_ICON = id => SV((LAYOUTS.find(l => l[0] === id) || LAYOUTS[0])[2], 16);
+/* 6 a 10 gráficos: cuadrícula de 2 filas; con 7 y 9 el principal ocupa las dos filas */
+const BIG_GRID = {'6': [3, false], '7': [4, true], '8': [4, false], '9': [5, true], '10': [5, false]};
+function bigAreas(n) { const [cols, big] = BIG_GRID[n], names = ['chart'].concat(Array.from({length: +n - 1}, (_, i) => i ? 'pane' + (i + 2) : 'pane')), r1 = names.slice(0, cols), r2 = big ? ['chart'].concat(names.slice(cols, cols * 2 - 1)) : names.slice(cols, cols * 2); return [r1, r2, cols]; }
+for (const n of Object.keys(BIG_GRID)) { const [r1, r2, cols] = bigAreas(n), w = 17 / cols - .8; let ic = ''; r1.forEach((a, i) => { ic += LR(3.5 + i * (w + .8), 3.5, w, a === 'chart' && BIG_GRID[n][1] ? 16.2 : 7.6); }); r2.forEach((a, i) => { if (a !== 'chart') ic += LR(3.5 + i * (w + .8), 12.1, w, 7.6); }); LAYOUTS.push([n, `${({'6': 'Seis', '7': 'Siete', '8': 'Ocho', '9': 'Nueve', '10': 'Diez'})[n]} gráficos`, ic]); }
+function bigLayoutCss() { // reglas de la cuadrícula para 6–10 gráficos (se generan una vez)
+  if ($('#layBigCss')) return; let css = '@media(min-width:1024px){';
+  for (const n of Object.keys(BIG_GRID)) { const [r1, r2, cols] = bigAreas(n), q = r => '"' + ['watch'].concat(r).join(' ') + ' side"', qe = r => '"' + ['watch'].concat(r).join(' ') + '"';
+    css += `body.split-${n} .pane-fr,body.split-${n} #pane2{display:block;border-left:1px solid var(--line);border-top:1px solid var(--line)}body.split-${n} #chartView{min-height:0}`
+      + `body.split-${n} main{grid-template-columns:var(--wl-w) repeat(${cols},minmax(0,1fr)) var(--side-w);grid-template-rows:minmax(0,1fr) minmax(0,1fr);grid-template-areas:${q(r1)} ${q(r2)}}`
+      + `body.split-${n}.expanded main{grid-template-columns:var(--wl-w) repeat(${cols},minmax(0,1fr));grid-template-areas:${qe(r1)} ${qe(r2)}}`; }
+  css += '}' + Array.from({length: 5}, (_, i) => `#pane${i + 6}{grid-area:pane${i + 6}}`).join('');
+  const st = document.createElement('style'); st.id = 'layBigCss'; st.textContent = css; document.head.appendChild(st);
+}
+const LAY_PANES = {'1': 0, '2v': 1, '2h': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6, '8': 7, '9': 8, '10': 9}, LAY_ICON = id => SV((LAYOUTS.find(l => l[0] === id) || LAYOUTS[0])[2], 16);
 const effLayout = () => state.layout !== '1' && innerWidth < 1024 ? '2h' : state.layout; // en pantalla angosta solo caben uno arriba y otro abajo
-function paneSrc(n) {
-  const order = state.symbol === 'ETHUSDT' ? ['BTCUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'] : ['ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'BTCUSDT'];
-  const sym = order.filter(x => x !== state.symbol)[n - 2] || 'BTCUSDT';
+function paneSrc(n, want) {
+  const order = ['ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'BTCUSDT', 'DOGEUSDT', 'ADAUSDT', 'LINKUSDT', 'AVAXUSDT', 'SUIUSDT'];
+  const sym = want || order.filter(x => x !== state.symbol)[n - 2] || 'BTCUSDT';
   return `index.html?pane=${n}&sym=${encodeURIComponent(sym)}&light=${state.light ? 1 : 0}`;
 }
 function applyLayout() {
@@ -6954,14 +6992,61 @@ function applyLayout() {
   const eff = effLayout(), need = LAY_PANES[eff] || 0;
   document.body.dataset.lay = eff;
   document.body.classList.toggle('split', eff !== '1'); document.body.classList.toggle('split-v', eff === '2v'); document.body.classList.toggle('split-h', eff === '2h');
-  for (const k of ['3', '4', '5']) document.body.classList.toggle('split-' + k, eff === k);
-  for (let n = 2; n <= 5; n++) {
+  bigLayoutCss();
+  for (const k of ['3', '4', '5', '6', '7', '8', '9', '10']) document.body.classList.toggle('split-' + k, eff === k);
+  for (let n = 2; n <= 10; n++) {
     let fr = $('#pane' + n);
     if (n - 1 > need) { if (fr) fr.remove(); continue; }
-    if (!fr) { fr = document.createElement('iframe'); fr.id = 'pane' + n; fr.className = 'pane-fr'; fr.title = 'Gráfico ' + n; fr.src = paneSrc(n); fr.allow = 'fullscreen'; $('main').appendChild(fr); }
+    if (!fr) { const su = paneSetupFor(n); fr = document.createElement('iframe'); fr.id = 'pane' + n; fr.className = 'pane-fr'; fr.title = 'Gráfico ' + n; fr.src = paneSrc(n, su && su.sym); fr.allow = 'fullscreen'; if (su) fr.addEventListener('load', () => setTimeout(() => paneSend(n, su), 400), {once: true}); $('main').appendChild(fr); }
   }
   const b = $('#layoutBtn'); if (b) b.innerHTML = LAY_ICON(state.layout) + ' Diseño';
   requestAnimationFrame(() => { render(); window.dispatchEvent(new Event('resize')); });
+}
+/* ───────── Asistente al elegir varios gráficos: 1) la moneda de cada gráfico 2) su plantilla ─────────
+   Los gráficos nuevos abren con los indicadores del principal; luego eliges por gráfico: como el principal, una de tus plantillas o desde cero. */
+const paneSetups = {};
+const paneSetupFor = n => { const su = paneSetups[n]; delete paneSetups[n]; return su; };
+function paneSend(n, su) { const fr = $('#pane' + n); if (!fr || !fr.contentWindow) return; try { fr.contentWindow.postMessage({cct: 'paneSetup', sym: su.sym || '', snap: su.snap || null}, location.origin); } catch {} }
+const paneSymOf = n => { try { return (JSON.parse(localStorage.getItem('cct_pane' + n + '_v1') || '{}') || {}).symbol || ''; } catch { return ''; } };
+const blankSnap = () => { const sn = tabSnap(); sn.indicators = Object.fromEntries(Object.keys(sn.indicators || {}).map(k => [k, false])); sn.stdHide = {}; sn.pine = []; return sn; };
+function paneWizard(ly) {
+  const N = (LAY_PANES[ly] || 0) + 1, had = new Set(); for (let n = 2; n <= 10; n++) if ($('#pane' + n)) had.add(n);
+  const order = ['ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'BTCUSDT', 'DOGEUSDT', 'ADAUSDT', 'LINKUSDT', 'AVAXUSDT', 'SUIUSDT'].filter(x => x !== state.symbol);
+  const pool = [...new Set([...state.symbols, ...(state.wlists || []).flatMap(l => l.symbols || []), ...order, state.symbol])];
+  const pick = {}; let k2 = 0; for (let n = 2; n <= N; n++) pick[n] = (had.has(n) && paneSymOf(n)) || order[k2++] || 'BTCUSDT';
+  const back = document.createElement('div'); back.className = 'pw-back'; document.body.appendChild(back);
+  const close = () => uxOut(back, 160), name = k => esc(pairLbl(k)) + (srcOf(k) !== 'binance' ? ` · ${esc(exName(k))}` : '');
+  const opts = cur => [...new Set([cur, ...pool])].map(k => `<option value="${esc(k)}"${k === cur ? ' selected' : ''}>${name(k)}</option>`).join('') + '<option value="__other">Otra moneda…</option>';
+  const step1 = () => {
+    back.innerHTML = `<div class="pw-dlg" role="dialog" aria-label="Varios gráficos"><div class="pw-head"><span class="pw-lay">${LAY_ICON(ly)}</span><div><b>${N} gráficos</b><small>Paso 1 de 2 · Elige la moneda de cada gráfico</small></div><button type="button" class="pw-x" aria-label="Cerrar">✕</button></div>
+      <div class="pw-body"><div class="pw-row main"><span class="pw-n">1</span><div class="pw-l"><b>${name(state.symbol)}</b><small>Gráfico principal · ${esc(state.interval)}</small></div></div>
+      ${Array.from({length: N - 1}, (_, i) => { const n = i + 2; return `<div class="pw-row"><span class="pw-n">${n}</span><div class="pw-l"><select class="pw-sel" data-pn="${n}">${opts(pick[n])}</select><input class="pw-other" data-po="${n}" placeholder="Escribe el par (ej. PEPEUSDT)" hidden></div>${had.has(n) ? '<em class="pw-tag">ya abierto</em>' : '<em class="pw-tag new">nuevo</em>'}</div>`; }).join('')}</div>
+      <div class="pw-foot"><button type="button" class="pw-btn" data-pw="cancel">Cancelar</button><button type="button" class="pw-btn pri" data-pw="next">Abrir gráficos</button></div></div>`;
+  };
+  const step2 = () => {
+    const ds = designsList(), sel = n => `<select class="pw-sel" data-pt="${n}"><option value="keep">${had.has(n) ? 'Dejar como está' : 'Como el gráfico principal'}</option>${had.has(n) ? '<option value="main">Como el gráfico principal</option>' : ''}${ds.map(d => `<option value="d:${esc(d.id)}">Plantilla: ${esc(d.name)}</option>`).join('')}<option value="blank">Gráfico desde cero</option></select>`;
+    back.innerHTML = `<div class="pw-dlg" role="dialog" aria-label="Plantillas de los gráficos"><div class="pw-head"><span class="pw-lay">${LAY_ICON(ly)}</span><div><b>Plantilla de cada gráfico</b><small>Paso 2 de 2 · Se aplica al momento; puedes cambiarla después en Plantillas</small></div><button type="button" class="pw-x" aria-label="Cerrar">✕</button></div>
+      <div class="pw-body"><div class="pw-all"><span>Para todos:</span><select class="pw-sel" data-pt="all"><option value="">—</option><option value="main">Como el gráfico principal</option>${ds.map(d => `<option value="d:${esc(d.id)}">Plantilla: ${esc(d.name)}</option>`).join('')}<option value="blank">Gráfico desde cero</option></select></div>
+      ${Array.from({length: N - 1}, (_, i) => { const n = i + 2; return `<div class="pw-row"><span class="pw-n">${n}</span><div class="pw-l"><b>${name(pick[n])}</b>${sel(n)}</div></div>`; }).join('')}</div>
+      <div class="pw-foot"><button type="button" class="pw-btn pri" data-pw="done">Listo</button></div></div>`;
+  };
+  const snapOf = v => v === 'main' ? tabSnap() : v === 'blank' ? blankSnap() : v.startsWith('d:') ? ((designsList().find(d => d.id === v.slice(2)) || {}).snap || null) : null;
+  step1();
+  back.addEventListener('change', e => {
+    const s1 = e.target.closest('[data-pn]'); if (s1) { const n = +s1.dataset.pn, o = back.querySelector(`[data-po="${n}"]`); if (s1.value === '__other') { o.hidden = false; o.focus(); } else { o.hidden = true; pick[n] = s1.value; } return; }
+    const s2 = e.target.closest('[data-pt]'); if (!s2) return;
+    if (s2.dataset.pt === 'all') { if (!s2.value) return; back.querySelectorAll('[data-pt]:not([data-pt="all"])').forEach(x => { x.value = [...x.options].some(o => o.value === s2.value) ? s2.value : 'keep'; x.dispatchEvent(new Event('change', {bubbles: true})); }); return; }
+    const n = +s2.dataset.pt, v = s2.value, sn = v === 'keep' ? (had.has(n) ? null : tabSnap()) : snapOf(v); if (sn) paneSend(n, {snap: sn});
+  });
+  back.addEventListener('click', e => {
+    if (e.target === back || e.target.closest('.pw-x,[data-pw="cancel"],[data-pw="done"]')) { close(); return; }
+    if (e.target.closest('[data-pw="next"]')) {
+      for (let n = 2; n <= N; n++) { const o = back.querySelector(`[data-po="${n}"]`); if (o && !o.hidden) { const v = o.value.trim().toUpperCase().replace(/[^A-Z0-9_.:@/-]/g, '').replace('/', ''); if (!v) { o.focus(); return; } pick[n] = /USDT|USDC|USD|BTC|ETH$/.test(v) ? v : v + 'USDT'; } }
+      const main = tabSnap();
+      for (let n = 2; n <= N; n++) { if (had.has(n)) { if (pick[n] !== paneSymOf(n)) paneSend(n, {sym: pick[n]}); } else paneSetups[n] = {sym: pick[n], snap: main}; }
+      state.layout = layoutNow = ly; try { localStorage.setItem(LAY_KEY, state.layout); } catch {} save(); applyLayout(); step2();
+    }
+  });
 }
 function pushPaneTheme() { document.querySelectorAll('.pane-fr').forEach(fr => { if (fr.contentWindow) { try { fr.contentWindow.postMessage({cct: 'light', light: !!state.light}, location.origin); } catch {} } }); }
 if (PANE) {
@@ -6972,10 +7057,10 @@ if (PANE) {
   $('#layoutBtn').onclick = e => {
     e.stopPropagation(); const old = $('#layoutMenu'); if (old) { old.remove(); return; }
     const m = document.createElement('div'); m.id = 'layoutMenu'; m.className = 'pop-menu';
-    m.innerHTML = LAYOUTS.filter(l => !(l[0] === '2v' && innerWidth < 700) && !(['3', '4', '5'].includes(l[0]) && innerWidth < 1024)).map(l => `<button data-ly="${l[0]}" class="${state.layout === l[0] ? 'on' : ''}"><span>${LAY_ICON(l[0])}</span>${l[1]}</button>`).join('');
+    m.innerHTML = LAYOUTS.filter(l => !(l[0] === '2v' && innerWidth < 700) && !(['3', '4', '5', '6', '7', '8', '9', '10'].includes(l[0]) && innerWidth < 1024)).map(l => `<button data-ly="${l[0]}" class="${state.layout === l[0] ? 'on' : ''}"><span>${LAY_ICON(l[0])}</span>${l[1]}</button>`).join('');
     const r = e.currentTarget.getBoundingClientRect(); document.body.appendChild(m);
     m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.top = Math.min(innerHeight - m.offsetHeight - 8, r.bottom + 6) + 'px';
-    m.onclick = ev => { const k = ev.target.closest('[data-ly]'); if (!k) return; state.layout = layoutNow = k.dataset.ly; try { localStorage.setItem(LAY_KEY, state.layout); } catch {} save(); applyLayout(); m.remove(); };
+    m.onclick = ev => { const k = ev.target.closest('[data-ly]'); if (!k) return; m.remove(); const ly = k.dataset.ly; if (ly === '1') { state.layout = layoutNow = ly; try { localStorage.setItem(LAY_KEY, state.layout); } catch {} save(); applyLayout(); return; } paneWizard(ly); };
     setTimeout(() => document.addEventListener('click', function f() { m.remove(); document.removeEventListener('click', f); }), 0);
   };
   window.addEventListener('resize', () => { if (document.body.dataset.lay !== effLayout()) applyLayout(); });

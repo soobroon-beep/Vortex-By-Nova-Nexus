@@ -1,7 +1,7 @@
 /* VORTEX · Trades a Discord (solo el desarrollador).
    Cada vez que entras en un trade (tu exchange conectado y/o la cuenta demo), VORTEX publica sola en el canal de Discord que elijas:
    la captura del gráfico (velas, indicadores y tus dibujos) con las líneas de entrada, stop loss y take profit, la moneda, la
-   temporalidad, el apalancamiento, el R:R y una explicación breve hecha con lo que muestra el gráfico (tendencia, RSI, volumen).
+   temporalidad, el apalancamiento, el R:R y una explicación breve con TUS indicadores: nube de 100, perfil de volumen, Fibonacci, soportes/resistencias, oscilador y money flow.
    · Espera unos segundos después de abrir (por defecto 20 s) para incluir el TP/SL que pongas justo después.
    · Publica UN dispositivo (el que lo activó) para que no salga repetido si tienes la app abierta en PC y celular.
    · Los trades que ya estaban abiertos al abrir la app no se publican: solo los nuevos.
@@ -23,19 +23,48 @@
   let status = {t: '', c: ''}, open = false, lastSent = null;
 
   /* ───────── Análisis breve (funciones puras, tests/trade-cast.test.js) ───────── */
-  function ema(cs, n) { if (cs.length < n) return NaN; const k = 2 / (n + 1); let e = cs.slice(0, n).reduce((a, c) => a + c.c, 0) / n; for (let i = n; i < cs.length; i++) e = cs[i].c * k + e * (1 - k); return e; }
-  function rsi(cs, n = 14) { if (cs.length < n + 1) return NaN; let g = 0, l = 0; for (let i = 1; i <= n; i++) { const d = cs[i].c - cs[i - 1].c; if (d > 0) g += d; else l -= d; } g /= n; l /= n; for (let i = n + 1; i < cs.length; i++) { const d = cs[i].c - cs[i - 1].c; g = (g * (n - 1) + Math.max(0, d)) / n; l = (l * (n - 1) + Math.max(0, -d)) / n; } return l === 0 ? 100 : 100 - 100 / (1 + g / l); }
-  function explain(cs, tr) {
+  /* Tus indicadores (no EMA 20/50 ni RSI): nube de 100 periodos, perfil de volumen, Fibonacci, soportes/resistencias, oscilador y money flow */
+  function emaArr(v, n) { const k = 2 / (n + 1), o = []; let e = NaN; for (let i = 0; i < v.length; i++) { if (i === n - 1) e = v.slice(0, n).reduce((a, b) => a + b, 0) / n; else if (i >= n) e = v[i] * k + e * (1 - k); o.push(e); } return o; }
+  function atr(cs, n) { let a = NaN; const o = []; for (let i = 0; i < cs.length; i++) { const p = i ? cs[i - 1].c : cs[i].o, tr = Math.max(cs[i].h - cs[i].l, Math.abs(cs[i].h - p), Math.abs(cs[i].l - p)); a = i < n ? (i ? (a * i + tr) / (i + 1) : tr) : (a * (n - 1) + tr) / n; o.push(a); } return o; }
+  function cloud(cs, n = 100, mult = .6) { if (cs.length < n) return null; const e = emaArr(cs.map(x => x.c), n), a = atr(cs, n), i = cs.length - 1; return {mid: e[i], top: e[i] + a[i] * mult, bot: e[i] - a[i] * mult}; }
+  function vprofile(cs, bins = 40) { // perfil de volumen de lo visible (hasta 200 velas): POC y área de valor (70 %)
+    const v = cs.slice(-200); if (v.length < 30) return null; const lo = Math.min(...v.map(x => x.l)), hi = Math.max(...v.map(x => x.h)), st = (hi - lo) / bins; if (!(st > 0)) return null;
+    const b = new Array(bins).fill(0); for (const x of v) { const a = Math.max(0, Math.floor((x.l - lo) / st)), z = Math.min(bins - 1, Math.floor((x.h - lo) / st)), each = (x.v || 0) / (z - a + 1); for (let k = a; k <= z; k++) b[k] += each; }
+    const tot = b.reduce((s, x) => s + x, 0); if (!(tot > 0)) return null; let poc = 0; b.forEach((x, k) => { if (x > b[poc]) poc = k; });
+    let L = poc, R = poc, acc = b[poc]; while (acc < tot * .7 && (L > 0 || R < bins - 1)) { const l = L > 0 ? b[L - 1] : -1, r = R < bins - 1 ? b[R + 1] : -1; if (r >= l) acc += b[++R]; else acc += b[--L]; }
+    return {poc: lo + (poc + .5) * st, val: lo + L * st, vah: lo + (R + 1) * st};
+  }
+  function fibo(cs, look = 120) { // último impulso (máximo y mínimo de las últimas velas) y su nivel más cercano al precio
+    const v = cs.slice(-look); if (v.length < 30) return null; let hi = 0, lo = 0; v.forEach((x, k) => { if (x.h > v[hi].h) hi = k; if (x.l < v[lo].l) lo = k; });
+    const H = v[hi].h, L = v[lo].l, up = lo < hi, c = v[v.length - 1].c, R = [0.236, 0.382, 0.5, 0.618, 0.786];
+    const lv = R.map(r => ({r, p: up ? H - (H - L) * r : L + (H - L) * r})); let best = lv[0]; for (const x of lv) if (Math.abs(x.p - c) < Math.abs(best.p - c)) best = x;
+    return {up, best, dist: Math.abs(best.p - c) / c * 100, above: c >= best.p};
+  }
+  function sr(cs, extra) { // soporte y resistencia más cercanos: tus líneas horizontales + pivotes (fractales de 5 velas)
+    const v = cs.slice(-150), c = cs[cs.length - 1].c, lv = (extra || []).filter(p => p > 0).slice();
+    for (let i = 2; i < v.length - 2; i++) { const x = v[i]; if (x.h >= v[i - 1].h && x.h >= v[i - 2].h && x.h >= v[i + 1].h && x.h >= v[i + 2].h) lv.push(x.h); if (x.l <= v[i - 1].l && x.l <= v[i - 2].l && x.l <= v[i + 1].l && x.l <= v[i + 2].l) lv.push(x.l); }
+    const near = c * .0015, sup = lv.filter(p => p < c - near).sort((a, b) => b - a)[0], res = lv.filter(p => p > c + near).sort((a, b) => a - b)[0];
+    return {sup, res, c};
+  }
+  function osc(cs) { // oscilador tipo WaveTrend (10, 21) y money flow ((cierre − apertura) / rango, media 60)
+    if (cs.length < 70) return null; const ap = cs.map(x => (x.h + x.l + x.c) / 3), esa = emaArr(ap, 10), d = emaArr(ap.map((x, i) => Math.abs(x - esa[i])).map(x => (Number.isFinite(x) ? x : 0)), 10);
+    const ci = ap.map((x, i) => d[i] ? (x - esa[i]) / (0.015 * d[i]) : 0), wt1 = emaArr(ci.map(x => (Number.isFinite(x) ? x : 0)), 21), i = cs.length - 1, wt2 = wt1.slice(i - 3, i + 1).reduce((a, b) => a + b, 0) / 4;
+    const mfv = cs.slice(-60).map(x => (x.h - x.l) > 0 ? (x.c - x.o) / (x.h - x.l) * 150 : 0), mf = mfv.reduce((a, b) => a + b, 0) / mfv.length;
+    return {wt: wt1[i], wt2, mf};
+  }
+  function explain(cs, tr, lvls) {
     const out = []; if (!cs || cs.length < 30) return out;
-    const c = cs[cs.length - 1].c, e20 = ema(cs, 20), e50 = ema(cs, 50), r = rsi(cs), long = tr.side > 0;
-    let trend = 0;
-    if (Number.isFinite(e50) ? c > e20 && e20 > e50 : c > e20) { trend = 1; out.push('Tendencia alcista: el precio está sobre la EMA 20' + (Number.isFinite(e50) ? ' y la EMA 50.' : '.')); }
-    else if (Number.isFinite(e50) ? c < e20 && e20 < e50 : c < e20) { trend = -1; out.push('Tendencia bajista: el precio está debajo de la EMA 20' + (Number.isFinite(e50) ? ' y la EMA 50.' : '.')); }
-    else out.push('Tendencia mixta: el precio está entre sus medias (EMA 20 / 50).');
-    if (Number.isFinite(r)) out.push(r >= 70 ? `RSI en ${r.toFixed(0)}: zona de sobrecompra.` : r <= 30 ? `RSI en ${r.toFixed(0)}: zona de sobreventa.` : r >= 50 ? `RSI en ${r.toFixed(0)}: domina la fuerza compradora.` : `RSI en ${r.toFixed(0)}: domina la presión vendedora.`);
-    const vs = cs.slice(-21, -1).map(x => x.v || 0), av = vs.reduce((a, b) => a + b, 0) / (vs.length || 1), lv = cs[cs.length - 1].v || 0, prevV = cs[cs.length - 2] ? cs[cs.length - 2].v || 0 : 0, vr = av > 0 ? Math.max(lv, prevV) / av : NaN;
-    if (Number.isFinite(vr)) { if (vr >= 1.5) out.push(`Volumen ${vr.toFixed(1)}× sobre su promedio.`); else if (vr <= .6) out.push('Volumen bajo por ahora.'); }
-    if (trend) out.push(trend === (long ? 1 : -1) ? 'Entrada a favor de la tendencia.' : 'Entrada contra la tendencia: operación de rebote, con más riesgo.');
+    const c = cs[cs.length - 1].c, long = tr.side > 0, f = v => (Math.abs(v) >= 1000 ? v.toLocaleString('en-US', {maximumFractionDigits: 1}) : +v.toPrecision(6)), pc = v => ((v - c) / c * 100);
+    const cl = cloud(cs); let side = 0;
+    if (cl) { if (c > cl.top) { side = 1; out.push('Precio **por encima de la nube de 100 periodos**: sesgo alcista.'); } else if (c < cl.bot) { side = -1; out.push('Precio **por debajo de la nube de 100 periodos**: sesgo bajista.'); } else out.push('Precio **dentro de la nube de 100 periodos**: zona de indecisión.'); }
+    const vp = vprofile(cs); if (vp) out.push(c > vp.poc ? `Perfil de volumen: el precio está **por encima del POC** (${f(vp.poc)}), la zona de más volumen queda como soporte.` : `Perfil de volumen: el precio está **por debajo del POC** (${f(vp.poc)}), la zona de más volumen queda como resistencia.`);
+    const fb = fibo(cs); if (fb) out.push(fb.dist <= 0.6 ? `Fibonacci: precio sobre el **${fb.best.r}** (${f(fb.best.p)}) del último impulso ${fb.up ? 'alcista' : 'bajista'}.` : `Fibonacci: el nivel más cercano es el **${fb.best.r}** (${f(fb.best.p)}), ${fb.above ? 'debajo' : 'arriba'} del precio.`);
+    const s = sr(cs, lvls); if (s.sup || s.res) out.push([s.sup ? `Soporte en ${f(s.sup)} (${pc(s.sup).toFixed(2)} %)` : '', s.res ? `resistencia en ${f(s.res)} (+${pc(s.res).toFixed(2)} %)` : ''].filter(Boolean).join(' · ') + '.');
+    const o = osc(cs); if (o && Number.isFinite(o.wt)) {
+      out.push(o.wt >= 53 ? 'Oscilador en **sobrecompra**.' : o.wt <= -53 ? 'Oscilador en **sobreventa**.' : `Oscilador neutral, ${o.wt >= o.wt2 ? 'girando al alza' : 'girando a la baja'}.`);
+      out.push(`Money flow **${o.mf >= 0 ? 'alcista' : 'bajista'}**.`);
+    }
+    if (side) out.push(side === (long ? 1 : -1) ? 'Entrada a favor de la nube.' : 'Entrada contra la nube: operación de rebote, con más riesgo.');
     return out;
   }
   function rr(tr) { // distancias y R:R con los niveles que tenga
@@ -55,7 +84,7 @@
       {name: 'Apalancamiento', value: tr.lev > 0 ? 'x' + Math.round(tr.lev) : '—', inline: true},
       {name: 'R:R', value: R.rr ? R.rr.toFixed(2) : '—', inline: true}
     ];
-    const desc = [(info.why || []).join(' '), C.note ? '\n' + C.note : ''].join('').trim();
+    const desc = [(info.why || []).map(x => '• ' + x).join('\n'), C.note ? '\n' + C.note : ''].join('').trim();
     return {
       username: (C.name || 'VORTEX').slice(0, 32), allowed_mentions: {parse: []},
       embeds: [Object.assign({
@@ -69,7 +98,7 @@
 
   /* ───────── Imagen: captura del gráfico (o un gráfico propio si la moneda no está abierta) + encabezado con los niveles ───────── */
   function marksOf(tr) { return [{p: +tr.entry, c: '#548fff', t: 'Entrada'}, {p: +tr.sl, c: '#f06b79', t: 'SL', dash: true}, {p: +tr.tp, c: '#20bf9f', t: 'TP', dash: true}].filter(m => m.p > 0); }
-  function mini(cs, marks, fmt) { // gráfico propio: últimas 90 velas, EMA 20/50 y niveles
+  function mini(cs, marks, fmt) { // gráfico propio: últimas 90 velas, nube de 100, POC del perfil de volumen y niveles
     const W = 1200, Hh = 620, pad = {l: 14, r: 92, t: 16, b: 26}, v = cs.slice(-90), o = document.createElement('canvas'); o.width = W; o.height = Hh; const g = o.getContext('2d');
     g.fillStyle = '#0b0e11'; g.fillRect(0, 0, W, Hh);
     let lo = Math.min(...v.map(x => x.l), ...marks.map(m => m.p)), hi = Math.max(...v.map(x => x.h), ...marks.map(m => m.p)); const sp = (hi - lo) || hi * .01; lo -= sp * .06; hi += sp * .06;
@@ -77,7 +106,9 @@
     g.strokeStyle = 'rgba(255,255,255,.06)'; g.lineWidth = 1; g.fillStyle = 'rgba(255,255,255,.5)'; g.font = '12px Inter, system-ui, sans-serif'; g.textBaseline = 'middle';
     for (let k = 0; k <= 5; k++) { const p = lo + (hi - lo) * k / 5, y = Yy(p); g.beginPath(); g.moveTo(pad.l, y); g.lineTo(W - pad.r, y); g.stroke(); g.fillText(fmt(p), W - pad.r + 8, y); }
     v.forEach((x, i) => { const up = x.c >= x.o, col = up ? '#20bf9f' : '#f06b79'; g.strokeStyle = col; g.fillStyle = col; g.beginPath(); g.moveTo(X(i), Yy(x.h)); g.lineTo(X(i), Yy(x.l)); g.stroke(); const y1 = Yy(Math.max(x.o, x.c)), y2 = Yy(Math.min(x.o, x.c)); g.fillRect(X(i) - bw / 2, y1, bw, Math.max(1, y2 - y1)); });
-    for (const [n, col] of [[20, '#e9c36e'], [50, '#a98bff']]) { if (cs.length < n) continue; const k = 2 / (n + 1); let e = cs.slice(0, n).reduce((a, c) => a + c.c, 0) / n; const pts = []; for (let i = n; i < cs.length; i++) { e = cs[i].c * k + e * (1 - k); const j = i - (cs.length - v.length); if (j >= 0) pts.push([X(j), Yy(e)]); } g.strokeStyle = col; g.lineWidth = 1.6; g.beginPath(); pts.forEach(([a, b], q) => q ? g.lineTo(a, b) : g.moveTo(a, b)); g.stroke(); }
+    if (cs.length >= 100) { const e = emaArr(cs.map(x => x.c), 100), a = atr(cs, 100), off = cs.length - v.length, top = [], bot = []; for (let j = 0; j < v.length; j++) { const i = j + off; if (Number.isFinite(e[i])) { top.push([X(j), Yy(e[i] + a[i] * .6)]); bot.push([X(j), Yy(e[i] - a[i] * .6)]); } } // nube de 100 periodos
+      if (top.length > 1) { const up = v[v.length - 1].c >= e[cs.length - 1]; g.fillStyle = up ? 'rgba(32,191,159,.16)' : 'rgba(240,107,121,.16)'; g.beginPath(); top.forEach(([a1, b1], q) => q ? g.lineTo(a1, b1) : g.moveTo(a1, b1)); bot.slice().reverse().forEach(([a1, b1]) => g.lineTo(a1, b1)); g.closePath(); g.fill(); } }
+    { const vp = vprofile(cs); if (vp) { g.strokeStyle = 'rgba(240,185,11,.85)'; g.lineWidth = 1.4; g.setLineDash([3, 4]); g.beginPath(); g.moveTo(pad.l, Yy(vp.poc)); g.lineTo(W - pad.r, Yy(vp.poc)); g.stroke(); g.setLineDash([]); g.fillStyle = 'rgba(240,185,11,.9)'; g.font = '600 11px Inter, system-ui, sans-serif'; g.fillText('POC', W - pad.r - 30, Yy(vp.poc) - 8); } } // perfil de volumen
     g.lineWidth = 2;
     for (const m of marks) { const y = Yy(m.p); g.strokeStyle = m.c; g.setLineDash(m.dash ? [8, 6] : []); g.beginPath(); g.moveTo(pad.l, y); g.lineTo(W - pad.r, y); g.stroke(); g.setLineDash([]); const tx = `${m.t} ${fmt(m.p)}`; g.font = '700 13px Inter, system-ui, sans-serif'; const tw = g.measureText(tx).width + 14; g.fillStyle = m.c; g.fillRect(pad.l + 6, y - 11, tw, 22); g.fillStyle = '#fff'; g.fillText(tx, pad.l + 13, y + 1); }
     return o;
@@ -103,7 +134,7 @@
     const url = C.url; if (!HOOK.test(url || '')) throw Error('Falta el webhook del canal');
     const same = h.cur().base === h.base(tr.key) && h.cur().n > 30, tf = h.tf();
     let cs = []; try { cs = same ? h.candles() : await h.klines(tr.key, tf, 200); } catch (e) { cs = same ? h.candles() : []; }
-    const info = {pair: h.pair(tr.key), tf, fmt: h.fmt, why: explain(cs, tr)};
+    const info = {pair: h.pair(tr.key), tf, fmt: h.fmt, why: explain(cs, tr, h.levels ? h.levels(tr.key) : [])};
     let blob = null;
     if (C.shot !== false) { try { const marks = marksOf(tr), base = same ? h.shot(marks) : (cs.length > 20 ? mini(cs, marks, h.fmt) : null); if (base) { const cv = compose(base, tr, info); blob = await new Promise(r => cv.toBlob(r, 'image/png')); } } catch (e) { blob = null; } }
     info.img = !!blob;
@@ -197,7 +228,7 @@
     }
     hookReal(); pollDemo(); setInterval(pollDemo, 3000); paint();
   }
-  W.CCTTradeCast = {explain, rr, payload, marksOf, send, active, observe: (s, l) => observe(s, l)};
+  W.CCTTradeCast = {explain, cloud, vprofile, fibo, sr, osc, rr, payload, marksOf, send, active, observe: (s, l) => observe(s, l)};
   if (typeof module === 'object' && module.exports) module.exports = W.CCTTradeCast;
   else if (document.readyState === 'complete') boot(); else addEventListener('load', boot);
 })();

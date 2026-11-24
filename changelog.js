@@ -3,6 +3,8 @@
    Los arreglos y ajustes pequeños NO se anotan aquí: se suman al último bloque «Mejoras» sin crear versión nueva. */
 window.CCT_CHANGELOG = [
   {v: '3.43', d: '19 nov 2026', t: 'Mejoras del gráfico', items: [
+    'Diseño: hasta 10 gráficos en la misma pantalla. Primero eliges la moneda de cada gráfico, se abren con los indicadores de tu gráfico principal y luego eliges su plantilla (como el principal, una de tus plantillas o desde cero).',
+    'Configuración › Acerca de: botón «Instalar aplicación en PC» o «en celular» según tu dispositivo.',
     'Conectores más limpios: una fila de iconos (Telegram, Webhook, Calendario, IA local) y al tocar uno se abre solo su configuración. Preferencias ahora vive dentro de su propio botón.',
     'Listas de seguimiento con emoji: al crear o editar una lista eliges su emoji (todos los del sistema y banderas) para distinguirlas de un vistazo.',
     'Pestañas del gráfico: arrástralas con el mouse para cambiarlas de lugar, o usa Mover a la izquierda / derecha (clic derecho; en celular, mantén presionada la pestaña).',

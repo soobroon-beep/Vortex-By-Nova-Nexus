@@ -18,3 +18,11 @@ test('niveles exactos en los ajustes de cada herramienta', () => {
   assert.match(app, /\['a', 'Entrada', d\.a\.p\], \['sp', 'Stop loss', st\], \['b', 'Take profit \(objetivo\)', d\.b\.p\]/);
   assert.match(app, /if \(k === 'lvok'\) \{ dApplyLevels\(\); return; \}/);
 });
+
+test('hasta 10 gráficos con asistente (moneda y plantilla de cada uno)', () => {
+  assert.match(app, /const LAY_PANES = \{[^}]*'10': 9\}/);
+  assert.match(app, /const BIG_GRID = \{'6': \[3, false\], '7': \[4, true\], '8': \[4, false\], '9': \[5, true\], '10': \[5, false\]\}/);
+  assert.match(app, /function paneWizard\(ly\)/);
+  assert.match(app, /e\.data\.cct !== 'paneSetup'/);
+  assert.match(app, /Math\.min\(10, Math\.max\(2/);
+});
