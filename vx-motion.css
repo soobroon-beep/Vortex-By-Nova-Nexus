@@ -192,7 +192,7 @@ html.vx-restoring *,html.vx-restoring *::before,html.vx-restoring *::after{trans
 
 /* Mi seguimiento · varias listas */
 .wl-lists-btn{flex-shrink:0}
-.wl-lists-btn em{font-style:normal;font-weight:650;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px;border-radius:999px;background:rgba(127,127,140,.18);font-size:11px}
+.wl-lists-btn em{font-style:normal;font-weight:650;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px;border-radius:999px;background:rgba(127,127,140,.18);font-size:11px}
 .wl-lists-pop{position:fixed;z-index:9000;min-width:230px;max-width:300px;padding:8px;border-radius:12px;background:#15171d;border:1px solid rgba(127,127,140,.25);box-shadow:0 14px 40px rgba(0,0,0,.45)}
 .wl-lists-pop .wlp-title{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.6;padding:4px 6px 6px}
 .wlp-row{display:flex;align-items:center;gap:2px;border-radius:8px}
@@ -208,3 +208,48 @@ html.vx-restoring *,html.vx-restoring *::before,html.vx-restoring *::after{trans
 .light .wl-lists-pop{background:#fff;color:#182234}
 :root.vx-min .wl-lists-pop{background:var(--m-fill,#1c1c20);color:var(--m-text,#f4f4f5)}
 :root.vx-min.light .wl-lists-pop,:root.vx-min .light .wl-lists-pop{background:#fff;color:#18181b}
+
+/* Conectores: fila de iconos; al tocar uno se abre solo su configuración */
+.cx-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.cx-tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:7px;padding:12px 4px 10px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.025);color:var(--text);cursor:pointer;font:inherit;transition:border-color .15s,background .15s,transform .15s}
+.cx-tile:hover{background:rgba(255,255,255,.05)}
+.cx-tile:active{transform:scale(.97)}
+.cx-tile.sel{border-color:var(--accent);background:rgba(127,127,140,.1)}
+.cx-tile .cx-ic{width:42px;height:42px;border-radius:13px}
+.cx-tn{font-size:11.5px;font-weight:600;text-align:center;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cx-dot{position:absolute;top:8px;right:8px;width:8px;height:8px;border-radius:50%;background:#8a8f98;box-shadow:0 0 0 2px var(--panel,#111)}
+.cx-dot.on{background:#20bf9f}
+.cx-hint{margin:2px 2px 0;font-size:12px;color:var(--muted);text-align:center}
+.cx-det{animation:vxmDrop .3s var(--vxm-ease) both}
+.light .cx-tile{background:#fff}
+#setPrefs .sg-chev{transition:transform .2s}
+#setPrefs[aria-expanded=true] .sg-chev{transform:rotate(90deg)}
+.pref-wrap:not([hidden]){animation:vxmDrop .3s var(--vxm-ease) both;margin-bottom:6px}
+.wlp-emo{font-size:17px;line-height:1;width:22px;text-align:center}
+/* Selector de emoji (listas) */
+.emo-back{position:fixed;inset:0;z-index:9500;display:grid;place-items:center;padding:14px;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
+.emo-dlg{width:min(420px,100%);max-height:min(620px,92dvh);display:flex;flex-direction:column;border-radius:18px;background:#15171d;color:#f1f3f7;border:1px solid rgba(127,127,140,.25);box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden}
+.emo-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px}.emo-head b{font-size:15px}
+.emo-x{width:32px;height:32px;border:0;border-radius:9px;background:rgba(127,127,140,.14);color:inherit;cursor:pointer}
+.emo-top{display:flex;gap:10px;padding:6px 16px 10px;align-items:center}
+.emo-cur{flex:none;width:52px;height:52px;border-radius:14px;border:1px solid rgba(127,127,140,.3);background:rgba(127,127,140,.12);font-size:28px;line-height:1;cursor:default}
+.emo-name{flex:1;min-width:0;height:44px;padding:0 12px;border-radius:12px;border:1px solid rgba(127,127,140,.3);background:rgba(255,255,255,.04);color:inherit;font:inherit;font-size:15px}
+.emo-name.err{border-color:#f06b79}
+.emo-tabs{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid rgba(127,127,140,.2);overflow-x:auto;scrollbar-width:none}
+.emo-tabs button{flex:none;width:40px;height:36px;border:0;border-bottom:2px solid transparent;background:none;font-size:19px;cursor:pointer;opacity:.55}
+.emo-tabs button[aria-selected=true]{opacity:1;border-bottom-color:var(--accent,#548fff)}
+.emo-grid{flex:1;overflow-y:auto;padding:8px 10px 10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:2px;align-content:start;min-height:220px}
+.emo-cat{grid-column:1/-1;font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;padding:4px 4px 6px}
+.emo-e{height:40px;border:0;border-radius:10px;background:none;font-size:23px;line-height:1;cursor:pointer}
+.emo-e:hover{background:rgba(127,127,140,.15)}.emo-e.on{background:rgba(84,143,255,.25);box-shadow:inset 0 0 0 1.5px var(--accent,#548fff)}
+.emo-foot{display:flex;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:1px solid rgba(127,127,140,.2)}
+.emo-foot button{height:38px;padding:0 16px;border-radius:10px;border:1px solid rgba(127,127,140,.3);background:none;color:inherit;font:inherit;font-weight:650;cursor:pointer}
+.emo-foot .emo-ok{background:var(--accent,#548fff);border-color:transparent;color:#fff}
+.light .emo-dlg{background:#fff;color:#182234}
+:root.vx-min .emo-dlg{background:var(--m-fill,#1c1c20)}
+:root.vx-min .emo-foot .emo-ok{background:var(--m-fill2,#2c2c32);border:1px solid var(--m-line,#3a3a40);color:var(--m-text,#f4f4f5)}
+.wl-lists-btn em{display:inline-flex;align-items:center;gap:4px}.wl-lists-btn em i{font-style:normal}.wl-lists-btn em span{overflow:hidden;text-overflow:ellipsis}
+@media (max-width:640px){.wl-lists-btn em span{display:none}.wl-lists-btn em{background:none;padding:0}}
+/* Pestañas: arrastrar para cambiarlas de lugar */
+#chartTabs.ct-dragging .ctab{transition:transform .16s ease}
+#chartTabs.ct-dragging .ctab.ct-drag{transition:none;z-index:3;cursor:grabbing;box-shadow:0 6px 18px rgba(0,0,0,.4);opacity:.95}

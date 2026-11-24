@@ -298,7 +298,7 @@ function merge(s) {
       const sy = Array.isArray(x.symbols) ? [...new Set(x.symbols.filter(okSym))].slice(0, 300) : [], gs = Array.isArray(x.groups) ? x.groups.filter(g => g && typeof g.id === 'string' && /^[\w-]{1,24}$/.test(g.id) && typeof g.name === 'string').slice(0, 30).map(g => ({id: g.id, name: g.name.slice(0, 40), collapsed: !!g.collapsed})) : [];
       const sg = {}, sc = {}; if (x.symGroup && typeof x.symGroup === 'object') for (const [k, v] of Object.entries(x.symGroup)) if (sy.includes(k) && gs.some(g => g.id === v)) sg[k] = v;
       if (x.symColor && typeof x.symColor === 'object') for (const [k, v] of Object.entries(x.symColor)) if (sy.includes(k) && TAGS.some(t => t[0] === v)) sc[k] = v;
-      wl.push({id: x.id, name: x.name.trim().slice(0, 30), symbols: sy, groups: gs, symGroup: sg, symColor: sc});
+      wl.push({id: x.id, name: x.name.trim().slice(0, 30), emo: typeof x.emo === 'string' && x.emo.length <= 16 && /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(x.emo) && !/[<>&"']/.test(x.emo) ? x.emo : '', symbols: sy, groups: gs, symGroup: sg, symColor: sc});
     }
     o.wlists = wl; o.wlCur = typeof o.wlCur === 'string' && wl.some(x => x.id === o.wlCur) ? o.wlCur : (wl[0] ? wl[0].id : '');
   }
@@ -699,22 +699,24 @@ $('#addSection').onclick = () => { const n = prompt('Nombre de la sección (por 
    La lista activa vive en state.symbols/groups/symGroup/symColor (todo lo demás la usa tal cual); las otras se guardan en state.wlists. */
 const wlNewId = () => 'l' + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36);
 const wlCopy = () => JSON.parse(JSON.stringify({symbols: state.symbols, groups: state.groups, symGroup: state.symGroup, symColor: state.symColor || {}}));
-function wlEnsure() { if (!Array.isArray(state.wlists)) state.wlists = []; if (!state.wlists.length) { const id = wlNewId(); state.wlists.push({id, name: 'Cripto', ...wlCopy()}); state.wlCur = id; } if (!state.wlists.some(x => x.id === state.wlCur)) state.wlCur = state.wlists[0].id; }
+function wlEnsure() { if (!Array.isArray(state.wlists)) state.wlists = []; if (!state.wlists.length) { const id = wlNewId(); state.wlists.push({id, name: 'Cripto', emo: '🪙', ...wlCopy()}); state.wlCur = id; } if (!state.wlists.some(x => x.id === state.wlCur)) state.wlCur = state.wlists[0].id; }
 function wlStash() { wlEnsure(); const cur = state.wlists.find(x => x.id === state.wlCur); if (cur) Object.assign(cur, wlCopy()); }
 const wlName = () => { const l = (state.wlists || []).find(x => x.id === state.wlCur); return l ? l.name : ''; };
+const wlEmo = l => (l && l.emo) || '📋';
 function wlAfter() { editMode = false; save(); renderWatch(); try { renderPopular(); } catch {} fetchTicker(); paintWlBtn(); }
 function wlSwitch(id) {
   wlStash(); const t = state.wlists.find(x => x.id === id); if (!t || id === state.wlCur) return;
   const c = JSON.parse(JSON.stringify(t)); state.symbols = c.symbols; state.groups = c.groups; state.symGroup = c.symGroup; state.symColor = c.symColor; state.wlCur = id;
   wlAfter(); toast(`Lista «${t.name}»`);
 }
-function wlCreate() {
-  const n = (prompt('Nombre de la nueva lista (por ejemplo: Forex)', '') || '').trim().slice(0, 30); if (!n) return;
+const wlAsk = o => window.CCTEmoji ? CCTEmoji.ask(o) : Promise.resolve((n => n ? {name: n.trim().slice(0, 30), emo: o.emo} : null)(prompt(o.title, o.name || '')));
+async function wlCreate() {
   wlStash(); if (state.wlists.length >= 20) { toast('Máximo 20 listas'); return; }
-  const id = wlNewId(); state.wlists.push({id, name: n, symbols: [], groups: [], symGroup: {}, symColor: {}});
-  wlSwitch(id); toast(`Lista «${n}» creada: añade sus activos con «Añadir»`);
+  const r = await wlAsk({title: 'Nueva lista', placeholder: 'Nombre (por ejemplo: Forex)', emo: '📈', ok: 'Crear lista'}); if (!r || !r.name) return;
+  wlStash(); const id = wlNewId(); state.wlists.push({id, name: r.name, emo: r.emo, symbols: [], groups: [], symGroup: {}, symColor: {}});
+  wlSwitch(id); toast(`Lista ${r.emo} «${r.name}» creada: añade sus activos con «Añadir»`);
 }
-function wlRename(id) { wlEnsure(); const l = state.wlists.find(x => x.id === id); if (!l) return; const n = (prompt('Nuevo nombre de la lista', l.name) || '').trim().slice(0, 30); if (!n) return; l.name = n; save(); paintWlBtn(); }
+async function wlRename(id) { wlEnsure(); const l = state.wlists.find(x => x.id === id); if (!l) return; const r = await wlAsk({title: 'Editar lista', name: l.name, emo: wlEmo(l), ok: 'Guardar'}); if (!r || !r.name) return; const l2 = (state.wlists || []).find(x => x.id === id); if (!l2) return; l2.name = r.name; l2.emo = r.emo; save(); paintWlBtn(); renderWatch(); }
 function wlDelete(id) {
   wlEnsure(); const l = state.wlists.find(x => x.id === id); if (!l) return; if (state.wlists.length < 2) { toast('Es tu única lista: crea otra antes de borrarla'); return; }
   vxAsk({title: '¿Borrar esta lista?', text: `«${l.name}» y sus ${id === state.wlCur ? state.symbols.length : l.symbols.length} activos. Tus otras listas no cambian.`, ok: 'Borrar', danger: true, always: true}).then(y => {
@@ -722,11 +724,11 @@ function wlDelete(id) {
     state.wlists = state.wlists.filter(x => x.id !== id); save(); paintWlBtn();
   });
 }
-function paintWlBtn() { const b = $('#wlListsBtn'); if (!b) return; const n = wlName(); b.querySelector('em').textContent = n || ''; b.querySelector('em').hidden = !n; b.title = n ? `Lista activa: ${n}` : 'Tus listas de seguimiento'; }
+function paintWlBtn() { const b = $('#wlListsBtn'); if (!b) return; const n = wlName(), l = (state.wlists || []).find(x => x.id === state.wlCur); b.querySelector('em').innerHTML = n ? `<i>${esc(wlEmo(l))}</i><span>${esc(n)}</span>` : ''; b.querySelector('em').hidden = !n; b.title = n ? `Lista activa: ${n}` : 'Tus listas de seguimiento'; }
 function openWlLists(btn) {
   const old = document.querySelector('.wl-lists-pop'); if (old) { old.remove(); return; }
   wlEnsure(); const m = document.createElement('div'); m.className = 'wl-lists-pop'; m.setAttribute('role', 'menu');
-  const draw = () => { m.innerHTML = `<div class="wlp-title">Tus listas</div>${state.wlists.map(l => { const on = l.id === state.wlCur, nn = on ? state.symbols.length : l.symbols.length; return `<div class="wlp-row${on ? ' on' : ''}"><button class="wlp-pick" data-wlp="${l.id}"><span class="wlp-ck">${on ? I('check', 14) : ''}</span><b>${esc(l.name)}</b><small>${nn}</small></button><button class="wlp-ic" data-wlr="${l.id}" title="Renombrar" aria-label="Renombrar">${I('pencil', 14)}</button><button class="wlp-ic" data-wld="${l.id}" title="Borrar" aria-label="Borrar">${I('trash', 14)}</button></div>`; }).join('')}<button class="wlp-new" data-wln="1">＋ Nueva lista…</button><p class="wlp-note">Cada lista guarda sus activos, secciones y colores. Se sincroniza con tu cuenta.</p>`; };
+  const draw = () => { m.innerHTML = `<div class="wlp-title">Tus listas</div>${state.wlists.map(l => { const on = l.id === state.wlCur, nn = on ? state.symbols.length : l.symbols.length; return `<div class="wlp-row${on ? ' on' : ''}"><button class="wlp-pick" data-wlp="${l.id}"><span class="wlp-ck">${on ? I('check', 14) : ''}</span><span class="wlp-emo">${esc(wlEmo(l))}</span><b>${esc(l.name)}</b><small>${nn}</small></button><button class="wlp-ic" data-wlr="${l.id}" title="Nombre y emoji" aria-label="Editar nombre y emoji">${I('pencil', 14)}</button><button class="wlp-ic" data-wld="${l.id}" title="Borrar" aria-label="Borrar">${I('trash', 14)}</button></div>`; }).join('')}<button class="wlp-new" data-wln="1">＋ Nueva lista…</button><p class="wlp-note">Cada lista guarda sus activos, secciones y colores. Se sincroniza con tu cuenta.</p>`; };
   draw(); document.body.appendChild(m);
   const r = btn.getBoundingClientRect(); m.style.top = Math.round(r.bottom + 6) + 'px'; m.style.left = Math.round(Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left))) + 'px';
   const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); };
@@ -2415,6 +2417,7 @@ function newTab() {
   const t = {id, s: state.symbol, i: state.interval, c: state.ctype || 'candles', cfg}; state.tabs.push(t); state.tab = id; state.tabRev = Date.now();
   tabApply(t); renderIndicators(); countIndicators(); save(); renderTabs(); loadTabChart(); openSheet(); // elige la moneda para la pestaña nueva
 }
+function moveTab(id, to) { const i = state.tabs.findIndex(x => x.id === id); if (i < 0) return; to = Math.max(0, Math.min(state.tabs.length - 1, to)); if (to === i) { renderTabs(); return; } const [t] = state.tabs.splice(i, 1); state.tabs.splice(to, 0, t); state.tabRev = Date.now(); save(); renderTabs(); }
 function closeTab(id) {
   if (state.tabs.length < 2) return; const i = state.tabs.findIndex(x => x.id === id); if (i < 0) return; const wasOn = id === state.tab;
   state.tabs.splice(i, 1); state.tabRev = Date.now();
@@ -2443,13 +2446,36 @@ function showTabPrev(el) { // vista previa de la pestaña: moneda, temporalidad,
   bar.addEventListener('mouseout', () => { clearTimeout(hov); hideTabPrev(); });
   bar.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch') return; const t = e.target.closest('[data-tab]'); if (!t) return; clearTimeout(lp); lpFired = false; lp = setTimeout(() => { lpFired = true; showTabPrev(t); navigator.vibrate?.(8); }, 450); });
   ['pointerup', 'pointercancel', 'pointermove'].forEach(ev => bar.addEventListener(ev, e => { if (ev === 'pointermove' && Math.abs(e.movementX) + Math.abs(e.movementY) < 3) return; clearTimeout(lp); if (ev !== 'pointermove') setTimeout(hideTabPrev, 900); else hideTabPrev(); }));
-  bar.addEventListener('contextmenu', e => { // clic derecho en una pestaña: cambiar nombre o cerrar
+  const tabMenu = (id, x, r) => {
+    const k0 = state.tabs.findIndex(q => q.id === id), n = state.tabs.length;
+    openMx({left: x || r.left, top: r.top, bottom: r.bottom, right: x || r.right}, 'Pestaña',
+      `<button type="button" class="mx-it" data-mx="ren">${SVX('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>')}<span>Cambiar nombre</span></button>`
+      + (k0 > 0 ? `<button type="button" class="mx-it" data-mx="left">${SVX('<path d="M15 6l-6 6 6 6"/>')}<span>Mover a la izquierda</span></button>` : '')
+      + (k0 < n - 1 ? `<button type="button" class="mx-it" data-mx="right">${SVX('<path d="M9 6l6 6-6 6"/>')}<span>Mover a la derecha</span></button>` : '')
+      + (n > 1 ? `<button type="button" class="mx-it danger" data-mx="close">${SVX('<path d="M6 6l12 12M18 6 6 18"/>')}<span>Cerrar pestaña</span></button>` : ''),
+      k => { closeMx(); if (k === 'ren') renameTab(id); else if (k === 'close') closeTab(id); else if (k === 'left' || k === 'right') moveTab(id, k === 'left' ? k0 - 1 : k0 + 1); });
+  };
+  bar.addEventListener('contextmenu', e => { // clic derecho en una pestaña: cambiar nombre, moverla o cerrar
     const t = e.target.closest('[data-tab]'); if (!t) return; e.preventDefault(); clearTimeout(hov); hideTabPrev(); if (lpFired) return;
-    const id = t.dataset.tab, r = t.getBoundingClientRect();
-    openMx({left: e.clientX || r.left, top: r.top, bottom: r.bottom, right: e.clientX || r.right}, 'Pestaña',
-      `<button type="button" class="mx-it" data-mx="ren">${SVX('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>')}<span>Cambiar nombre</span></button>` + (state.tabs.length > 1 ? `<button type="button" class="mx-it danger" data-mx="close">${SVX('<path d="M6 6l12 12M18 6 6 18"/>')}<span>Cerrar pestaña</span></button>` : ''),
-      k => { closeMx(); if (k === 'ren') renameTab(id); else if (k === 'close') closeTab(id); });
+    tabMenu(t.dataset.tab, e.clientX, t.getBoundingClientRect());
   });
+  bar.addEventListener('pointerup', e => { if (e.pointerType === 'touch' && lpFired) { const t = e.target.closest('[data-tab]'); if (t) setTimeout(() => { hideTabPrev(); tabMenu(t.dataset.tab, 0, t.getBoundingClientRect()); }, 60); } }); // celular: mantener presionada la pestaña → vista previa y, al soltar, el menú (mover, nombre, cerrar)
+  /* Arrastrar una pestaña con el mouse para cambiarla de lugar (izquierda / derecha) */
+  let dg = null;
+  bar.addEventListener('pointerdown', e => { if (e.pointerType === 'touch' || e.button !== 0 || e.target.closest('[data-tab-x],#tabAdd,input')) return; const t = e.target.closest('[data-tab]'); if (!t) return; dg = {t, id: t.dataset.tab, x0: e.clientX, on: false, pid: e.pointerId}; });
+  addEventListener('pointermove', e => {
+    if (!dg || e.pointerId !== dg.pid) return; const dx = e.clientX - dg.x0;
+    if (!dg.on) { if (Math.abs(dx) < 6) return; dg.on = true; clearTimeout(hov); hideTabPrev(); dg.t.classList.add('ct-drag'); bar.classList.add('ct-dragging'); try { bar.setPointerCapture(e.pointerId); } catch {} }
+    dg.t.style.transform = `translateX(${dx}px)`;
+    const tabs = [...bar.querySelectorAll('.ctab')], me = tabs.indexOf(dg.t), cx = dg.t.getBoundingClientRect(), mid = cx.left + cx.width / 2; let to = me;
+    tabs.forEach((o, k) => { if (o === dg.t) return; const r = o.getBoundingClientRect(), m = r.left + r.width / 2; if (k < me && mid < m) to = Math.min(to, k); if (k > me && mid > m) to = Math.max(to, k); });
+    tabs.forEach((o, k) => { if (o === dg.t) return; const sh = me < to && k > me && k <= to ? -cx.width - 4 : me > to && k < me && k >= to ? cx.width + 4 : 0; o.style.transform = sh ? `translateX(${sh}px)` : ''; });
+    dg.to = to;
+  });
+  const dgEnd = () => { if (!dg) return; const d = dg; dg = null; if (!d.on) return; lpFired = true; setTimeout(() => { lpFired = false; }, 0); // el clic que sigue a soltar no cambia de pestaña
+    bar.classList.remove('ct-dragging'); bar.querySelectorAll('.ctab').forEach(o => { o.style.transform = ''; o.classList.remove('ct-drag'); });
+    if (d.to != null) moveTab(d.id, d.to); };
+  addEventListener('pointerup', dgEnd); addEventListener('pointercancel', dgEnd);
 }
 /* Cambiar el nombre de una pestaña: se escribe ahí mismo (Enter guarda, Esc cancela; vacío = vuelve al nombre de la moneda) */
 function renameTab(id, done) {
@@ -5476,6 +5502,7 @@ function renderCustom() {
   renderGenPrefs();
 }
 /* Preferencias de uso en Configuración (antes en Personalización): cursor, cuenta atrás, aviso de conexión, confirmar, pantalla y pestaña */
+document.addEventListener('click', e => { const b = e.target.closest('#setPrefs'); if (!b) return; const w = $('#prefWrap'); if (!w) return; w.hidden = !w.hidden; b.setAttribute('aria-expanded', String(!w.hidden)); if (!w.hidden) { renderGenPrefs(); setTimeout(() => w.scrollIntoView({block: 'nearest', behavior: 'smooth'}), 30); } }); // Preferencias: dentro de su botón, no todo desplegado
 function renderGenPrefs() {
   const box = $('#genPrefBox'); if (!box) return;
   const ic = (c, d) => `<span class="sg-ic" style="--c:${c}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg></span>`;
