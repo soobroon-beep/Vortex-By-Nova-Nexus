@@ -294,7 +294,7 @@
     });
     rootEl.addEventListener('change', e => { if (e.target.id === 'nwHi') { st.hi = e.target.checked; ls.set('cct_news_hi', st.hi ? '1' : '0'); st.shown = SHOW_STEP; renderList(); } });
     // al abrir la sección (pestaña lateral en PC, botón inferior en móvil) se actualiza si hace falta
-    document.addEventListener('click', e => { if (e.target.closest('[data-side="newsView"],[data-view="newsView"]')) setTimeout(() => { if (st.tab === 'news') refresh(false); else if (st.tab === 'macro') { if (root.CCTMacro) root.CCTMacro.show($('#nwMacro')); } else buildCalendar(); }, 60); });
+    document.addEventListener('click', e => { if (e.target.closest('button[data-side="newsView"],[data-view="newsView"]')) setTimeout(() => { if (st.tab === 'news') refresh(false); else if (st.tab === 'macro') { if (root.CCTMacro) root.CCTMacro.show($('#nwMacro')); } else buildCalendar(); }, 60); });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && viewVisible()) { if (st.tab === 'news') refresh(false); } });
     new MutationObserver(() => { if (st.tab === 'cal') buildCalendar(); }).observe(document.body, {attributes: true, attributeFilter: ['class']}); // cambia el tema → se vuelve a pintar el calendario
     window.addEventListener('pagehide', () => { const mx = st.items.reduce((m, i) => Math.max(m, i.t), 0); if (mx) ls.set('cct_news_seen', String(mx)); }); // lo visto hasta aquí; lo siguiente saldrá como NUEVA

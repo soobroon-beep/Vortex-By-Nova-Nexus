@@ -550,6 +550,23 @@ function watchRow(s) {
   return `<button class="watch-row${tgA}" data-symbol="${esc(s)}"><span class="row-dots" role="button" tabindex="0" data-menu="${esc(s)}" aria-haspopup="menu" aria-label="Opciones de ${esc(base(s))}" title="Opciones"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></span>${main}${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
 }
 let wlDragOn = false, wlDragPend = false; // mientras arrastras no se repinta la lista (los precios en vivo la reconstruían a mitad del gesto)
+/* Actualiza un contenedor con HTML nuevo tocando SOLO lo que cambió (precios, %, colores…). Antes la lista entera se volvía a crear cada
+   pocos segundos con cada precio nuevo y las fotos de las monedas se recargaban: en la PC se veía parpadear. Las imágenes se conservan. */
+function domPatch(box, html) {
+  if (!box) return; if (box.__h === html) return; box.__h = html;
+  const tmp = document.createElement('div'); tmp.innerHTML = html;
+  const morph = (o, n) => {
+    if (o.nodeType !== n.nodeType || o.nodeName !== n.nodeName || (o.nodeType === 1 && (o.dataset.symbol || o.dataset.sec || '') !== (n.dataset.symbol || n.dataset.sec || ''))) { o.replaceWith(n); return; }
+    if (o.nodeType === 3 || o.nodeType === 8) { if (o.data !== n.data) o.data = n.data; return; }
+    if (o.nodeType !== 1) return;
+    for (const at of [...o.attributes]) if (!n.hasAttribute(at.name) && at.name !== 'style') o.removeAttribute(at.name); // «style» puede ser del efecto dock
+    for (const at of [...n.attributes]) if (o.getAttribute(at.name) !== at.value) o.setAttribute(at.name, at.value);
+    if (o.nodeName === 'IMG') return;
+    kids(o, n);
+  };
+  const kids = (o, n) => { const oc = [...o.childNodes], nc = [...n.childNodes]; for (let i = 0; i < nc.length; i++) { if (i < oc.length) morph(oc[i], nc[i]); else o.appendChild(nc[i]); } for (let i = nc.length; i < oc.length; i++) oc[i].remove(); };
+  kids(box, tmp);
+}
 function renderWatch() {
   if (wlDragOn) { wlDragPend = true; return; }
   const q = $('#searchCoins').value.trim().toUpperCase();
@@ -561,7 +578,7 @@ function renderWatch() {
     html.push(`<div class="wl-sec ${g.collapsed ? 'closed' : ''}" data-sec="${g.id}"><span class="sec-grip" title="Arrastra para mover la sección" aria-label="Mover sección">⠿</span><button class="wl-sec-t" data-tog="${g.id}" aria-expanded="${!g.collapsed}"><span class="wl-car">▾</span><span class="wl-nm">${esc(g.name)}</span><small>${items.length}</small></button>${true ? `<span class="wl-sec-ed"><button hidden data-secmv="-1" data-sid="${g.id}" aria-label="Subir sección" ${gi === 0 ? 'disabled' : ''}>▲</button><button hidden data-secmv="1" data-sid="${g.id}" aria-label="Bajar sección" ${gi === state.groups.length - 1 ? 'disabled' : ''}>▼</button><button data-secren="${g.id}" aria-label="Renombrar sección">✎</button><button data-secdel="${g.id}" class="danger" aria-label="Eliminar sección">✕</button></span>` : ''}</div>`);
     if (open) html.push(items.map(watchRow).join('') || (editMode ? '<p class="small-note wl-empty">Sección vacía: arrastra aquí o elige la sección en cada activo.</p>' : ''));
   });
-  $('#watchRows').innerHTML = html.join('') || '<p class="small-note">No hay activos con ese nombre.</p>';
+  domPatch($('#watchRows'), html.join('') || '<p class="small-note">No hay activos con ese nombre.</p>'); // solo cambia lo que cambió: las fotos de las monedas ya no parpadean
   $('#totalAssets').textContent = state.symbols.length;
   $('#winners').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) > 0).length;
   $('#losers').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) < 0).length;

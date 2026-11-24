@@ -371,12 +371,12 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     [/cambiar (de )?(moneda|cripto)|buscar (una )?(moneda|cripto)|otro exchange|bingx|bybit/, 'Buscar activo', 'chartView', '#symbolButton', '#symbolButton', 'Busca cualquier cripto y elige el exchange.'],
     [/anadir|agregar (una )?(cripto|moneda)|seguimiento/, 'Añadir a Mi seguimiento', 'watchView', '#addAsset', '#addAsset', 'Agrega criptos de cualquier exchange.'],
     [/crear (una )?alerta|nueva alerta/, 'Crear alerta', 'alertsView', '#alAdd', '#alAdd', 'O dímelo a mí: «avísame si BTC pasa 70 mil».'],
-    [/alerta/, 'Alertas', 'alertsView', '[data-side="alertsView"]', '#topAlertsBtn', 'Tus alertas de precio y de indicador.'],
+    [/alerta/, 'Alertas', 'alertsView', '.right-rail [data-side="alertsView"]', '#topAlertsBtn', 'Tus alertas de precio y de indicador.'],
     [/avisos con la app cerrada|app cerrada|notificacion/, 'Avisos con la app cerrada', 'notifView', '#pushOn', '#pushOn', 'En Configuración › Avisos: enciende «Activar notificaciones».'],
     [/calendario/, 'Calendario económico', 'newsView', '[data-nw-tab="cal"]', '[data-nw-tab="cal"]', 'Eventos pasados, de hoy y futuros.'],
-    [/noticia/, 'Noticias', 'newsView', '[data-side="newsView"]', '.bottom-nav [data-view="newsView"]', 'Cripto y bolsa en español.'],
-    [/screener|senales/, 'Screener', 'screenerView', '[data-side="screenerView"]', '.bottom-nav [data-view="screenerView"]', 'Señales de Nova Nexus en el top de criptos.'],
-    [/lens|mi cuenta de bingx|mi cuenta del exchange|mis operaciones/, 'Nexus Lens', 'lensView', '[data-side="lensView"]', '.bottom-nav [data-view="lensView"]', 'Tu cuenta, trades abiertos y operaciones.'],
+    [/noticia/, 'Noticias', 'newsView', '.right-rail [data-side="newsView"]', '.bottom-nav [data-view="newsView"]', 'Cripto y bolsa en español.'],
+    [/screener|senales/, 'Screener', 'screenerView', '.right-rail [data-side="screenerView"]', '.bottom-nav [data-view="screenerView"]', 'Señales de Nova Nexus en el top de criptos.'],
+    [/lens|mi cuenta de bingx|mi cuenta del exchange|mis operaciones/, 'Nexus Lens', 'lensView', '.right-rail [data-side="lensView"]', '.bottom-nav [data-view="lensView"]', 'Tu cuenta, trades abiertos y operaciones.'],
     [/bot lab|crear (un )?bot|backtest|paper/, 'Nova Bot Lab', 'botLabView', '#rrBotLab', null, 'Crea, prueba y simula bots (versión de PC).'],
     [/discord/, 'Discord', 'discordView', '#rrDiscord', '#dcOpenFromSettings', 'Únete a Nova Nexus y manda tus avisos a tu canal.'],
     [/tema|modo oscuro|modo claro/, 'Tema claro/oscuro', null, '#rrTheme', '#themeBtn', 'Cambia entre claro y oscuro.'],
@@ -384,8 +384,8 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     [/instalar|icono de la app/, 'Instalar la app', 'customView', '#appInstall', '#appInstall', 'Elige el ícono e instálala en tu celular.'],
     [/iniciar sesion|cuenta de google|login/, 'Iniciar sesión', null, '#rrAccount', '#accountBtn', 'Con Google: tu configuración viaja a todos tus dispositivos.'],
     [/saldo/, 'Saldo de la cuenta', null, '[data-acct-open]', '[data-acct-open]', 'La barra que te anima a usar stop loss.'],
-    [/configuracion|ajustes/, 'Configuración', 'settingsView', '[data-side="settingsView"]', '#settingsBtn', 'Cuenta, avisos, preferencias, app y datos.'],
-    [/\bia\b|briefing|laboratorio/, 'IA', 'aiView', '[data-side="aiView"]', '.bottom-nav [data-view="aiView"]', 'Analizar gráfico, Briefing del día y Laboratorio de indicadores.']
+    [/configuracion|ajustes/, 'Configuración', 'settingsView', '.right-rail [data-side="settingsView"]', '#settingsBtn', 'Cuenta, avisos, preferencias, app y datos.'],
+    [/\bia\b|briefing|laboratorio/, 'IA', 'aiView', '.right-rail [data-side="aiView"]', '.bottom-nav [data-view="aiView"]', 'Analizar gráfico, Briefing del día y Laboratorio de indicadores.']
   ];
   async function findThing(t) {
     const h = H(), q = nrm(t), tools = h.tools(), desk = h.desktop();

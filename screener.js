@@ -86,6 +86,8 @@
     const h = H(); if (!h) return; bind(); if (!st.tf) st.tf = TFS.includes(h.interval()) ? h.interval() : '1h';
     paint(); if (!st.rows.length || Date.now() - st.at > 120e3 || st.tfDone !== st.tf) { st.tfDone = st.tf; scan(); }
   }
-  document.addEventListener('click', e => { if (e.target.closest('#scrOpen, [data-side="screenerView"], [data-view="screenerView"]')) open(); });
+  /* Solo los botones que abren el Screener. Ojo: <body data-side="screenerView"> también coincidía, así que CUALQUIER clic (por ejemplo en el
+     gráfico) volvía a pintar la lista y la recargaba. */
+  document.addEventListener('click', e => { const b = e.target.closest('#scrOpen, [data-side="screenerView"], [data-view="screenerView"]'); if (b && b !== document.body && b !== document.documentElement) open(); });
   window.CCTScreener = {signalOf, kindOf, open, sortRows, SIG_BARS, rows: () => st.rows.slice(), tf: () => st.tf, busy: () => !!st.busy};
 })();

@@ -39,7 +39,7 @@
     });
     rail.addEventListener('mouseleave', () => { mouse = Infinity; go(); });
     rail.addEventListener('mouseenter', () => { mids = null; });
-    window.addEventListener('resize', () => { mids = null; }); window.addEventListener('scroll', () => { mids = null; }, true);
+    window.addEventListener('resize', () => { mids = null; snap(); }); // al restaurar la ventana cambia de tamaño: todo a su tamaño normal al instante window.addEventListener('scroll', () => { mids = null; }, true);
     resets.push(snap);
   }
   let ignore = null; const resets = [];

@@ -381,7 +381,7 @@ Cierra con «Análisis educativo, no asesoría financiera.»`;
     });
     root.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'labIn') { e.preventDefault(); const i = e.target, v = i.value; i.value = ''; labSubmit(v); } });
     home();
-    document.addEventListener('click', e => { if (e.target.closest('[data-side="aiView"],[data-view="aiView"]') && st.view === 'home') setTimeout(home, 60); });
+    document.addEventListener('click', e => { if (e.target.closest('button[data-side="aiView"],[data-view="aiView"]') && st.view === 'home') setTimeout(home, 60); });
   }
   window.CCTAIUI = Object.assign(window.CCTAIUI || {}, {md});
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

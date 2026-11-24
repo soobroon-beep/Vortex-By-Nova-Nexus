@@ -179,3 +179,5 @@ body.light #customView .stc.mi{border-color:rgba(0,0,0,.18)!important}
 .cx .dc-btn{padding:8px 12px;border-radius:9px;border:1px solid var(--line);background:var(--raised);color:var(--text);font-size:12px;font-weight:650;cursor:pointer;gap:6px}
 .cx .dc-btn.pri{background:var(--accent);border-color:transparent;color:#fff}
 .cx .dc-btn:disabled{opacity:.45;cursor:default}
+/* al restaurar la ventana: todo aparece ya en su tamaño final (sin el «crecer y encogerse» de los iconos) */
+html.vx-restoring *,html.vx-restoring *::before,html.vx-restoring *::after{transition:none!important;animation-duration:0s!important;animation-delay:0s!important}

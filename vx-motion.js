@@ -71,6 +71,14 @@
     mo.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'], attributeOldValue: true});
   }
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+  /* Al volver de minimizada (PC): el navegador recalcula la página con otro tamaño mientras estaba oculta y, al restaurarla, las transiciones
+     animaban ese cambio (los iconos de la barra derecha se veían gigantes y se encogían). Durante un instante al volver se apagan las
+     transiciones y animaciones para que todo aparezca ya en su tamaño final. */
+  const root = document.documentElement; let rsT = 0, visAt = 0;
+  const restoring = () => { root.classList.add('vx-restoring'); clearTimeout(rsT); rsT = setTimeout(() => root.classList.remove('vx-restoring'), 500); };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) restoring(); else { visAt = Date.now(); restoring(); } });
+  window.addEventListener('pageshow', restoring);
+  window.addEventListener('resize', () => { if (document.hidden || Date.now() - visAt < 1500 || innerHeight < 200 || innerWidth < 200) restoring(); });
   /* Salida animada para quien la pida: VXMotion.out(el) (la usan los cierres que ya tenían uxOut) */
   window.VXMotion = {
     out(el, ms) { if (!el || !el.isConnected) return; if (reduced) { el.remove(); return; } el.classList.add('vxm-out'); el.querySelectorAll('[id]').forEach(x => x.removeAttribute('id')); if (el.id) el.removeAttribute('id'); setTimeout(() => el.remove(), ms || 170); },
