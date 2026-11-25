@@ -88,21 +88,60 @@
 
   /* Editar lo que ya está dibujado: «pon el canal en rojo», «la resistencia más gruesa», «soportes punteados», «borra el fibonacci»,
      «mueve la resistencia a 65000». Así ya no confunde «cambia el color del canal» con «dibuja un canal». */
-  const COLORS = {rojo: '#ef4444', roja: '#ef4444', rojos: '#ef4444', rojas: '#ef4444', verde: '#22c55e', verdes: '#22c55e', azul: '#3b82f6', azules: '#3b82f6', amarillo: '#facc15', amarilla: '#facc15', amarillos: '#facc15', amarillas: '#facc15', naranja: '#f97316', naranjas: '#f97316', anaranjado: '#f97316', morado: '#a855f7', morada: '#a855f7', morados: '#a855f7', moradas: '#a855f7', violeta: '#8b5cf6', purpura: '#a855f7', lila: '#c4b5fd', rosa: '#ec4899', rosado: '#ec4899', rosada: '#ec4899', fucsia: '#d946ef', blanco: '#ffffff', blanca: '#ffffff', blancos: '#ffffff', blancas: '#ffffff', negro: '#111827', negra: '#111827', gris: '#9ca3af', grises: '#9ca3af', cian: '#22d3ee', celeste: '#38bdf8', turquesa: '#2dd4bf', aqua: '#22d3ee', dorado: '#f0b90b', dorada: '#f0b90b', oro: '#f0b90b', cafe: '#a16207', marron: '#a16207', menta: '#3ff0c0', 'verde lima': '#a3e635', lima: '#a3e635', 'azul claro': '#60a5fa', 'azul marino': '#1e3a8a', 'verde oscuro': '#15803d', 'rojo oscuro': '#991b1b'};
+  /* Colores en español: nombres comunes y finos (carmesí, vino, jade, esmeralda, rosa mexicano, azul cielo…), con plurales y femeninos,
+     más tonos («claro», «oscuro», «pastel», «neón»), hexadecimal (#ff8800 o #f80) y rgb(255, 136, 0). */
+  const BASE = {
+    rojo: '#ef4444', verde: '#22c55e', azul: '#3b82f6', amarillo: '#facc15', naranja: '#f97316', anaranjado: '#f97316', morado: '#a855f7', violeta: '#8b5cf6', purpura: '#9333ea',
+    lila: '#c4b5fd', lavanda: '#b8a9f5', rosa: '#ec4899', rosado: '#f472b6', fucsia: '#d946ef', magenta: '#e11d9a', blanco: '#ffffff', negro: '#111827', gris: '#9ca3af', plata: '#c0c7d1', plateado: '#c0c7d1',
+    cian: '#22d3ee', celeste: '#38bdf8', turquesa: '#2dd4bf', aqua: '#22d3ee', aguamarina: '#5eead4', dorado: '#f0b90b', oro: '#f0b90b', cafe: '#a16207', marron: '#92400e', chocolate: '#7b3f1d', beige: '#e7d7b5', crema: '#f5ecd2',
+    menta: '#3ff0c0', lima: '#a3e635', oliva: '#808b2b', mostaza: '#d4a017', ambar: '#f59e0b', bronce: '#b0773a', cobre: '#c46a3a', terracota: '#c2573a', salmon: '#fa8072', coral: '#ff6f61', durazno: '#ffb07a', melocoton: '#ffb07a',
+    carmesi: '#dc143c', escarlata: '#ff2400', vino: '#7f1d3a', guinda: '#7b1131', granate: '#7a1e2c', bordo: '#7a1e2c', cereza: '#c2185b', frambuesa: '#c72c5b', tomate: '#ff5a36', ladrillo: '#b5452c',
+    esmeralda: '#10b981', jade: '#00a86b', pistache: '#93c572', pistacho: '#93c572', militar: '#4b5d3a', bosque: '#166534', agua: '#5eead4',
+    indigo: '#4f46e5', cobalto: '#0047ab', zafiro: '#1d4ed8', rey: '#2563eb', marino: '#1e3a8a', petroleo: '#0f5e6e', acero: '#64748b', grafito: '#3f4654', carbon: '#1f2329', hueso: '#efe8d8', perla: '#eae6df', arena: '#d8c39a', caqui: '#bfa76a'
+  };
+  const PHRASES = {'rosa mexicano': '#e4007c', 'azul cielo': '#60b5ff', 'azul celeste': '#38bdf8', 'azul marino': '#1e3a8a', 'azul rey': '#2563eb', 'azul electrico': '#2e5bff', 'azul turquesa': '#14b8a6', 'azul petroleo': '#0f5e6e', 'azul acero': '#4682b4', 'verde lima': '#a3e635', 'verde limon': '#a3e635', 'verde menta': '#3ff0c0', 'verde agua': '#5eead4', 'verde bandera': '#16a34a', 'verde militar': '#4b5d3a', 'verde olivo': '#808b2b', 'verde oliva': '#808b2b', 'verde bosque': '#166534', 'verde esmeralda': '#10b981', 'verde jade': '#00a86b', 'verde botella': '#14532d', 'rojo vino': '#7f1d3a', 'rojo sangre': '#a40e1a', 'rojo carmesi': '#dc143c', 'rojo fuego': '#ff3b1f', 'rojo ladrillo': '#b5452c', 'amarillo canario': '#ffe135', 'amarillo mostaza': '#d4a017', 'amarillo limon': '#fff44f', 'amarillo oro': '#f0b90b', 'gris claro': '#d1d5db', 'gris oxford': '#3f4654', 'gris perla': '#d6d3cd', 'blanco hueso': '#efe8d8', 'morado claro': '#c084fc', 'cafe claro': '#c08a4a', 'color piel': '#e8b796', 'verde neon': '#39ff14', 'rosa neon': '#ff2fb3', 'azul neon': '#1f51ff', 'amarillo neon': '#e7ff1f', 'naranja neon': '#ff6a00'};
+  const nz0 = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const COLORS = {}; // nombre (con plurales y femenino) → hex
+  for (const [k, v] of Object.entries(BASE)) { COLORS[k] = v; const fem = k.replace(/o$/, 'a'); COLORS[fem] = v; for (const w of [k, fem]) COLORS[/[aeiou]$/.test(w) ? w + 's' : /[sz]$/.test(w) ? w : w + 'es'] = v; }
+  Object.assign(COLORS, PHRASES, {'verde oscuro': '#15803d', 'rojo oscuro': '#991b1b', 'azul claro': '#60a5fa'});
+  const NAME = {}; for (const [k, v] of Object.entries(Object.assign({}, BASE, PHRASES))) if (!NAME[v]) NAME[v] = k; // hex → nombre bonito para la respuesta
+  const hx2 = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+  function shade(hex, mode) { // claro / oscuro / pastel / neón
+    let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    if (mode === 'light') [r, g, b] = [r, g, b].map(c => c + (255 - c) * .4);
+    else if (mode === 'pastel') [r, g, b] = [r, g, b].map(c => c + (255 - c) * .55);
+    else if (mode === 'dark') [r, g, b] = [r, g, b].map(c => c * .6);
+    else if (mode === 'neon') { const mx = Math.max(r, g, b) || 1; [r, g, b] = [r, g, b].map(c => c === mx ? 255 : c / mx * 255 * .35); }
+    return '#' + hx2(r) + hx2(g) + hx2(b);
+  }
+  const KEYS = () => KEYS.c || (KEYS.c = Object.keys(COLORS).sort((a, b) => b.length - a.length));
+  /* Todos los colores que aparecen en el texto, en orden: [{col, name, at}] */
+  function colorsIn(text) {
+    const s = nz0(text), out = [], used = [];
+    const take = (at, len, col, name) => { if (used.some(([a, b]) => at < b && at + len > a)) return; used.push([at, at + len]); out.push({col, name, at}); };
+    for (const m of s.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/g)) { const h = m[1].length === 3 ? m[1].split('').map(c => c + c).join('') : m[1]; take(m.index, m[0].length, '#' + h, '#' + h); }
+    for (const m of s.matchAll(/rgba?\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})[^)]*\)/g)) { const h = '#' + hx2(+m[1]) + hx2(+m[2]) + hx2(+m[3]); take(m.index, m[0].length, h, h); }
+    for (const k of KEYS()) { const re = new RegExp('(^|[^a-z])(' + k.replace(/ /g, '\\s+') + ')(?![a-z])', 'g'); let m;
+      while ((m = re.exec(s))) { const at = m.index + m[1].length, len = m[2].length; let col = COLORS[k], name = NAME[col] || k;
+        const after = s.slice(at + len, at + len + 22), mod = /^\s*(clarit[oa]s?|clar[oa]s?|suave|bajito)\b/.test(after) ? 'light' : /^\s*(pastel)\b/.test(after) ? 'pastel' : /^\s*(oscur[oa]s?|obscur[oa]s?|fuerte|intens[oa])\b/.test(after) ? 'dark' : /^\s*(neon|fosforescente|fluorescente|chillon|brillante|electric[oa])\b/.test(after) ? 'neon' : null;
+        if (mod && !PHRASES[k + ' ' + (after.trim().split(/\s+/)[0] || '')]) { col = shade(col, mod); name += {light: ' claro', pastel: ' pastel', dark: ' oscuro', neon: ' neón'}[mod]; }
+        take(at, len, col, name); } }
+    return out.sort((a, b) => a.at - b.at);
+  }
+  const colorOf = text => { const c = colorsIn(text); return c.length ? c[0] : null; };
+  const colorName = hex => NAME[String(hex || '').toLowerCase()] || null;
   const TARGETS = [[/canal(es)?/, 'channel'], [/soportes?/, 'sup'], [/resistencias?/, 'res'], [/(linea de )?tendencias?|directriz/, 'trend'], [/fibo(nacci)?|fib\b|retroceso/, 'fib'], [/rangos?|caja/, 'range'], [/niveles?|horizontal(es)?/, 'hline'], [/ultim[oa]/, 'last'], [/(todo|todos|todas|tus dibujos|lo tuyo|lo que dibujaste|tus lineas)/, 'all'], [/lineas?/, 'line']];
   const nz = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   function targetOf(s) { for (const [re, k] of TARGETS) if (re.test(s)) return k; return null; }
   function parseEdit(text) {
-    const s = nz(text), t = targetOf(s); let col = null;
-    for (const k of Object.keys(COLORS).sort((a, b) => b.length - a.length)) if (new RegExp('\\b' + k + '\\b').test(s)) { col = COLORS[k]; break; }
-    const hex = s.match(/#[0-9a-f]{6}\b/); if (hex) col = hex[0];
+    const s = nz(text), t = targetOf(s), cc = colorOf(text); let col = cc ? cc.col : null;
     const lw = /grues|gord|resalta/.test(s) ? 3 : /delgad|\bfin[oa]s?\b/.test(s) ? 1 : 0;
     const ds = /puntead|puntitos|de puntos/.test(s) ? 'dot' : /discontinu|guiones|rayitas|cortad/.test(s) ? 'dash' : /solida|continua|lisa/.test(s) ? '' : null;
-    const editVerb = /(cambia|\bpon(er|le|la|lo|las|los|ga)?\b|pinta|colorea|\bhaz\b|hazla|hazlo|hacer|que sea|vuelve|deja)/.test(s);
+    const editVerb = /(cambia|\bpon(er|le|la|lo|las|los|ga|melo|mela|selo)?\b|pinta|colorea|\bhaz\b|hazla|hazlo|hacer|que sea|vuelve|deja|\bcolor\b|\bde color\b|tono|tin(e|ta))/.test(s);
     if (/(borra|quita|elimina|limpia|desaparece)/.test(s)) { if (!t || t === 'all') return [{do: 'clear'}]; return [{do: 'remove', target: t}]; }
     const mv = s.match(/\b(?:a|en|hasta)\s*\$?\s*([0-9][0-9.,]*)\s*(k|mil)?\b/);
     if (mv && t && t !== 'all' && /(mueve|mover|muevela|recorre|subela|bajala|pasala|llevala)/.test(s)) { const raw = mv[1].replace(/[.,]$/, ''); let v = /^\d{1,3}([.,]\d{3})+$/.test(raw) ? +raw.replace(/[.,]/g, '') : +raw.replace(',', '.'); if (mv[2]) v *= 1000; if (v > 0) return [{do: 'move', target: t, price: v}]; }
-    if ((editVerb || col || (t && t !== 'all')) && (col || lw || ds !== null) && !/(dibuja|traza|marca|crea|agrega|anade)/.test(s)) { const o = {do: 'style', target: t || 'last'}; if (col) o.col = col; if (lw) o.lw = lw; if (ds !== null) o.ds = ds; return [o]; }
+    if ((editVerb || (t && t !== 'all')) && (col || lw || ds !== null) && !/(dibuja|traza|marca|crea|agrega|anade)/.test(s)) { const o = {do: 'style', target: t || 'last'}; if (col) o.col = col; if (lw) o.lw = lw; if (ds !== null) o.ds = ds; return [o]; }
     return [];
   }
 
@@ -131,6 +170,7 @@
 
   /* «pon los soportes en verde y las resistencias en rojo» / «soportes y resistencias en azul» */
   function parseEditMulti(text) {
+    if (/(dibuja|traza|marca|crea|agrega|anade|muestrame|senala)/.test(nz(text)) && !/(borra|quita|elimina)/.test(nz(text))) return []; // pidió DIBUJAR (con colores): no es una edición
     const parts = nz(text).split(/\s+(?:y|e|tambien)\s+|[,;]/).map(x => x.trim()).filter(Boolean);
     if (parts.length < 2) return parseEdit(text);
     const verb = (nz(text).match(/^(cambia(le|r)?|pon(er|le|la|lo)?|pinta(r)?|colorea(r)?|haz(la|lo)?|borra(r)?|quita(r)?|elimina(r)?)\b/) || [''])[0];
@@ -152,10 +192,20 @@
     if (/soporte|resistencia|niveles|s\/r|zonas/.test(s)) out.push({do: 'sr'});
     if (/tendencia|directriz|trendline/.test(s)) out.push({do: 'trend'});
     if (/fibo|fib\b|retroceso/.test(s)) out.push({do: 'fib'});
+    /* el color que pediste al dibujar: «dibuja un canal verde», «soportes en verde y resistencias en rojo» */
+    const cols = colorsIn(text);
+    if (cols.length && out.length) {
+      const near = re => { const m = re.exec(s); if (!m) return null; const c = cols.filter(c => c.at > m.index).sort((a, b) => a.at - b.at)[0]; const nxt = s.slice(m.index + m[0].length).search(/soporte|resistencia|canal|rango|tendencia|fibo/); return c && (nxt < 0 || c.at < m.index + m[0].length + nxt) ? c.col : null; };
+      for (const a of out) {
+        if (a.do === 'sr') { if (new Set(cols.map(c => c.col)).size === 1) { a.col = cols[0].col; continue; } const cs = near(/soportes?/), cr = near(/resistencias?/); if (cs) a.colSup = cs; if (cr) a.colRes = cr; if (!cs && !cr) a.col = cols[0].col; continue; }
+        const re = {channel: /canal(es)?/, range: /rango|lateral|consolida|caja/, trend: /tendencia|directriz|trendline/, fib: /fibo(nacci)?|fib\b|retroceso/}[a.do];
+        const c = re && (out.length > 1 ? near(re) : cols[0].col); if (c) a.col = c;
+      }
+    }
     const m = s.match(/(?:linea|nivel|precio|marca|en)\s*(?:en|a|de)?\s*\$?\s*([0-9][0-9.,]*)/);
     if (m && /linea|nivel|marca/.test(s)) { const raw = m[1].replace(/[.,]$/, ''), v = parseFloat(/^\d{1,3}(\.\d{3})+$/.test(raw) ? raw.replace(/\./g, '') : raw.replace(/,(?=\d{3}\b)/g, '').replace(',', '.')); if (Number.isFinite(v) && v > 0) out.push({do: 'hline', price: v}); }
     return out;
   }
-  root.NexusPixelDraw = {parse, parseEdit, pickTargets, targetOf, COLORS, build, channel, range, levels, trend, fib, pivots, regression, atr, describe, COL};
+  root.NexusPixelDraw = {parse, parseEdit, colorsIn, colorOf, colorName, pickTargets, targetOf, COLORS, build, channel, range, levels, trend, fib, pivots, regression, atr, describe, COL};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.NexusPixelDraw;
 })(typeof window !== 'undefined' ? window : globalThis);

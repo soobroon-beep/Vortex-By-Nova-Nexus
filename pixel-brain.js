@@ -198,7 +198,7 @@
       if (q && typeof q === 'object') { const t = tAt(q.bars != null ? q.bars : q.hace), p = +(q.price != null ? q.price : q.precio); return t != null && okP(p) ? {t, p} : null; }
       return null;
     };
-    const col = (c => { if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) return c.toLowerCase(); const Dr = D(), k = nz(c); return (Dr && Dr.COLORS[k]) || null; })(act.col || act.color);
+    const col = (c => { if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) return c.toLowerCase(); const Dr = D(), k = nz(c); if (Dr && Dr.COLORS[k]) return Dr.COLORS[k]; const f = Dr && Dr.colorOf && c ? Dr.colorOf(String(c)) : null; return f ? f.col : null; })(act.col || act.color);
     const label = act.label ? String(act.label).slice(0, 60) : '', text = String(act.text || act.label || '').slice(0, 80);
     const base = o => Object.assign(o, col || DEF_COL[type] ? {col: col || DEF_COL[type]} : {}, label && !['text', 'note'].includes(type) ? {label} : {});
     if (type === 'long' || type === 'short') {
@@ -270,6 +270,7 @@ ACCIONES:
   Posición: {"do":"draw","shape":"long"|"short","entry":PRECIO,"sl":PRECIO,"tp":PRECIO}
 - Acciones de la APP (cuando te pidan cambiar algo; no necesitan que diga «dibuja»): {"do":"tf","value":"1m|5m|15m|30m|1h|4h|1d|1w|1M"} · {"do":"symbol","value":"ETH"} · {"do":"ind","key":"rsi|macd|vwap|bollinger|supertrend|stoch|atr|obv|volume|ichimoku|ema20|ema50|sma200|adx|cci|mfi","on":true|false} · {"do":"look","key":"up|down|bg|grid|cross","col":"#rrggbb"} (up/down = velas alcistas/bajistas, bg = fondo, grid = cuadrícula, cross = cursor) · {"do":"ctype","value":"candles|ha|line|area|bars|hollow"} · {"do":"cursor","value":"Cruz|Flecha|Estrella|Órbita"} · {"do":"theme","value":"light|dark"}
 - Editar lo existente (ver DIBUJOS): {"do":"style","target":T,"col":"#rrggbb","lw":1|2|3,"ds":"dot"|"dash"|""} · {"do":"remove","target":T} · {"do":"move","target":T,"price":N} · {"do":"clear"} (borra tus dibujos). T: channel, sup, res, trend, fib, range, hline, line, last.
+COLORES: si el usuario pide un color (al dibujar o al editar), ponlo SIEMPRE en "col" como hexadecimal #rrggbb. Si el mensaje trae «COLORES QUE PIDIÓ», usa esos hex tal cual y en el orden en que los dijo (p. ej. «soportes verdes y resistencias rojas» = dos acciones, cada una con su color). Para «claro/oscuro/pastel/neón» ajusta el tono. Si no pidió color, no pongas "col" (la app usa sus colores). Para cambiar el color de algo que ya existe usa {"do":"style","target":T,"col":"#rrggbb"}.
 Ejemplo zona: {"do":"draw","shape":"rect","p":[[45,64850],[-10,64200]],"label":"Zona de oferta","col":"#f06b79"}`;
 
   const SEE = 'Eres los ojos de un analista de trading. Describe en español, en máximo 8 renglones, SOLO lo que se ve en la captura del gráfico: tendencia, figuras o patrones (canales, triángulos, banderas, dobles techos/suelos, HCH), velas importantes recientes, dónde está el precio respecto a las líneas/nubes/indicadores visibles y los dibujos del usuario (rectángulos, líneas, Long/Short) con sus precios si se leen en la escala. No des recomendaciones ni inventes números que no se lean.';

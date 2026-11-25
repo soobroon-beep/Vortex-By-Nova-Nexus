@@ -74,6 +74,7 @@
         const cand = s.ext - dir * Math.max(A * 1.5, R0 * .8);
         if ((cand - stop) * dir > R0 * .1 && (k0.c - cand) * dir > A * .3) { stop = cand; ev.push({k: 'trail', txt: `Stop subido detrás del precio: aseguras ${((stop - E) * dir / R0).toFixed(1)}R.`}); }
       }
+      { const full = Math.abs(box.target - E); if (!s.ntp && full > 0 && (s.ext - E) * dir >= full * .85) { s.ntp = true; ev.push({k: 'neartp', txt: 'Ya casi llega al objetivo: considera tomar una parte de la ganancia o subir el stop.'}); } }
       if (!s.warned && cur <= -.7 && (stop - E) * dir < 0) { s.warned = true; ev.push({k: 'near', txt: 'El precio está cerca de tu stop. Respeta el plan: no lo muevas en contra.'}); }
       if (cur > -.3) s.warned = false;
     }

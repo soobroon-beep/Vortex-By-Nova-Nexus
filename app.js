@@ -222,7 +222,7 @@ function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estil
   if (o.ds != null && o.ds !== 'dash' && o.ds !== 'dot') delete o.ds;
   if (o.ts != null) { const v = Math.round(+o.ts); if (Number.isFinite(v)) o.ts = Math.max(8, Math.min(36, v)); else delete o.ts; }
   if (o.label != null) { o.label = String(o.label).slice(0, 80); if (!o.label) delete o.label; }
-  if (o.sm != null) { const m = o.sm, n = v => Number.isFinite(+v) ? +v : undefined; if (!m || typeof m !== 'object' || Array.isArray(m)) delete o.sm; else o.sm = {on: m.on === true, be: m.be !== false, trail: m.trail !== false, al: m.al !== false, phase: ['wait', 'live', 'out'].includes(m.phase) ? m.phase : 'wait', s0: n(m.s0), at: n(m.at), ext: n(m.ext), bh: n(m.bh), bl: n(m.bl), warned: m.warned === true, res: ['tp', 'sl', 'be', 'trail', ''].includes(m.res) ? m.res : undefined}; } // caja inteligente
+  if (o.sm != null) { const m = o.sm, n = v => Number.isFinite(+v) ? +v : undefined; if (!m || typeof m !== 'object' || Array.isArray(m)) delete o.sm; else o.sm = {on: m.on === true, be: m.be !== false, trail: m.trail !== false, al: m.al !== false, phase: ['wait', 'live', 'out'].includes(m.phase) ? m.phase : 'wait', s0: n(m.s0), at: n(m.at), ext: n(m.ext), bh: n(m.bh), bl: n(m.bl), warned: m.warned === true, ntp: m.ntp === true, nosl: m.nosl === true, exw: n(m.exw), res: ['tp', 'sl', 'be', 'trail', ''].includes(m.res) ? m.res : undefined}; } // caja inteligente
   if (o.pane != null && !(typeof o.pane === 'string' && /^[A-Za-z0-9:_.-]{1,60}$/.test(o.pane))) delete o.pane; // dibujo sobre un panel (oscilador, RSI…)
   if (o.sp != null) { const v = +o.sp; if (Number.isFinite(v) && (v > 0 || o.pane)) o.sp = v; else delete o.sp; } // en un panel los valores pueden ser negativos (MACD…) // Long/Short: precio del stop puesto a mano
   if (o.gc != null && !hex(o.gc)) delete o.gc; if (o.rc != null && !hex(o.rc)) delete o.rc; // Long/Short: color del objetivo y del stop
@@ -2960,6 +2960,24 @@ function smartSug(d) {
   if (ind.lm && window.CCTIndicators && CCTIndicators.liqClusters) { const C = CCTIndicators.liqClusters(ind.lm, d.a.p, 3); for (const q of [...C.up, ...C.dn]) extra.push({p: q.p, why: `zona de liquidaciones de ${q.side === 'long' ? 'largos' : 'cortos'}`}); }
   return CCTSmart.suggest(candles, {side: d.type === 'long' ? 1 : -1, entry: d.a.p, extra});
 }
+/* La posición REAL del exchange conectado que corresponde a esta caja (misma moneda y mismo lado) */
+function smartReal(d) {
+  const X = window.CCTExchange; if (!X || !X.connected || !X.connected()) return null; let sn = null; try { sn = X.snap(); } catch {} if (!sn || !Array.isArray(sn.positions)) return null;
+  const want = base(state.symbol).replace(/^1000+/, '').toUpperCase(), side = d.type === 'long' ? 'long' : 'short';
+  const pos = sn.positions.find(p => String(p.symbol || '').split(/[/:]/)[0].replace(/^1000+/, '').toUpperCase() === want && String(p.side || '').toLowerCase() === side && Math.abs(+p.contracts || 0) > 0);
+  if (!pos) return null; let pr = {}; try { pr = X.protections(pos) || {}; } catch {}
+  return {pos, sl: pr.sl ? pr.sl.price : null, tp: pr.tp ? pr.tp.price : null, name: (X.info && X.info() && X.info().name) || 'tu exchange', trade: !!(X.canTrade && X.canTrade())};
+}
+const smartOn = () => PR.n.smart !== false;
+async function smartExMove(d, price, why) { // mueve el SL real (si lo permitiste) o te avisa qué hacer
+  const R = smartReal(d); if (!R) return false; const t = `${base(state.symbol)} · caja inteligente`;
+  const better = R.sl == null || (price - R.sl) * (d.type === 'long' ? 1 : -1) > Math.abs(price) * 1e-5; if (!better) return false; // tu stop real ya está igual o mejor
+  if (PR.n.smartEx && R.trade) {
+    try { await CCTExchange.setTpSl(R.pos, 'sl', price); appAlert(`${t}: moví tu stop loss en ${R.name} a ${fmt(price)}. ${why}`, t, `Stop loss en ${R.name}: ${fmt(price)}. ${why}`, 'smart-ex'); return true; }
+    catch (e) { appAlert(`${t}: no pude mover el stop en ${R.name} (${String(e && e.message || e).slice(0, 90)}). Muévelo tú a ${fmt(price)}.`, t, `Mueve tu stop loss a ${fmt(price)}`, 'smart-ex'); return false; }
+  }
+  appAlert(`${t}: mueve tu stop loss en ${R.name} a ${fmt(price)}. ${why}`, t, `Mueve tu stop loss en ${R.name} a ${fmt(price)}. ${why}`, 'smart-ex'); return false;
+}
 function smartPop(d) {
   const sg = smartSug(d), m = d.sm || {}, on = !!m.on, lg = d.type === 'long', E = d.a.p, st = posStop(d), R = Math.abs(E - st), rr = Math.abs(d.b.p - E) / (R || 1), p = v => `${v >= E ? '+' : '−'}${Math.abs((v - E) / E * 100).toFixed(2)}%`;
   const row = (n, v, sub, col) => `<div class="sm-row"><span>${n}</span><b style="color:${col}">${fmt(v)}</b><small>${sub}</small></div>`, tg = (k, n, sub, val) => `<button class="pp-item${val ? ' on' : ''}" data-psm="${k}"><span class="pp-ic">${val ? I('check', 16) : ''}</span><span>${n}${sub ? `<small class="sm-sub">${sub}</small>` : ''}</span></button>`;
@@ -2972,6 +2990,9 @@ function smartPop(d) {
     ${sg ? `<div class="sm-box"><div class="sm-h">Sugerencia para tu entrada en ${fmt(E)}</div>${row('Stop', sg.stop, p(sg.stop), d.rc || '#f23645')}${row('Objetivo', sg.target, `${p(sg.target)} · R:R ${sg.rr.toFixed(2)}`, d.gc || '#089981')}${row('Objetivo 2', sg.t2, p(sg.t2), d.gc || '#089981')}
       <ul class="sm-why">${sg.why.map(w => `<li>${esc(w)}</li>`).join('')}</ul><button class="pp-item sm-go" data-sb="smapply"><span class="pp-ic">${I('check', 16)}</span><span>Aplicar stop y objetivo sugeridos</span></button></div>` : '<p class="pp-note">Necesito el gráfico cargado (fuera de la repetición) para sugerir niveles.</p>'}
     ${warn.length ? `<ul class="sm-warn">${warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+    ${(() => { const R = smartReal(d); if (!R) return ''; const want = sg ? sg.stop : st;
+      return `<label class="pp-lbl">Tu posición real en ${esc(R.name)}</label><div class="sm-box"><div class="sm-row"><span>Entrada</span><b>${fmt(+R.pos.entryPrice)}</b><small>${esc(String(R.pos.side).toUpperCase())}</small></div><div class="sm-row"><span>Stop real</span><b style="color:${R.sl ? (d.rc || '#f23645') : '#f0b90b'}">${R.sl ? fmt(R.sl) : 'sin stop'}</b><small>${R.sl ? '' : '¡ponle uno!'}</small></div>
+        ${R.trade ? `<button class="pp-item sm-go" data-sb="smex"><span class="pp-ic">${I('check', 16)}</span><span>Poner el stop ${fmt(st)} en ${esc(R.name)}</span></button>` : `<p class="pp-note">Para que VORTEX lo mueva por ti, activa «Permitir operar en vivo» en tu exchange conectado y «Mover el stop en mi exchange solo» en Avisos. Mientras, te aviso cuándo moverlo.</p>`}</div>`; })()}
     <label class="pp-lbl">Gestión automática</label><div class="pp-col">${tg('on', on ? 'Activada' : 'Activar gestión', on ? phase : 'Vigila tu caja mientras VORTEX está abierta en esta moneda', on)}
     ${on ? tg('be', 'Stop a la entrada en +1R', 'Cuando vas ganando 1 vez tu riesgo, ya no puedes perder', m.be !== false) + tg('trail', 'Seguir al precio con el stop', 'Desde +1.5R sube el stop detrás del precio para asegurar ganancia', m.trail !== false) + tg('al', 'Avisarme', 'Entrada, cerca del stop, objetivo y salida', m.al !== false) : ''}</div>
     <div class="pp-sep"></div><button class="pp-item${state.smartAuto ? ' on' : ''}" data-sb="smauto"><span class="pp-ic">${state.smartAuto ? I('check', 16) : ''}</span><span>Usarla en todas mis cajas nuevas</span></button>
@@ -2987,17 +3008,24 @@ function smartToggle(k) {
 let smT = 0;
 function smartTick(now) {
   if (!window.CCTSmart || replay || !candles.length) return; if (!now && Date.now() - smT < 800) return; smT = Date.now();
-  let ch = false; const out = [];
+  let ch = false; const out = [], exJobs = [];
   const arr = getDrawings().map(d => {
     if (!isPos(d) || !d.sm || !d.sm.on || d.sm.phase === 'out') return d;
     const st0 = posStop(d), sm = {...d.sm}; if (sm.phase === 'wait' || !Number.isFinite(sm.s0)) sm.s0 = st0; // mientras espera la entrada, el riesgo es el que tengas dibujado
     const r = CCTSmart.manage(candles, {side: d.type === 'long' ? 1 : -1, entry: d.a.p, stop: st0, target: d.b.p}, sm);
     const moved = Math.abs(r.stop - st0) > 1e-12, keyCh = r.st.phase !== d.sm.phase || r.st.res !== d.sm.res || r.st.warned !== d.sm.warned || r.events.length;
     if (!moved && !keyCh) { Object.assign(d.sm, {at: r.st.at, ext: r.st.ext, bh: r.st.bh, bl: r.st.bl, s0: r.st.s0}); return d; } // sin cambios importantes: no guarda en la nube
-    ch = true; if (sm.al !== false) for (const e of r.events) out.push(e);
+    ch = true; if (sm.al !== false && smartOn()) for (const e of r.events) out.push(e);
+    if (moved && smartOn() && r.events.some(e => e.k === 'be' || e.k === 'trail')) exJobs.push([d, r.stop, r.events.find(e => e.k === 'be' || e.k === 'trail').txt]);
     return {...d, sm: r.st, ...(moved ? {sp: r.stop} : {})};
   });
   if (ch) { setDrawings(arr); scheduleRender(); if (selectedId) { renderSelBar(); } }
+  for (const [d, p, why] of exJobs) smartExMove(d, p, why);
+  if (smartOn()) for (const d of getDrawings()) { // posición real sin stop: avísale una vez por caja
+    if (!isPos(d) || !d.sm || !d.sm.on || d.sm.phase === 'out' || d.sm.nosl) continue; const R = smartReal(d); if (!R || R.sl != null) continue;
+    d.sm.nosl = true; save(); const t = `${base(state.symbol)} · caja inteligente`, sp = posStop(d);
+    appAlert(`${t}: tu posición real en ${R.name} NO tiene stop loss. Ponlo en ${fmt(sp)} para no correr en pérdidas.`, t, `Tu posición no tiene stop loss: ponlo en ${fmt(sp)}`, 'smart-nosl');
+  }
   for (const e of out) { const t = `${base(state.symbol)} · caja inteligente`; try { appAlert(`${t}: ${e.txt}`, t, e.txt, 'smart-' + e.k, {}); } catch { toast(e.txt); } } // mensaje, sonido y notificación (respeta tus ajustes de avisos)
 }
 function renderSelBar() {
@@ -3047,6 +3075,7 @@ document.addEventListener('click', e => {
   if (D.ptplDel !== undefined) { state.drawTpl = (state.drawTpl || []).filter((_, i) => i !== +D.ptplDel); save(); renderSelBar(); return; }
   const k = D.sb;
   if (k === 'smapply') { smartApply(); return; }
+  if (k === 'smex') { const d = curDraw(), R = d && smartReal(d); if (!R) { toast('No encontré tu posición real de esta moneda'); return; } const sp = posStop(d); if (!confirm(`¿Poner el stop loss REAL de ${base(state.symbol)} en ${fmt(sp)} en ${R.name}?`)) return; CCTExchange.setTpSl(R.pos, 'sl', sp).then(() => { toast(`Stop loss puesto en ${R.name}: ${fmt(sp)}`); setTimeout(renderPop, 1500); }, e => toast(String(e && e.message || e).slice(0, 140))); return; }
   if (k === 'smauto') { state.smartAuto = !state.smartAuto; save(); renderPop(); toast(state.smartAuto ? 'Tus cajas nuevas de Long/Short saldrán con la gestión inteligente' : 'Gestión inteligente solo en las cajas que elijas'); return; }
   if (['tpl', 'col', 'txt', 'lw', 'ds', 'set', 'more', 'smart'].includes(k)) { selPop = selPop === k ? '' : k; if (!selPop) closePop(); else renderPop(); return; }
   if (k === 'txtok') { sbEditText($('#sbTxt').value); return; }
@@ -5549,6 +5578,8 @@ function renderPrefs() {
     + irow(ico('#b07cff', '<path d="M5 4v16M5 14c3-6 6 2 9-4s4-2 5-3"/>'), 'Alertas de indicador', 'Señales de tus indicadores al cerrar la vela', tg('ind', PR.n.ind !== false, 'Alertas de indicador'))
     + irow(ico('#f5b942', '<path d="M3 17l6-6 4 4 8-8"/><circle cx="21" cy="7" r="1.6" fill="currentColor"/><path d="M3 21h18"/>'), 'Mis trades abiertos', 'Ganancia, pérdida, TP, SL y liquidación de tus posiciones', tg('trade', PR.n.trade !== false, 'Mis trades abiertos'))
     + (PR.n.trade !== false ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Avisar cada', 'Escalón de ganancia o pérdida (ROE)', `<select id="tradeStep" class="pref-sel" aria-label="Avisar cada">${(window.CCTTradeWatch ? CCTTradeWatch.STEPS : [10]).map(v => `<option value="${v}" ${(window.CCTTradeWatch ? CCTTradeWatch.step() : 10) === v ? 'selected' : ''}>±${v} %</option>`).join('')}</select>`, sub + ' nt-in') : '')
+    + irow(ico('#548fff', '<path d="M12 3 5 6v5.5c0 4.4 3 7.7 7 9.5 4-1.8 7-5.1 7-9.5V6z"/><path d="M9 12.5l2 2 4-4.5"/>'), 'Caja inteligente', 'Cuándo mover el stop o el objetivo de tus cajas Long/Short y de tu posición real', tg('smart', PR.n.smart !== false, 'Caja inteligente'))
+    + (PR.n.smart !== false ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Mover el stop en mi exchange solo', window.CCTExchange && CCTExchange.connected() ? (CCTExchange.canTrade() ? 'VORTEX mueve el stop loss de tu posición real por ti' : 'Necesita «Permitir operar en vivo» en tu exchange conectado; si no, solo te avisa') : 'Conecta tu exchange (con permiso de operar); si no, solo te avisa', tg('smartEx', !!PR.n.smartEx, 'Mover el stop en mi exchange'), sub + ' nt-in') : '')
     + irow(ico('#7c87ff', '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/>'), 'Mis bots', 'Cuando un bot de Nova Bot Lab compra, vende o cierra', tg('bots', PR.n.bots !== false, 'Mis bots'))
     + irow(ico('#f06b79', '<path d="M3 12h4l2-6 4 12 2-6h6"/>'), 'Movimientos bruscos', 'Sube o cae fuerte en minutos · BTC, ETH, BNB, XRP y SOL', tg('move', !!M.on, 'Movimientos bruscos'))
     + (M.on ? irow('<span class="sg-ic pref-ind" aria-hidden="true"></span>', 'Sensibilidad', `También avisa si pasa ±${(M.pct * 2.5).toFixed(M.pct * 2.5 % 1 ? 1 : 0)} % en 1 hora`, `<select id="moveLvl" class="pref-sel" aria-label="Sensibilidad">${MOVE_LEVELS.map(l => `<option value="${l[0]}" ${l[0] === near[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select>`, sub + ' nt-in') : '')

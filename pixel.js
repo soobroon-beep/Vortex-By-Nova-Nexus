@@ -154,20 +154,26 @@
     const all = (H().candles && H().candles()) || cs, snap = BR && all.length >= 30 ? BR.snapshot(all, {visible: cs}) : null, errs = [];
     for (const a of acts.filter(a => a.do === 'draw').slice(0, 8)) { const r = BR.toDrawings(a, all, snap && snap.st), grp = 'draw:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); if (!r.drawings.length) { errs.push(r.err); continue; } for (const d of r.drawings) { d.grp = grp; await drawAnimated(d); } }
     if (errs.length && !acts.some(a => a.do !== 'draw')) texts.push(acts.filter(a => a.do === 'draw').length === errs.length ? `No pude dibujar eso (${errs[0]}). Dime los precios o en qué velas y lo intento otra vez.` : '');
-    for (const a of acts.filter(a => a.do !== 'draw').slice(0, 5)) { const r = D.build(a.do, cs, a.price, {sr: C.sr}), grp = a.do + ':' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); texts.push(r.text); for (const d of r.drawings) { d.grp = grp; if (/^Soporte/.test(d.label || '') && C.colSup) d.col = C.colSup; if (/^Resistencia/.test(d.label || '') && C.colRes) d.col = C.colRes; await drawAnimated(d); } }
+    for (const a of acts.filter(a => a.do !== 'draw').slice(0, 5)) { const r = D.build(a.do, cs, a.price, {sr: C.sr}), grp = a.do + ':' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); texts.push(r.text); for (const d of r.drawings) { d.grp = grp; const sup = /^Soporte/.test(d.label || ''), res = /^Resistencia/.test(d.label || '');
+        if (sup && C.colSup) d.col = C.colSup; if (res && C.colRes) d.col = C.colRes;
+        if (a.col) d.col = a.col; if (sup && a.colSup) d.col = a.colSup; if (res && a.colRes) d.col = a.colRes; // el color que pediste al dibujar
+        await drawAnimated(d); }
+      if (a.do === 'sr' && (a.col || a.colSup || a.colRes)) setCfgSafe(Object.assign({}, (a.colSup || a.col) ? {colSup: a.colSup || a.col} : {}, (a.colRes || a.col) ? {colRes: a.colRes || a.col} : {})); }
     const hm = home(); await flyTo(hm.x, hm.y); mood('happy', 'thumbs');
     say(((intro ? intro + ' ' : '') + texts.filter(Boolean).join(' ')).trim() || 'Listo.'); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2200);
   }
 
   /* ── editar lo que ya está dibujado: color, grosor, estilo, borrar o mover una pieza ── */
   const TNAME = {channel: ['el canal', 'los canales'], sup: ['el soporte', 'los soportes'], res: ['la resistencia', 'las resistencias'], trend: ['la tendencia', 'las tendencias'], fib: ['el Fibonacci', 'los Fibonacci'], range: ['el rango', 'los rangos'], hline: ['el nivel', 'los niveles'], line: ['la línea', 'las líneas'], last: ['el último dibujo', 'el último dibujo'], all: ['mis dibujos', 'mis dibujos']};
-  const CNAME = c => { for (const [k, v] of Object.entries(D.COLORS)) if (v === c) return k; return c; };
+  const CNAME = c => (D.colorName && D.colorName(c)) || (() => { for (const [k, v] of Object.entries(D.COLORS)) if (v === c) return k; return c; })();
+  const DRAWABLE = {channel: 'channel', sup: 'sr', res: 'sr', trend: 'trend', fib: 'fib', range: 'range'};
   async function editDrawings(acts, intro) {
-    const h = H(), out = []; let any = false;
+    const h = H(), out = [], missing = []; let any = false;
     for (const a of acts.slice(0, 4)) {
       const list = h.list(), ids = D.pickTargets(list, a.target, a.do === 'move' ? a.price : undefined), nm = TNAME[a.target] || ['eso', 'eso'], pl = ids.length > 1 ? nm[1] : nm[0];
       if (a.do === 'style' && a.col) { if (a.target === 'sup') setCfgSafe({colSup: a.col}); if (a.target === 'res') setCfgSafe({colRes: a.col}); } // los próximos que dibuje salen de ese color aunque ahorita no haya
-      if (!ids.length) { const sr = a.target === 'sup' || a.target === 'res'; out.push(sr && a.col ? `Todavía no te he marcado ${nm[1]}: cuando te los marque saldrán en ${CNAME(a.col)}. (Si son los del indicador Nova Nexus, su color se cambia en su engrane › Estilo.)` : list.length ? `No encontré ${nm[0]} en el gráfico. ¿Quieres que lo dibuje primero?` : 'Todavía no hay dibujos en este gráfico. Pídeme uno y luego lo cambiamos.'); if (sr) setChipsCustom([['Márcalos ahora', 'Marca soportes y resistencias']]); continue; }
+      if (!ids.length) { const mk = DRAWABLE[a.target]; if (a.do === 'style' && mk) { missing.push(Object.assign({do: mk}, a.target === 'sup' ? {colSup: a.col} : a.target === 'res' ? {colRes: a.col} : {col: a.col})); continue; } // «pon el canal en morado» sin canal: te lo dibujo ya en morado
+        out.push(list.length ? `No encontré ${nm[0]} en el gráfico. ¿Quieres que lo dibuje primero?` : 'Todavía no hay dibujos en este gráfico. Pídeme uno y luego lo cambiamos.'); continue; }
       const d0 = list.find(d => d.id === ids[0]); if (d0 && d0.pts && d0.pts[0]) { const q = h.toScreen(d0.pts[0]); if (q) { const s = AV(), f = V2(q), hd = M ? M.handScreen() : {x: s.w * .8, y: s.h * .55}; bub.hidden = true; mood('focused', 'point'); await flyTo(clamp(f.x - hd.x, 0, AW() - s.w), clamp(f.y - hd.y, 0, AH() - s.h), 650); await sleep(REDUCED ? 0 : 250); } }
       any = true;
       if (a.do === 'remove') { const n = h.remove(ids); out.push(`Listo, quité ${pl}${n > 1 ? ` (${n})` : ''}.`); }
@@ -177,6 +183,9 @@
         h.patch(ids, f); const bits = [a.col && `en ${CNAME(a.col)}`, a.lw === 3 && 'más gruesa', a.lw === 1 && 'más delgada', a.ds === 'dot' && 'punteada', a.ds === 'dash' && 'discontinua', a.ds === '' && 'sólida'].filter(Boolean);
         out.push(`Listo, puse ${pl} ${bits.join(' y ')}.`); }
     }
+    if (missing.length) { const m = []; for (const x of missing) { const y = m.find(z => z.do === x.do); if (y) Object.assign(y, Object.fromEntries(Object.entries(x).filter(([, v]) => v))); else m.push(x); } // soporte + resistencia = un solo «sr»
+      if (any) { say(out.join(' '), {busy: true}); await sleep(REDUCED ? 0 : 900); }
+      await perform(m, (intro ? intro + ' ' : '') + (out.length ? out.join(' ') + ' ' : '') + 'No lo tenías dibujado, así que te lo dibujo con ese color.'); return; }
     if (any) { mood('happy', 'thumbs'); await sleep(REDUCED ? 0 : 300); const hm = home(); await flyTo(hm.x, hm.y, 600); } else mood('thinking', 'idle');
     say(((intro ? intro + ' ' : '') + out.join(' ')).trim()); setTimeout(() => { if (!busy) mood('neutral', 'idle'); }, 2000);
   }
@@ -198,6 +207,8 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     try { const c = window.CCT_getAIContext && window.CCT_getAIContext(); if (c) o.indicadores = JSON.stringify(c).slice(0, 1800); } catch {}
     return o;
   }
+  const VL = () => window.VozLimpia || {clean: t => String(t || '').trim(), merge: (a, b) => (a + ' ' + b).trim(), fromResults: r => { let t = ''; for (let i = 0; i < r.length; i++) t += r[i][0].transcript; return t; }, HINT: '', TRANSCRIBE: ''};
+  const VOZ = () => VL().HINT || ''; // pista: entiende la intención aunque el dictado traiga muletillas o repeticiones
   function profile() { // lo que el usuario configuró en la tarjeta de Pixel
     const c = CFG(), out = [];
     if (c.nombre) out.push(`El usuario se llama ${c.nombre}: llámalo así.`);
@@ -245,8 +256,10 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     const L = LLM(); if (!L || !L.chat) throw new Error('sin IA'); it = it || (BR ? BR.intent(text) : {});
     let seen = ''; if (it.see && BR) { status('mirando tu gráfico…'); say('Déjame mirar tu gráfico…', {busy: true}); seen = await look(); }
     status('pensando…'); if (it.decide) say('Revisando tu posición, tus indicadores y la estructura…', {busy: true}); else if (!it.see) say('Déjame pensarlo…', {busy: true});
-    const data = brainData(seen), sys = (BR ? BR.SYS : SYS_OLD) + profile() + (it.draw ? '\nEl usuario SÍ pidió dibujar: incluye las acciones necesarias.' : '\nEl usuario NO pidió dibujar: "actions" debe ir vacío salvo que edite dibujos existentes.');
-    const msgs = [{role: 'system', content: sys}, ...hist.slice(-6), {role: 'user', content: `${text}\n\nDATOS DEL GRÁFICO (en vivo):\n${data.text}`}];
+    const data = brainData(seen), sys = (BR ? BR.SYS : SYS_OLD) + profile() + VOZ() + (it.draw ? '\nEl usuario SÍ pidió dibujar: incluye las acciones necesarias.' : '\nEl usuario NO pidió dibujar: "actions" debe ir vacío salvo que edite dibujos existentes.');
+    let cols = []; try { cols = D.colorsIn ? D.colorsIn(text) : []; } catch {}
+    const colHint = cols.length ? '\nCOLORES QUE PIDIÓ (úsalos EXACTOS en "col"): ' + cols.map(c => `${c.name} = ${c.col}`).join(' · ') : '';
+    const msgs = [{role: 'system', content: sys}, ...hist.slice(-6), {role: 'user', content: `${text}${colHint}\n\nDATOS DEL GRÁFICO (en vivo):\n${data.text}`}];
     const call = L.pixelChat ? L.pixelChat(msgs, {json: true, maxTokens: 1800}) : L.chat(msgs, {purpose: 'text', maxTokens: 900, noOwn: true});
     const r = await Promise.race([call, sleep(90000).then(() => { throw new Error('La IA tardó demasiado'); })]);
     const pr = BR ? BR.parseReply(r && r.text) : {reply: String(r && r.text || ''), actions: []};
@@ -420,7 +433,7 @@ REGLAS:
 - No prometas ganancias; si das una opinión de mercado, al final una nota muy breve de que no es asesoría financiera.`;
   async function llmText(sys, user, maxTokens = 650) {
     const L = LLM(); if (!L || !L.chat) throw new Error('sin IA');
-    const r = await Promise.race([L.chat([{role: 'system', content: sys + profile()}, ...hist.slice(-4), {role: 'user', content: user}], {purpose: 'text', maxTokens, noOwn: true}), sleep(60000).then(() => { throw new Error('tarde'); })]);
+    const r = await Promise.race([L.chat([{role: 'system', content: sys + profile() + VOZ()}, ...hist.slice(-4), {role: 'user', content: user}], {purpose: 'text', maxTokens, noOwn: true}), sleep(60000).then(() => { throw new Error('tarde'); })]);
     const t = String(r && r.text || '').replace(/```[\s\S]*?```/g, '').trim(); hist.push({role: 'user', content: user.slice(0, 300)}, {role: 'assistant', content: t.slice(0, 600)}); if (hist.length > 12) hist.splice(0, hist.length - 12); return t;
   }
   const big = on => { bub.classList.toggle('long', !!on); if (!bub.hidden) placeBubble(); };
@@ -624,7 +637,7 @@ REGLAS:
   async function transcribe(blob) {
     const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(), dec = await ac.decodeAudioData(await blob.arrayBuffer()); try { ac.close(); } catch {}
     const len = Math.ceil(dec.duration * 16000), off = new OfflineAudioContext(1, Math.max(1, len), 16000), src = off.createBufferSource(); src.buffer = dec; src.connect(off.destination); src.start(); const pcm = (await off.startRendering()).getChannelData(0);
-    const body = {model: 'openai-audio', temperature: 0, max_tokens: 1200, messages: [{role: 'system', content: 'Eres un transcriptor. Escribe EXACTAMENTE lo que dice la persona en el audio, completo de principio a fin, en español, sin responderle, sin comillas y sin agregar nada. Si no se entiende nada, responde solo: ""'}, {role: 'user', content: [{type: 'text', text: 'Transcribe este audio completo.'}, {type: 'input_audio', input_audio: {data: b64(toWav(pcm)), format: 'wav'}}]}]};
+    const body = {model: 'openai-audio', temperature: 0, max_tokens: 1200, messages: [{role: 'system', content: VL().TRANSCRIBE || 'Eres un transcriptor. Escribe EXACTAMENTE lo que dice la persona en el audio, completo de principio a fin, en español, sin responderle, sin comillas y sin agregar nada. Si no se entiende nada, responde solo: ""'}, {role: 'user', content: [{type: 'text', text: 'Transcribe este audio completo.'}, {type: 'input_audio', input_audio: {data: b64(toWav(pcm)), format: 'wav'}}]}]};
     const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 30000 + Math.min(60000, dec.duration * 400));
     try { const r = await fetch(VXURL + '/ai', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body), signal: ctl.signal}); if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(), m = j && j.choices && j.choices[0] && j.choices[0].message || {}, t = m.content || (m.audio && m.audio.transcript) || ''; return String(t || '').replace(/^["«“\s]+|["»”\s]+$/g, '').trim(); }
     finally { clearTimeout(to); }
@@ -641,7 +654,7 @@ REGLAS:
       if (cancelled || !open) { cancelled = false; mood('neutral', 'idle'); return; }
       if (!chunks.length || dur < 600) { mood('neutral', 'idle'); say('No alcancé a escucharte. Toca el micrófono y habla.'); return; }
       busy = true; bub.classList.add('working'); mood('thinking', 'think'); say('Escuchando lo que dijiste…', {busy: true}); status('transcribiendo…');
-      let t = ''; try { t = await transcribe(new Blob(chunks, {type})); } catch (e) { console.warn('Pixel voz', e); }
+      let t = ''; try { t = VL().clean(await transcribe(new Blob(chunks, {type}))); } catch (e) { console.warn('Pixel voz', e); } // sin muletillas ni repeticiones
       busy = false; bub.classList.remove('working'); status('IA de VORTEX'); if (!open) return;
       if (!t || t.length < 2) { mood('surprised', 'idle'); say('No te entendí bien. Intenta de nuevo hablando un poco más cerca del micrófono, o escríbeme.'); return; }
       input.value = t; ask(t); };
@@ -652,14 +665,14 @@ REGLAS:
     const start = () => {
       rec = new SR(); rec.lang = 'es-MX'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1; part = ''; fail = ''; lastStart = Date.now();
       rec.onstart = () => { if (first) { first = false; micUI(true); } };
-      rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; part = t.trim(); input.value = (said + ' ' + part).trim(); };
+      rec.onresult = e => { part = VL().fromResults(e.results).trim(); input.value = VL().merge(said, part); }; // sin duplicar lo que Android repite
       rec.onerror = e => { fail = e.error; };
-      rec.onend = () => { said = (said + ' ' + part).trim(); part = '';
+      rec.onend = () => { said = VL().merge(said, part); part = '';
         const fatal = ['not-allowed', 'service-not-allowed', 'audio-capture', 'language-not-supported'].includes(fail);
         if (Date.now() - lastStart < 700) restarts++; else restarts = 0;
         if (wantRec && !cancelled && open && !fatal && restarts < 6) { try { start(); return; } catch {} }
         rec = null; wantRec = false; micUI(false); mood('neutral', 'idle'); if (cancelled || !open) { cancelled = false; return; }
-        if (said) { ask(said); return; }
+        if (said) { const t = VL().clean(said) || said; input.value = t; ask(t); return; }
         if (fail === 'not-allowed' || fail === 'service-not-allowed') { say('Necesito permiso para usar el micrófono: actívalo en los permisos del navegador (o de VORTEX) y vuelve a tocarlo.'); return; }
         say('No te escuché. Toca el micrófono y vuelve a intentarlo.'); };
       rec.start();

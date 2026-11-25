@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const DEF = {tz: 'auto', clock: '24', date: 'dmy', dec: 'auto', sep: 'en', sym: '', sound: 'on', tone: 'beep', vol: 70, vib: 'on', quiet: {on: false, from: '23:00', to: '07:00'},
-    cd: 'on', tabPx: 'off', wake: 'off', conf: 'on', conn: 'on', n: {price: true, ind: true, trade: true, bots: true, discord: true, app: true}};
+    cd: 'on', tabPx: 'off', wake: 'off', conf: 'on', conn: 'on', n: {price: true, ind: true, trade: true, bots: true, discord: true, app: true, smart: true, smartEx: false}};
   const HM = v => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
   const TZ = [['auto', 'Automática (la de tu dispositivo)'], ['UTC', 'UTC'], ['America/Mexico_City', 'Ciudad de México'], ['America/New_York', 'Nueva York'], ['America/Bogota', 'Bogotá'], ['America/Argentina/Buenos_Aires', 'Buenos Aires'],
     ['America/Sao_Paulo', 'São Paulo'], ['Europe/London', 'Londres'], ['Europe/Madrid', 'Madrid'], ['Asia/Dubai', 'Dubái'], ['Asia/Singapore', 'Singapur'], ['Asia/Tokyo', 'Tokio'], ['Australia/Sydney', 'Sídney']];
