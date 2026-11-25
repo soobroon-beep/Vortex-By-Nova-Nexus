@@ -32,3 +32,9 @@
 .pwa-card details{font-size:12px;line-height:1.65;color:var(--muted)}.pwa-card summary{cursor:pointer;font-size:12px;color:var(--accent);padding:6px 2px 0;list-style:none}.pwa-card summary::-webkit-details-marker{display:none}.pwa-card details[open] summary{color:var(--text)}
 .pwa-card #updateApp{margin-top:12px;width:100%}
 .light .pwa-icon-option{background:rgba(0,0,0,.04)}
+
+/* iPad (app instalada, diseño de PC): la barra de estado de iOS tapaba la parte de arriba. Se deja su espacio. */
+@media(display-mode:standalone) and (min-width:1024px){
+  body:not(.pane) #app{padding-top:env(safe-area-inset-top)}
+  body.expanded:not(.pane) .chart-view{height:calc(100dvh - env(safe-area-inset-top))}
+}
