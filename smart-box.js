@@ -50,7 +50,8 @@
   /* Gestión de una caja activa. st = estado guardado en el dibujo:
      {phase: 'wait'|'live'|'out', s0, ext, at, warned, be, trail, res}; box = {side, entry, stop, target}; c = velas (la última puede estar en curso).
      Devuelve {st, stop, events: [{k, txt}]} — stop es el nuevo stop (o el mismo). */
-  function manage(c, box, st) {
+  function manage(c, box, st, f) { // f: formato de precio para los mensajes (opcional)
+    f = f || (v => String(round(v, box.entry)));
     const n = c.length, dir = box.side > 0 ? 1 : -1, E = box.entry, ev = [], s = Object.assign({phase: 'wait', s0: box.stop, ext: E, warned: false}, st || {}); let stop = box.stop;
     if (!n || s.phase === 'out') return {st: s, stop, events: ev};
     const R0 = Math.abs(E - (s.s0 || box.stop)) || Math.abs(E - stop) || E * .01, A = atr(c.slice(-120)) || R0, since = s.at || 0;
@@ -61,26 +62,32 @@
       const seen = k0.t === s.at && fin(s.bh) && fin(s.bl), k = seen ? {t: k0.t, o: k0.o, c: k0.c, h: k0.h > s.bh ? k0.h : -Infinity, l: k0.l < s.bl ? k0.l : Infinity} : k0;
       s.bh = seen ? Math.max(s.bh, k0.h) : k0.h; s.bl = seen ? Math.min(s.bl, k0.l) : k0.l; s.at = k0.t;
       if (s.phase === 'wait') {
-        if (k0.l <= E && k0.h >= E) { s.phase = 'live'; s.ext = E; ev.push({k: 'in', txt: 'El precio tocó tu entrada: la caja está activa.'}); }
+        if (k0.l <= E && k0.h >= E) { s.phase = 'live'; s.ext = E; ev.push({k: 'in', txt: `El precio llegó a tu entrada (${f(E)}). Si entras: stop en ${f(stop)} y objetivo en ${f(box.target)}.`}); }
         else continue;
       }
       // salida primero (conservador: si en la misma vela toca stop y objetivo, cuenta el stop)
-      if ((dir > 0 && k.l <= stop) || (dir < 0 && k.h >= stop)) { s.phase = 'out'; s.res = (stop - E) * dir >= -R0 * .05 ? (Math.abs(stop - E) < R0 * .1 ? 'be' : 'trail') : 'sl'; ev.push({k: s.res === 'sl' ? 'sl' : 'exit', txt: s.res === 'sl' ? 'Tocó el stop: pérdida controlada (1R). Bien por respetarlo.' : s.res === 'be' ? 'Salió en la entrada: sin perder.' : 'Salió con el stop que fue siguiendo al precio: ganancia asegurada.'}); break; }
-      if ((dir > 0 && k.h >= box.target) || (dir < 0 && k.l <= box.target)) { s.phase = 'out'; s.res = 'tp'; ev.push({k: 'tp', txt: 'Llegó al objetivo.'}); break; }
+      if ((dir > 0 && k.l <= stop) || (dir < 0 && k.h >= stop)) { s.phase = 'out'; s.res = (stop - E) * dir >= -R0 * .05 ? (Math.abs(stop - E) < R0 * .1 ? 'be' : 'trail') : 'sl'; ev.push({k: s.res === 'sl' ? 'sl' : 'exit', txt: s.res === 'sl' ? `Tocó el stop (${f(stop)}): pérdida controlada de 1R. Bien por respetarlo.` : s.res === 'be' ? `Regresó a tu entrada (${f(stop)}): sales sin perder.` : `Tocó tu stop de ganancia (${f(stop)}): aseguraste ${((stop - E) * dir / R0).toFixed(1)}R.`}); break; }
+      if ((dir > 0 && k.h >= box.target) || (dir < 0 && k.l <= box.target)) { s.phase = 'out'; s.res = 'tp'; ev.push({k: 'tp', txt: `Llegó a tu objetivo (${f(box.target)}): ganancia de ${(Math.abs(box.target - E) / R0).toFixed(1)}R.`}); break; }
       s.ext = dir > 0 ? Math.max(s.ext, k0.h) : Math.min(s.ext, k0.l);
       const prog = (s.ext - E) * dir / R0, cur = (k0.c - E) * dir / R0;
-      if (s.be !== false && prog >= 1 && (stop - E) * dir < 0) { stop = E + dir * R0 * .05; ev.push({k: 'be', txt: 'Llegó a +1R: stop movido a la entrada (ya no puedes perder).'}); }
+      if (s.be !== false && prog >= 1 && (stop - E) * dir < 0) { stop = E + dir * R0 * .05; ev.push({k: 'be', txt: `Va ganando 1 vez lo que arriesgas: mueve tu stop a la entrada (${f(stop)}) y ya no puedes perder.`}); }
       if (s.trail !== false && prog >= 1.5) {
         const cand = s.ext - dir * Math.max(A * 1.5, R0 * .8);
-        if ((cand - stop) * dir > R0 * .1 && (k0.c - cand) * dir > A * .3) { stop = cand; ev.push({k: 'trail', txt: `Stop subido detrás del precio: aseguras ${((stop - E) * dir / R0).toFixed(1)}R.`}); }
+        if ((cand - stop) * dir > R0 * .1 && (k0.c - cand) * dir > A * .3) { stop = cand; ev.push({k: 'trail', txt: `${dir > 0 ? 'Sube' : 'Baja'} tu stop a ${f(stop)} detrás del precio: aseguras ${((stop - E) * dir / R0).toFixed(1)}R.`}); }
       }
-      { const full = Math.abs(box.target - E); if (!s.ntp && full > 0 && (s.ext - E) * dir >= full * .85) { s.ntp = true; ev.push({k: 'neartp', txt: 'Ya casi llega al objetivo: considera tomar una parte de la ganancia o subir el stop.'}); } }
-      if (!s.warned && cur <= -.7 && (stop - E) * dir < 0) { s.warned = true; ev.push({k: 'near', txt: 'El precio está cerca de tu stop. Respeta el plan: no lo muevas en contra.'}); }
+      { const full = Math.abs(box.target - E); if (!s.ntp && full > 0 && (s.ext - E) * dir >= full * .85) { s.ntp = true; ev.push({k: 'neartp', txt: `Ya casi llega a tu objetivo (${f(box.target)}): considera tomar una parte de la ganancia o ajustar el stop.`}); } }
+      if (!s.warned && cur <= -.7 && (stop - E) * dir < 0) { s.warned = true; ev.push({k: 'near', txt: `El precio está cerca de tu stop (${f(stop)}). Respeta el plan: no lo muevas en contra.`}); }
       if (cur > -.3) s.warned = false;
     }
     return {st: s, stop, events: ev};
   }
-  const api = {suggest, manage, swings, atr};
+  /* Caja ↔ servidor: el plan y su avance en un objeto pequeño (lo guarda el servidor de avisos, máx. 400 caracteres) */
+  const P = v => fin(+v) ? +(+v).toPrecision(10) : undefined;
+  function toSpec(box, st) { st = st || {}; return {sd: box.side > 0 ? 1 : -1, e: P(box.entry), s: P(box.stop), t: P(box.target), s0: P(st.s0 != null ? st.s0 : box.stop), be: st.be !== false ? 1 : 0, tr: st.trail !== false ? 1 : 0, ph: st.phase || 'wait', at: P(st.at), x: P(st.ext), bh: P(st.bh), bl: P(st.bl), w: st.warned ? 1 : 0, n: st.ntp ? 1 : 0, r: st.res || undefined}; }
+  function fromSpec(sp) { sp = sp || {}; return {box: {side: sp.sd > 0 ? 1 : -1, entry: +sp.e, stop: +sp.s, target: +sp.t}, st: {phase: ['wait', 'live', 'out'].includes(sp.ph) ? sp.ph : 'wait', s0: fin(+sp.s0) ? +sp.s0 : +sp.s, at: fin(+sp.at) ? +sp.at : undefined, ext: fin(+sp.x) ? +sp.x : undefined, bh: fin(+sp.bh) ? +sp.bh : undefined, bl: fin(+sp.bl) ? +sp.bl : undefined, warned: !!sp.w, ntp: !!sp.n, res: sp.r, be: sp.be !== 0, trail: sp.tr !== 0}}; }
+  const planOf = sp => sp ? [sp.sd, sp.e, sp.t, sp.s0, sp.be, sp.tr].join('|') : ''; // si cambia, el usuario editó la caja
+  const okSpec = sp => !!sp && fin(+sp.e) && fin(+sp.s) && fin(+sp.t) && +sp.e > 0 && (+sp.t - +sp.e) * (sp.sd > 0 ? 1 : -1) > 0;
+  const api = {suggest, manage, swings, atr, toSpec, fromSpec, planOf, okSpec};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTSmart = api;
 })(typeof self !== 'undefined' ? self : this);

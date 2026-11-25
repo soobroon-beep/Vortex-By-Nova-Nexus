@@ -6,7 +6,7 @@
 //   3) le devuelve al servidor qué velas revisó y cuáles saltaron; el servidor manda la notificación (y Discord si lo elegiste).
 // La llave se deriva de FIREBASE_SERVICE_ACCOUNT (scripts/bot-push-key.js): no hay secretos nuevos.
 'use strict';
-const AE = require('../alert-eval.js'), M = require('../markets.js');
+const AE = require('../alert-eval.js'), M = require('../markets.js'), SM = require('../smart-box.js');
 const {botPushKey} = require('./bot-push-key.js');
 let Pine = null; try { Pine = require('../pine.js'); } catch {}
 try { require('../nova-nexus.js'); } catch {}
@@ -54,6 +54,7 @@ async function round(key, getScript) {
   const getK = async (s, i) => { const k = s + '|' + i; if (!kc.has(k)) kc.set(k, klines(s, i).catch(e => { kc.delete(k); throw e; })); return kc.get(k); };
   let checked = 0, hits = 0;
   for (const dv of jobs.devs || []) for (const a of dv.alerts || []) {
+    if (a.src === 'smart') { try { const r = await smartJob(a, getK); if (r) { out.push(Object.assign({dev: dv.dev, id: a.id}, r)); checked++; if (r.hit) hits++; } } catch (e) { console.log('caja inteligente', a.id, String(e.message || e).slice(0, 160)); } continue; }
     let cs; try { cs = await getK(a.symbol, a.interval); } catch (e) { console.log('velas', a.symbol, a.interval, e.message); continue; }
     if (cs.length < 3) continue; const k = cs.length - 1, lc = cs[k].t; if (!(lc > (a.lastBar || 0))) continue; // esa vela ya se revisó
     const bars = AE.barsToCheck(cs, k, a.lastBar); let info = null; checked++;
@@ -77,6 +78,18 @@ async function round(key, getScript) {
   if (out.length) { const r = await post('/ind/report', {key, results: out}); console.log(`${new Date().toISOString()} · revisadas ${checked} · saltaron ${hits} · avisos enviados ${r.sent || 0}`); }
   return {checked, hits};
 }
+/* Caja inteligente con la app cerrada: el mismo cerebro que la app (smart-box.js) con velas de 1 minuto CERRADAS.
+   Avisa cuando el precio llega a tu entrada, cuándo mover el stop a la entrada, cuándo subirlo, si se acerca al stop o al objetivo y cuando sale.
+   Devuelve el avance (spec) para que el servidor lo guarde; «save» solo cuando cambió algo importante (pocas escrituras). */
+async function smartJob(a, getK) {
+  const sp = a.spec; if (!SM.okSpec(sp) || sp.ph === 'out') return null;
+  const cs = await getK(a.symbol, '1m'); if (!cs || cs.length < 30) return null; const last = cs[cs.length - 1].t;
+  const {box, st} = SM.fromSpec(sp); if (!st.at) st.at = last; // recién registrada: empieza a vigilar desde ahora
+  const r = SM.manage(cs, box, st, fmt), ns = SM.toSpec(Object.assign({}, box, {stop: r.stop}), r.st);
+  const save = r.events.length > 0 || ns.ph !== sp.ph || ns.s !== sp.s || ns.w !== sp.w || ns.n !== sp.n || !sp.at;
+  const side = box.side > 0 ? 'LONG' : 'SHORT', base = String(a.symbol).split('@')[0].replace(/[-_]?(USDT|USDC|FDUSD|USD)$/, '');
+  return {lastBar: last, hit: r.events.length > 0, info: r.events.map(e => e.txt).join(' ').slice(0, 200), spec: ns, save, title: `${base} · caja ${side}`};
+}
 function fmt(v) { const a = Math.abs(v); return (+v).toLocaleString('en-US', {maximumFractionDigits: a >= 1000 ? 2 : a >= 1 ? 4 : 8}); }
 
 function setup() { // llave + lector de scripts (lo usa también scripts/motor.js)
@@ -94,4 +107,4 @@ async function main() {
   } while (Date.now() < end);
 }
 if (require.main === module) main().then(() => process.exit(0)).catch(e => { console.error('Error:', String(e.message || e).slice(0, 200)); process.exit(1); });
-module.exports = {round, klines, makeScripts, setup};
+module.exports = {round, klines, makeScripts, setup, smartJob};

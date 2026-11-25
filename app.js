@@ -222,7 +222,7 @@ function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estil
   if (o.ds != null && o.ds !== 'dash' && o.ds !== 'dot') delete o.ds;
   if (o.ts != null) { const v = Math.round(+o.ts); if (Number.isFinite(v)) o.ts = Math.max(8, Math.min(36, v)); else delete o.ts; }
   if (o.label != null) { o.label = String(o.label).slice(0, 80); if (!o.label) delete o.label; }
-  if (o.sm != null) { const m = o.sm, n = v => Number.isFinite(+v) ? +v : undefined; if (!m || typeof m !== 'object' || Array.isArray(m)) delete o.sm; else o.sm = {on: m.on === true, be: m.be !== false, trail: m.trail !== false, al: m.al !== false, phase: ['wait', 'live', 'out'].includes(m.phase) ? m.phase : 'wait', s0: n(m.s0), at: n(m.at), ext: n(m.ext), bh: n(m.bh), bl: n(m.bl), warned: m.warned === true, ntp: m.ntp === true, nosl: m.nosl === true, exw: n(m.exw), res: ['tp', 'sl', 'be', 'trail', ''].includes(m.res) ? m.res : undefined}; } // caja inteligente
+  if (o.sm != null) { const m = o.sm, n = v => Number.isFinite(+v) ? +v : undefined; if (!m || typeof m !== 'object' || Array.isArray(m)) delete o.sm; else o.sm = {on: m.on === true, be: m.be !== false, trail: m.trail !== false, al: m.al !== false, phase: ['wait', 'live', 'out'].includes(m.phase) ? m.phase : 'wait', s0: n(m.s0), at: n(m.at), ext: n(m.ext), bh: n(m.bh), bl: n(m.bl), warned: m.warned === true, ntp: m.ntp === true, nosl: m.nosl === true, exw: n(m.exw), fa: n(m.fa), res: ['tp', 'sl', 'be', 'trail', ''].includes(m.res) ? m.res : undefined}; } // caja inteligente
   if (o.pane != null && !(typeof o.pane === 'string' && /^[A-Za-z0-9:_.-]{1,60}$/.test(o.pane))) delete o.pane; // dibujo sobre un panel (oscilador, RSI…)
   if (o.sp != null) { const v = +o.sp; if (Number.isFinite(v) && (v > 0 || o.pane)) o.sp = v; else delete o.sp; } // en un panel los valores pueden ser negativos (MACD…) // Long/Short: precio del stop puesto a mano
   if (o.gc != null && !hex(o.gc)) delete o.gc; if (o.rc != null && !hex(o.rc)) delete o.rc; // Long/Short: color del objetivo y del stop
@@ -1149,8 +1149,8 @@ async function indAlertTick(force) {
 window.CCTAlerts = {stdHit, pineHit, STD_CONDS}; // expuesto para pruebas
 window.CCTPushBridge = {state: () => state, prefs: () => PR, save: () => save(), setSound: on => setPref('sound', on ? 'on' : 'off'), renderPrefs: () => renderPrefs(), renderAlerts: () => renderAlerts(), scheduleRender: () => scheduleRender(), toast: m => toast(m), uid: () => (fbUser && fbUser.uid) || '',
   indAlerts: () => state.alerts.filter(a => a.kind === 'ind').map(a => Object.assign({id: a.id, symbol: a.symbol, interval: a.interval, src: a.src, sid: a.sid, spec: a.spec, label: a.label, note: a.note, notify: a.notify, repeat: a.repeat, on: a.on, lastBar: a.lastBar || 0, firedAt: a.firedAt || 0, firedInfo: a.firedInfo || ''},
-    a.src === 'pine' ? {inputs: (state.pine.find(p => p.sid === a.sid) || {}).inputs || {}} : {}, a.src === 'nova' ? {nopt: novaOpts()} : {})), // el servidor las revisa con la app cerrada (scripts/ind-alerts.js)
-  applyInd: back => { let ch = false; for (const s of back || []) { const a = state.alerts.find(x => x.id === s.id && x.kind === 'ind'); if (!a || !(s.firedAt > (a.firedAt || 0))) continue; a.on = s.on; a.firedAt = s.firedAt; a.firedInfo = s.firedInfo || ''; a.lastBar = Math.max(a.lastBar || 0, s.lastBar || 0); ch = true; } if (ch) { save(); renderAlerts(); } }}; // para push.js (avisos con la app cerrada)
+    a.src === 'pine' ? {inputs: (state.pine.find(p => p.sid === a.sid) || {}).inputs || {}} : {}, a.src === 'nova' ? {nopt: novaOpts()} : {})).concat(smartJobs()), // el servidor las revisa con la app cerrada (scripts/ind-alerts.js); las cajas inteligentes también
+  applyInd: back => { let ch = false; smartBack((back || []).filter(s => /^sm/.test(s.id) && s.spec)); for (const s of back || []) { const a = state.alerts.find(x => x.id === s.id && x.kind === 'ind'); if (!a || !(s.firedAt > (a.firedAt || 0))) continue; a.on = s.on; a.firedAt = s.firedAt; a.firedInfo = s.firedInfo || ''; a.lastBar = Math.max(a.lastBar || 0, s.lastBar || 0); ch = true; } if (ch) { save(); renderAlerts(); } }}; // para push.js (avisos con la app cerrada)
 /* Seguimiento de tus trades abiertos (trade-watch.js): avisos de cómo va cada posición real de tu exchange y resaltado en Mi seguimiento */
 if (window.CCTTradeWatch && CCTTradeWatch.host) CCTTradeWatch.host({
   prefs: () => PR, fmt: v => fmt(v),
@@ -2969,6 +2969,35 @@ function smartReal(d) {
   return {pos, sl: pr.sl ? pr.sl.price : null, tp: pr.tp ? pr.tp.price : null, name: (X.info && X.info() && X.info().name) || 'tu exchange', trade: !!(X.canTrade && X.canTrade())};
 }
 const smartOn = () => PR.n.smart !== false;
+/* Con la app CERRADA: cada caja inteligente activa viaja al servidor de avisos (como una alerta) y el motor la revisa cada minuto con
+   velas de 1 min (scripts/ind-alerts.js). Lo que avance allá (fase, stop movido) regresa a la caja al abrir la app. */
+function smartJobs() {
+  if (!window.CCTSmart || PR.n.smart === false) return []; const out = [];
+  for (const [sym, arr] of Object.entries(state.drawings || {})) for (const d of arr || []) {
+    if (!isPos(d) || !d.sm || !d.sm.on || d.sm.phase === 'out' || !/^[A-Z0-9][A-Z0-9_-]{1,24}(@[a-z]{2,12})?$/.test(sym)) continue;
+    const m = d.sm, plan = CCTSmart.toSpec({side: d.type === 'long' ? 1 : -1, entry: d.a.p, stop: posStopOf(d), target: d.b.p}, {s0: m.phase === 'wait' ? posStopOf(d) : m.s0, be: m.be, trail: m.trail, phase: m.phase});
+    out.push({id: ('sm' + d.id).slice(0, 40), symbol: sym, interval: '1m', src: 'smart', sid: '', spec: plan, label: `Caja inteligente ${d.type === 'long' ? 'LONG' : 'SHORT'}`, note: '', notify: 'both', repeat: 'every', on: true, lastBar: 0, firedAt: m.fa || 0, firedInfo: ''});
+    if (out.length >= 20) return out;
+  }
+  return out;
+}
+const posStopOf = d => { const ok = Number.isFinite(d.sp) && ((d.sp - d.a.p) * (d.b.p - d.a.p) < 0 || (d.sm && d.sm.on && (d.sp - d.b.p) * (d.b.p - d.a.p) < 0)); return ok ? d.sp : d.a.p - (d.b.p - d.a.p) / (CCTDrawCfg.get(d, 'rr') || 2); };
+function smartBack(list) { // avance que hizo el servidor mientras la app estaba cerrada
+  if (!list.length || !window.CCTSmart) return; let ch = false;
+  for (const [sym, arr] of Object.entries(state.drawings || {})) state.drawings[sym] = (arr || []).map(d => {
+    const b = list.find(s => s.id === ('sm' + d.id).slice(0, 40)); if (!b || !isPos(d) || !d.sm || (b.firedAt || 0) <= (d.sm.fa || 0)) return d;
+    const {st} = CCTSmart.fromSpec(b.spec); ch = true;
+    return {...d, sp: +b.spec.s, sm: {...d.sm, phase: st.phase, s0: st.s0, ext: st.ext, warned: st.warned, ntp: st.ntp, res: st.res, at: st.at, bh: st.bh, bl: st.bl, fa: b.firedAt}};
+  });
+  if (ch) { save(); scheduleRender(); toast('Tus cajas inteligentes se pusieron al día con lo que pasó mientras estabas fuera'); }
+}
+/* Mensaje emergente al activar algo que actúa por ti */
+function smartModal(title, html, okTxt, onOk) {
+  const ov = document.createElement('div'); ov.className = 'sm-modal-ov'; ov.innerHTML = `<div class="sm-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sm-modal-ic">${SV('<path d="M12 3 5 6v5.5c0 4.4 3 7.7 7 9.5 4-1.8 7-5.1 7-9.5V6z"/><path d="M9 12.5l2 2 4-4.5"/>', 26)}</div><h3>${esc(title)}</h3>${html}<div class="sm-modal-b">${onOk ? '<button type="button" class="sm-no">Cancelar</button>' : ''}<button type="button" class="sm-ok">${esc(okTxt)}</button></div></div>`;
+  const close = ok => { ov.classList.add('out'); setTimeout(() => ov.remove(), 180); if (ok && onOk) onOk(); };
+  ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('.sm-no')) close(false); else if (e.target.closest('.sm-ok')) close(true); });
+  document.body.appendChild(ov); setTimeout(() => { const b = ov.querySelector('.sm-ok'); if (b) b.focus(); }, 50);
+}
 async function smartExMove(d, price, why) { // mueve el SL real (si lo permitiste) o te avisa qué hacer
   const R = smartReal(d); if (!R) return false; const t = `${base(state.symbol)} · caja inteligente`;
   const better = R.sl == null || (price - R.sl) * (d.type === 'long' ? 1 : -1) > Math.abs(price) * 1e-5; if (!better) return false; // tu stop real ya está igual o mejor
@@ -3003,7 +3032,9 @@ function smartToggle(k) {
   const d = curDraw(); if (!d) return; let m = d.sm ? {...d.sm} : null;
   if (k === 'on') m = m && m.on ? {...m, on: false} : {...smartNew(), be: m ? m.be !== false : true, trail: m ? m.trail !== false : true, al: m ? m.al !== false : true, s0: posStop(d)};
   else if (m) m[k] = m[k] === false;
-  patchD({sm: m}); if (k === 'on' && m.on) { smartTick(true); toast('Caja inteligente activada'); }
+  patchD({sm: m}); if (k === 'on' && m.on) { smartTick(true); if (window.VortexPush) setTimeout(() => VortexPush.sync(true), 300);
+    if (!state.smartIntro) { state.smartIntro = 1; save(); smartModal('Tu caja inteligente está vigilando', `<p>VORTEX va a cuidar esta operación por ti, <b>aunque cierres la app o el gráfico</b>:</p><ul><li>Te avisa cuando el precio llegue a tu <b>entrada</b>, con tu stop y objetivo.</li><li>Cuando vas ganando 1 vez lo que arriesgas, te dice que <b>muevas el stop a la entrada</b> (ya no puedes perder).</li><li>Después te va diciendo a dónde <b>subir el stop</b> para asegurar ganancia y te avisa cerca del <b>objetivo</b>.</li><li>Si el precio se acerca a tu stop, te recuerda <b>respetar el plan</b>.</li></ul><p class="sm-modal-n">Para recibirlo con la app cerrada, ten encendido «Activar notificaciones» en Configuración › Avisos. Si además quieres que mueva el stop de tu exchange, actívalo ahí mismo.</p>`, 'Entendido'); }
+    else toast('Caja inteligente activada'); }
 }
 let smT = 0;
 function smartTick(now) {
@@ -3012,10 +3043,10 @@ function smartTick(now) {
   const arr = getDrawings().map(d => {
     if (!isPos(d) || !d.sm || !d.sm.on || d.sm.phase === 'out') return d;
     const st0 = posStop(d), sm = {...d.sm}; if (sm.phase === 'wait' || !Number.isFinite(sm.s0)) sm.s0 = st0; // mientras espera la entrada, el riesgo es el que tengas dibujado
-    const r = CCTSmart.manage(candles, {side: d.type === 'long' ? 1 : -1, entry: d.a.p, stop: st0, target: d.b.p}, sm);
+    const r = CCTSmart.manage(candles, {side: d.type === 'long' ? 1 : -1, entry: d.a.p, stop: st0, target: d.b.p}, sm, fmt);
     const moved = Math.abs(r.stop - st0) > 1e-12, keyCh = r.st.phase !== d.sm.phase || r.st.res !== d.sm.res || r.st.warned !== d.sm.warned || r.events.length;
     if (!moved && !keyCh) { Object.assign(d.sm, {at: r.st.at, ext: r.st.ext, bh: r.st.bh, bl: r.st.bl, s0: r.st.s0}); return d; } // sin cambios importantes: no guarda en la nube
-    ch = true; if (sm.al !== false && smartOn()) for (const e of r.events) out.push(e);
+    ch = true; if (sm.al !== false && smartOn() && !(window.VortexPush && VortexPush.on)) for (const e of r.events) out.push(e); // con el servidor de avisos activo, la notificación llega de allá (sin repetir)
     if (moved && smartOn() && r.events.some(e => e.k === 'be' || e.k === 'trail')) exJobs.push([d, r.stop, r.events.find(e => e.k === 'be' || e.k === 'trail').txt]);
     return {...d, sm: r.st, ...(moved ? {sp: r.stop} : {})};
   });
@@ -5620,7 +5651,9 @@ function renderPrefs() {
     const w2 = e.target.closest('[data-sw2]');
     if (w2) { const k = w2.dataset.sw2; if (k === 'quiet') setPref('quiet', {...(PR.quiet || {}), on: !(PR.quiet && PR.quiet.on)}); else setPref(k, PR[k] === 'off' ? 'on' : 'off'); if (k === 'wake') wakeSync(); if (k === 'tabPx') tabTitle(); if (k === 'conn') connPaint(); return; }
     const w = e.target.closest('[data-sw]');
-    if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'radar') { if (window.CCTRadar) { CCTRadar.setOn(!CCTRadar.on()); toast(CCTRadar.on() ? 'Radar encendido: Nexus Pixel te avisará de las grandes oportunidades' : 'Radar apagado'); } renderPrefs(); } else if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); save(); renderPrefs(); renderMoveAlerts(); if (window.VortexPush) VortexPush.sync(true); } else if (k === 'scr' || k === 'scrH1' || k === 'scrH4') { const S = {...(state.scrPush || {})}; if (k === 'scr') S.on = !S.on; else if (k === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false; state.scrPush = sanScrPush(S); save(); renderPrefs(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true); } else { setPref(k, !PR.n[k], true); if (k === 'trade' && window.CCTTradeWatch) { CCTTradeWatch.refresh(); renderWatch(); } if (window.VortexPush) VortexPush.sync(true); }; return; }
+    if (w) { const k = w.dataset.sw; if (k === 'sound') { setPref('sound', PR.sound === 'off' ? 'on' : 'off'); return; } if (k === 'radar') { if (window.CCTRadar) { CCTRadar.setOn(!CCTRadar.on()); toast(CCTRadar.on() ? 'Radar encendido: Nexus Pixel te avisará de las grandes oportunidades' : 'Radar apagado'); } renderPrefs(); } else if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); save(); renderPrefs(); renderMoveAlerts(); if (window.VortexPush) VortexPush.sync(true); } else if (k === 'scr' || k === 'scrH1' || k === 'scrH4') { const S = {...(state.scrPush || {})}; if (k === 'scr') S.on = !S.on; else if (k === 'scrH1') S.h1 = S.h1 === false; else S.h4 = S.h4 === false; state.scrPush = sanScrPush(S); save(); renderPrefs(); renderScrPush(); if (window.VortexPush) VortexPush.sync(true); } else if (k === 'smartEx' && !PR.n.smartEx) { const X = window.CCTExchange, can = !!(X && X.connected() && X.canTrade());
+        smartModal('Mover tu stop loss automáticamente', `<p>Con esto, <b>VORTEX mueve por ti el stop loss</b> de tu posición real en tu exchange cuando tu caja inteligente lo indique:</p><ul><li>Lo sube a tu <b>entrada</b> cuando vas ganando 1 vez lo que arriesgas, para que ya no pierdas.</li><li>Lo va subiendo <b>detrás del precio</b> para asegurar ganancia.</li><li>Solo lo mueve <b>a tu favor</b>, nunca en contra, y siempre pone el nuevo antes de quitar el anterior.</li></ul><p>Te ayuda a no correr en pérdidas y a no regresar ganancias. Te avisamos cada vez que lo mueva.</p>${can ? '' : '<p class="sm-modal-w">Tu exchange todavía no tiene «Permitir operar en vivo»: mientras, solo te avisaremos qué mover.</p>'}<p class="sm-modal-n">Lo mueve mientras VORTEX está abierta; con la app cerrada te llega el aviso para que lo muevas tú.</p>`, 'Activar', () => { setPref('smartEx', true, true); renderPrefs(); toast('Listo: VORTEX moverá tu stop loss por ti'); }); return; }
+      else { setPref(k, !PR.n[k], true); if (k === 'trade' && window.CCTTradeWatch) { CCTTradeWatch.refresh(); renderWatch(); } if (window.VortexPush) VortexPush.sync(true); }; return; }
     if (e.target.closest('[data-play]')) { const t = $('#notifBox select[data-pk=tone]'); alertBeep(true, t && t.value); return; }
     if (e.target.closest('[data-news]')) openNews();
   };

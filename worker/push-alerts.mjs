@@ -83,7 +83,7 @@ export function sanAlert(a) {
 const IV_OK = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M']);
 const jsonOk = (o, max) => { try { return o && typeof o === 'object' && !Array.isArray(o) && JSON.stringify(o).length <= max; } catch { return false; } };
 export function sanInd(a) {
-  if (!a || typeof a.id !== 'string' || a.id.length > 40 || !/^[A-Z0-9][A-Z0-9_-]{1,24}(@[a-z]{2,12})?$/.test(a.symbol) || !IV_OK.has(a.interval) || !['pine', 'std', 'nova'].includes(a.src) || !jsonOk(a.spec, 400)) return null;
+  if (!a || typeof a.id !== 'string' || a.id.length > 40 || !/^[A-Z0-9][A-Z0-9_-]{1,24}(@[a-z]{2,12})?$/.test(a.symbol) || !IV_OK.has(a.interval) || !['pine', 'std', 'nova', 'smart'].includes(a.src) || !jsonOk(a.spec, 400)) return null;
   const o = {id: a.id, symbol: a.symbol, interval: a.interval, src: a.src, sid: typeof a.sid === 'string' ? a.sid.slice(0, 40) : '', spec: a.spec, label: String(a.label || '').slice(0, 120), note: String(a.note || '').slice(0, 140),
     on: a.on !== false, repeat: a.repeat === 'every' ? 'every' : 'once', lastBar: +a.lastBar || 0, firedAt: +a.firedAt || 0, firedInfo: String(a.firedInfo || '').slice(0, 200)};
   if (['app', 'discord', 'both'].includes(a.notify)) o.notify = a.notify;
@@ -96,11 +96,17 @@ export function mergeInd(incoming, server, since = 0) {
   const byId = new Map((server || []).map(a => [a.id, a])), out = [], back = [];
   for (const a of (Array.isArray(incoming) ? incoming : []).map(sanInd).filter(Boolean)) {
     const s = byId.get(a.id);
+    if (a.src === 'smart' && s && s.src === 'smart') { // caja inteligente: si el plan no cambió, el avance que lleva el servidor gana (stop movido, fase…)
+      const same = smartPlan(a.spec) === smartPlan(s.spec);
+      if (same) { const m = Object.assign({}, a, {spec: s.spec, on: s.on, firedAt: Math.max(a.firedAt, s.firedAt || 0), firedInfo: s.firedInfo || a.firedInfo, lastBar: Math.max(a.lastBar, s.lastBar || 0)}); out.push(m); if (s.firedAt > (+since || 0) && s.firedAt > a.firedAt) back.push({id: m.id, on: m.on, firedAt: m.firedAt, firedInfo: m.firedInfo, lastBar: m.lastBar, spec: m.spec}); continue; }
+      out.push(a); continue; // editaste la caja: empieza de nuevo con tu plan
+    }
     if (s && s.firedAt > (+since || 0) && s.firedAt > a.firedAt) { const m = Object.assign({}, a, {on: s.on, firedAt: s.firedAt, firedInfo: s.firedInfo, lastBar: Math.max(a.lastBar, s.lastBar || 0)}); out.push(m); back.push({id: m.id, on: m.on, firedAt: m.firedAt, firedInfo: m.firedInfo, lastBar: m.lastBar}); }
     else out.push(s ? Object.assign(a, {lastBar: Math.max(a.lastBar, s.lastBar || 0)}) : a);
   }
   return {ind: out.slice(0, MAX_ALERTS), back};
 }
+const smartPlan = sp => sp ? [sp.sd, sp.e, sp.t, sp.s0, sp.be, sp.tr].join('|') : '';
 export function sanScr(x) { const q = x && typeof x === 'object' ? x : {}; return {on: q.on === true, h1: q.h1 !== false, h4: q.h4 !== false}; }
 export function sanMove(m) { const q = m && typeof m === 'object' ? m : {}; return {on: q.on !== false, pct: Math.max(0.5, Math.min(25, +q.pct || 2))}; }
 /* Solo servicios push reales (Chrome/Android, Firefox, Edge/Windows, Safari/iPhone): el servidor nunca le manda nada a otra dirección */
@@ -574,7 +580,7 @@ export default {
       const m = mergeAlerts(incoming, cur.alerts, b.since);
       const d = {sub, lastPush: cur.lastPush, alerts: m.alerts, move: sanMove(b.move), scr: b.scr ? sanScr(b.scr) : sanScr(cur.scr), radar: b.radar == null ? !!cur.radar : b.radar === true, priceOn: b.priceOn !== false, dc: sanDc(b.dc, b.dcUrl), dcUrl: typeof b.dcUrl === 'string' && b.dcUrl.length < 300 && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/[\w/-]+$/.test(b.dcUrl) ? b.dcUrl : '', moveLast: cur.moveLast || {}, updated: cur.updated || Date.now(), cx: b.cx === undefined ? cur.cx || {} : sanCx(b.cx),
         uid, bots: b.bots == null ? cur.bots !== false : b.bots !== false,
-        trades: TW.merge(b.trades, cur.trades), indOn: b.indOn == null ? cur.indOn !== false : b.indOn !== false, tradeStep: TW.STEPS.includes(+b.tradeStep) ? +b.tradeStep : TW.DEF_STEP, syncAt: cur.syncAt || 0};
+        trades: TW.merge(b.trades, cur.trades), indOn: b.indOn == null ? cur.indOn !== false : b.indOn !== false, smartOn: b.smartOn == null ? cur.smartOn !== false : b.smartOn !== false, tradeStep: TW.STEPS.includes(+b.tradeStep) ? +b.tradeStep : TW.DEF_STEP, syncAt: cur.syncAt || 0};
       if (cur.testAt) d.testAt = cur.testAt; // una prueba «con la app cerrada» pendiente no se pierde al sincronizar
       const mi = b.ind === undefined ? {ind: cur.ind || [], back: []} : mergeInd(b.ind, cur.ind, b.since); d.ind = mi.ind;
       if (d.trades.length && now - d.syncAt > 12 * 3600e3) d.syncAt = now; // la app sigue viendo esos trades abiertos (se renueva cada 12 h para no gastar escrituras)
@@ -761,6 +767,16 @@ async function indBatch(env, b) {
     if (!d || !d.sub) continue; const rs = Array.isArray(all[id]) ? all[id] : [], msgs = [], dc = [], cxI = []; let changed = false;
     for (const r of rs) {
       const a = (d.ind || []).find(x => x.id === r.id); if (!a || !a.on || !(+r.lastBar > (a.lastBar || 0))) continue; // la app ya revisó esa vela (o la alerta se apagó)
+      if (a.src === 'smart') { // caja inteligente: guarda su avance y avisa con su propio texto
+        if (r.save && jsonOk(r.spec, 400)) { a.spec = r.spec; a.lastBar = +r.lastBar; if (r.spec.ph === 'out') a.on = false; changed = true; }
+        if (!r.hit) continue;
+        a.firedAt = now; a.firedInfo = String(r.info || '').slice(0, 200); fired++;
+        const title = 'VORTEX · ' + String(r.title || 'Caja inteligente').slice(0, 60), text = a.firedInfo;
+        if (d.smartOn !== false) msgs.push({title, body: text, tag: 'sm-' + a.id, url: APP_URL + '#chart'});
+        if (dcAllow(d, 'ind')) dc.push(`${String(r.title || '')}: ${text}`);
+        cxI.push({kind: 'ind', title: String(r.title || 'Caja inteligente'), text});
+        continue;
+      }
       if (!r.hit) { if (+r.lastBar - (a.lastBar || 0) > 6 * 3600e3) { a.lastBar = +r.lastBar; changed = true; } continue; } // sin aviso: solo se anota de vez en cuando (pocas escrituras)
       a.lastBar = +r.lastBar; a.firedAt = now; a.firedInfo = String(r.info || '').slice(0, 200); if (a.repeat === 'once') a.on = false; changed = true; fired++;
       const text = `${baseOf(a.symbol)} ${a.interval} · ${a.label}${a.firedInfo ? ' · ' + a.firedInfo : ''}${a.note ? ' · ' + a.note : ''}`, n = a.notify || 'both';
