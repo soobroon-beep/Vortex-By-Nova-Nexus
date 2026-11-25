@@ -151,7 +151,8 @@ const STD_SCHEMA_BASE = {
   keltner: [['len', 'Período EMA', 'int', 20, 2, 300], ['mult', 'Multiplicador ATR', 'float', 2, .1, 10], ['atr', 'Período ATR', 'int', 10, 1, 200], ['color', 'Color y opacidad', 'color', '#f5c568'], ['width', 'Grosor', 'int', 1, 1, 6], ['fill', 'Relleno entre bandas', 'color', '#f5c56814']],
   ichimoku: [['t', 'Tenkan', 'int', 9, 1, 100], ['k', 'Kijun', 'int', 26, 1, 200], ['b', 'Senkou B', 'int', 52, 1, 300], ['cT', 'Color Tenkan', 'color', '#2962ff'], ['cK', 'Color Kijun', 'color', '#b71c1c'], ['cUp', 'Nube alcista', 'color', '#08998133'], ['cDn', 'Nube bajista', 'color', '#f2364533'], ['cC', 'Color Chikou', 'color', '#43a047'], ['width', 'Grosor', 'int', 1, 1, 6]],
   psar: [['step', 'Paso', 'float', .02, .001, .5], ['max', 'Máximo', 'float', .2, .01, 1], ['up', 'Color alcista', 'color', '#089981'], ['down', 'Color bajista', 'color', '#f23645']],
-  liqmap: [['rows', 'Resolución (filas de precio)', 'int', 140, 40, 300], ['gain', 'Intensidad (%)', 'int', 100, 30, 400], ['alpha', 'Opacidad (%)', 'int', 80, 20, 100]],
+  liqmap: [['rows', 'Resolución (filas de precio)', 'int', 160, 40, 300], ['gain', 'Intensidad (%)', 'int', 100, 30, 400], ['alpha', 'Opacidad (%)', 'int', 80, 20, 100],
+    ['prof', 'Perfil de liquidaciones a la derecha', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['marks', 'Marcar las zonas más fuertes (imanes)', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['real', 'Liquidaciones reales en vivo (burbujas)', 'string', 'Sí', 0, 0, ['Sí', 'No']]],
   vpvr: [['rows', 'Número de filas', 'int', 24, 4, 200], ['va', 'Área de valor (% del volumen)', 'int', 70, 10, 100], ['mode', 'Volumen', 'string', 'Arriba/Abajo', 0, 0, ['Arriba/Abajo', 'Total', 'Delta']], ['place', 'Ubicación', 'string', 'Derecha', 0, 0, ['Derecha', 'Izquierda']], ['wpct', 'Ancho (% del gráfico)', 'int', 30, 5, 90],
     ['cUp', 'Volumen comprador (arriba)', 'color', '#2962ff'], ['cDn', 'Volumen vendedor (abajo)', 'color', '#fbc02d'], ['pocOn', 'Línea POC', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cPoc', 'Color POC', 'color', '#ff5252'], ['vaOn', 'Líneas VAH / VAL', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cVa', 'Color VAH / VAL', 'color', '#2962ff']]
 };
@@ -405,16 +406,18 @@ function setSide(id) {
   { const cur = document.body.dataset.side; if (id === 'alertsView' && cur && !SUB_VIEWS.includes(cur)) alBackTo = cur; }
   document.body.dataset.side = id;
   if (id === 'lensView' && window.CCTLens) CCTLens.open(); // Nexus Lens (lens.js): se pinta y lee tu exchange al abrirlo
+  if (id === 'mapView' && window.CCTMap) CCTMap.open(); // Radar del mercado (market-map.js)
   $$('.right-rail [data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === (id === 'customView' || id === 'notifView' ? 'settingsView' : id)));
 }
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
-    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView' || id === 'botLabView' || id === 'customView' || id === 'notifView' || id === 'devView') { setSide(id); if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } if (id === 'watchView') { wlOpenSym = null; renderWatch(); } if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
+    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'mapView' || id === 'discordView' || id === 'botLabView' || id === 'customView' || id === 'notifView' || id === 'devView') { setSide(id); if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } if (id === 'watchView') { wlOpenSym = null; renderWatch(); } if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
     id = 'chartView';
   }
   if (id === 'alertsView' && currentView !== id && !SUB_VIEWS.includes(currentView)) alBackTo = currentView;
   currentView = id; try { wakeSync(); } catch {} if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); }
   if (id === 'lensView' && window.CCTLens) CCTLens.open();
+  if (id === 'mapView' && window.CCTMap) CCTMap.open();
   $$('.view').forEach(x => x.classList.toggle('active', x.id === id));
   $$('.bottom-nav button').forEach(x => x.classList.toggle('active', x.dataset.view === id));
   { const ta = $('#topAlertsBtn'); if (ta) ta.classList.toggle('active', id === 'alertsView'); } // celular: Alertas vive arriba, junto a Notificaciones
@@ -1291,7 +1294,7 @@ function renderFrames() {
   window.addEventListener('resize', close);
   // celular: en la píldora quedan solo los esenciales; lo demás pasa a «Más» (en escritorio todo vuelve a su lugar)
   // celular: la barra flotante solo lleva la temporalidad actual y la estrella; todo lo demás va en el menú que se despliega
-  const MOVE = [tb.querySelector('[data-panel=indicators]'), $('#liqBtn'), tb.querySelector('[data-panel=tools]'), $('#designsBtn'), $('#tradeBtn'), $('#replayBtn'), $('#bookBtn'), $('#journalBtn')].filter(Boolean), UNDO = $('#undoDraw');
+  const MOVE = [tb.querySelector('[data-panel=indicators]'), $('#liqBtn'), tb.querySelector('[data-panel=tools]'), $('#designsBtn'), $('#tradeBtn'), $('#replayBtn'), $('#bookBtn')].filter(Boolean), UNDO = $('#undoDraw');
   const ORIG = [...tb.children], firstOwn = $('#layoutBtn'); // orden original de la barra (para volver a escritorio)
   const place = () => {
     const mob = !isDesktop(), grp = $('#moreGroup');
@@ -1825,6 +1828,22 @@ function recalc() {
   ind = {ema20: ema(c, sp('ema20', 'len')), ema50: ema(c, sp('ema50', 'len')), sma200: sma(c, sp('sma200', 'len')), bbU: up, bbL: lo, rsi: rsi(c, sp('rsi', 'len'))};
   ind.nn = null; calcNova(); calcExtra(); schedulePine();
 }
+/* Mapa de liquidaciones: se calcula con el interés abierto real de Binance Futures (cuándo entran y salen posiciones) y se guarda
+   en caché: solo se rehace con una vela nueva, cuando la vela en vivo marca un máximo/mínimo nuevo (eso liquida bandas) o cada 15 s. */
+let lmCache = null;
+if (window.CCTLiqLive) CCTLiqLive.on(() => { if (state.indicators.liqmap && candles.length) scheduleRender(); });
+function liqCalc(T, iv) {
+  const n = candles.length, L = candles[n - 1], fs = dvSym(); let oiA = null;
+  if (fs && window.CCTDerivs) { oiA = CCTDerivs.series(fs, iv, 'oi', candles); CCTDerivs.loadSeries(fs, iv, ['oi']); }
+  const oiN = oiA ? oiA.reduce((a, v) => a + (v != null ? 1 : 0), 0) : 0;
+  const k = `${state.symbol}|${state.interval}|${n}|${candles[0].t}|${sp('liqmap', 'rows')}|${oiN}|${L.h}|${L.l}`;
+  if (lmCache && lmCache._k === k) return lmCache;
+  if (lmCache && lmCache._k.split('|').slice(0, 6).join('|') === k.split('|').slice(0, 6).join('|')) { const age = Date.now() - lmCache._at; // misma vela: máximo un cálculo cada 2 s, y sin extremos nuevos aguanta 15 s
+    if (age < 2000 || (age < 15000 && L.h <= lmCache._h && L.l >= lmCache._l)) return lmCache; }
+  const m = T.liquidationHeatmap(candles, {rows: sp('liqmap', 'rows'), oi: oiN > 5 ? oiA : null});
+  if (m) { m._k = k; m._at = Date.now(); m._h = L.h; m._l = L.l; m.src = oiN > 5 ? 'oi' : 'vol'; m.fs = fs; }
+  return (lmCache = m);
+}
 const PANELS = ['macd', 'stoch', 'atr', 'obv', 'adx', 'cci', 'willr', 'mfi', 'roc', 'stochrsi', 'ao', 'cmf', 'oi', 'funding', 'lsr', 'taker'];
 function calcExtra() { // indicadores de la fase 2: solo se calculan los activados
   const I = state.indicators, T = window.CCTIndicators, n = candles.length;
@@ -1858,7 +1877,8 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.rev = I.nnRev ? T.reversalBands(candles, NP('revLen')) : null;
   ind.sr = I.nnSR ? T.supportResistance(candles, {lookback: NP('srLookback'), retSince: NP('srSince'), retValid: NP('srLimit')}) : null;
   ind.piv = I.nnPiv ? T.pivots(candles, NP('pivLen')) : null;
-  { const lk = `${state.symbol}|${state.interval}|${candles.length}|${candles[0].t}|${sp('liqmap', 'rows')}|${Math.floor(Date.now() / 20000)}`; if (!I.liqmap || !planOk('liq')) ind.lm = null; else if (!ind.lm || ind.lm._k !== lk) { ind.lm = T.liquidationHeatmap(candles, {rows: sp('liqmap', 'rows')}); if (ind.lm) ind.lm._k = lk; } }
+  if (window.CCTLiqLive) CCTLiqLive.watch(I.liqmap && planOk('liq') && sp('liqmap', 'real') !== 'No' ? dvSym() : null); // liquidaciones reales: solo con el mapa encendido
+  ind.lm = I.liqmap && planOk('liq') && !replay ? liqCalc(T, iv) : (I.liqmap && planOk('liq') ? T.liquidationHeatmap(candles, {rows: sp('liqmap', 'rows')}) : null);
   ind.liq = I.nnLiq ? T.liquidations(candles, iv, {lookback: NP('liqLookback')}) : null;
   ind.dch = I.dchan && planOk('proInd') && window.CCTChannels ? CCTChannels.detect(candles, {len: sp('dchan', 'len'), count: sp('dchan', 'count'), brk: sp('dchan', 'brk')}) : null;
   { const Q = k => sp('patterns', k); ind.pat = I.patterns && planOk('proInd') && window.CCTPatterns ? CCTPatterns.detect(candles, {len: Q('len'), dev: Q('dev'), tol: Q('tol') / 100, min: Q('min'), max: Q('max'), keep: Q('keep'), p123: Q('g123') === 'Sí', abc: Q('gabc') === 'Sí', harm: Q('gharm') === 'Sí', chart: Q('gchart') === 'Sí', ell: Q('gell') === 'Sí'}) : null; }
@@ -3952,6 +3972,7 @@ function renderCore() {
   for (const {r} of pOver) CCTPineDraw.draw(g, r, {X, Y, lo, hi, left, right: left + plotW + (vpOn ? 0 : pineG), top: plotTop, bottom: plotTop + plotH, step, candles, overlay: true, zoneBack: true});
   for (const {r} of pSub.concat(pTop)) if (r.strategy) CCTPineDraw.drawTrades(g, r.strategy, {X, Y, lo, hi, candles}); // estrategias con panel propio: las operaciones se marcan igual sobre el precio
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailLine(ind.trail, lo, hi);
+  if (stdOn('liqmap') && ind.lm) drawLiqOver(ind.lm, lo, hi); // imanes y liquidaciones reales encima de las velas
   if (state.indicators.nnSR && ind.sr) drawNovaSRLabels(ind.sr, lo, hi);
   if (stdOn('dchan') && ind.dch) drawChannels(ind.dch.list);
   if (stdOn('patterns') && ind.pat) drawPatterns(ind.pat.list);
@@ -4422,18 +4443,65 @@ function drawPatterns(list) {
 /* ───────── Heatmap de liquidaciones estimadas (estilo CoinGlass) ─────────
    Cada celda (vela × tramo de precio) se pinta según cuántas liquidaciones se estiman ahí; la escala va de morado oscuro (poco) a amarillo (mucho). Se dibuja detrás de las velas. */
 const LIQ_RAMP = ['#2b0a5e', '#3a1590', '#3b2fb5', '#2a5fd1', '#1f94b8', '#26b97f', '#7ad24a', '#d6e035', '#ffe81a'];
+function liqLv(v, m, gain) { return Math.min(LIQ_RAMP.length - 1, Math.floor(Math.pow(Math.min(1.3, v / m.ref * gain), .75) * (LIQ_RAMP.length - 1) * .85)); }
 function drawLiqMap(m, lo, hi) {
   const P = k => sp('liqmap', k), gain = P('gain') / 100, a = P('alpha') / 100, n = Math.min(hi, m.n), top = geo.plotTop, bot = geo.plotTop + geo.plotH;
   const r0 = Math.max(0, Math.floor((geo.min - m.pMin) / m.step)), r1 = Math.min(m.rows - 1, Math.ceil((geo.max - m.pMin) / m.step));
-  g.save(); g.beginPath(); g.rect(geo.left, top, geo.plotW + 2 + (geo.vpOn ? 0 : geo.gutter), geo.plotH); g.clip(); g.globalAlpha = a;
-  const nl = LIQ_RAMP.length - 1, x0 = i => Math.max(geo.left, X(i - .5)), W = geo.step;
+  const rEdge = geo.left + geo.plotW + (geo.vpOn ? 0 : geo.gutter), live = n >= m.n && m.cur, xLive = X(m.n - .5); // zona a la derecha de la última vela: liquidaciones vivas AHORA
+  g.save(); g.beginPath(); g.rect(geo.left, top, rEdge - geo.left, geo.plotH); g.clip(); g.globalAlpha = a;
+  const x0 = i => Math.max(geo.left, X(i - .5));
   for (let r = r0; r <= r1; r++) {
     const d = m.data[r], yt = Math.max(top, Y(m.pMin + (r + 1) * m.step)), yb = Math.min(bot, Y(m.pMin + r * m.step)), hgt = yb - yt + .6; if (hgt <= 0) continue;
     let runLv = -1, runStart = 0;
     for (let i = Math.max(0, lo); i <= n; i++) {
-      const lv = i < n ? Math.min(nl, Math.floor(Math.pow(Math.min(1.3, d[i] / m.ref * gain), .75) * nl * .85)) : -1;
+      const lv = i < n ? liqLv(d[i], m, gain) : -1;
       if (lv !== runLv) { if (runLv > 0) { g.fillStyle = LIQ_RAMP[runLv]; const xs = x0(runStart); g.fillRect(xs, yt, X(i - .5) - xs + .5, hgt); } runLv = lv; runStart = i; }
     }
+    if (live && xLive < rEdge) { const lv = liqLv(m.cur[r], m, gain); if (lv > 0) { g.fillStyle = LIQ_RAMP[lv]; g.fillRect(Math.max(geo.left, xLive), yt, rEdge - Math.max(geo.left, xLive), hgt); } }
+  }
+  g.restore();
+  if (live && P('prof') !== 'No') { // perfil: cuánto se liquidaría en cada precio si el mercado llega ahí (rojo = largos, verde = cortos)
+    let mx = 0; for (let r = r0; r <= r1; r++) mx = Math.max(mx, m.cur[r]); if (!(mx > 0)) return;
+    const W = Math.min(64, (rEdge - geo.left) * .12), xr = geo.left + geo.plotW - 2;
+    g.save(); g.beginPath(); g.rect(geo.left, top, geo.plotW, geo.plotH); g.clip();
+    for (let r = r0; r <= r1; r++) {
+      const v = m.cur[r]; if (!(v > mx * .02)) continue; const yt = Y(m.pMin + (r + 1) * m.step), yb = Y(m.pMin + r * m.step), h = Math.max(1, yb - yt - (yb - yt > 3 ? 1 : 0)), w = v / mx * W, fl = m.curL[r] / v;
+      g.fillStyle = 'rgba(242,54,69,.55)'; g.fillRect(xr - w, yt, w * fl, h); g.fillStyle = 'rgba(8,153,129,.6)'; g.fillRect(xr - w + w * fl, yt, w * (1 - fl), h);
+    }
+    g.restore();
+  }
+}
+/* Encima de las velas: las zonas más fuertes («imanes») y las liquidaciones reales que van pasando (Binance Futures, en vivo) */
+function liqShort(v) { const a = Math.abs(v); return a >= 1e9 ? (v / 1e9).toFixed(2) + 'B' : a >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : a >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v.toFixed(0); }
+function drawLiqOver(m, lo, hi) {
+  const P = k => sp('liqmap', k), n = candles.length, last = candles[n - 1]; if (!last) return;
+  const rEdge = geo.left + geo.plotW, top = geo.plotTop, bot = geo.plotTop + geo.plotH;
+  g.save(); g.beginPath(); g.rect(geo.left, top, geo.plotW, geo.plotH); g.clip(); g.font = '600 10px system-ui'; g.textBaseline = 'middle';
+  if (P('marks') !== 'No' && hi >= n && window.CCTIndicators && CCTIndicators.liqClusters) {
+    const pad = (geo.max - geo.min) * .03, C = CCTIndicators.liqClusters(m, last.c, 2, geo.min + pad, geo.max - pad), xs = Math.max(geo.left, X(n - 1));
+    for (const q of [...C.up, ...C.dn]) {
+      const y = Y(q.p); if (y < top + 6 || y > bot - 6) continue; const col = q.side === 'long' ? '#ff6b81' : '#2ee6a8';
+      g.strokeStyle = col; g.globalAlpha = .55; g.lineWidth = 1; g.setLineDash([3, 4]); g.beginPath(); g.moveTo(xs, y); g.lineTo(rEdge, y); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+      const txt = `Liq. ${q.side === 'long' ? 'largos' : 'cortos'} ${fmt(q.p)} · ${((q.p / last.c - 1) * 100).toFixed(1)}%`, tw = g.measureText(txt).width + 12, tx = Math.max(geo.left + 4, rEdge - tw - (P('prof') !== 'No' ? Math.min(70, geo.plotW * .12) + 6 : 6));
+      g.fillStyle = 'rgba(9,12,20,.72)'; g.beginPath(); g.roundRect ? g.roundRect(tx, y - 8, tw, 16, 8) : g.rect(tx, y - 8, tw, 16); g.fill(); g.fillStyle = col; g.textAlign = 'left'; g.fillText(txt, tx + 6, y + .5);
+    }
+  }
+  const ev = P('real') !== 'No' && window.CCTLiqLive ? CCTLiqLive.events(m.fs) : [];
+  if (ev.length) { // burbujas: rojo = largos liquidados (venta forzada), verde = cortos liquidados
+    const iv = IV_MS[state.interval] || 6e4, t0 = candles[Math.max(0, lo)].t, t1 = candles[Math.min(n, hi) - 1].t + iv;
+    for (const e of ev) {
+      if (e.t < t0 || e.t > t1) continue; let i = Math.min(n - 1, Math.max(0, Math.floor((e.t - candles[0].t) / iv))); while (i > 0 && candles[i].t > e.t) i--; while (i < n - 1 && candles[i + 1].t <= e.t) i++;
+      const x = X(i - .5 + Math.min(1, (e.t - candles[i].t) / iv)), y = Y(e.p), r = Math.max(2.5, Math.min(18, Math.sqrt(e.usd) / 28)); if (y < top || y > bot) continue;
+      g.globalAlpha = .78; g.fillStyle = e.long ? '#ff4d6d' : '#19d3a2'; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+      g.globalAlpha = .9; g.strokeStyle = 'rgba(255,255,255,.6)'; g.lineWidth = 1; g.stroke(); g.globalAlpha = 1;
+      if (r >= 10) { g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = '700 9px system-ui'; g.fillText(liqShort(e.usd), x, y + .5); g.font = '600 10px system-ui'; }
+    }
+  }
+  { // resumen chiquito abajo a la izquierda: de dónde sale el mapa y lo liquidado de verdad en la última hora
+    const s1 = window.CCTLiqLive ? CCTLiqLive.sum(m.fs, 36e5) : null, parts = [m.src === 'oi' ? 'Mapa con interés abierto real' : 'Mapa estimado con volumen'];
+    if (s1 && (s1.l || s1.s)) parts.push(`Liquidado 1 h: largos $${liqShort(s1.l)} · cortos $${liqShort(s1.s)}`);
+    const txt = parts.join('  ·  '); g.textAlign = 'left'; const tw = g.measureText(txt).width + 14, y = bot - 14, x = Math.max(geo.left + 8, rEdge - tw - 8);
+    g.fillStyle = 'rgba(9,12,20,.55)'; g.beginPath(); g.roundRect ? g.roundRect(x, y - 8, tw, 16, 8) : g.rect(x, y - 8, tw, 16); g.fill(); g.fillStyle = 'rgba(220,226,240,.78)'; g.fillText(txt, x + 7, y + .5);
   }
   g.restore();
 }
@@ -6293,17 +6361,15 @@ function dvFill(p) {
 }
 setInterval(() => { document.querySelectorAll('[data-dv-cd]').forEach(el => { const S = dvFs && CCTDerivs.summary(dvFs); if (S) el.textContent = dvCountdown(S.next); }); }, 1000);
 if (window.CCTDerivs) {
-  CCTDerivs.on(() => { clearTimeout(dvTickT); dvTickT = setTimeout(() => { if (candles.length && DV_PANES.some(k => state.indicators[k])) { dvCalc(); scheduleRender(); } dvRender(); }, 60); });
+  CCTDerivs.on(() => { clearTimeout(dvTickT); dvTickT = setTimeout(() => { if (candles.length && DV_PANES.some(k => state.indicators[k])) { dvCalc(); scheduleRender(); } if (candles.length && state.indicators.liqmap && !replay && window.CCTIndicators && planOk('liq')) { ind.lm = liqCalc(CCTIndicators, IV_MS[state.interval]); scheduleRender(); } dvRender(); }, 60); });
   dvTimer = setInterval(() => dvRefresh(), 30e3);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) dvRefresh(); });
 }
-if (window.CCTJournal) CCTJournal.bind({sym: () => state.symbol, base: s => base(s), fmt, toast, go: s => { if (s !== state.symbol) selectSymbol(s); else switchView('chartView'); },
-  snap: () => { try { const cv = $('#priceCanvas'); if (!cv || !cv.width) return null; const W = 720, k = W / cv.width, o = document.createElement('canvas'); o.width = W; o.height = Math.round(cv.height * k); const c = o.getContext('2d'); c.fillStyle = cstyle().bg || '#07090e'; c.fillRect(0, 0, o.width, o.height); c.drawImage(cv, 0, 0, o.width, o.height); return o.toDataURL('image/jpeg', .72); } catch { return null; } }});
+if (window.CCTMap) CCTMap.bind({open: s => { if (s !== state.symbol) selectSymbol(s); else switchView('chartView'); }, cur: () => state.symbol, has: s => !!tickers[s], toast});
 if (window.CCTBook) {
   CCTBook.bind({sym: () => state.symbol, src: () => srcOf(state.symbol), split: s => splitSym(s), fmt, render: scheduleRender, toast, base: s => base(s)});
   const bb = $('#bookBtn'); if (bb) bb.addEventListener('click', () => CCTBook.toggle());
 }
-{ const jb = $('#journalBtn'); if (jb) jb.addEventListener('click', () => window.CCTJournal && CCTJournal.open()); }
 if (window.CCTTrade) {
   CCTTrade.bind({sym: () => state.symbol, price: s => { const v = s === state.symbol && candles.length && !replay ? candles[candles.length - 1].c : curPrice(s); return +v; }, fmt, render: scheduleRender, toast, base: s => base(s), go: s => { if (s !== state.symbol) selectSymbol(s); }});
   const tb = $('#tradeBtn'); if (tb) tb.addEventListener('click', () => CCTTrade.toggle());

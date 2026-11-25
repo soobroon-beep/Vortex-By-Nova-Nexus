@@ -331,27 +331,63 @@
     return {tenkan: ten, kijun: kij, spanA: sa, spanB: sbb, chikou: chi};
   }
 
-  const LIQ_TIERS = [[5, .08], [10, .2], [25, .3], [50, .25], [100, .17]];
+  /* Mapa de calor de liquidaciones estimadas (estilo CoinGlass), v2 — más preciso:
+     · Posiciones nuevas = SUBIDA del interés abierto real (Binance Futures) en cada vela; si no hay ese dato, el volumen.
+     · Si el interés abierto BAJA, se cierran posiciones: todas las bandas vivas se reducen en esa proporción.
+     · Entrada repartida en la vela (apertura, precio medio y cierre) en vez de solo el cierre; largos/cortos según dónde cerró la vela.
+     · Cada apalancamiento con su margen de mantenimiento; la banda se reparte entre las dos filas vecinas (sin redondeo a escalones).
+     · Una banda de largos muere cuando el mínimo de una vela la toca (de cortos, el máximo); las viejas se desvanecen poco a poco.
+     Devuelve la matriz por vela (data[fila][vela]) y el perfil vivo después de la última vela (cur/curL/curS) para la zona de la derecha. */
+  const LIQ_TIERS = [[5, .06, .004], [10, .19, .005], [20, .17, .005], [25, .2, .006], [50, .22, .008], [100, .16, .01]];
   function liquidationHeatmap(c, o = {}) {
     const n = c.length; if (n < 3) return null;
-    const res = Math.max(20, Math.min(400, o.rows | 0 || 140)), mm = o.mm == null ? .005 : o.mm, tiers = o.tiers || LIQ_TIERS;
+    const res = Math.max(20, Math.min(400, o.rows | 0 || 140)), tiers = o.tiers || LIQ_TIERS, mm0 = o.mm, oi = Array.isArray(o.oi) && o.oi.length === n ? o.oi : null;
+    const keep = o.halfLife > 0 ? Math.pow(.5, 1 / o.halfLife) : Math.pow(.5, 1 / 400); // las posiciones viejas se van cerrando solas
     let lo = Infinity, hi = -Infinity; for (let i = 0; i < n; i++) { if (c[i].l < lo) lo = c[i].l; if (c[i].h > hi) hi = c[i].h; }
-    const pMin = Math.max(lo - (hi - lo) * .6, lo * .8, 1e-9), pMax = Math.min(hi + (hi - lo) * .6, hi * 1.2), step = (hi - lo) / res, rows = Math.max(res, Math.min(900, Math.ceil((pMax - pMin) / step)));
-    const diff = Array.from({length: rows}, () => new Float32Array(n + 1));
-    let vsum = 0; for (let i = 0; i < n; i++) vsum += c[i].v; const vavg = vsum / n || 1;
-    for (let i = 0; i < n - 1; i++) {
-      const k = c[i], w = k.v / vavg, up = k.c >= k.o, wl = up ? .6 : .4, ws = 1 - wl;
-      for (const [L, tw] of tiers) {
-        const pl = k.c * (1 - 1 / L + mm), ps = k.c * (1 + 1 / L - mm);
-        if (pl > pMin && k.l > pl) { const r = Math.floor((pl - pMin) / step); if (r >= 0 && r < rows) { let e = i + 1; while (e < n && c[e].l > pl) e++; diff[r][i + 1] += w * tw * wl; diff[r][e] -= w * tw * wl; } }
-        if (ps < pMax && k.h < ps) { const r = Math.floor((ps - pMin) / step); if (r >= 0 && r < rows) { let e = i + 1; while (e < n && c[e].h < ps) e++; diff[r][i + 1] += w * tw * ws; diff[r][e] -= w * tw * ws; } }
+    // la rejilla cubre al menos ±12 % (donde caen 10x-100x) aunque el rango de las velas sea estrecho
+    const pMin = Math.max(Math.min(lo - (hi - lo) * .6, lo * .88), lo * .8, 1e-9), pMax = Math.min(Math.max(hi + (hi - lo) * .6, hi * 1.12), hi * 1.2);
+    const step = Math.max((hi - lo) / res, (pMax - pMin) / 900) || lo * .001 || 1e-9, rows = Math.max(1, Math.min(900, Math.ceil((pMax - pMin) / step)));
+    const L = new Float64Array(rows), S = new Float64Array(rows), data = Array.from({length: rows}, () => new Float32Array(n));
+    let vsum = 0; for (let i = 0; i < n; i++) vsum += c[i].v || 0; const vavg = vsum / n || 1;
+    let dsum = 0, dn = 0; if (oi) for (let i = 1; i < n; i++) if (oi[i] != null && oi[i - 1] != null) { dsum += Math.abs(oi[i] - oi[i - 1]); dn++; }
+    const davg = dn ? dsum / dn || 1 : 1, rowF = p => (p - pMin) / step;
+    const put = (A, p, w) => { const f = rowF(p) - .5, r = Math.floor(f), t = f - r; if (r >= 0 && r < rows) A[r] += w * (1 - t); if (r + 1 >= 0 && r + 1 < rows) A[r + 1] += w * t; };
+    let oiUsed = 0;
+    for (let i = 0; i < n; i++) {
+      const k = c[i];
+      // 1) la vela liquida lo que toca: largos con liquidación ≥ mínimo, cortos ≤ máximo
+      { const rl = Math.max(0, Math.floor(rowF(k.l) - .5)); for (let r = rl; r < rows; r++) L[r] = 0; const rh = Math.min(rows - 1, Math.ceil(rowF(k.h) + .5)); for (let r = 0; r <= rh; r++) S[r] = 0; }
+      // 2) cierre de posiciones: el interés abierto bajó
+      let w = (k.v || 0) / vavg * .35, fade = keep;
+      if (oi && oi[i] != null && i > 0 && oi[i - 1] != null && oi[i - 1] > 0) { const d = oi[i] - oi[i - 1]; oiUsed++; if (d < 0) { fade *= Math.max(.05, 1 + d / oi[i - 1] * 1.5); w = 0; } else w = d / davg; }
+      if (fade < 1) for (let r = 0; r < rows; r++) { L[r] *= fade; S[r] *= fade; }
+      for (let r = 0; r < rows; r++) { const v = L[r] + S[r]; data[r][i] = v > 1e-4 ? v : 0; }
+      // 3) posiciones nuevas de esta vela (aparecen desde la siguiente)
+      if (!(w > 0)) continue;
+      const rng = k.h - k.l, pos = rng > 0 ? (k.c - k.l) / rng : .5, wl = Math.max(.25, Math.min(.75, .5 + (pos - .5) * .5 + (k.c >= k.o ? .05 : -.05))), ws = 1 - wl;
+      const E = [[k.o, .3], [(k.h + k.l + k.c) / 3, .45], [k.c, .25]];
+      for (const [lev, tw, mmT] of tiers) {
+        const mm = mm0 == null ? mmT : mm0;
+        for (const [e, ew] of E) {
+          const pl = e * (1 - 1 / lev + mm), ps = e * (1 + 1 / lev - mm), q = w * tw * ew;
+          if (pl < k.l) put(L, pl, q * wl); // si la vela misma ya la tocó, no cuenta
+          if (ps > k.h) put(S, ps, q * ws);
+        }
       }
     }
-    const samples = [];
-    for (let r = 0; r < rows; r++) { const d = diff[r]; let a = 0; for (let i = 0; i < n; i++) { a += d[i]; d[i] = a > 1e-3 ? a : 0; if (d[i] > 0 && (i + r) % 7 === 0) samples.push(d[i]); } }
+    const samples = []; for (let r = 0; r < rows; r++) { const d = data[r]; for (let i = 0; i < n; i++) if (d[i] > 0 && (i + r) % 7 === 0) samples.push(d[i]); }
     samples.sort((a, b) => a - b);
     const ref = samples.length ? samples[Math.min(samples.length - 1, Math.floor(samples.length * .97))] : 1;
-    return {rows, n, pMin, step, data: diff.map(d => d.subarray(0, n)), ref: ref || 1};
+    const cur = new Float32Array(rows); for (let r = 0; r < rows; r++) cur[r] = L[r] + S[r];
+    return {rows, n, pMin, step, data, ref: ref || 1, cur, curL: Float32Array.from(L), curS: Float32Array.from(S), oiUsed};
+  }
+  /* Grupos más fuertes de liquidaciones vivas arriba y abajo del precio (los «imanes»), para marcarlos en el gráfico */
+  function liqClusters(m, price, k = 2, lo = -Infinity, hi = Infinity) { // lo/hi: solo dentro de ese rango de precios (lo visible)
+    if (!m || !m.cur) return {up: [], dn: []}; const out = {up: [], dn: []}, pk = [];
+    for (let r = 1; r < m.rows - 1; r++) { const pr = m.pMin + (r + .5) * m.step; if (pr < lo || pr > hi) continue; const v = m.cur[r - 1] * .5 + m.cur[r] + m.cur[r + 1] * .5; if (v > 0 && m.cur[r] >= m.cur[r - 1] && m.cur[r] >= m.cur[r + 1]) pk.push({p: m.pMin + (r + .5) * m.step, v, side: m.curL[r] >= m.curS[r] ? 'long' : 'short'}); }
+    pk.sort((a, b) => b.v - a.v);
+    for (const q of pk) { const arr = q.p > price ? out.up : out.dn; if (arr.length < k && !arr.some(x => Math.abs(x.p - q.p) < m.step * 6)) arr.push(q); if (out.up.length >= k && out.dn.length >= k) break; }
+    return out;
   }
   const LIQ_AFTER = Date.UTC(2023, 0, 1);
   const LIQ_SPEC = [
@@ -455,6 +491,6 @@
     return {from: f, to: t, lo, hi, step, rows, total, maxVol: maxV, maxDelta: Math.max(...rows.map(x => Math.abs(x.delta))), poc, pocPrice: lo + (poc + .5) * step, pocBot: lo + poc * step, pocTop: lo + (poc + 1) * step, vaLo: a, vaHi: z, val: lo + a * step, vah: lo + (z + 1) * step, vaShare: acc / total};
   }
 
-  root.CCTIndicators = {visibleRangeProfile, liquidationHeatmap, cci, willr, mfi, roc, adx, stochRsi, awesome, cmf, donchian, keltner, psar, ichimoku, rsiOf, volumeProfile, gradient, liquidations, LIQ_AFTER, pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
+  root.CCTIndicators = {visibleRangeProfile, liquidationHeatmap, liqClusters, cci, willr, mfi, roc, adx, stochRsi, awesome, cmf, donchian, keltner, psar, ichimoku, rsiOf, volumeProfile, gradient, liquidations, LIQ_AFTER, pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTIndicators;
 })(typeof window !== 'undefined' ? window : globalThis);
