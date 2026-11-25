@@ -3,6 +3,7 @@
    Los arreglos y ajustes pequeños NO se anotan aquí: se suman al último bloque «Mejoras» sin crear versión nueva. */
 window.CCT_CHANGELOG = [
   {v: '3.43', d: '19 nov 2026', t: 'Mejoras del gráfico', items: [
+    'Recorrido de bienvenida interactivo: la primera vez que abres VORTEX te guía paso a paso por todas las funciones (gráfico, dibujo, IA y Nexus Pixel, Screener, Nexus Lens, Nova Bot Lab, estilos y planes), con su propia versión para celular. Puedes saltarlo y volver a verlo en Configuración › Acerca de.',
     'Diseño: hasta 10 gráficos en la misma pantalla. Primero eliges la moneda de cada gráfico, se abren con los indicadores de tu gráfico principal y luego eliges su plantilla (como el principal, una de tus plantillas o desde cero).',
     'Configuración › Acerca de: botón «Instalar aplicación en PC» o «en celular» según tu dispositivo.',
     'Conectores más limpios: una fila de iconos (Telegram, Webhook, Calendario, IA local) y al tocar uno se abre solo su configuración. Preferencias ahora vive dentro de su propio botón.',
