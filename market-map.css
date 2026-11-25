@@ -13,27 +13,6 @@
 .mm-ib.spin svg{animation:mmSpin .9s linear infinite}
 @keyframes mmSpin{to{transform:rotate(360deg)}}
 
-/* sentimiento */
-.mm-sent{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px}
-.mm-sent>div{border:1px solid var(--glass-line,var(--line));background:var(--glass,rgba(255,255,255,.02));-webkit-backdrop-filter:var(--blur-s,none);backdrop-filter:var(--blur-s,none);border-radius:14px;padding:8px 10px;min-width:0}
-.mm-fng{display:flex;align-items:center;gap:8px}
-.mm-fng svg{width:40px;height:24px;flex:0 0 auto}
-.mm-fng .trk,.mm-fng .val{fill:none;stroke-width:4;stroke-linecap:round}
-.mm-fng .trk{stroke:rgba(255,255,255,.09)}
-.light .mm-fng .trk{stroke:rgba(0,0,0,.08)}
-.mm-fng .val{transition:stroke-dasharray .6s ease}
-.mm-fng b{display:block;font-size:16px;line-height:1;font-variant-numeric:tabular-nums}
-.mm-fng small,.mm-breadth small,.mm-glob small,.mm-glob span,.mm-bt span{display:block;font-size:9.5px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mm-bt{display:flex;justify-content:space-between;align-items:baseline}
-.mm-bt span{margin:0}
-.mm-bt b{font-size:13px;font-variant-numeric:tabular-nums}
-.mm-bar{height:5px;border-radius:9px;background:color-mix(in srgb,var(--red) 55%,transparent);overflow:hidden;margin-top:5px}
-.mm-bar i{display:block;height:100%;background:var(--green);border-radius:9px;transition:width .6s ease}
-.mm-glob{text-align:right}
-.mm-glob span{margin:0}
-.mm-glob b{display:block;font-size:13px;margin-top:2px;font-variant-numeric:tabular-nums}
-.mm-glob .up,.mm-tg .up{color:var(--green)}.mm-glob .dn,.mm-tg .dn{color:var(--red)}
-
 /* controles */
 .mm-ctl{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
 .mm-row2{display:flex;gap:6px}
@@ -75,4 +54,5 @@
 .mm-tg{display:grid;grid-template-columns:1fr auto;gap:3px 12px}
 .mm-tg span{color:var(--muted)}
 .mm-tg b{text-align:right;font-variant-numeric:tabular-nums}
+.mm-tg .up{color:var(--green)}.mm-tg .dn{color:var(--red)}
 @media(prefers-reduced-motion:reduce){.mm-t{transition:none}.mm-t.fl-up,.mm-t.fl-dn{animation:none}}

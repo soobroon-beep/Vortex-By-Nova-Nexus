@@ -1,14 +1,13 @@
 /* VORTEX · Radar del mercado — mapa de calor de criptomonedas (idea parecida a Coin360, diseño propio).
    · Cada cuadro es una moneda: su tamaño = capitalización (o volumen) y su color = cuánto sube o baja en el periodo elegido.
-   · Arriba: sentimiento del mercado (índice de miedo y codicia, % de monedas en verde, cambio de la capitalización total).
    · «Nuevas»: los listados más recientes de Binance Futures, con su edad.
    · Tocas un cuadro y se abre su gráfico. Se actualiza solo mientras el panel está abierto, y los cuadros que cambian parpadean.
-   Datos públicos: CoinGecko (mercado), alternative.me (miedo y codicia) y Binance (respaldo y nuevas). El algoritmo de acomodo
+   Datos públicos: CoinGecko (mercado) y Binance (respaldo y nuevas). El algoritmo de acomodo
    (treemap «squarified») está en layout() y se prueba en tests/market-map.test.js. No es asesoría financiera. */
 (function (root) {
   'use strict';
   const doc = root.document, fin = Number.isFinite;
-  const CG = 'https://api.coingecko.com/api/v3', FNG = 'https://api.alternative.me/fng/?limit=2', BN = 'https://api.binance.com/api/v3', BF = 'https://fapi.binance.com/fapi/v1';
+  const CG = 'https://api.coingecko.com/api/v3', BN = 'https://api.binance.com/api/v3', BF = 'https://fapi.binance.com/fapi/v1';
   const PROXY = 'https://vortex-push.soobroon.workers.dev/mkt?u=', PREF = 'cct_map_pref_v1';
   const STABLE = new Set(['usdt', 'usdc', 'dai', 'fdusd', 'tusd', 'usde', 'usds', 'pyusd', 'busd', 'usdp', 'gusd', 'frax', 'lusd', 'usdd', 'usd1', 'rlusd', 'usdtb', 'usdy', 'usyc', 'buidl', 'susde', 'susds', 'eurc', 'xaut', 'paxg', 'usdf', 'usdg', 'bfusd', 'usdx', 'crvusd', 'gho']);
   const SKIP = /(^|-)(wrapped|staked|restaked|bridged|binance-peg|liquid-staked)(-|$)|^weth$|^wbtc$|^steth$|^wsteth$|^weeth$|^cbbtc$|^cbeth$|^reth$|^jitosol$|^msol$|^bnsol$|^lbtc$|^solvbtc|^ezeth$|^rseth$|^meth$|^wbeth$|^clbtc$|^tbtc$/i;
@@ -16,7 +15,7 @@
   const P = (() => { let o = {}; try { o = JSON.parse(localStorage.getItem(PREF) || '{}') || {}; } catch {} return {per: ['1h', '24h', '7d'].includes(o.per) ? o.per : '24h', size: o.size === 'vol' ? 'vol' : 'cap', list: ['50', '100', '200', 'new'].includes(o.list) ? o.list : '100'}; })();
   const saveP = () => { try { localStorage.setItem(PREF, JSON.stringify(P)); } catch {} };
   let H = {open: null, cur: () => '', has: () => false, toast: () => {}};
-  let host = null, coins = [], news = [], fng = null, glob = null, at = 0, newAt = 0, busy = false, err = '', src = '', prev = new Map(), timer = 0, tip = null, ro = null, lastW = 0, lastH = 0, bnSpot = null, bnSpotAt = 0;
+  let host = null, coins = [], news = [], at = 0, newAt = 0, busy = false, err = '', src = '', prev = new Map(), timer = 0, tip = null, ro = null, lastW = 0, lastH = 0, bnSpot = null, bnSpotAt = 0;
 
   /* ───────── Datos ───────── */
   async function getJSON(u, proxy) {
@@ -41,10 +40,6 @@
     }
     at = Date.now();
   }
-  async function loadSentiment() {
-    try { const j = await getJSON(FNG); const d = j && j.data || []; if (d[0]) fng = {v: +d[0].value, txt: d[0].value_classification, prev: d[1] ? +d[1].value : NaN}; } catch {}
-    try { const g = (await getJSON(`${CG}/global`)).data; if (g) glob = {chg: g.market_cap_change_percentage_24h_usd, cap: g.total_market_cap && g.total_market_cap.usd, btc: g.market_cap_percentage && g.market_cap_percentage.btc}; } catch {}
-  }
   async function loadNew() { // listados recientes de Binance Futures (los 45 días más nuevos), con su volumen y cambio de 24 h
     if (news.length && Date.now() - newAt < 5 * 6e4) return;
     try {
@@ -59,7 +54,7 @@
   async function refresh(force) {
     if (busy) return; if (!force && at && Date.now() - at < 40000) return paint(); busy = true; paintStatus();
     snapPrev();
-    try { await Promise.all([P.list === 'new' ? loadNew() : loadMarket(), !fng || Date.now() - at > 3e5 ? loadSentiment() : null, loadBnSpot()]); } finally { busy = false; }
+    try { await Promise.all([P.list === 'new' ? loadNew() : loadMarket(), loadBnSpot()]); } finally { busy = false; }
     if (P.list === 'new') at = Date.now();
     paint(true);
   }
@@ -110,22 +105,10 @@
     const isNew = P.list === 'new';
     return `<div class="mm">
       <div class="view-head mm-head"><div><div class="eyebrow">MERCADO</div><h1>Radar</h1></div><button type="button" class="mm-ib" data-mm="sync" aria-label="Actualizar" title="Actualizar"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.35-5.65"/><path d="M20 4.5V9h-4.5"/></svg></button></div>
-      <div class="mm-sent" data-mm-sent>${sentHtml()}</div>
       <div class="mm-ctl">${seg('list', P.list, [['50', 'Top 50'], ['100', 'Top 100'], ['200', 'Top 200'], ['new', 'Nuevas']])}
         <div class="mm-row2">${seg('per', isNew ? '24h' : P.per, [['1h', '1h', isNew], ['24h', '24h'], ['7d', '7d', isNew]])}${seg('size', isNew ? 'vol' : P.size, [['cap', 'Capitalización', isNew], ['vol', 'Volumen']])}</div></div>
       <div class="mm-map" data-mm-map role="list" aria-label="Mapa de criptomonedas"></div>
       <p class="mm-foot" data-mm-foot></p></div>`;
-  }
-  function sentHtml() {
-    const L = list(), n = L.filter(c => fin(chOf(c))).length, up = L.filter(c => chOf(c) > 0).length, upP = n ? up / n * 100 : NaN;
-    const f = fng, fc = !f ? 'var(--muted)' : f.v >= 75 ? 'var(--green)' : f.v >= 55 ? 'color-mix(in srgb, var(--green) 70%, var(--text))' : f.v > 45 ? 'var(--muted)' : f.v > 25 ? 'color-mix(in srgb, var(--red) 70%, var(--text))' : 'var(--red)';
-    const TXT = {'Extreme Fear': 'Miedo extremo', Fear: 'Miedo', Neutral: 'Neutral', Greed: 'Codicia', 'Extreme Greed': 'Codicia extrema'};
-    const arc = f ? (f.v / 100 * 50.3).toFixed(1) : 0;
-    return `<div class="mm-fng" title="Índice de miedo y codicia (alternative.me): 0 = miedo extremo, 100 = codicia extrema">
-        <svg viewBox="0 0 40 24" aria-hidden="true"><path d="M4 21a16 16 0 0 1 32 0" class="trk"/><path d="M4 21a16 16 0 0 1 32 0" class="val" style="stroke:${fc};stroke-dasharray:${arc} 60"/></svg>
-        <div><b style="color:${fc}">${f ? f.v : '—'}</b><small>${f ? esc(TXT[f.txt] || f.txt) : 'Sentimiento'}</small></div></div>
-      <div class="mm-breadth" title="Monedas que suben vs. bajan en el mapa (${perOf(L[0] || {ch: {}})})"><div class="mm-bt"><span>En verde</span><b>${fin(upP) ? Math.round(upP) + '%' : '—'}</b></div><div class="mm-bar"><i style="width:${fin(upP) ? upP.toFixed(1) : 50}%"></i></div><small>${up} de ${n} suben</small></div>
-      ${glob && P.list !== 'new' ? `<div class="mm-glob" title="Capitalización total del mercado cripto${fin(glob.btc) ? ' · dominancia de BTC ' + glob.btc.toFixed(1) + '%' : ''}"><span>Mercado</span><b class="${glob.chg >= 0 ? 'up' : 'dn'}">${pctTxt(glob.chg)}</b><small>${big(glob.cap)}</small></div>` : ''}`;
   }
   function paintMap(flash) {
     const box = host && host.querySelector('[data-mm-map]'); if (!box) return;
@@ -150,7 +133,6 @@
   }
   function paint(flash) {
     if (!host) return; if (!host.firstChild) host.innerHTML = shell();
-    else { const s = host.querySelector('[data-mm-sent]'); if (s) s.innerHTML = sentHtml(); }
     paintMap(flash); paintStatus();
   }
   function repaintAll() { if (!host) return; host.innerHTML = shell(); paint(); }
