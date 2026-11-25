@@ -222,6 +222,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     let chg24 = null; try { chg24 = ind && ind.change24h; } catch {}
     const extra = {sym: h.symbol(), tf: h.interval(), exchange: h.exchange ? h.exchange() : '', chg24, ind, pos: snap ? BR.positions(src, h.symbol(), snap.px) : [], draws: src.draws.filter(d => !d.hide), seen};
     let text = BR.brief(snap, extra);
+    try { const mx = window.CCT_marketExtra && window.CCT_marketExtra(); if (mx) text += '\n' + mx; } catch {}
     try { if (h.desktop() && section() !== 'chartView') text += '\nPANEL DERECHO ABIERTO: ' + (NAMES[section()] || section()) + ': ' + screenText(section()).slice(0, 400); } catch {}
     return {text, snap, pos: extra.pos};
   }
@@ -368,7 +369,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     [/tipo de vela|velas heikin|heikin|linea de precio/, 'Tipo de vela', 'chartView', '#ctypeBtn', '#moreBtn', 'Velas, Heikin Ashi, línea y más.'],
     [/dividir|varios graficos|2 graficos|layout/, 'Dividir el gráfico', 'chartView', '#layoutBtn', '#moreBtn', 'Hasta 5 gráficos a la vez.'],
     [/deshacer/, 'Deshacer', 'chartView', '#undoDraw', '#undoDraw', 'Regresa tu último dibujo.'],
-    [/cambiar (de )?(moneda|cripto)|buscar (una )?(moneda|cripto)|otro exchange|bingx|bybit/, 'Buscar activo', 'chartView', '#symbolButton', '#symbolButton', 'Busca cualquier cripto y elige el exchange.'],
+    [/cambiar (de )?(moneda|cripto)|buscar (una )?(moneda|cripto)|(cambiar|elegir) (de )?exchange|otro exchange/, 'Buscar activo', 'chartView', '#symbolButton', '#symbolButton', 'Busca cualquier cripto y elige el exchange.'],
     [/anadir|agregar (una )?(cripto|moneda)|seguimiento/, 'Añadir a Mi seguimiento', 'watchView', '#addAsset', '#addAsset', 'Agrega criptos de cualquier exchange.'],
     [/crear (una )?alerta|nueva alerta/, 'Crear alerta', 'alertsView', '#alAdd', '#alAdd', 'O dímelo a mí: «avísame si BTC pasa 70 mil».'],
     [/alerta/, 'Alertas', 'alertsView', '.right-rail [data-side="alertsView"]', '#topAlertsBtn', 'Tus alertas de precio y de indicador.'],
@@ -407,10 +408,16 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
   function setChipsCustom(list) { bub.querySelector('.px-chips').innerHTML = list.map(([t, q]) => `<button type="button" data-q="${esc(q)}">${esc(t)}</button>`).join(''); }
 
   /* ── IA con el contexto de la sección ── */
-  const SYS_APP = `Eres NEXUS PIXEL, el asistente amigable de VORTEX (by Nova Nexus), una app de trading cripto. Vives en toda la app y ayudas en cada sección.
-Secciones: Gráfico (velas, indicadores, dibujos; tú puedes dibujar), Mi seguimiento (lista de criptos), Noticias (cripto y bolsa en español + Calendario económico), Screener (señales LONG/SHORT/RANGO de Nova Nexus; edad = velas desde que salió), Alertas (de precio y de indicador; avisos con la app cerrada y a Discord), IA (Analizar gráfico, Briefing del día, Laboratorio de indicadores), Nexus Lens (tu cuenta del exchange conectado en VORTEX, cualquier exchange: equity, posiciones abiertas, historial, estadísticas, calendario y Coach IA; API key de SOLO LECTURA), Nova Bot Lab (PC: crear bots en español o constructor visual, backtest, paper trading, riesgo), Discord, Configuración.
-Habla en español, claro, breve y con buena onda. No prometas ganancias (no es asesoría financiera). Usa SOLO los datos que te dan; si falta algo, dilo.
-Responde EXACTAMENTE a lo que te piden, sin cambiar de tema ni dar respuestas genéricas; si no queda claro, haz una sola pregunta concreta.`;
+  const SYS_APP = `Eres NEXUS PIXEL, el copiloto de VORTEX (by Nova Nexus), una terminal de trading cripto profesional. Vives en toda la app; eres experto en trading y conoces la app de memoria.
+QUÉ HAY EN VORTEX: Gráfico (velas, indicadores, Nova Nexus, dibujos; tú puedes dibujar), caja Long/Short con botón «Caja inteligente» (sugiere stop y objetivo y mueve el stop a tu favor), mapa de calor de liquidaciones, Radar del mercado (mapa de cuadros de criptos), Mi seguimiento, Noticias + Calendario económico, Macro (miedo y codicia, dominancia), Screener (señales LONG/SHORT de Nova Nexus; «edad» = velas desde la señal), Alertas, IA (Analizar gráfico, Briefing, Laboratorio de indicadores), Nexus Lens (cuenta del exchange: estadísticas, diario de cada operación y Coach), Nova Bot Lab (bots, backtest, paper trading), Repetición, Calculadora de riesgo.
+CÓMO PIENSAS: primero entiende QUÉ quiere exactamente (una respuesta, un dato, que hagas algo, o que le enseñes dónde está algo). Luego responde a eso y nada más.
+REGLAS:
+- Español de México, directo, claro y con buena onda. Sin relleno, sin repetir la pregunta, sin despedidas largas. Máximo 8 renglones salvo que pida detalle.
+- Usa los DATOS que te paso; cita números concretos. Nunca inventes precios, noticias ni funciones que no existen. Si falta un dato, dilo en una frase.
+- NUNCA hables de conectar el exchange, API keys, BingX ni de cuentas a menos que el usuario pregunte justo por eso.
+- Si pregunta algo de trading general (conceptos, gestión de riesgo, psicología), responde como un trader experto con ejemplos prácticos.
+- Si no queda claro, haz UNA pregunta concreta con 2-3 opciones.
+- No prometas ganancias; si das una opinión de mercado, al final una nota muy breve de que no es asesoría financiera.`;
   async function llmText(sys, user, maxTokens = 650) {
     const L = LLM(); if (!L || !L.chat) throw new Error('sin IA');
     const r = await Promise.race([L.chat([{role: 'system', content: sys + profile()}, ...hist.slice(-4), {role: 'user', content: user}], {purpose: 'text', maxTokens, noOwn: true}), sleep(60000).then(() => { throw new Error('tarde'); })]);
@@ -459,6 +466,7 @@ Responde EXACTAMENTE a lo que te piden, sin cambiar de tema ni dar respuestas ge
   }
   async function skillLens(t) { // Nexus Lens ya es parte de VORTEX: si tu exchange está conectado, Pixel ve tus números; si no, te explica cómo conectarlo
     const X = window.CCTExchange, on = !!(X && X.connected && X.connected()); let ctx = '';
+    if (!on && !/conect|api|key|clave|como (lo )?(uso|activo|configuro)|vincul/.test(nrm(t))) { mood('happy', 'idle'); say('Para ver tus números necesito tu exchange conectado (botón «Conectar» en Nexus Lens, una sola vez). Mientras, pregúntame lo que quieras del gráfico.'); setChips(); return; }
     try { if (window.CCTLens && CCTLens.metrics()) ctx = await CCTLens.context(); } catch {}
     mood('thinking', 'think'); say(on ? 'Déjame ver tu cuenta en Nexus Lens…' : 'Te explico cómo conectar tu exchange…', {busy: true});
     const task = on && ctx ? '\nTAREA: eres el coach de la cuenta del usuario en Nexus Lens. Responde su pregunta con SUS números (win rate, P&L, pares, sesiones, posiciones). Breve, en viñetas, con acciones concretas. Para un análisis más largo, dile que use la pestaña «Coach IA» de Nexus Lens.'
@@ -484,7 +492,7 @@ Responde EXACTAMENTE a lo que te piden, sin cambiar de tema ni dar respuestas ge
     catch { mood('surprised', 'idle'); say('No pude hablar con la IA ahorita. Pero puedo enseñarte dónde está cada cosa: pregúntame «¿dónde está…?».'); }
   }
   /* En PC: palabras que indican que hablas del panel derecho y no del gráfico */
-  const SIDE_KW = {watchView: /(seguimiento|watchlist|mi lista|lista de monedas|cual se mueve|panel)/, newsView: /(noticia|titular|resum|panel)/, alertsView: /(alerta|panel)/, lensView: /(lens|bingx|cuenta|panel)/, botLabView: /(\bbots?\b|bot lab|panel)/, aiView: /(panel|esta seccion|aqui)/, settingsView: /(config|ajuste|panel)/, discordView: /(discord|panel)/, screenerView: /(screener|panel)/};
+  const SIDE_KW = {watchView: /(seguimiento|watchlist|mi lista|lista de monedas|cual se mueve|panel)/, newsView: /(noticia|titular|resum|panel)/, alertsView: /(alerta|panel)/, lensView: /(lens|mis (trades|operaciones|posiciones)|mi (cuenta|saldo|equity|win ?rate|historial)|coach)/, botLabView: /(\bbots?\b|bot lab|panel)/, aiView: /(panel|esta seccion|aqui)/, settingsView: /(config|ajuste|panel)/, discordView: /(discord|panel)/, screenerView: /(screener|panel)/};
   /* A qué habilidad va cada pedido */
   async function routeApp(text) {
     const q = nrm(text), sec = section();
@@ -504,7 +512,8 @@ Responde EXACTAMENTE a lo que te piden, sin cambiar de tema ni dar respuestas ge
     const aboutChart = !!(CMD && CMD.chartish(text)) && !/(screener|noticia|nexus lens|api key|\bbots?\b|bot lab|alerta)/.test(q); // habla del gráfico: nunca se va a la sección del panel derecho
     if ((sec === 'screenerView' && (desk ? /(screener|mejor(es)? (entrada|senal)|confluencia)/ : /(mejor|entrada|long|short|confluencia|senal|cual|analiza)/).test(q)) || /screener/.test(q)) { await skillScreener(text); return true; }
     if (/\bbots?\b|estrategia automat|bot lab/.test(q) && !/screener/.test(q)) { await skillBot(text); return true; }
-    if (/nexus lens|api key|secret key/.test(q) || (sec === 'lensView' && !D.parse(text).length && !aboutChart && (!desk || SIDE_KW.lensView.test(q)))) { await skillLens(text); return true; }
+    const lensQ = /nexus lens|api key|secret key|conectar (mi |el |tu )?(exchange|cuenta)|mis (trades|operaciones|posiciones)|mi (cuenta|saldo|equity|win ?rate|historial)|como (voy|me va) (en|con) (mis|el) trad/.test(q);
+    if (lensQ || (sec === 'lensView' && !D.parse(text).length && !aboutChart && SIDE_KW.lensView.test(q))) { await skillLens(text); return true; }
     if (sec !== 'chartView' && !aboutChart && !D.parse(text).length && (!desk || (SIDE_KW[sec] && SIDE_KW[sec].test(q) && !/grafic|vela|indicador|\bema\b|rsi|soporte|resistencia|tendencia|dibuj|canal|fibo|linea|color/.test(q)))) { await skillGeneral(text); return true; }
     return false;
   }

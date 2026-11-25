@@ -222,6 +222,7 @@ function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estil
   if (o.ds != null && o.ds !== 'dash' && o.ds !== 'dot') delete o.ds;
   if (o.ts != null) { const v = Math.round(+o.ts); if (Number.isFinite(v)) o.ts = Math.max(8, Math.min(36, v)); else delete o.ts; }
   if (o.label != null) { o.label = String(o.label).slice(0, 80); if (!o.label) delete o.label; }
+  if (o.sm != null) { const m = o.sm, n = v => Number.isFinite(+v) ? +v : undefined; if (!m || typeof m !== 'object' || Array.isArray(m)) delete o.sm; else o.sm = {on: m.on === true, be: m.be !== false, trail: m.trail !== false, al: m.al !== false, phase: ['wait', 'live', 'out'].includes(m.phase) ? m.phase : 'wait', s0: n(m.s0), at: n(m.at), ext: n(m.ext), bh: n(m.bh), bl: n(m.bl), warned: m.warned === true, res: ['tp', 'sl', 'be', 'trail', ''].includes(m.res) ? m.res : undefined}; } // caja inteligente
   if (o.pane != null && !(typeof o.pane === 'string' && /^[A-Za-z0-9:_.-]{1,60}$/.test(o.pane))) delete o.pane; // dibujo sobre un panel (oscilador, RSI…)
   if (o.sp != null) { const v = +o.sp; if (Number.isFinite(v) && (v > 0 || o.pane)) o.sp = v; else delete o.sp; } // en un panel los valores pueden ser negativos (MACD…) // Long/Short: precio del stop puesto a mano
   if (o.gc != null && !hex(o.gc)) delete o.gc; if (o.rc != null && !hex(o.rc)) delete o.rc; // Long/Short: color del objetivo y del stop
@@ -1682,7 +1683,7 @@ function applyKline(k) {
   if (k.t === last.t) { if (!liveGlideStart(k, last)) candles[n - 1] = k; }
   else if (k.t > last.t) { liveGlideStop(); candles.push(k); if (pan > 0) pan += 1; isNew = true; }
   else return;
-  recalcSoon(isNew); updateChartHeader(); checkAlerts(state.symbol, k.c); if (window.CCTTrade) CCTTrade.tick(state.symbol, k.c);
+  recalcSoon(isNew); updateChartHeader(); checkAlerts(state.symbol, k.c); if (window.CCTTrade) CCTTrade.tick(state.symbol, k.c); smartTick(isNew);
   if (currentView === 'chartView') scheduleRender();
 }
 document.addEventListener('visibilitychange', () => {
@@ -2803,6 +2804,7 @@ function popHtml(kind, d) {
       + dLevelsHtml(d)
       + (brush || SB_NOSTYLE.has(d.type) ? '' : sbTextBlock(d));
   }
+  if (kind === 'smart' && isPos(d)) return smartPop(d);
   if (kind === 'more') {
     const it = (a, ic, n, k) => `<button class="pp-item" data-sb="${a}"><span class="pp-ic">${ic}</span><span>${n}</span>${k ? `<small>${k}</small>` : ''}</button>`;
     return it('clone', I('layers', 16), 'Clonar', 'Ctrl+D') + it('copy', I('copy', 16), 'Copiar', 'Ctrl+C') + (drawClip ? it('paste', I('clipboard', 16), 'Pegar', 'Ctrl+V') : '') + '<div class="pp-sep"></div>'
@@ -2948,6 +2950,56 @@ function openRisk(d, priceHint) {
   });
   setTimeout(() => { const i = m.querySelector(riskCap() ? '#rkS' : '#rkCap'); if (i && deskMQ.matches) i.focus(); }, 50);
 }
+/* ───────── Caja inteligente (smart-box.js): stop y objetivo sugeridos + gestión automática mientras VORTEX está abierta en esa moneda ───────── */
+const smartNew = () => ({on: true, be: true, trail: true, al: true, phase: 'wait', at: candles.length ? candles[candles.length - 1].t : Date.now()});
+const posStop = d => { // stop movido a mano (del lado contrario al objetivo) o, con la caja inteligente, también en la entrada o más allá (asegurando ganancia)
+  const ok = Number.isFinite(d.sp) && ((d.sp - d.a.p) * (d.b.p - d.a.p) < 0 || (d.sm && d.sm.on && (d.sp - d.b.p) * (d.b.p - d.a.p) < 0));
+  return ok ? d.sp : d.a.p - (d.b.p - d.a.p) / (dOpt(d, 'rr') || 2); };
+function smartSug(d) {
+  if (!window.CCTSmart || !candles.length || replay) return null; const extra = [];
+  if (ind.lm && window.CCTIndicators && CCTIndicators.liqClusters) { const C = CCTIndicators.liqClusters(ind.lm, d.a.p, 3); for (const q of [...C.up, ...C.dn]) extra.push({p: q.p, why: `zona de liquidaciones de ${q.side === 'long' ? 'largos' : 'cortos'}`}); }
+  return CCTSmart.suggest(candles, {side: d.type === 'long' ? 1 : -1, entry: d.a.p, extra});
+}
+function smartPop(d) {
+  const sg = smartSug(d), m = d.sm || {}, on = !!m.on, lg = d.type === 'long', E = d.a.p, st = posStop(d), R = Math.abs(E - st), rr = Math.abs(d.b.p - E) / (R || 1), p = v => `${v >= E ? '+' : '−'}${Math.abs((v - E) / E * 100).toFixed(2)}%`;
+  const row = (n, v, sub, col) => `<div class="sm-row"><span>${n}</span><b style="color:${col}">${fmt(v)}</b><small>${sub}</small></div>`, tg = (k, n, sub, val) => `<button class="pp-item${val ? ' on' : ''}" data-psm="${k}"><span class="pp-ic">${val ? I('check', 16) : ''}</span><span>${n}${sub ? `<small class="sm-sub">${sub}</small>` : ''}</span></button>`;
+  const warn = [];
+  if (sg) { if (R < sg.atr * .5) warn.push('Tu stop está muy pegado: con el ruido normal de esta moneda es fácil que te saque.'); else if (R > sg.atr * 4) warn.push('Tu stop está muy lejos: arriesgas mucho para lo que se mueve esta moneda.'); }
+  if (rr < 1.2) warn.push(`Ganas ${rr.toFixed(2)} por cada 1 que arriesgas: busca al menos 1.5.`);
+  const RK = state.risk || {}, cap = riskCap(); if (cap > 0 && window.CCTRisk) { const r = CCTRisk.calc({capital: cap, riskPct: RK.pct, entry: E, stop: st, target: d.b.p, leverage: RK.lev, feePct: RK.fee}); if (r.ok) warn.push(`Con tu riesgo de ${RK.pct || 1}% arriesgas ${usd(r.loss)} en este trade.`); }
+  const phase = !on ? '' : m.phase === 'wait' ? 'Esperando a que el precio toque tu entrada.' : m.phase === 'live' ? 'Activa: vigilando el stop y el objetivo.' : 'Terminó. Puedes reiniciarla moviendo la caja.';
+  return `<div class="pp-title">Caja inteligente</div>
+    ${sg ? `<div class="sm-box"><div class="sm-h">Sugerencia para tu entrada en ${fmt(E)}</div>${row('Stop', sg.stop, p(sg.stop), d.rc || '#f23645')}${row('Objetivo', sg.target, `${p(sg.target)} · R:R ${sg.rr.toFixed(2)}`, d.gc || '#089981')}${row('Objetivo 2', sg.t2, p(sg.t2), d.gc || '#089981')}
+      <ul class="sm-why">${sg.why.map(w => `<li>${esc(w)}</li>`).join('')}</ul><button class="pp-item sm-go" data-sb="smapply"><span class="pp-ic">${I('check', 16)}</span><span>Aplicar stop y objetivo sugeridos</span></button></div>` : '<p class="pp-note">Necesito el gráfico cargado (fuera de la repetición) para sugerir niveles.</p>'}
+    ${warn.length ? `<ul class="sm-warn">${warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+    <label class="pp-lbl">Gestión automática</label><div class="pp-col">${tg('on', on ? 'Activada' : 'Activar gestión', on ? phase : 'Vigila tu caja mientras VORTEX está abierta en esta moneda', on)}
+    ${on ? tg('be', 'Stop a la entrada en +1R', 'Cuando vas ganando 1 vez tu riesgo, ya no puedes perder', m.be !== false) + tg('trail', 'Seguir al precio con el stop', 'Desde +1.5R sube el stop detrás del precio para asegurar ganancia', m.trail !== false) + tg('al', 'Avisarme', 'Entrada, cerca del stop, objetivo y salida', m.al !== false) : ''}</div>
+    <div class="pp-sep"></div><button class="pp-item${state.smartAuto ? ' on' : ''}" data-sb="smauto"><span class="pp-ic">${state.smartAuto ? I('check', 16) : ''}</span><span>Usarla en todas mis cajas nuevas</span></button>
+    <p class="pp-note">El stop solo se mueve a tu favor, nunca en contra. No es asesoría financiera.</p>`;
+}
+function smartApply() { const d = curDraw(), sg = d && smartSug(d); if (!sg) { toast('Carga el gráfico para calcular la sugerencia'); return; } const sm = d.sm ? {...d.sm, s0: sg.stop} : d.sm; patchD({sp: sg.stop, b: {...d.b, p: sg.target}, ...(sm ? {sm} : {})}); toast(`Stop ${fmt(sg.stop)} y objetivo ${fmt(sg.target)} (R:R ${sg.rr.toFixed(2)})`); }
+function smartToggle(k) {
+  const d = curDraw(); if (!d) return; let m = d.sm ? {...d.sm} : null;
+  if (k === 'on') m = m && m.on ? {...m, on: false} : {...smartNew(), be: m ? m.be !== false : true, trail: m ? m.trail !== false : true, al: m ? m.al !== false : true, s0: posStop(d)};
+  else if (m) m[k] = m[k] === false;
+  patchD({sm: m}); if (k === 'on' && m.on) { smartTick(true); toast('Caja inteligente activada'); }
+}
+let smT = 0;
+function smartTick(now) {
+  if (!window.CCTSmart || replay || !candles.length) return; if (!now && Date.now() - smT < 800) return; smT = Date.now();
+  let ch = false; const out = [];
+  const arr = getDrawings().map(d => {
+    if (!isPos(d) || !d.sm || !d.sm.on || d.sm.phase === 'out') return d;
+    const st0 = posStop(d), sm = {...d.sm}; if (sm.phase === 'wait' || !Number.isFinite(sm.s0)) sm.s0 = st0; // mientras espera la entrada, el riesgo es el que tengas dibujado
+    const r = CCTSmart.manage(candles, {side: d.type === 'long' ? 1 : -1, entry: d.a.p, stop: st0, target: d.b.p}, sm);
+    const moved = Math.abs(r.stop - st0) > 1e-12, keyCh = r.st.phase !== d.sm.phase || r.st.res !== d.sm.res || r.st.warned !== d.sm.warned || r.events.length;
+    if (!moved && !keyCh) { Object.assign(d.sm, {at: r.st.at, ext: r.st.ext, bh: r.st.bh, bl: r.st.bl, s0: r.st.s0}); return d; } // sin cambios importantes: no guarda en la nube
+    ch = true; if (sm.al !== false) for (const e of r.events) out.push(e);
+    return {...d, sm: r.st, ...(moved ? {sp: r.stop} : {})};
+  });
+  if (ch) { setDrawings(arr); scheduleRender(); if (selectedId) { renderSelBar(); } }
+  for (const e of out) { const t = `${base(state.symbol)} · caja inteligente`; try { appAlert(`${t}: ${e.txt}`, t, e.txt, 'smart-' + e.k, {}); } catch { toast(e.txt); } } // mensaje, sonido y notificación (respeta tus ajustes de avisos)
+}
 function renderSelBar() {
   let bar = $('#selBar'); const d = curDraw(), show = !!d || isBrushTool(drawTool);
   if (!show) { if (bar) { bar.removeAttribute('id'); bar.classList.add('pbar-out'); bar.style.pointerEvents = 'none'; setTimeout(() => bar.remove(), 170); } closePop(); return; } // se desvanece al soltar el dibujo
@@ -2964,6 +3016,7 @@ function renderSelBar() {
     + (line ? b('ds', '', 'Estilo de línea', `<svg width="30" height="8" viewBox="0 0 30 8"><path d="M1 4h28" stroke="currentColor" stroke-width="2" ${d.ds === 'dash' ? 'stroke-dasharray="6 4"' : d.ds === 'dot' ? 'stroke-dasharray="1.5 4" stroke-linecap="round"' : 'stroke-dasharray="1.5 4" stroke-linecap="round"'}/></svg>`) : '')
     + (d ? '<i class="sb-sep"></i>' + b('set', '', 'Ajustes', sbIc('set')) : '')
     + (d && SB_ALERT.has(d.type) ? b('alert', '', 'Añadir alerta a esta línea', sbIc('alert')) : '')
+    + (isPos(d) ? b('smart', '', 'Caja inteligente: stop y objetivo sugeridos y gestión automática', `<span class="sb-smart${d.sm && d.sm.on ? ' on' : ''}">${SV('<path d="M12 3 5 6v5.5c0 4.4 3 7.7 7 9.5 4-1.8 7-5.1 7-9.5V6z"/><path d="M12 8.2l1.1 2.3 2.5.3-1.8 1.7.5 2.5-2.3-1.3-2.3 1.3.5-2.5-1.8-1.7 2.5-.3z"/>', 20)}</span>`) : '')
     + (isPos(d) ? b('risk', '', 'Calculadora de riesgo: tamaño de la posición', SV('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11v6M8 14h2M12 14h2M8 17h2M12 17h2"/>', 20)) : '')
     + (d ? b('lock', '', d.lock ? 'Desbloquear' : 'Bloquear', sbIc(d.lock ? 'lock' : 'unlock')) + b('del', '', 'Eliminar (Supr)', sbIc('trash')) : '')
     + b('more', '', 'Más opciones', sbIc('dots'));
@@ -2980,8 +3033,8 @@ document.addEventListener('pointerdown', e => {
 });
 document.addEventListener('pointerdown', e => { if (selPop && !e.target.closest('.pbar, .pbar-pop')) closePop(); }, true);
 document.addEventListener('click', e => {
-  const t = e.target.closest('#selBar [data-sb], #selPop [data-sb], #selPop [data-pc], #selPop [data-ptc], #selPop [data-pgc], #selPop [data-prc], #selPop [data-ptog], #selPop [data-pw], #selPop [data-pd], #selPop [data-pts], #selPop [data-ptpl], #selPop [data-ptpl-del]'); if (!t) return;
-  const D = t.dataset, keep = selPop === 'set' || selPop === 'txt' || (selPop === 'col' && isPos(curDraw())), done = () => { if (!keep) closePop(); }; // color, grosor, estilo y plantilla se cierran al elegir; Texto y Ajustes siguen abiertos
+  const t = e.target.closest('#selBar [data-sb], #selPop [data-sb], #selPop [data-pc], #selPop [data-ptc], #selPop [data-pgc], #selPop [data-prc], #selPop [data-ptog], #selPop [data-pw], #selPop [data-pd], #selPop [data-pts], #selPop [data-ptpl], #selPop [data-ptpl-del], #selPop [data-psm]'); if (!t) return;
+  const D = t.dataset, keep = selPop === 'set' || selPop === 'txt' || selPop === 'smart' || (selPop === 'col' && isPos(curDraw())), done = () => { if (!keep) closePop(); }; // color, grosor, estilo y plantilla se cierran al elegir; Texto y Ajustes siguen abiertos
   if (D.pc) { sbSetColor(D.pc); done(); return; }
   if (D.ptc) { patchD({tc: D.ptc}); return; }
   if (D.pgc) { patchD({gc: D.pgc}); return; } if (D.prc) { patchD({rc: D.prc}); return; }
@@ -2989,10 +3042,13 @@ document.addEventListener('click', e => {
   if (D.pw) { sbSetWidth(+D.pw); done(); return; }
   if (D.pd !== undefined) { patchD({ds: D.pd || null}); done(); return; }
   if (D.pts) { patchD({ts: +D.pts}); return; }
+  if (D.psm) { smartToggle(D.psm); return; }
   if (D.ptpl !== undefined) { sbApplyTpl(+D.ptpl); done(); return; }
   if (D.ptplDel !== undefined) { state.drawTpl = (state.drawTpl || []).filter((_, i) => i !== +D.ptplDel); save(); renderSelBar(); return; }
   const k = D.sb;
-  if (['tpl', 'col', 'txt', 'lw', 'ds', 'set', 'more'].includes(k)) { selPop = selPop === k ? '' : k; if (!selPop) closePop(); else renderPop(); return; }
+  if (k === 'smapply') { smartApply(); return; }
+  if (k === 'smauto') { state.smartAuto = !state.smartAuto; save(); renderPop(); toast(state.smartAuto ? 'Tus cajas nuevas de Long/Short saldrán con la gestión inteligente' : 'Gestión inteligente solo en las cajas que elijas'); return; }
+  if (['tpl', 'col', 'txt', 'lw', 'ds', 'set', 'more', 'smart'].includes(k)) { selPop = selPop === k ? '' : k; if (!selPop) closePop(); else renderPop(); return; }
   if (k === 'txtok') { sbEditText($('#sbTxt').value); return; }
   if (k === 'lvok') { dApplyLevels(); return; }
   if (k === 'priceok') { const v = parseFloat(String($('#sbPrice').value).replace(',', '.')), d = curDraw(); if (d && v > 0) patchD({a: {...d.a, p: v}}); else toast('Escribe un precio válido'); return; }
@@ -3373,9 +3429,8 @@ function channelOff(d) { // desplazamiento vertical (en precio) de la paralela q
 }
 function posBox(d) { // Long/Short: entrada = a, objetivo = b, stop espejo a 2:1
   const A = px(d.a), B = px(d.b), x1 = Math.min(A.x, B.x); let x2 = Math.max(A.x, B.x); if (x2 - x1 < 40) x2 = x1 + 40;
-  const manual = Number.isFinite(d.sp) && (d.sp - d.a.p) * (d.b.p - d.a.p) < 0; // stop movido a mano (debe quedar del lado contrario al objetivo)
-  const stop = manual ? d.sp : d.a.p - (d.b.p - d.a.p) / (dOpt(d, 'rr') || 2);
-  return {x1, x2, entry: d.a.p, target: d.b.p, stop, yE: Y(d.a.p), yT: Y(d.b.p), yS: Y(stop), manual};
+  const stop = posStop(d), locked = (stop - d.a.p) * (d.b.p - d.a.p) >= 0; // locked: la caja inteligente ya subió el stop a la entrada o más (ganancia asegurada)
+  return {x1, x2, entry: d.a.p, target: d.b.p, stop, yE: Y(d.a.p), yT: Y(d.b.p), yS: Y(stop), manual: Number.isFinite(d.sp), locked, s0: locked && d.sm && Number.isFinite(d.sm.s0) ? d.sm.s0 : stop};
 }
 function fmtDur(ms) { const m = Math.round(Math.abs(ms) / 6e4), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60; return d ? `${d} d ${h} h` : h ? `${h} h ${mm} min` : `${mm} min`; }
 function markerKind(d) { const c = candles[clamp(Math.round(idxOfTime(d.a.t)), 0, candles.length - 1)]; return c && Math.abs(d.a.p - c.h) <= Math.abs(d.a.p - c.l) ? 'high' : 'low'; }
@@ -3460,7 +3515,7 @@ function distToDrawing(d, pt) {
 }
 const b_price = (d, lv) => d.b.p - (d.b.p - d.a.p) * lv;
 function hitTest(pt) { if (DOPT.lock || DOPT.hide) return null; const arr = getDrawings(); for (let i = arr.length - 1; i >= 0; i--) if (!arr[i].hide && (inPaneCtx(arr[i], () => distToDrawing(arr[i], pt)) ?? 1e9) < 13) return arr[i]; return null; }
-function withLastStyle(d) { const st = (state.lastStyle || {})[tplKind(d)]; if (st) for (const [k, v] of Object.entries(st)) if (k !== 'k' && v != null && d[k] == null) d[k] = v; return d; } // última configuración usada en esa herramienta
+function withLastStyle(d) { const st = (state.lastStyle || {})[tplKind(d)]; if (st) for (const [k, v] of Object.entries(st)) if (k !== 'k' && v != null && d[k] == null) d[k] = v; if (state.smartAuto && isPos(d) && !d.sm) d.sm = smartNew(); return d; } // última configuración usada en esa herramienta
 function commitDrawing(a, b, c) { const k = drawPaneKey; if (k && dPaneOf(k) && !commitDrawing._in) { commitDrawing._in = true; try { return withPane(k, () => commitDrawing(a, b, c)); } finally { commitDrawing._in = false; } }
   const one = ONEPT.includes(drawTool), three = THREEPT.includes(drawTool);
   if (!one) {
@@ -4818,14 +4873,19 @@ function drawShapeExtra(d, a, b, rightX, col) {
   else if (t === 'long' || t === 'short') {
     const q = posBox(d), lg = t === 'long', gc = d.gc || '#089981', rc = d.rc || '#f23645', w = q.x2 - q.x1, lw = d.lw || 1.2, ds = d.ds === 'dash' ? [7, 5] : d.ds === 'dot' ? [1.5, 4] : [];
     g.globalAlpha = dOpt(d, 'zo') / 100; g.fillStyle = gc; g.fillRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
-    g.fillStyle = rc; g.fillRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE)); g.globalAlpha = 1;
+    if (!q.locked) { g.fillStyle = rc; g.fillRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE)); } g.globalAlpha = 1;
     g.lineWidth = lw; g.setLineDash(ds); if (dOpt(d, 'bd')) { g.strokeStyle = gc; g.strokeRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
-      g.strokeStyle = rc; g.strokeRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE)); }
+      if (!q.locked) { g.strokeStyle = rc; g.strokeRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE)); } }
+    if (q.locked) { g.save(); g.strokeStyle = rc; g.lineWidth = 1.4; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(q.x1, q.yS); g.lineTo(q.x2, q.yS); g.stroke(); g.restore(); } // stop asegurado dentro de la zona de ganancia
     g.strokeStyle = dOpt(d, 'ec'); g.beginPath(); g.moveTo(q.x1, q.yE); g.lineTo(q.x2, q.yE); g.stroke(); g.setLineDash([]);
     const pc = v => dOpt(d, 'pc') ? ` (${pct((v - q.entry) / q.entry * 100)})` : '', tc = d.tc || '#fff', fs = d.ts ? Math.max(9, d.ts - 3) : 10;
-    if (!d.nt) tag(d.label ? d.label : `${lg ? 'Long' : 'Short'} · R:R ${(Math.abs(q.target - q.entry) / (Math.abs(q.entry - q.stop) || 1)).toFixed(2)}`, q.x1, q.yE, '#5b6b83', 'left', tc, fs);
+    if (!d.nt) tag(d.label ? d.label : `${lg ? 'Long' : 'Short'} · R:R ${(Math.abs(q.target - q.entry) / (Math.abs(q.entry - q.s0) || 1)).toFixed(2)}`, q.x1, q.yE, '#5b6b83', 'left', tc, fs);
     if (!d.no) tag(`Objetivo ${fmt(q.target)}${pc(q.target)}`, q.x1, q.yT + (q.yT < q.yE ? -11 : 11), gc, 'left', tc, fs);
-    if (!d.ns) tag(`Stop ${fmt(q.stop)}${pc(q.stop)}`, q.x1, q.yS + (q.yS < q.yE ? -11 : 11), rc, 'left', tc, fs);
+    if (!d.ns) tag(`${q.locked ? 'Stop asegurado' : 'Stop'} ${fmt(q.stop)}${pc(q.stop)}`, q.x1, q.yS + (q.locked ? 11 * (q.yT < q.yE ? 1 : -1) : (q.yS < q.yE ? -11 : 11)), rc, 'left', tc, fs);
+    if (d.sm && d.sm.on) { const m = d.sm, R0 = Math.abs(q.entry - (m.s0 || q.stop)) || 1, last = candles.length ? candles[candles.length - 1].c : q.entry, cur = (last - q.entry) * (lg ? 1 : -1) / R0, lock = (q.stop - q.entry) * (lg ? 1 : -1) / R0;
+      const txt = m.phase === 'wait' ? 'Inteligente · esperando la entrada' : m.phase === 'out' ? (m.res === 'tp' ? 'Inteligente · objetivo alcanzado' : m.res === 'sl' ? 'Inteligente · salió en el stop (1R)' : m.res === 'be' ? 'Inteligente · salió en la entrada' : `Inteligente · cerró asegurando ${lock.toFixed(1)}R`)
+        : `Inteligente · ${cur >= 0 ? '+' : ''}${cur.toFixed(2)}R${lock >= -.01 ? (lock > .2 ? ` · aseguras ${lock.toFixed(1)}R` : ' · stop en la entrada') : ''}`;
+      tag(txt, q.x2 + 6, q.yE, m.phase === 'out' ? (m.res === 'tp' || m.res === 'trail' ? gc : m.res === 'sl' ? rc : '#5b6b83') : 'rgba(84,143,255,.85)', 'left', '#fff', Math.max(9, fs - 1)); }
     const RK = state.risk || {}, cap = riskCap(); // tamaño de posición según tu riesgo (calculadora)
     if (RK.show !== false && cap > 0 && window.CCTRisk && !d.nr) { const r = CCTRisk.calc({capital: cap, riskPct: RK.pct, entry: q.entry, stop: q.stop, target: q.target, leverage: RK.lev, feePct: RK.fee});
       if (r.ok) tag(`Tamaño ${fmtQty(r.qty)} (${usd(r.notional)}) · x${r.lev} · arriesgas ${usd(r.loss)}${r.warn.length && /liquidar/.test(r.warn[0]) ? ' · ⚠ liquidación antes del stop' : ''}`, q.x1, q.yE + (q.yS > q.yE ? 13 : -13), '#2a3446', 'left', tc, Math.max(9, fs - 1)); }
@@ -6963,6 +7023,19 @@ window.CCT_pixel = {
   fit: () => { try { resetChart(); return true; } catch { return false; } },
   undo: () => { const b = $('#undoDraw'); if (b) { b.click(); return true; } return false; },
   setCfg(c) { state.pixel = sanPixel(Object.assign({}, c, {at: Date.now()})); save(); try { window.dispatchEvent(new CustomEvent('cct-pixel-cfg', {detail: state.pixel})); } catch {} return state.pixel; }
+};
+/* Lo que Nexus Pixel (y la IA) ven además de las velas: derivados (funding, interés abierto, long/short), zonas de liquidación
+   y tus cajas inteligentes. Texto corto; vacío si no hay datos. */
+window.CCT_marketExtra = function () {
+  const L = [];
+  try { const fs = dvSym(), S = fs && window.CCTDerivs && CCTDerivs.summary(fs); if (S) { const p = (v, d = 3) => Number.isFinite(v) ? (v >= 0 ? '+' : '') + v.toFixed(d) + '%' : '—';
+    L.push(`DERIVADOS (Binance Futures, ${fs}): funding ${p(S.fund, 4)} cada 8 h · interés abierto ${dvBig(S.oiUsd)} (${p(S.oiChg, 2)} en 24 h)${Number.isFinite(S.ls) ? ` · ratio long/short de cuentas ${S.ls.toFixed(2)} (${S.longPct.toFixed(0)}% en largo)` : ''}${Number.isFinite(S.basis) ? ` · prima mark/índice ${p(S.basis, 3)}` : ''}`);
+    const r = CCTDerivs.reading(S, dvPriceChg24()); if (r) L.push('LECTURA DE DERIVADOS: ' + r); } } catch {}
+  try { if (ind.lm && window.CCTIndicators && CCTIndicators.liqClusters && candles.length) { const px = candles[candles.length - 1].c, C = CCTIndicators.liqClusters(ind.lm, px, 3), f = q => `${fmt(q.p)} (${((q.p / px - 1) * 100).toFixed(2)}%, ${q.side === 'long' ? 'largos' : 'cortos'})`;
+    L.push(`ZONAS DE LIQUIDACIÓN (imanes del mapa de calor): arriba ${C.up.map(f).join(', ') || '—'}; abajo ${C.dn.map(f).join(', ') || '—'}`);
+    const s1 = window.CCTLiqLive && CCTLiqLive.sum(ind.lm.fs, 36e5); if (s1 && (s1.l || s1.s)) L.push(`LIQUIDADO DE VERDAD en la última hora: largos $${liqShort(s1.l)} · cortos $${liqShort(s1.s)}`); } } catch {}
+  try { const bx = getDrawings().filter(d => isPos(d) && d.sm && d.sm.on); for (const d of bx.slice(0, 3)) { const m = d.sm; L.push(`CAJA INTELIGENTE ${d.type.toUpperCase()}: entrada ${fmt(d.a.p)}, stop ${fmt(posStop(d))}, objetivo ${fmt(d.b.p)} · ${m.phase === 'wait' ? 'esperando la entrada' : m.phase === 'live' ? 'activa' : 'terminada (' + (m.res || '') + ')'}`); } } catch {}
+  return L.join('\n');
 };
 window.CCT_getAIContext = function () {
   const n = candles.length; if (n < 30) return null;
