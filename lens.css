@@ -303,3 +303,23 @@
 .ln-exw{display:flex;flex-direction:column;align-items:center;gap:3px}
 .ln-fut{font-size:9.5px;font-weight:650;letter-spacing:.3px;color:var(--muted);white-space:nowrap}
 .ln-fut.big{display:inline-block;margin:-2px 0 10px;padding:3px 9px;border-radius:999px;background:var(--raised);font-size:10.5px}
+
+/* ───── Diario de cada operación (setup, emoción, errores y nota) ───── */
+button.ln-tr{width:100%;background:none;border:0;border-bottom:1px solid var(--line);color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:0;transition:background .2s}
+button.ln-tr:hover,button.ln-tr.open{background:rgba(255,255,255,.035)}
+.light button.ln-tr:hover,.light button.ln-tr.open{background:rgba(0,0,0,.035)}
+.ln-ntag{font-style:normal;font-size:9.5px;font-weight:650;color:var(--muted);border:1px solid var(--glass-line,var(--line));border-radius:999px;padding:1px 7px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ln-ned{padding:4px 4px 12px 14px;border-bottom:1px solid var(--line);animation:lnNed .22s ease}
+@keyframes lnNed{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.ln-ned h5{margin:10px 0 6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ln-ncs{display:flex;flex-wrap:wrap;gap:5px}
+.ln-nc{border:1px solid var(--glass-line,var(--line));background:transparent;color:var(--muted);font:inherit;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;cursor:pointer;transition:all .18s}
+.ln-nc:hover{color:var(--text)}
+.ln-nc.on{background:var(--raised);color:var(--text);border-color:var(--glass-hi,var(--accent))}
+.ln-nc.add{border-style:dashed}
+.ln-nta{width:100%;box-sizing:border-box;resize:vertical;min-height:64px;background:rgba(255,255,255,.03);border:1px solid var(--glass-line,var(--line));border-radius:12px;color:var(--text);font:inherit;font-size:12px;padding:9px 11px;outline:none}
+.ln-nta:focus{border-color:var(--glass-hi,var(--accent))}
+.light .ln-nta{background:rgba(0,0,0,.025)}
+.ln-btn2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ln-btn2 .ln-wide{margin-top:12px}
+.ln-card .ln-rows+.ln-sub{margin-top:12px}

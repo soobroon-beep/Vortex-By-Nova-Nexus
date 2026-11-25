@@ -47,6 +47,51 @@
   let calY = new Date().getFullYear(), calM = new Date().getMonth(), calSel = '';
   let ai = {busy: false, kind: '', text: '', model: '', err: '', note: ''}, chat = [], posAi = {}, aiCtl = null;
 
+  /* ───────── Diario de cada operación (antes en «Diario de trading»): setup, emoción, errores y nota ─────────
+     Se guarda por cuenta (este navegador + users/<uid>/data/lens_notes) y se mezcla por fecha: nunca se pisa lo más nuevo. */
+  const NOTES = 'cct_lens_notes_v1', TAGS = ['Ruptura', 'Retesteo', 'Tendencia', 'Rango', 'Reversión', 'Noticia', 'Scalp', 'Swing'];
+  const MOODS = ['Disciplinado', 'Confiado', 'Dudoso', 'Impulsivo', 'Miedo', 'Codicia'], ERRS = ['Entré tarde', 'Sin plan', 'Moví el stop', 'Cerré antes', 'Sobreapalancado', 'Operé por venganza'];
+  let N = (() => { try { const o = JSON.parse(localStorage.getItem(NOTES) || 'null'); if (o && o.map) return o; } catch {} return {owner: '', map: {}}; })(), noteSel = '', noteT = 0, notesPulled = '';
+  const tKey = t => String(t.id || (t.sym + '|' + t.ts));
+  const noteOf = t => N.map[tKey(t)] || null;
+  const hasNote = n => !!(n && ((n.tags || []).length || n.mood || (n.errs || []).length || (n.note || '').trim()));
+  function notesSave() {
+    const u = cuid(); if (u && N.owner && N.owner !== u) N = {owner: u, map: {}}; if (u) N.owner = u;
+    if (demo) return; // la cuenta de ejemplo no se guarda
+    try { localStorage.setItem(NOTES, JSON.stringify({owner: N.owner, map: Object.fromEntries(Object.entries(N.map).filter(([k]) => !k.startsWith('demo')))})); } catch {}
+    clearTimeout(noteT); noteT = setTimeout(notesPush, 2500);
+  }
+  async function notesPull() {
+    const C = root.CCTCloudPriv, u = cuid(); if (!C || !C.ready || !C.ready() || !u || notesPulled === u) return; notesPulled = u;
+    if (N.owner && N.owner !== u) N = {owner: u, map: {}};
+    try { const d = await C.get('lens_notes'); let m = {}; try { m = d && d.items ? JSON.parse(d.items) : {}; } catch {} let ch = false;
+      for (const [k, v] of Object.entries(m || {})) { const cur = N.map[k]; if (v && (!cur || (v.at || 0) > (cur.at || 0))) { N.map[k] = v; ch = true; } }
+      N.owner = u; try { localStorage.setItem(NOTES, JSON.stringify(N)); } catch {} if (ch && visible()) paint(); } catch {}
+  }
+  async function notesPush() {
+    const C = root.CCTCloudPriv, u = cuid(); if (!C || !C.ready || !C.ready() || !u) return;
+    try { const keep = Object.entries(N.map).filter(([k, v]) => !k.startsWith('demo') && hasNote(v)).sort((a, b) => (b[1].at || 0) - (a[1].at || 0)).slice(0, 1500); await C.set('lens_notes', {items: JSON.stringify(Object.fromEntries(keep)), at: Date.now()}); } catch {}
+  }
+  function noteSet(key, fn) { const n = N.map[key] || (N.map[key] = {tags: [], mood: '', errs: [], note: ''}); fn(n); n.at = Date.now(); notesSave(); return n; }
+  function noteEditor(t) {
+    const n = noteOf(t) || {}, k = tKey(t), chip = (kind, v, on) => `<button type="button" class="ln-nc${on ? ' on' : ''}" data-ln-nk="${kind}" data-ln-nv="${esc(v)}" data-ln-nid="${esc(k)}">${esc(v)}</button>`;
+    return `<div class="ln-ned" data-ln-ned="${esc(k)}">
+      <h5>Setup</h5><div class="ln-ncs">${TAGS.map(v => chip('tag', v, (n.tags || []).includes(v))).join('')}${(n.tags || []).filter(v => !TAGS.includes(v)).map(v => chip('tag', v, true)).join('')}<button type="button" class="ln-nc add" data-ln-newtag="${esc(k)}">+ Otro</button></div>
+      <h5>Cómo me sentí</h5><div class="ln-ncs">${MOODS.map(v => chip('mood', v, n.mood === v)).join('')}</div>
+      <h5>Errores</h5><div class="ln-ncs">${ERRS.map(v => chip('err', v, (n.errs || []).includes(v))).join('')}</div>
+      <h5>Nota</h5><textarea class="ln-nta" data-ln-nta="${esc(k)}" rows="3" maxlength="4000" placeholder="¿Por qué entraste? ¿Qué harías distinto?">${esc(n.note || '')}</textarea></div>`;
+  }
+  function csv() {
+    if (!M) return; const rows = [['Fecha cierre', 'Par', 'Lado', 'Resultado USD', 'R', 'Salida', 'Comisión', 'Setup', 'Emoción', 'Errores', 'Nota']];
+    for (const t of M.T.slice().reverse()) { const n = noteOf(t) || {}; rows.push([new Date(t.ts).toISOString(), t.sym, t.side === 'long' ? 'Long' : t.side === 'short' ? 'Short' : '', t.pnl.toFixed(2), (t.pnl / M.R).toFixed(2), fin(t.exit) ? t.exit : '', fin(t.fee) ? t.fee : '', (n.tags || []).join(' | '), n.mood || '', (n.errs || []).join(' | '), n.note || '']); }
+    const txt = '\ufeff' + rows.map(r => r.map(v => /[",\n;]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(',')).join('\n');
+    const a = doc.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], {type: 'text/csv'})); a.download = `nexus-lens-${new Date().toISOString().slice(0, 10)}.csv`; doc.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function journalStats() { // por setup y errores, con las operaciones que tienen nota
+    const by = (keys) => { const m = new Map(); for (const t of M.T) { const n = noteOf(t); if (!n) continue; for (const k of keys(n)) { const o = m.get(k) || {n: 0, pnl: 0, w: 0}; o.n++; o.pnl += t.pnl; if (t.pnl > 0) o.w++; m.set(k, o); } } return [...m.entries()].map(([k, v]) => Object.assign({k, wr: v.n ? v.w / v.n : 0}, v)); };
+    return {tags: by(n => n.tags || []).sort((a, b) => b.pnl - a.pnl), errs: by(n => n.errs || []).sort((a, b) => a.pnl - b.pnl), moods: by(n => n.mood ? [n.mood] : []).sort((a, b) => b.pnl - a.pnl)};
+  }
+
   /* ───────── Formatos ───────── */
   const money = (v, d = 2) => fin(v) ? (v < 0 ? '−' : '') + '$' + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d}) : '—';
   const pnlTxt = (v, d = 2) => fin(v) ? (v > 0 ? '+' : v < 0 ? '−' : '') + '$' + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d}) : '—';
@@ -312,9 +357,10 @@
     if (P.filter === 'long') list = list.filter(t => t.side === 'long'); else if (P.filter === 'short') list = list.filter(t => t.side === 'short'); else if (P.filter === 'win') list = list.filter(t => t.pnl > 0); else if (P.filter === 'loss') list = list.filter(t => t.pnl < 0);
     const shown = list.slice(0, 120);
     h += card(`Operaciones <em>${list.length}</em>`, `<div class="ln-chips2">${[['all', 'Todas'], ['long', 'Long'], ['short', 'Short'], ['win', 'Ganadas'], ['loss', 'Perdidas']].map(([v, t]) => `<button type="button" data-ln-filter="${v}" aria-pressed="${P.filter === v}">${t}</button>`).join('')}</div>
-      <div class="ln-tl">${shown.length ? shown.map(t => { const r = t.pnl / M.R, d = new Date(t.ts); return `<div class="ln-tr"><span class="ln-sbar ${t.side || 'na'}"></span><div class="ln-tr-m"><b>${esc(t.sym)}${t.side ? `<i class="ln-side ${t.side}">${t.side === 'long' ? 'L' : 'S'}</i>` : ''}</b><small>${d.toLocaleDateString('es-MX', {day: 'numeric', month: 'short'})} · ${d.toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit'})}${fin(t.exit) ? ' · ' + px(t.exit) : ''}</small></div><div class="ln-tr-v"><b class="${tone(t.pnl)}">${pnlTxt(t.pnl)}</b><small class="${tone(r)}">${(r >= 0 ? '+' : '') + r.toFixed(2)}R</small></div></div>`; }).join('') : `<div class="ln-none">Sin operaciones con este filtro.</div>`}</div>
+      <div class="ln-tl">${shown.length ? shown.map(t => { const r = t.pnl / M.R, d = new Date(t.ts), n = noteOf(t), k = tKey(t), open = noteSel === k, tg = hasNote(n) ? [...(n.tags || []), n.mood].filter(Boolean).slice(0, 2).join(' · ') || 'Nota' : ''; return `<button type="button" class="ln-tr${open ? ' open' : ''}" data-ln-note="${esc(k)}" aria-expanded="${open}" title="Anotar setup, emoción, errores y nota"><span class="ln-sbar ${t.side || 'na'}"></span><div class="ln-tr-m"><b>${esc(t.sym)}${t.side ? `<i class="ln-side ${t.side}">${t.side === 'long' ? 'L' : 'S'}</i>` : ''}${tg ? `<i class="ln-ntag">${esc(tg)}</i>` : ''}</b><small>${d.toLocaleDateString('es-MX', {day: 'numeric', month: 'short'})} · ${d.toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit'})}${fin(t.exit) ? ' · ' + px(t.exit) : ''}</small></div><div class="ln-tr-v"><b class="${tone(t.pnl)}">${pnlTxt(t.pnl)}</b><small class="${tone(r)}">${(r >= 0 ? '+' : '') + r.toFixed(2)}R</small></div></button>${open ? noteEditor(t) : ''}`; }).join('') : `<div class="ln-none">Sin operaciones con este filtro.</div>`}</div>
       ${list.length > shown.length ? `<p class="ln-note">Mostrando las ${shown.length} más recientes.</p>` : ''}
-      <button type="button" class="small-button ln-wide" data-ln="copy">${svg(IC.copy, 15)} Copiar resumen</button>`);
+      <p class="ln-note">Toca una operación para anotar su setup, cómo te sentiste, tus errores y una nota.</p>
+      <div class="ln-btn2"><button type="button" class="small-button ln-wide" data-ln="copy">${svg(IC.copy, 15)} Copiar resumen</button><button type="button" class="small-button ln-wide" data-ln="csv">${svg(IC.list, 15)} Exportar CSV</button></div>`);
     return h;
   }
 
@@ -344,6 +390,10 @@
     // horas
     const hm = Math.max(1, ...M.hours.map(v => v.n));
     h += card('Mapa por hora', `<div class="ln-heat">${M.hours.map((v, i) => `<div class="ln-hc ${v.n ? tone(v.pnl) : ''}" style="--a:${v.n ? (0.12 + v.n / hm * .6).toFixed(2) : 0}" title="${i}:00 · ${v.n} ops · ${pnlTxt(v.pnl)}"><span>${v.n || ''}</span></div>`).join('')}</div><div class="ln-heat-x"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div><p class="ln-note">Intensidad = cantidad de operaciones · color = resultado neto. Hora local.</p>`);
+    // diario: setups, emociones y errores anotados
+    { const J = journalStats(), mxOf = a => Math.max(1e-9, ...a.map(v => Math.abs(v.pnl))), rows = a => { const mx = mxOf(a); return `<div class="ln-rows">${a.slice(0, 8).map(v => hbar(v.k, v, mx)).join('')}</div>`; };
+      if (J.tags.length || J.errs.length || J.moods.length) h += card('Tu diario', (J.tags.length ? `<div class="ln-sub">Por setup</div>${rows(J.tags)}` : '') + (J.errs.length ? `<div class="ln-sub">Errores más caros</div>${rows(J.errs)}` : '') + (J.moods.length ? `<div class="ln-sub">Por emoción</div>${rows(J.moods)}` : ''), `<span class="ln-tag">de tus notas</span>`);
+      else h += card('Tu diario', `<div class="ln-none">${svg(IC.info, 18)} Anota tus operaciones en <b>Trades</b> (setup, emoción, errores) y aquí verás cuáles te dan dinero y cuáles te cuestan.</div>`); }
     // pares
     const pr = M.pairs.slice(), sorted = P.pairs === 'n' ? pr.sort((a, b) => b.n - a.n) : P.pairs === 'worst' ? pr.sort((a, b) => a.pnl - b.pnl) : pr.sort((a, b) => b.pnl - a.pnl), pm = Math.max(1e-9, ...pr.map(p => P.pairs === 'n' ? p.n : Math.abs(p.pnl)));
     h += card('Pares', `<div class="ln-rows">${sorted.slice(0, 8).map(p => `<div class="ln-row"><b>${esc(p.sym)}</b><div class="ln-hb"><i class="${P.pairs === 'n' ? 'acc' : tone(p.pnl)}" style="width:${((P.pairs === 'n' ? p.n : Math.abs(p.pnl)) / pm * 100).toFixed(1)}%"></i></div><span class="ln-rv"><b class="${tone(p.pnl)}">${shortS(p.pnl)}</b><small>${p.n} ops · ${pct(p.wr, 0)}</small></span></div>`).join('')}</div>`, seg('pairs', P.pairs, [['pnl', 'Mejores'], ['worst', 'Peores'], ['n', 'Más operados']]));
@@ -428,6 +478,10 @@
       t += `- Pares: ${M.pairs.slice().sort((a, b) => b.n - a.n).slice(0, 10).map(p => `${p.sym} ${p.n} ops ${pnlTxt(p.pnl)} WR ${pct(p.wr, 0)}`).join(' · ')}${NL}`;
       t += `- Conducta: ${M.tpd.toFixed(1)} ops/día (máx ${M.maxDay}) · siguiente op. tras perder ${pnlTxt(M.rev.afterLoss)} vs tras ganar ${pnlTxt(M.rev.afterWin)} · reentradas <30 min tras perder: ${M.quick.n} (${pnlTxt(M.quick.pnl)})${M.rev.hasSize && M.rev.size ? ` · tamaño tras perder ${Math.round((M.rev.sizeL / M.rev.size) * 100)}% del promedio` : ''}${NL}`;
       t += `ÚLTIMAS 20 OPERACIONES:${NL}${M.T.slice(-20).reverse().map(x => `- ${new Date(x.ts).toLocaleString('es-MX', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'})} ${x.sym} ${x.side ? x.side.toUpperCase() : '?'} ${pnlTxt(x.pnl)}${fin(x.exit) ? ' @' + px(x.exit) : ''}`).join(NL)}${NL}`;
+      { const J = journalStats(), f = a => a.slice(0, 6).map(v => `${v.k} ${v.n} ops ${pnlTxt(v.pnl)} WR ${pct(v.wr, 0)}`).join(' · ');
+        if (J.tags.length || J.errs.length || J.moods.length) t += `DIARIO DEL TRADER (sus notas):${NL}${J.tags.length ? `- Setups: ${f(J.tags)}${NL}` : ''}${J.errs.length ? `- Errores: ${f(J.errs)}${NL}` : ''}${J.moods.length ? `- Emociones: ${f(J.moods)}${NL}` : ''}`;
+        const ns = M.T.slice(-40).reverse().map(x => [x, noteOf(x)]).filter(([, n]) => n && (n.note || '').trim()).slice(0, 6);
+        if (ns.length) t += `NOTAS RECIENTES:${NL}${ns.map(([x, n]) => `- ${x.sym} ${pnlTxt(x.pnl)}: ${String(n.note).replace(/\s+/g, ' ').slice(0, 160)}`).join(NL)}${NL}`; }
     } else t += `Sin operaciones cerradas en el historial.${NL}`;
     if (pos.length) {
       t += `POSICIONES ABIERTAS:${NL}`;
@@ -518,6 +572,9 @@ Reglas:
 
   function onClick(e) {
     const t = e.target, b = t.closest('button'); if (!b || !host.contains(b)) return;
+    if (b.dataset.lnNote) { noteSel = noteSel === b.dataset.lnNote ? '' : b.dataset.lnNote; return paint(); }
+    if (b.dataset.lnNk) { const {lnNk: kind, lnNv: v, lnNid: k} = b.dataset; noteSet(k, n => { if (kind === 'mood') n.mood = n.mood === v ? '' : v; else { const f = kind === 'tag' ? 'tags' : 'errs'; n[f] = (n[f] || []).includes(v) ? n[f].filter(x => x !== v) : [...(n[f] || []), v]; } }); return paint(); }
+    if (b.dataset.lnNewtag) { const v = (root.prompt('Nombre del setup:') || '').trim().slice(0, 24); if (v) { noteSet(b.dataset.lnNewtag, n => { n.tags = [...new Set([...(n.tags || []), v])]; }); paint(); } return; }
     if (b.dataset.lnTab) { P.tab = b.dataset.lnTab; saveP(); paint(); (host.closest('.view') || host).scrollTop = 0; return; }
     if (b.dataset.lnRange) { P.range = b.dataset.lnRange; saveP(); return paint(); }
     if (b.dataset.lnFilter) { P.filter = b.dataset.lnFilter; saveP(); return paint(); }
@@ -529,6 +586,7 @@ Reglas:
     if (b.dataset.lnChart) { const s = b.dataset.lnChart + 'USDT'; try { if (root.CCT_pixel && root.CCT_pixel.openSymbol) root.CCT_pixel.openSymbol(s); } catch {} return; }
     const a = b.dataset.ln; if (!a) return;
     if (a === 'sync') return load(true);
+    if (a === 'csv') return csv();
     if (a === 'demo') { demo = true; P.tab = 'home'; return load(); }
     if (a === 'demo-off') { demo = false; D = {trades: [], at: 0, src: '', spot: false, err: '', ex: ''}; M = null; return load(); }
     if (a === 'cal-prev') { calM--; if (calM < 0) { calM = 11; calY--; } calSel = ''; return paint(); }
@@ -545,11 +603,13 @@ Reglas:
     if (host) return true;
     host = doc.getElementById('lensRoot'); if (!host) return false;
     host.addEventListener('click', onClick); host.addEventListener('submit', onSubmit);
+    host.addEventListener('input', e => { const ta = e.target.closest && e.target.closest('[data-ln-nta]'); if (!ta) return; const k = ta.dataset.lnNta, v = ta.value.slice(0, 4000); noteSet(k, n => { n.note = v; }); });
+    host.addEventListener('focusout', e => { if (e.target.closest && e.target.closest('[data-ln-nta]')) { const r = host.querySelector(`[data-ln-note="${CSS.escape(e.target.dataset.lnNta)}"] .ln-tr-m b`); if (r && !r.querySelector('.ln-ntag') && (e.target.value || '').trim()) r.insertAdjacentHTML('beforeend', '<i class="ln-ntag">Nota</i>'); } });
     if (root.ResizeObserver) { let rt = 0; new ResizeObserver(() => { if (!host.clientWidth || Math.abs(host.clientWidth - lastW) < 2) return; clearTimeout(rt); rt = setTimeout(() => { lastW = host.clientWidth; mountCharts(); }, 120); }).observe(host); }
     return true;
   }
   /* Abrir (lo llama app.js al mostrar la sección) */
-  function open() { if (!mount()) return; paint(); load(false); }
+  function open() { if (!mount()) return; paint(); load(false); notesPull(); }
   /* El exchange cambió (lectura nueva, conectado o desconectado) */
   let snapT = 0, lastId = '';
   function wire() {
@@ -557,7 +617,7 @@ Reglas:
     X.onChange(s => {
       try { if (s && fin(s.equity) && s.equity >= 0) root.postMessage({cct: 'equity', value: s.equity}, root.location.origin); } catch {} // barra de saldo de la cuenta (abajo del gráfico)
       const info = X.info(), id = info ? info.id : ''; if (id !== lastId) { lastId = id; if (demo && id) demo = false; if (visible()) { load(true); return; } D.ex = ''; }
-      if (!visible() || demo) return; clearTimeout(snapT); snapT = setTimeout(() => { if (M) compute(); if (!(host.querySelector('.ln-ask input') === doc.activeElement)) paint(); }, 250);
+      if (!visible() || demo) return; clearTimeout(snapT); snapT = setTimeout(() => { if (M) compute(); const ae = doc.activeElement; if (!(ae && host.contains(ae) && ae.matches('input, textarea'))) paint(); }, 250);
     });
   }
   root.addEventListener('vx-exchange-changed', () => { if (visible()) load(true); });
