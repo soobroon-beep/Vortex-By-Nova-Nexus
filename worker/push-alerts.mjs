@@ -736,11 +736,10 @@ async function scrExt(req, env) {
   if ((+st[tf] || 0) >= slot) return J({ok: true, skip: 'ya enviado'});
   const rows = (Array.isArray(b.rows) ? b.rows : []).slice(0, 60).filter(r => r && /^[A-Z0-9]{2,20}$/.test(r.symbol) && r.sg && typeof r.sg === 'object')
     .map(r => ({symbol: r.symbol, price: +r.price || 0, sg: {side: r.sg.side === 'buy' ? 'buy' : 'sell', range: !!r.sg.range, div: !!r.sg.div, score: +r.sg.score || 0, age: +r.sg.age || 1, ago: +r.sg.ago || 0}}));
-  st[tf] = slot; st.lock = 0; st.err = null; st.last = Object.assign(st.last || {}, {[tf]: {at: now, n: rows.length, of: +b.of || 0, discord: rows.length > 0, pushed: 0, by: 'motor'}});
-  await env.KV.put('scr', JSON.stringify(st));
+  await scrPatch(env, s => { s[tf] = Math.max(+s[tf] || 0, slot); s.err = null; s.last = Object.assign(s.last || {}, {[tf]: {at: now, n: rows.length, of: +b.of || 0, discord: rows.length > 0, pushed: 0, by: 'motor'}}); });
   let pushed = 0, radar = null;
   if (rows.length) { try { const t = SCR.pushText(tf, rows); pushed = (await self(env, '/scr/push', {tf, msg: {title: t.title, body: t.body, tag: 'scr-' + tf, url: APP_URL + '#screener'}})).sent; } catch (e) { console.error('push', e.message); } }
-  if (pushed) { st.last[tf].pushed = pushed; await env.KV.put('scr', JSON.stringify(st)); }
+  if (pushed) await scrPatch(env, s => { if (s.last && s.last[tf]) s.last[tf].pushed = pushed; });
   try { radar = await self(env, '/radar/run', {tf, now, rows: rows.map(r => ({symbol: r.symbol, sg: r.sg}))}); } catch (e) { radar = {error: e.message}; }
   return J({ok: true, claimed: true, pushed, radar: radar && (radar.error || 'ok')});
 }
@@ -807,12 +806,18 @@ async function self(env, path, body) {
   const r = env.SELF ? await env.SELF.fetch('https://vortex-push.internal' + path, init) : await scrInternal(new Request('https://x' + path, init), env, path);
   if (!r.ok) throw new Error(path + ' HTTP ' + r.status); return r.json();
 }
+/* El estado del Screener lo escriben dos: el Motor (/ext/scr) y esta ronda de respaldo. Antes cada uno guardaba la copia que leyó al
+   empezar: si el respaldo fallaba un minuto después, borraba lo que el Motor acababa de anotar (sobre todo la franja 4h, que sale
+   segundos después de la 1h) y el Vigía la daba por perdida. Ahora se relee justo antes de guardar y solo se cambia lo propio. */
+async function scrPatch(env, fn) { const s = (await env.KV.get('scr', 'json')) || {}; fn(s); await env.KV.put('scr', JSON.stringify(s)); return s; }
+export const MOTOR_GRACE_MIN = 6; // el Motor manda la franja al minuto 1-2; el servidor solo entra de respaldo si a los 6 min nadie la mandó
 async function scrKick(env, now = Date.now()) {
   const st = (await env.KV.get('scr', 'json')) || {}, tf = SCR.dueTf(st, now); if (!tf) return null;
+  if ((now - SCR.slotOf(tf, now) * SCR.SLOT_MS[tf]) / 6e4 < MOTOR_GRACE_MIN) return null;
   if (st.lock && now - st.lock < 4 * 6e4) return null; // otra ronda ya está trabajando
-  st.lock = now; st.kick = {at: now, tf}; await env.KV.put('scr', JSON.stringify(st));
+  await scrPatch(env, s => { s.lock = now; s.kick = {at: now, tf}; });
   try { return await self(env, '/scr/run', {tf, now}); }
-  catch (e) { const s2 = (await env.KV.get('scr', 'json')) || st; s2.lock = 0; s2.err = {at: Date.now(), tf, why: 'run: ' + String(e && e.message || e).slice(0, 200)}; await env.KV.put('scr', JSON.stringify(s2)); throw e; }
+  catch (e) { await scrPatch(env, s2 => { s2.lock = 0; s2.err = {at: Date.now(), tf, why: 'run: ' + String(e && e.message || e).slice(0, 200)}; }); throw e; }
 }
 async function pool(items, n, fn) { const out = []; let k = 0; await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => { while (k < items.length) { const i = k++; out[i] = await fn(items[i]).catch(e => ({error: e.message})); } })); return out; }
 async function scrInternal(req, env, path) {
@@ -858,7 +863,7 @@ async function scrInternal(req, env, path) {
   }
   if (path === '/scr/run') {
     const st = (await env.KV.get('scr', 'json')) || {}, slot = SCR.slotOf(tf, now);
-    const release = async (why) => { st.lock = 0; st.err = {at: Date.now(), tf, why}; await env.KV.put('scr', JSON.stringify(st)); return J({ok: false, why}); };
+    const release = async (why) => { await scrPatch(env, s => { s.lock = 0; if ((+s[tf] || 0) < slot) s.err = {at: Date.now(), tf, why}; }); return J({ok: false, why}); };
     if ((+st[tf] || 0) >= slot) return J({ok: true, skip: 'ya enviado'});
     let top, c = await env.KV.get('scrtop', 'json'); // la lista del top se guarda 3 h (leerla de Binance es lo que más CPU gasta)
     if (c && Date.now() - c.at < 3 * 36e5 && Array.isArray(c.top) && c.top.length >= 10) top = c.top;
@@ -872,13 +877,13 @@ async function scrInternal(req, env, path) {
     const failed = retry.filter(x => x !== 'ok').length, done = top.length - failed;
     if (done < top.length * .6) return release(`solo ${done}/${top.length} monedas`);
     SCR.sortRows(rows);
+    if ((+((await env.KV.get('scr', 'json')) || {})[tf] || 0) >= slot) { await scrPatch(env, s => { s.lock = 0; }); return J({ok: true, skip: 'ya lo mandó el Motor'}); } // sin duplicados en Discord
     let discord = false, pushed = 0;
     if (rows.length) {
       try { discord = await SCR.postDiscord(String(env.DISCORD_WEBHOOK || '').trim(), SCR.F.signalEmbeds(tf, rows, top.map(t => t.symbol))); } catch (e) { console.error('discord', e.message); }
       try { const t = SCR.pushText(tf, rows); pushed = (await self(env, '/scr/push', {tf, msg: {title: t.title, body: t.body, tag: 'scr-' + tf, url: APP_URL + '#screener'}})).sent; } catch (e) { console.error('push', e.message); }
     }
-    st[tf] = slot; st.lock = 0; st.err = null; st.last = Object.assign(st.last || {}, {[tf]: {at: Date.now(), n: rows.length, of: done, discord, pushed}});
-    await env.KV.put('scr', JSON.stringify(st));
+    await scrPatch(env, s => { s[tf] = Math.max(+s[tf] || 0, slot); s.lock = 0; s.err = null; s.last = Object.assign(s.last || {}, {[tf]: {at: Date.now(), n: rows.length, of: done, discord, pushed}}); });
     let radar = null; try { radar = await self(env, '/radar/run', {tf, now, rows: rows.map(r => ({symbol: r.symbol, sg: r.sg}))}); } catch (e) { radar = {error: e.message}; } // el radar revisa lo que encontró el Screener
     return J({ok: true, tf, n: rows.length, of: done, discord, pushed, radar});
   }

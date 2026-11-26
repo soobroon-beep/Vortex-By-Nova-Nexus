@@ -231,8 +231,9 @@ function parse(T) {
   }
   function parseFor() {
     const line = next().line;
-    if (isOp('[')) { next(); const a = identTok().v; expectOp(','); const b = identTok().v; expectOp(']'); if (!isId('in')) fail("Se esperaba «in»"); next(); const it = parseExpr(); return {k: 'forin', idx: a, v: b, iter: it, body: parseBlock(), line}; }
-    const v = identTok().v;
+    // Pine permite tipar la variable del bucle: «for int i = 0 to n», «for float x in arr», «for [int i, float x] in arr»
+    if (isOp('[')) { next(); skipTypes(); const a = identTok().v; expectOp(','); skipTypes(); const b = identTok().v; expectOp(']'); if (!isId('in')) fail("Se esperaba «in»"); next(); const it = parseExpr(); return {k: 'forin', idx: a, v: b, iter: it, body: parseBlock(), line}; }
+    skipTypes(); const v = identTok().v;
     if (isId('in')) { next(); const it = parseExpr(); return {k: 'forin', idx: null, v, iter: it, body: parseBlock(), line}; }
     expectOp('='); const from = parseExpr(); if (!isId('to')) fail("Se esperaba «to»"); next(); const to = parseExpr(); let by = null;
     if (isId('by')) { next(); by = parseExpr(); }
