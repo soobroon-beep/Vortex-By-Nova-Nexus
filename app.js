@@ -6030,6 +6030,10 @@ const pineSecCache = new Map();
 async function pineSecCandles(sym, itv) {
   const key = sym + '|' + itv, hit = pineSecCache.get(key); if (hit && Date.now() - hit.at < 30000) return hit.data;
   let data = [];
+  if (sym.endsWith('@yh')) { // bolsa, índices, divisas y materias primas (NASDAQ:AAPL, TVC:DXY, CBOE:VIX…) desde el servidor de VORTEX
+    try { const tf = /^x(\d+)$/.test(itv) ? (+itv.slice(1) >= 1440 ? '1d' : '1h') : itv, r = await fetch(`https://vortex-push.soobroon.workers.dev/yh?s=${encodeURIComponent(sym.slice(0, -3))}&tf=${encodeURIComponent(tf)}`); if (r.ok) { const j = await r.json(); data = Array.isArray(j.cs) ? j.cs : []; } } catch {}
+    pineSecCache.set(key, {at: Date.now(), data}); return data;
+  }
   if (sym.includes('@')) { try { data = await CCTMarkets.klinesAny(sym, itv, 1000, {closedOnly: false}); } catch {} pineSecCache.set(key, {at: Date.now(), data}); return data; } // otro exchange (BINGX:…, BYBIT:…): sus propias velas
   try {
     if (/^x\d+$/.test(itv)) { // temporalidad sin velas propias en Binance (3 h, 2 D, 45 min…): se juntan velas de la mayor temporalidad que la divide
@@ -6059,9 +6063,9 @@ async function pineRunOne(p) {
   if (pineBusy[p.sid]) { pineDirty[p.sid] = true; return; }
   const code = (scripts.find(x => x.id === p.sid) || {}).code; if (!code || !candles.length) return;
   const key = `${state.symbol}|${state.interval}|${candles[0].t}`; pineBusy[p.sid] = true;
-  const res = await pineRunFull(code, {inputs: p.inputs, interval: state.interval, symbol: symOf(state.symbol), name: pineName(p.sid), timeLimitMs: 12000});
+  const res = await pineRunFull(code, {inputs: p.inputs, interval: state.interval, symbol: symOf(state.symbol), name: pineName(p.sid), timeLimitMs: pineHeavy.has(p.sid) ? 40000 : 12000}); // un script pesado se recalcula con más tiempo
   pineBusy[p.sid] = false; res._key = key; pineRes[p.sid] = res;
-  if (!res.ok && /tard/.test((res.error && res.error.msg) || '') && !pineRetried.has(p.sid)) { pineRetried.add(p.sid); setTimeout(() => { pineKey = ''; schedulePine(); }, 3000); } else if (res.ok) pineRetried.delete(p.sid); if (res.stats) pineLastMs = Math.max(pineLastMs * .5, res.stats.ms); // los scripts pesados se recalculan con menos frecuencia
+  if (!res.ok && /tard/.test((res.error && res.error.msg) || '') && !pineRetried.has(p.sid)) { pineRetried.add(p.sid); pineHeavy.add(p.sid); setTimeout(() => { pineKey = ''; schedulePine(); }, 3000); } else if (res.ok) pineRetried.delete(p.sid); if (res.stats) pineLastMs = Math.max(pineLastMs * .5, res.stats.ms); // los scripts pesados se recalculan con menos frecuencia
   if (pineDirty[p.sid]) { pineDirty[p.sid] = false; pineKey = ''; schedulePine(); }
   if ((sheetMode === 'indicators' && $('#sheet').classList.contains('open'))) { renderIndicators(); if (sheetMode === 'indicators') ibRefresh(); }
   scheduleRender();
@@ -6122,7 +6126,7 @@ async function genPrev(x) {
 }
 const prevImg = x => { if (x.id === 'cat:nova-lite') return novaLitePreviewSvg().replace('class="nova-prev"', 'class="pine-prev nl-prev"'); const u = scriptPrev(x); return u && u !== 'err' ? `<img class="pine-prev" alt="Imagen de ${esc(x.name)}" src="${u}">` : `<div class="pine-prev ph">${u === 'err' ? 'Sin imagen: el script no se pudo calcular' : 'Generando imagen…'}</div>`; };
 window.__cctScripts = {addScript, store: () => prevStore}; // expuesto para pruebas
-const pineRetried = new Set();
+const pineRetried = new Set(), pineHeavy = new Set(); // scripts que necesitan más de 12 s
 function schedulePine() {
   if (!candles.length || !activePine().length) return;
   const key = `${state.symbol}|${state.interval}|${candles[0].t}|${candles.length}`, wait = key !== pineKey ? 0 : Math.max(0, Math.max(1500, 6 * pineLastMs) - (Date.now() - pineLast));
@@ -6991,7 +6995,7 @@ window.CCT_ai = {
     finally { currentView = prev; if (hidden) { view.style.cssText = css; if (!wasActive) view.classList.remove('active'); } }
   },
   candles: () => candles.slice(),
-  async run(code, name) { if (!candles.length) return {ok: false, error: {msg: 'Abre un gráfico y espera a que carguen las velas.'}}; return pineRunFull(code, {interval: state.interval, symbol: symOf(state.symbol), name: name || 'Indicador IA', timeLimitMs: 12000}); },
+  async run(code, name, ms) { if (!candles.length) return {ok: false, error: {msg: 'Abre un gráfico y espera a que carguen las velas.'}}; return pineRunFull(code, {interval: state.interval, symbol: symOf(state.symbol), name: name || 'Indicador IA', timeLimitMs: ms || 12000}); },
   msg: (res, code) => pineMsgHtml(res, code),
   list: () => scripts.filter(x => x.ai).map(x => ({id: x.id, name: x.name, code: x.code, temp: !!x.temp, on: state.pine.some(p => p.sid === x.id && p.on)})),
   tryOnChart(code, name, res, replaceId) { // pone el indicador en el gráfico sin guardarlo (temp); reemplaza la prueba anterior

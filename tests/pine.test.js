@@ -69,11 +69,11 @@ test('label.new / line.new / box.new con límite y delete', () => {
   assert.equal(r2.labels.length, 2); assert.equal(r2.labels[0].x, 2);
 });
 test('lo no soportado se avisa con su línea y marca el resultado como incompleto', () => {
-  const r = vals('t = request.financial("A", "B", "FY")\nx = ta.foo(close, 3)\nplot(x)\nstrategy.entry("L", strategy.long)', closes([1, 2, 3]));
+  const r = vals('t = request.bogus("A", "B", "FY")\nx = ta.foo(close, 3)\nplot(x)\nstrategy.entry("L", strategy.long)', closes([1, 2, 3]));
   assert.equal(r.complete, false);
   const un = r.warnings.filter(w => w.level === 'unsupported').map(w => w.msg);
-  assert.ok(un.some(m => m.includes('request.financial')) && un.some(m => m.includes('ta.foo')) && un.some(m => m.includes('strategy')), un.join(' | '));
-  assert.ok(r.warnings.find(w => w.msg.includes('request.financial')).line === 3);
+  assert.ok(un.some(m => m.includes('request.bogus')) && un.some(m => m.includes('ta.foo')) && un.some(m => m.includes('strategy')), un.join(' | '));
+  assert.ok(r.warnings.find(w => w.msg.includes('request.bogus')).line === 3);
   assert.equal(r.plots[0].values[2], null);
   const ok = vals('plot(ta.sma(close,2))', closes([1, 2, 3])); assert.equal(ok.complete, true);
 });
@@ -87,7 +87,7 @@ test('errores de sintaxis y de ejecución dan línea; tipos y bibliotecas no sop
   r = P.run(hdr + 'plot(noexiste)', closes([1])); assert.equal(r.ok, false); assert.match(r.error.msg, /noexiste/);
   r = P.run(hdr + 'enum Color\n    red\n    blue = "Azul"\nc = Color.blue\nplot(c == Color.blue ? 1 : 0)', closes([1])); assert.ok(r.ok, JSON.stringify(r.error)); assert.equal(r.plots[0].values[0], 1);
   r = P.run(hdr + 'enum Color\n    red\nplot(Color.verde == Color.red ? 1 : 0)', closes([1])); assert.equal(r.ok, false); assert.match(r.error.msg, /verde/);
-  r = P.run(hdr + 'import a/b/1 as c', closes([1])); assert.equal(r.ok, false);
+  r = P.run(hdr + 'import a/b/1 as c\nplot(nz(c.f(close), 1))', closes([1])); assert.ok(r.ok); assert.equal(r.complete, false); assert.ok(r.warnings.some(w => w.level === 'unsupported' && /a\/b/.test(w.msg))); // biblioteca no incluida: corre y avisa
 });
 test('seguridad: sin acceso a JavaScript ni al prototipo; bucle infinito se corta por tiempo', () => {
   for (const nm of ['constructor', 'process', 'globalThis', 'require', '__proto__', 'toString']) { const r = P.run(hdr + `plot(${nm})`, closes([1])); assert.equal(r.ok, false, nm); }

@@ -16,7 +16,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
 'use strict';
 
-class PineError extends Error { constructor(msg, line) { super(msg); this.line = line || 0; this.pine = true; } }
+class PineError extends Error { constructor(msg, line) { const k = Error.stackTraceLimit; Error.stackTraceLimit = 0; super(msg); Error.stackTraceLimit = k; this.line = line || 0; this.pine = true; } } // sin pila: en modo tolerante se crean muchos
 const isna = v => v === null || v === undefined || (typeof v === 'number' && v !== v);
 
 /* ───────────── Reparación del texto pegado ─────────────
@@ -50,7 +50,8 @@ function sanitize(src) {
 }
 
 /* ───────────── Lexer ───────────── */
-const KW = new Set(['if', 'else', 'for', 'to', 'by', 'in', 'while', 'switch', 'var', 'varip', 'true', 'false', 'and', 'or', 'not', 'break', 'continue', 'import', 'export', 'type', 'method', 'enum']);
+const KW = new Set(['if', 'else', 'for', 'to', 'by', 'in', 'while', 'switch', 'var', 'varip', 'true', 'false', 'and', 'or', 'not', 'break', 'continue', 'import']);
+// «type», «method», «enum» y «export» solo son palabras clave al empezar su declaración: muchos scripts los usan como nombre (ma(src, len, type) =>, method = input…)
 const OPS = [':=', '==', '!=', '<=', '>=', '=>', '+=', '-=', '*=', '/=', '%=', '+', '-', '*', '/', '%', '<', '>', '=', '?', ':', '(', ')', '[', ']', ',', '.'];
 const CONT_END = new Set(['+', '-', '*', '/', '%', '==', '!=', '<', '>', '<=', '>=', '=', '?', ':', ',', ':=', '+=', '-=', '*=', '/=', '%=']);
 const START_RE = /(?:(?:and|or)(?![A-Za-z0-9_]))|==|!=|<=|>=|[?:*\/%<>.]|[+\-](?=\s)/y;
@@ -186,7 +187,7 @@ function parse(T) {
     }
     expectOp(')'); expectOp('=>');
     let body;
-    if (peek().t === 'nl') body = parseBlock(); else { const l = peek().line; body = [{k: 'expr', e: parseExpr(), line: l}]; endStmt(); }
+    if (peek().t === 'nl') body = parseBlock(); else { body = []; do { body.push(parseStatement()); } while (T[p - 1].t === 'op' && T[p - 1].v === ','); } // una línea: también «f(x) => var l = label.new(…)»
     return {k: 'fn', name, params, body, line, method: !!isMethod};
   }
   function parseEnum() {
@@ -205,6 +206,7 @@ function parse(T) {
     if (peek().t === 'nl') next(); if (peek().t !== 'indent') fail('Se esperaba la lista de campos indentada'); next();
     while (peek().t !== 'dedent' && peek().t !== 'eof') {
       if (peek().t === 'nl') { next(); continue; }
+      if (isId('varip') || isId('var')) next(); // campos «varip int ticks = -1»
       skipTypes(); const nm = identTok().v; let def = null;
       if (isOp('=')) { next(); def = parseExpr(); }
       endStmt(); fields.push({name: nm, def});
@@ -264,11 +266,15 @@ function parse(T) {
         case 'switch': return parseSwitch();
         case 'break': next(); endStmt(); return {k: 'break', line};
         case 'continue': next(); endStmt(); return {k: 'continue', line};
-        case 'import': fail('«import» (bibliotecas) todavía no está soportado');
-        case 'type': return parseType();
-        case 'enum': return parseEnum();
-        case 'method': return parseFn(true);
-        case 'export': next(); return parseStatement();
+        case 'import': { // import Autor/Biblioteca/versión [as alias]
+          next(); let raw = ''; while (peek().t !== 'nl' && peek().t !== 'eof' && !isId('as')) raw += next().v; // «Autor-Con-Guion/Biblioteca/2»
+          let alias = null; if (isId('as')) { next(); alias = identTok().v; }
+          const mm = /^([\w-]+)\/([\w-]+)\/(\d+)$/.exec(raw); if (!mm) fail('import debe ser «Autor/Biblioteca/versión»');
+          endStmt(); return {k: 'import', lib: mm[1] + '/' + mm[2], ver: +mm[3], alias: alias || mm[2], line};
+        }
+        case 'type': case 'enum': if (T[p + 1].t === 'id' && (T[p + 2].t === 'nl' || T[p + 2].t === 'indent')) return t.v === 'type' ? parseType() : parseEnum(); break;
+        case 'method': if (T[p + 1].t === 'id' && T[p + 2].t === 'op' && T[p + 2].v === '(') return parseFn(true); break;
+        case 'export': if (T[p + 1].t === 'id' && !(T[p + 2].t === 'op' && /^(=|:=)$/.test(T[p + 2].v))) { next(); return parseStatement(); } break;
       }
       if (looksLikeFn()) return parseFn();
       const d = tryDecl(); if (d) return d;
@@ -315,6 +321,7 @@ function parse(T) {
     let e = parsePrimary();
     for (;;) {
       const line = peek().line;
+      if (T[p - 1].t === 'dedent' || T[p - 1].t === 'nl') break; // tras un bloque (switch/if/for como valor) la línea siguiente es otra sentencia, no «[…]» ni «(…)» de este valor
       if (isOp('(')) {
         next(); const args = [];
         while (!isOp(')')) {
@@ -325,7 +332,7 @@ function parse(T) {
         expectOp(')'); e = {k: 'call', fn: e, args, line};
       } else if (isOp('[')) { next(); const idx = parseExpr(); expectOp(']'); e = {k: 'idx', obj: e, idx, line}; }
       else if (isOp('.')) { next(); const t = next(); if (t.t !== 'id') fail('Se esperaba un nombre tras «.»', t); e = {k: 'mem', obj: e, prop: t.v, line}; }
-      else if (isOp('<') && e.k === 'mem' && e.prop === 'new') { const j = skipGeneric(p); if (j < 0 || !(T[j].t === 'op' && T[j].v === '(')) break; p = j; }
+      else if (isOp('<') && (e.k === 'mem' || e.k === 'id')) { const j = skipGeneric(p); if (j < 0 || !T.slice(p + 1, j - 1).every(t => (t.t === 'id' && !KW.has(t.v)) || (t.t === 'op' && /^[,.<>\[\]]$/.test(t.v))) || !(T[j].t === 'op' && (T[j].v === '(' || (T[j].v === '.' && e.k === 'id')))) break; p = j; } // array.from<string>(…), array<Point>.new(), map.new<string, float>()
       else break;
     }
     return e;
@@ -400,7 +407,8 @@ const CONSTS = Object.assign(Object.create(null), {
   'timeframe.isintraday': c => (TF_MIN[c.interval] || 60) < 1440, 'timeframe.isdaily': c => c.interval === '1d' || c.interval === '3d', 'timeframe.isweekly': c => c.interval === '1w', 'timeframe.ismonthly': c => c.interval === '1M',
   'timeframe.isdwm': c => (TF_MIN[c.interval] || 60) >= 1440, 'timeframe.isseconds': false, 'timeframe.isminutes': c => (TF_MIN[c.interval] || 60) < 1440,
   'syminfo.ticker': c => c.symbol, 'syminfo.tickerid': c => (SEC_NAME[c.exch] || 'BINANCE') + ':' + String(c.symbol).replace(/[-_]/g, '') + (SEC_PERP[String(c.exch).replace(/f$/, '')] === c.exch ? '.P' : ''), 'syminfo.prefix': c => SEC_NAME[c.exch] || 'BINANCE', 'syminfo.currency': c => /USDT$/.test(c.symbol) ? 'USDT' : 'USD',
-  'syminfo.basecurrency': c => String(c.symbol).replace(/[-_]/g, '').replace(/USDT$|USD$/, ''), 'syminfo.root': c => String(c.symbol).replace(/[-_]/g, '').replace(/USDT$|USDC$|USD$|BUSD$/, ''), 'syminfo.ticker': c => c.symbol, 'syminfo.type': 'crypto', 'syminfo.mintick': c => c.mintick, 'syminfo.pointvalue': 1, 'syminfo.session': '24x7', 'syminfo.timezone': 'Etc/UTC',
+  'syminfo.basecurrency': c => String(c.symbol).replace(/[-_]/g, '').replace(/USDT$|USD$/, ''), 'syminfo.root': c => String(c.symbol).replace(/[-_]/g, '').replace(/USDT$|USDC$|USD$|BUSD$/, ''), 'syminfo.ticker': c => c.symbol, 'syminfo.type': 'crypto', 'syminfo.volumetype': 'base', 'syminfo.description': c => String(c.symbol).replace(/[-_]/g, '').replace(/USDT$/, ' / TetherUS'), 'syminfo.sector': '', 'syminfo.industry': '', 'syminfo.country': '', 'syminfo.minmove': 1, 'syminfo.pricescale': c => Math.round(1 / (c.mintick || 0.01)), 'syminfo.main_tickerid': c => (SEC_NAME[c.exch] || 'BINANCE') + ':' + String(c.symbol).replace(/[-_]/g, ''), 'syminfo.employees': null, 'syminfo.shareholders': null, 'syminfo.shares_outstanding_float': null, 'syminfo.shares_outstanding_total': null, 'syminfo.expiration_date': null, 'syminfo.current_contract': null, 'syminfo.isin': '', 'syminfo.mincontract': 0,
+  'chart.left_visible_bar_time': c => { const v = c.opts.visible; if (v && v.from != null) return v.from; return c.candles[Math.max(0, c.n - 150)].t; }, 'chart.right_visible_bar_time': c => { const v = c.opts.visible; if (v && v.to != null) return v.to; return c.candles[c.n - 1].t; }, 'chart.is_line': false, 'chart.is_range': false, 'chart.is_pnf': false, 'chart.is_kagi': false, 'chart.is_linebreak': false, 'syminfo.mintick': c => c.mintick, 'syminfo.pointvalue': 1, 'syminfo.session': '24x7', 'syminfo.timezone': 'Etc/UTC',
   'chart.fg_color': hexCol('D1D4DC'), 'chart.bg_color': hexCol('131722'), 'chart.is_standard': true, 'chart.is_heikinashi': false, 'chart.is_renko': false,
   'display.none': 0, 'display.pane': 1, 'display.data_window': 2, 'display.price_scale': 4, 'display.status_line': 8, 'display.all': 15, 'display.pine_screener': 16,
   'dayofweek.sunday': 1, 'dayofweek.monday': 2, 'dayofweek.tuesday': 3, 'dayofweek.wednesday': 4, 'dayofweek.thursday': 5, 'dayofweek.friday': 6, 'dayofweek.saturday': 7,
@@ -411,11 +419,16 @@ for (const k in NAMED) CONSTS['color.' + k] = hexCol(NAMED[k]);
 const CONST_DYN = Object.create(null); // series “variables” de ta.* con estado propio (ver builtins)
 
 const OLDVAR = Object.assign(Object.create(null), {tickerid: 'syminfo.tickerid', ticker: 'syminfo.ticker', period: 'timeframe.period', interval: 'timeframe.multiplier', isintraday: 'timeframe.isintraday', isdaily: 'timeframe.isdaily', isweekly: 'timeframe.isweekly', ismonthly: 'timeframe.ismonthly', isdwm: 'timeframe.isdwm', mintick: 'syminfo.mintick', n: 'bar_index'});
+// nombres sueltos de Pine v1–v4: tipos de input (type=integer), estilos de plot (style=line) y variables de ta.* sin prefijo
+const OLDNAME = Object.assign(Object.create(null), {integer: 'int', bool: 'bool', float: 'float', string: 'string', source: 'source', resolution: 'timeframe', symbol: 'symbol', session: 'session',
+  line: 'style_line', linebr: 'style_linebr', stepline: 'style_stepline', histogram: 'style_histogram', cross: 'style_cross', area: 'style_area', areabr: 'style_areabr', columns: 'style_columns', circles: 'style_circles',
+  dashed: 'style_dashed', dotted: 'style_dotted', solid: 'style_solid'});
+const OLDTA = new Set(['obv', 'accdist', 'pvt', 'nvi', 'pvi', 'wad', 'wvad', 'iii', 'vwap']);
 const lookup = (env, name) => { for (let s = env.scope; s; s = s.up) { const v = s.m.get(name); if (v) return v; } return null; };
 const histAt = (ctx, v, off) => { if (off === 0) return v.cur; if (off < 0) return null; const i = ctx.bar - off; if (i < 0) return null; const h = v.hist[i]; return h === undefined ? null : h; };
 function warn(ctx, line, msg, key, level) { const k = key || msg; if (ctx.wkeys.has(k)) return; ctx.wkeys.add(k); ctx.warnings.push({line: line || 0, msg, level: level || 'warn'}); }
 function dotted(n) { if (n._dp !== undefined) return n._dp; const o = n, parts = []; while (n.k === 'mem') { parts.unshift(n.prop); n = n.obj; } if (n.k !== 'id') return (o._dp = null); parts.unshift(n.name); o._dp = parts; o._full = parts.join('.'); return parts; }
-function tick(ctx, line) { if ((++ctx.steps & 0xfff) === 0 && Date.now() > ctx.deadline) throw new PineError('El script tardó demasiado y se detuvo (límite de tiempo)', line); }
+function tick(ctx, line) { if ((++ctx.steps & 0xfff) === 0 && Date.now() > ctx.deadline) { const e = new PineError('El script tardó demasiado y se detuvo (límite de tiempo)', line); e.fatal = true; throw e; } }
 
 function binop(op, l, r, line) {
   if (op === '+' && (typeof l === 'string' || typeof r === 'string')) return (isna(l) ? 'NaN' : String(l)) + (isna(r) ? 'NaN' : String(r));
@@ -447,6 +460,8 @@ function evId(n, env) {
   if (BVARS[name]) return BVARS[name](ctx);
   if (name === 'tr') return CONST_DYN['ta.tr'](ctx, env.frame.state(n));
   if (OLDVAR[name] && !ctx.fns.has(name)) { const to = OLDVAR[name]; warn(ctx, n.line, `${name} (sintaxis antigua) → ${to}`, 'fixv:' + name, 'fix'); return to in CONSTS ? (typeof CONSTS[to] === 'function' ? CONSTS[to](ctx) : CONSTS[to]) : to === 'bar_index' ? ctx.bar : null; }
+  if (OLDTA.has(name) && !ctx.fns.has(name)) { warn(ctx, n.line, `${name} (sintaxis antigua) → ta.${name}`, 'fixv:' + name, 'fix'); return CONST_DYN['ta.' + name](ctx, env.frame.state(n)); }
+  if (OLDNAME[name] && !ctx.fns.has(name)) { warn(ctx, n.line, `${name} (sintaxis antigua) → ${OLDNAME[name]}`, 'fixv:' + name, 'fix'); return OLDNAME[name]; }
   if (Object.prototype.hasOwnProperty.call(NAMED, name) && !ctx.fns.has(name)) { warn(ctx, n.line, `Color «${name}» (sintaxis antigua) → color.${name}`, 'fixc:' + name, 'fix'); return CONSTS['color.' + name]; }
   if (ctx.fns.has(name)) throw new PineError(`«${name}» es una función; falta llamarla con ()`, n.line);
   throw new PineError(`Variable no definida «${name}»`, n.line);
@@ -460,6 +475,7 @@ function evMem(n, env) {
     if (ctx.enums && ctx.enums.has(parts[0]) && parts.length === 2) { const en = ctx.enums.get(parts[0]); if (!en.fields.some(f => f.name === parts[1])) throw new PineError(`El enum ${parts[0]} no tiene el valor «${parts[1]}»`, n.line); return full; }
     if (ENUM_NS.has(parts[0]) && parts.length === 2) return parts[1];
     if (parts[0] === 'strategy' && parts.length >= 2) return full.replace(/^strategy\./, ''); // constantes de strategy (percent_of_equity, cash, direction.long…): sin efecto en un indicador
+    if (ctx.libs && ctx.libs.has(parts[0])) { warn(ctx, n.line, `«${full}» es de la biblioteca «${ctx.libs.get(parts[0])}»: se usa na`, 'libv:' + full, 'unsupported'); ctx.incomplete = true; return null; }
     if (KNOWN_ROOTS.has(parts[0])) { warn(ctx, n.line, `«${full}» no está soportado todavía: se usa na`, 'v:' + full, 'unsupported'); ctx.incomplete = true; return null; }
     throw new PineError(`Variable no definida «${parts[0]}»`, n.line);
   }
@@ -468,7 +484,8 @@ function evMem(n, env) {
   if (parts && n._full in CONSTS) { const c = CONSTS[n._full]; return typeof c === 'function' ? c(ctx) : c; } // p. ej. un parámetro llamado «size» o «color» y luego size.small / color.red
   if (parts && CONST_DYN[n._full]) return CONST_DYN[n._full](ctx, env.frame.state(n));
   if (parts && parts.length === 2 && ENUM_NS.has(parts[0])) return parts[1];
-  if (isna(o)) throw new PineError(`Se leyó el campo «${n.prop}» de un objeto na`, n.line);
+  if (o && o._kind === 'point' && PT_F[n.prop]) { const v = o[PT_F[n.prop]]; return v === undefined ? null : v; } // chart.point: .index .time .price
+  if (isna(o)) { warn(ctx, n.line, `Se leyó «.${n.prop}» de un objeto na: devuelve na`, 'nafield:' + n.prop, 'fix'); return null; } // TradingView lo tolera en la mayoría de los casos (objetos aún no creados)
   throw new PineError(`No se puede leer «.${n.prop}» de este valor`, n.line);
 }
 
@@ -482,7 +499,7 @@ function ev(n, env) {
     case 'tup': return new Tup(n.items.map(x => ev(x, env)));
     case 'un': {
       const v = ev(n.e, env);
-      if (n.op === 'not') return isna(v) ? null : !truthy(v);
+      if (n.op === 'not') return isna(v) ? (env.ctx.v6 ? true : null) : !truthy(v); // v6: un bool nunca es na (na cuenta como false)
       if (isna(v)) return null;
       if (typeof v !== 'number') throw new PineError(`«${n.op}» solo se aplica a números`, n.line);
       return n.op === '-' ? -v : v;
@@ -523,7 +540,26 @@ function ev(n, env) {
   throw new PineError('Expresión no soportada: ' + n.k, n.line);
 }
 
-function execBlock(stmts, env) { let val = null; for (const s of stmts) { val = exec(s, env); if (env.ctx.ctrl) break; } return val; }
+/* Modo tolerante: un error en tiempo de ejecución (índice fuera del array, objeto na, tipo inesperado…) ya no detiene todo el indicador
+   como en TradingView: se salta esa sentencia en esa vela, se avisa con su línea y el resto sigue dibujándose. Solo detienen el script
+   el límite de tiempo y runtime.error() (el autor lo pidió a propósito). La variable que no se pudo calcular queda en na. */
+const STATIC_ERR = /Variable no definida|no es una función|falta llamarla|no tiene el valor|no tiene el campo|no se puede usar aquí|demasiad|memoria|Para recibir varios/; // errores del código (no de los datos): sí detienen
+function execBlock(stmts, env) {
+  let val = null;
+  for (const s of stmts) {
+    try { val = exec(s, env); }
+    catch (e) {
+      if (!e.pine || e.fatal || env.ctx.strict || STATIC_ERR.test(e.message)) throw e;
+      const ctx = env.ctx; ctx.rtErrors = (ctx.rtErrors || 0) + 1; ctx.incomplete = true;
+      warn(ctx, e.line || s.line, `Error en la vela ${ctx.bar + 1}: ${e.message} (se omite esa parte y el resto sigue)`, 'rt:' + (e.line || s.line) + ':' + e.message.replace(/\d+/g, 'N'), 'unsupported');
+      if (s.k === 'decl') { const v = env.frame.slot(s, s.mode !== null); if (!v.done || !s.mode) { v.cur = null; v.done = true; } env.scope.m.set(s.name, v); }
+      else if (s.k === 'tdecl') { if (!s.keys) s.keys = s.names.map(() => ({})); s.names.forEach((nm, i) => { const v = env.frame.slot(s.keys[i], false); v.cur = null; env.scope.m.set(nm, v); }); }
+      val = null;
+    }
+    if (env.ctx.ctrl) break;
+  }
+  return val;
+}
 const sub = env => ({ctx: env.ctx, scope: {m: new Map(), up: env.scope}, frame: env.frame});
 function loopCtl(ctx) { if (ctx.ctrl === 'break') { ctx.ctrl = null; return true; } if (ctx.ctrl === 'continue') ctx.ctrl = null; return false; }
 function exec(s, env) {
@@ -533,6 +569,7 @@ function exec(s, env) {
     case 'decl': {
       const v = env.frame.slot(s, s.mode !== null);
       if (s.mode && v.done) { env.scope.m.set(s.name, v); return v.cur; }
+      if (!lookup(env, s.name)) env.scope.m.set(s.name, v); // la declaración puede leer su propio historial: «float ji = … nz(ji[1])»
       const val = ev(s.init, env); if (val instanceof Tup) throw new PineError('Para recibir varios valores usa [a, b] = …', s.line);
       v.cur = val; v.done = true; env.scope.m.set(s.name, v); return val;
     }
@@ -567,13 +604,17 @@ function exec(s, env) {
       return val;
     }
     case 'forin': {
-      const arr = ev(s.iter, env); if (!Array.isArray(arr)) throw new PineError('«for … in» necesita un array', s.line);
+      let arr = ev(s.iter, env), keys = null;
+      if (arr && arr._kind === 'matrix') arr = arr.d.map(r => r.slice()); // matrix: recorre sus filas
+      else if (arr && arr._kind === 'map') { keys = [...arr.m.keys()]; arr = [...arr.m.values()]; } // map: [clave, valor]
+      else if (isna(arr)) arr = []; // array na: el bucle no corre
+      if (!Array.isArray(arr)) throw new PineError('«for … in» necesita un array', s.line);
       const lv = env.frame.slot(s, false); let val = null;
       if (!s.ik) s.ik = {};
       const iv2 = env.frame.slot(s.ik, false);
       for (let i = 0; i < arr.length; i++) {
         tick(ctx, s.line); lv.cur = arr[i]; const e2 = sub(env); e2.scope.m.set(s.v, lv);
-        if (s.idx) { iv2.cur = i; e2.scope.m.set(s.idx, iv2); }
+        if (s.idx) { iv2.cur = keys ? keys[i] : i; e2.scope.m.set(s.idx, iv2); }
         val = execBlock(s.body, e2); if (loopCtl(ctx)) break;
       }
       return val;
@@ -594,6 +635,7 @@ function exec(s, env) {
     }
     case 'fassign': {
       const o = ev(s.target.obj, env);
+      if (o && o._kind === 'point' && PT_F[s.target.prop]) { const k = PT_F[s.target.prop]; let val = ev(s.e, env); if (s.op !== ':=') val = binop(s.op[0], o[k], val, s.line); o[k] = isna(val) ? null : val; return val; }
       if (!o || typeof o !== 'object' || !o._t) throw new PineError(`No se puede asignar el campo «${s.target.prop}» (el objeto es na o no es un tipo definido)`, s.line);
       let val = ev(s.e, env); if (s.op !== ':=') val = binop(s.op[0], o[s.target.prop] === undefined ? null : o[s.target.prop], val, s.line);
       o[s.target.prop] = val; return val;
@@ -603,6 +645,7 @@ function exec(s, env) {
     case 'break': ctx.ctrl = 'break'; return null;
     case 'continue': ctx.ctrl = 'continue'; return null;
     case 'fn': return null; // ya registrada (hoisting)
+    case 'import': return null; // ya registrada en analyze()
   }
   throw new PineError('Sentencia no soportada: ' + s.k, s.line);
 }
@@ -627,7 +670,7 @@ function callUser(fnNode, call, env, recv) {
 }
 const B = Object.create(null);
 const def = (name, sig, f, opt) => { B[name] = Object.assign({sig, f}, opt || {}); };
-const PARAM_ALIAS = {plot1: 'hline1', plot2: 'hline2', series: 'series', top_value: 'hline1', bottom_value: 'hline2'}; // fill(plot1=…, plot2=…) usa los mismos huecos que hline1/hline2
+const PARAM_ALIAS = {plot1: 'hline1', plot2: 'hline2', series: 'series'}; // fill(plot1=…, plot2=…) usa los mismos huecos que hline1/hline2
 function callBuiltin(b, name, n, env, recv) {
   const ctx = env.ctx, sig = b.sig, vals = []; let pos = 0, transp;
   if (recv !== undefined) vals[pos++] = recv;
@@ -649,16 +692,18 @@ function evCall(n, env) {
   if (f.k === 'id') parts = f._dp || (f._dp = [f.name]); else if (f.k === 'mem') parts = dotted(f);
   if (parts && (parts.length === 1 || !lookup(env, parts[0]))) { // una variable puede llamarse igual que una función (p. ej. «color barcolor = …» y «barcolor(…)»)
     const name = n._nm || (n._nm = parts.join('.'));
-    if (parts.length === 1 && ctx.fns.has(name)) return callUser(ctx.fns.get(name), n, env);
+    if (ctx.fns.has(name) && (parts.length === 1 || (ctx.libs && ctx.libs.has(parts[0])))) return callUser(ctx.fns.get(name), n, env);
+    if (parts.length >= 2 && ctx.libs && ctx.libs.has(parts[0]) && !B[name] && !(parts[0] === 'ta' && B['ta.' + parts.slice(1).join('.')])) { warn(ctx, n.line, `${name}() es de la biblioteca «${ctx.libs.get(parts[0])}», que no está incluida: devuelve na`, 'libf:' + name, 'unsupported'); ctx.incomplete = true; return null; }
     if (parts.length === 1 && ctx.methods.has(name) && n.args.length) { // método llamado como función: el primer argumento es el receptor
       const recv = ev(n.args[0].e, env), ty = typeOfVal(recv), ms = ctx.methods.get(name);
       const m = ms.find(x => x.params[0] && x.params[0].type === ty) || ms.find(x => ty === 'int' && x.params[0] && x.params[0].type === 'float') || ms.find(x => x.params[0] && (!x.params[0].type || x.params[0].type === 'series')) || ms[0];
       return callUser(m, Object.assign({}, n, {args: n.args.slice(1)}), env, recv);
     }
     if (parts.length === 2 && parts[1] === 'new' && ctx.types.has(parts[0])) return newObj(ctx.types.get(parts[0]), n, env);
+    if (name === 'request.security_lower_tf') return evSecurityLTF(n, env);
     if (name === 'request.security' || (name === 'security' && parts.length === 1 && !ctx.fns.has('security'))) { if (name === 'security') (ctx.legacyUsed || (ctx.legacyUsed = new Map())).set('security', 'request.security'); return evSecurity(n, env); }
-    let b = B[name]; if (!b && name.startsWith('array.new_')) b = B['array.new'];
-    if (!b && parts.length === 1) b = B['ta.' + name] || B['math.' + name] || B['str.' + name] || B[LEGACY[name]];
+    let b = B[name]; if (!b && /^array\.new[a-z]/.test(name) && B[name.replace(/^array\.new/, 'array.new_')]) b = B[name.replace(/^array\.new/, 'array.new_')]; /* v4: array.newcolor… */ if (!b && name.startsWith('array.new_')) b = B['array.new'];
+    if (!b && parts.length === 1) b = B['math.' + name] || B['ta.' + name] || B['str.' + name] || B[LEGACY[name]]; // v4: max()/min() son math.max/min
     if (b) return callBuiltin(b, name, n, env);
     if (parts[0] === 'strategy') { warn(ctx, n.line, 'Las órdenes de «strategy.*» se ignoran: este script solo se muestra como indicador (el backtesting llega en la Fase 7)', 'strategy', 'unsupported'); ctx.incomplete = true; return null; }
     warn(ctx, n.line, `Función no soportada: ${name}() — devuelve na`, 'f:' + name, 'unsupported'); ctx.incomplete = true; return null;
@@ -666,16 +711,27 @@ function evCall(n, env) {
   if (f.k === 'mem') {
     const recv = ev(f.obj, env);
     const ms = ctx.methods.get(f.prop);
-    if (ms) { const ty = typeOfVal(recv); const m = ms.find(x => x.params[0] && x.params[0].type === ty) || ms.find(x => ty === 'int' && x.params[0] && x.params[0].type === 'float') || ms.find(x => x.params[0] && (!x.params[0].type || x.params[0].type === 'series')); if (m) return callUser(m, n, env, recv); }
+    const ns0 = Array.isArray(recv) ? 'array' : recv && recv._kind ? (recv._kind === 'point' ? 'chart.point' : recv._kind) : typeof recv === 'string' ? 'str' : null;
+    if (ms) { const ty = typeOfVal(recv), pt = x => x.params[0] && x.params[0].type;
+      const m = ms.find(x => pt(x) === ty) || ms.find(x => ty === 'int' && pt(x) === 'float') || ms.find(x => x.params[0] && (!pt(x) || pt(x) === 'series'))
+        || (typeof recv === 'string' ? ms.find(x => ctx.enums && ctx.enums.has(pt(x))) : null) // valor de un enum propio
+        || (!(ns0 && B[ns0 + '.' + f.prop]) && ms.find(x => x.params[0]) ) || null; // receptor na o de otro tipo: el método propio con ese nombre
+      if (m) return callUser(m, n, env, recv); }
     if (recv && recv._t && f.prop === 'copy') return Object.assign({}, recv);
-    const ns = Array.isArray(recv) ? 'array' : recv && recv._kind ? recv._kind : typeof recv === 'string' ? 'str' : null;
+    const ns = ns0;
     const b = ns && B[ns + '.' + f.prop];
     if (b) return callBuiltin(b, ns + '.' + f.prop, n, env, recv);
+    if (isna(recv)) { // método de un objeto que todavía es na (line/label/box…): como line.get_y1(na) → na, line.set_x2(na, …) → no hace nada
+      const nsn = ['line', 'label', 'box', 'table', 'linefill', 'polyline', 'array', 'matrix', 'map', 'chart.point'].find(q => B[q + '.' + f.prop]);
+      if (nsn) { try { return callBuiltin(B[nsn + '.' + f.prop], nsn + '.' + f.prop, n, env, recv); } catch (e) { if (!e.pine) throw e; return null; } }
+    }
     { const dp = dotted(f), nm = dp && dp.join('.'); if (nm && B[nm]) return callBuiltin(B[nm], nm, n, env); if (dp && dp.length === 2 && dp[1] === 'new' && ctx.types.has(dp[0])) return newObj(ctx.types.get(dp[0]), n, env); } // la variable tapaba un espacio de nombres (color.new con un parámetro «color»)
+    if (isna(recv)) { warn(ctx, n.line, `.${f.prop}() sobre un valor na: devuelve na`, 'nam:' + f.prop, 'unsupported'); ctx.incomplete = true; return null; } // objeto de una biblioteca no incluida o aún sin crear
     throw new PineError(`El método «${f.prop}» no está soportado para este valor`, n.line);
   }
   throw new PineError(`«${f.name || 'expresión'}» no es una función`, n.line);
 }
+const PT_F = {index: 'i', time: 't', price: 'p'};
 const typeOfVal = v => Array.isArray(v) ? 'array' : v && v._t ? v._t : v && v._kind ? v._kind : typeof v === 'string' ? 'string' : typeof v === 'number' ? (Number.isInteger(v) ? 'int' : 'float') : typeof v === 'boolean' ? 'bool' : v instanceof Col ? 'color' : null;
 function newObj(tn, call, env) {
   const o = {_t: tn.name}, argv = []; let pos = 0;
@@ -873,6 +929,15 @@ def('ta.dmi', ['diLength', 'adxSmoothing'], (a, c) => {
 def('ta.adx', ['diLength', 'adxSmoothing'], (a, c) => { const t = B['ta.dmi'].f([a[0], a[1] === undefined || isna(a[1]) ? a[0] : a[1]], c); return t.a[2]; });
 CONST_DYN['ta.tr'] = (ctx) => trV(ctx, ctx.bar, false);
 CONST_DYN['ta.vwap'] = (ctx, st) => { const c = ctx.candles[ctx.bar]; if (st.bar !== ctx.bar) { const d = Math.floor(c.t / 864e5); if (d !== st.day) { st.day = d; st.pv = 0; st.v = 0; } st.pv += (c.h + c.l + c.c) / 3 * c.v; st.v += c.v; st.bar = ctx.bar; } return st.v ? st.pv / st.v : null; };
+// variables acumuladas de ta.* (también las de v4 sin prefijo: accdist, pvt, nvi…)
+const accV = (ctx, st, f) => { if (st.bar !== ctx.bar) { const c = ctx.candles[ctx.bar], p = ctx.candles[ctx.bar - 1]; st.v = f(c, p, st.v); st.bar = ctx.bar; } return st.v; };
+CONST_DYN['ta.accdist'] = (ctx, st) => accV(ctx, st, (c, p, a) => (a || 0) + (c.h === c.l ? 0 : ((c.c - c.l) - (c.h - c.c)) / (c.h - c.l) * c.v));
+CONST_DYN['ta.pvt'] = (ctx, st) => accV(ctx, st, (c, p, a) => (a || 0) + (p && p.c ? (c.c - p.c) / p.c * c.v : 0));
+CONST_DYN['ta.nvi'] = (ctx, st) => accV(ctx, st, (c, p, a) => a == null ? 1 : (p && c.v < p.v && p.c ? a + (c.c - p.c) / p.c * a : a));
+CONST_DYN['ta.pvi'] = (ctx, st) => accV(ctx, st, (c, p, a) => a == null ? 1 : (p && c.v > p.v && p.c ? a + (c.c - p.c) / p.c * a : a));
+CONST_DYN['ta.wad'] = (ctx, st) => accV(ctx, st, (c, p, a) => (a || 0) + (!p ? 0 : c.c > p.c ? c.c - Math.min(c.l, p.c) : c.c < p.c ? c.c - Math.max(c.h, p.c) : 0));
+CONST_DYN['ta.wvad'] = (ctx) => { const c = ctx.candles[ctx.bar]; return c.h === c.l ? null : (c.c - c.o) / (c.h - c.l) * c.v; };
+CONST_DYN['ta.iii'] = (ctx) => { const c = ctx.candles[ctx.bar]; return c.h === c.l || !c.v ? null : (2 * c.c - c.h - c.l) / ((c.h - c.l) * c.v); };
 CONST_DYN['ta.obv'] = (ctx, st) => { if (st.bar !== ctx.bar) { const c = ctx.candles[ctx.bar], p = ctx.candles[ctx.bar - 1], ch = p ? c.c - p.c : 0; st.o = (st.o || 0) + (ch > 0 ? c.v : ch < 0 ? -c.v : 0); st.bar = ctx.bar; } return st.o; };
 def('ta.vwap', ['source', 'anchor', 'stdev_mult'], (a, c) => { // ta.vwap(src) · ta.vwap(src, anchor) · ta.vwap(src, anchor, mult) → [vwap, banda superior, banda inferior]
   const ctx = c.ctx, k = ctx.candles[ctx.bar], s = c.st;
@@ -892,7 +957,7 @@ def('na', ['x'], a => isna(a[0]));
 def('nz', ['source', 'replacement'], a => isna(a[0]) ? (a[1] === undefined ? 0 : a[1]) : a[0]);
 def('fixnan', ['source'], (a, c) => { if (!isna(a[0])) c.st.last = a[0]; return isna(a[0]) ? (c.st.last === undefined ? null : c.st.last) : a[0]; });
 def('iff', ['cond', 'then', 'else'], a => truthy(a[0]) ? a[1] : a[2]);
-for (const nm of ['max_bars_back', 'log.info', 'log.warning', 'log.error', 'runtime.error']) def(nm, null, (a, c) => { if (nm === 'runtime.error') throw new PineError(String(a[0]), c.line); warn(c.ctx, c.line, `${nm}() se ignora`, 'ign:' + nm, 'info'); return null; }, {lenient: true});
+for (const nm of ['max_bars_back', 'log.info', 'log.warning', 'log.error', 'runtime.error']) def(nm, null, (a, c) => { if (nm === 'runtime.error') { const e = new PineError(String(a[0]), c.line); e.fatal = true; throw e; } warn(c.ctx, c.line, `${nm}() se ignora`, 'ign:' + nm, 'info'); return null; }, {lenient: true});
 // Alertas: se registran por llamada (call-site) y la app las evalúa en la última vela cerrada (sin repintado)
 const alertSlot = (c, kind, title) => { const o = c.ctx.out; o.alerts = o.alerts || []; let s = c.st.al; if (!s) { s = c.st.al = {kind, title: title, message: '', bars: [], msgs: {}}; o.alerts.push(s); } return s; };
 const noteAlert = (s, c, msg) => { s.bars.push(c.ctx.bar); if (s.bars.length > ((c.ctx.opts && c.ctx.opts.alertCap) || 400)) s.bars.shift(); if (msg !== undefined && msg !== null) { s.message = String(msg); s.msgs[c.ctx.bar] = s.message; const ks = Object.keys(s.msgs); if (ks.length > 8) delete s.msgs[ks[0]]; } };
@@ -912,6 +977,7 @@ def('math.max', null, a => a.length && !a.some(isna) ? Math.max(...a) : null);
 def('math.min', null, a => a.length && !a.some(isna) ? Math.min(...a) : null);
 def('math.avg', null, a => a.length && !a.some(isna) ? a.reduce((t, v) => t + v, 0) / a.length : null);
 def('math.sum', S1, (a, c) => sumw(c.st, c.ctx.bar, a[0], LEN(a[1])));
+def('ta.sum', S1, (a, c) => sumw(c.st, c.ctx.bar, a[0], LEN(a[1]))); // alias que usan algunos scripts
 def('math.random', ['min', 'max', 'seed'], a => (a[0] === undefined ? 0 : a[0]) + Math.random() * ((a[1] === undefined ? 1 : a[1]) - (a[0] === undefined ? 0 : a[0])));
 
 /* str.* */
@@ -950,7 +1016,7 @@ def('str.format', null, a => String(a[0]).replace(/\{(\d+)(?:,number,([^}]*))?\}
 
 /* array.* */
 const arrOf = (v, line) => { if (!Array.isArray(v)) throw new PineError('Se esperaba un array', line); return v; };
-const ai = (arr, i, line) => { if (isna(i) || i < 0 || i >= arr.length) throw new PineError(`Índice ${i} fuera del array (tamaño ${arr.length})`, line); return Math.trunc(i); };
+const ai = (arr, i, line) => { if (!isna(i) && i < 0 && i >= -arr.length) i = arr.length + i; /* índices negativos cuentan desde el final (como en Pine) */ if (isna(i) || i < 0 || i >= arr.length) throw new PineError(`Índice ${i} fuera del array (tamaño ${arr.length})`, line); return Math.trunc(i); };
 const MAXARR = 100000;
 for (const t of ['float', 'int', 'bool', 'string', 'color']) def('array.new_' + t, ['size', 'initial_value'], (a, c) => { const n = a[0] || 0; if (n > MAXARR) throw new PineError('Array demasiado grande', c.line); return new Array(n).fill(a[1] === undefined ? null : a[1]); });
 for (const t of ['label', 'line', 'box', 'linefill', 'table', 'polyline']) def('array.new_' + t, ['size', 'initial_value'], (a, c) => new Array(Math.min(MAXARR, a[0] || 0)).fill(a[1] === undefined ? null : a[1]));
@@ -978,6 +1044,7 @@ def('array.reverse', ['id'], (a, c) => { arrOf(a[0], c.line).reverse(); return n
 def('array.sort', ['id', 'order'], (a, c) => { const r = arrOf(a[0], c.line), d = a[1] === 'descending' ? -1 : 1; r.sort((x, y) => d * (x < y ? -1 : x > y ? 1 : 0)); return null; });
 const nums = (a, c) => arrOf(a[0], c.line).filter(v => typeof v === 'number' && !isNaN(v));
 def('array.variance', ['id', 'biased'], (a, c) => { const r = nums(a, c); if (!r.length) return null; const m = r.reduce((x, y) => x + y, 0) / r.length, ss = r.reduce((x, y) => x + (y - m) ** 2, 0); return a[1] === false ? (r.length > 1 ? ss / (r.length - 1) : null) : ss / r.length; });
+def('array.standardize', ['id'], (a, c) => { const r = arrOf(a[0], c.line).filter(x => !isna(x)); if (!r.length) return []; const m = r.reduce((x, y) => x + y, 0) / r.length, sd = Math.sqrt(r.reduce((x, y) => x + (y - m) * (y - m), 0) / r.length); return arrOf(a[0], c.line).map(x => isna(x) ? null : sd ? (x - m) / sd : 0); });
 def('array.stdev', ['id', 'biased'], (a, c) => { const v = B['array.variance'].f(a, c); return v === null ? null : Math.sqrt(v); });
 def('array.median', ['id'], (a, c) => { const r = nums(a, c).sort((x, y) => x - y); if (!r.length) return null; const m = r.length >> 1; return r.length % 2 ? r[m] : (r[m - 1] + r[m]) / 2; });
 def('array.mode', ['id'], (a, c) => { const r = nums(a, c), cnt = new Map(); for (const v of r) cnt.set(v, (cnt.get(v) || 0) + 1); let best = null, bc = 0; for (const [v, k] of cnt) if (k > bc || (k === bc && v < best)) { best = v; bc = k; } return best; });
@@ -1004,11 +1071,12 @@ def('map.put_all', ['id', 'id2'], (a, c) => { const m = a[0], o = a[1]; if (!m |
 def('map.put', ['id', 'key', 'value'], (a, c) => { const m = a[0]; if (!m || !m.m) throw new PineError('Se esperaba un map', c.line); const old = m.m.has(a[1]) ? m.m.get(a[1]) : null; m.m.set(a[1], a[2] === undefined ? null : a[2]); return old; });
 def('map.get', ['id', 'key'], (a, c) => { const m = a[0]; if (!m || !m.m) throw new PineError('Se esperaba un map', c.line); return m.m.has(a[1]) ? m.m.get(a[1]) : null; });
 def('map.contains', ['id', 'key'], a => !!(a[0] && a[0].m.has(a[1])));
-def('map.remove', ['id', 'key'], a => { const v = a[0].m.has(a[1]) ? a[0].m.get(a[1]) : null; a[0].m.delete(a[1]); return v; });
-def('map.size', ['id'], a => a[0].m.size); def('map.clear', ['id'], a => { a[0].m.clear(); return null; });
-def('map.keys', ['id'], a => [...a[0].m.keys()]); def('map.values', ['id'], a => [...a[0].m.values()]);
-def('map.copy', ['id'], a => ({_kind: 'map', m: new Map(a[0].m)}));
+def('map.remove', ['id', 'key'], a => { if (!a[0] || !a[0].m) return null; const v = a[0].m.has(a[1]) ? a[0].m.get(a[1]) : null; a[0].m.delete(a[1]); return v; });
+def('map.size', ['id'], a => a[0] && a[0].m ? a[0].m.size : null); def('map.clear', ['id'], a => { if (a[0] && a[0].m) a[0].m.clear(); return null; });
+def('map.keys', ['id'], a => a[0] && a[0].m ? [...a[0].m.keys()] : []); def('map.values', ['id'], a => a[0] && a[0].m ? [...a[0].m.values()] : []);
+def('map.copy', ['id'], a => a[0] && a[0].m ? {_kind: 'map', m: new Map(a[0].m)} : null);
 /* color.* */
+for (const k of ['line', 'label', 'box', 'table', 'linefill', 'polyline', 'chart.point']) def(k, ['x'], a => a[0] === undefined ? null : a[0]); // conversiones «line(na)», «label(na)»…
 def('color.new', ['color', 'transp'], a => a[0] instanceof Col ? new Col(a[0].r, a[0].g, a[0].b, isna(a[1]) ? 0 : clamp(a[1], 0, 100)) : null);
 def('color.rgb', ['red', 'green', 'blue', 'transp'], a => a.slice(0, 3).some(isna) ? null : new Col(clamp(Math.round(a[0]), 0, 255), clamp(Math.round(a[1]), 0, 255), clamp(Math.round(a[2]), 0, 255), a[3] || 0));
 def('color.from_gradient', ['value', 'bottom_value', 'top_value', 'bottom_color', 'top_color'], a => {
@@ -1203,7 +1271,9 @@ def('hline', ['price', 'title', 'color', 'linestyle', 'linewidth', 'editable', '
   if (!h) { h = c.st.h = {id: o.hlines.length, price: nv(a[0]), title: a[1] || '', ci: pal(c.ctx, a[2] === undefined ? hexCol('787B86') : a[2]), style: String(a[3] || 'style_dashed').replace(/^style_/, ''), lw: a[4] || 1, hidden: hidden(a[6])}; o.hlines.push(h); }
   return {_kind: 'hline', id: h.id};
 }, {lenient: true});
-def('fill', ['hline1', 'hline2', 'color', 'title', 'editable', 'show_last', 'fillgaps', 'display'], (a, c) => {
+def('fill', ['hline1', 'hline2', 'color', 'title', 'editable', 'show_last', 'fillgaps', 'display', 'top_value', 'bottom_value', 'top_color', 'bottom_color'], (a, c) => {
+  if (!(a[2] instanceof Col) && (a[10] instanceof Col || a[11] instanceof Col) && !(a[2] !== undefined && !isna(a[2]) && typeof a[2] === 'number')) { const tc = a[10] instanceof Col ? a[10] : a[11], bc = a[11] instanceof Col ? a[11] : a[10]; a[2] = isna(a[8]) || isna(a[9]) ? tc : (Math.abs(a[8]) >= Math.abs(a[9]) ? tc : bc); } // relleno degradado: se usa el color del extremo dominante
+  else if (typeof a[2] === 'number' && (a[4] instanceof Col || a[5] instanceof Col)) { const tc = a[4] instanceof Col ? a[4] : a[5], bc = a[5] instanceof Col ? a[5] : a[4]; a[2] = isna(a[2]) || isna(a[3]) ? tc : (Math.abs(a[2]) >= Math.abs(a[3]) ? tc : bc); } // degradado con argumentos por posición: fill(p1, p2, top_value, bottom_value, top_color, bottom_color)
   const ctx = c.ctx, o = ctx.out; let f = c.st.f;
   if (!f) {
     const ref = h => h && (h._kind === 'plot' || h._kind === 'hline') ? {kind: h._kind, id: h.id} : null;
@@ -1356,8 +1426,231 @@ function walk(n, f) {
   if (n.k) f(n);
   for (const key in n) { const v = n[key]; if (v && typeof v === 'object') walk(v, f); }
 }
+
+/* ───────── Funciones agregadas para compatibilidad amplia (v5/v6) ───────── */
+// datos de bolsa que no existen en cripto: devuelven na sin detener el script (solo un aviso informativo)
+for (const nm of ['request.financial', 'request.earnings', 'request.dividends', 'request.splits', 'request.economic', 'request.quandl', 'request.seed'])
+  def(nm, null, (a, c) => { warn(c.ctx, c.line, `${nm}() da datos de acciones (balances, dividendos, economía…) que no existen para criptomonedas: devuelve na`, 'na:' + nm, 'info'); return null; }, {lenient: true});
+def('request.currency_rate', ['from', 'to', 'ignore_invalid_currency'], a => { const f = String(a[0] || '').toUpperCase(), t = String(a[1] || '').toUpperCase(), usd = x => /^(USD|USDT|USDC)$/.test(x); return f === t || (usd(f) && usd(t)) ? 1 : null; });
+// tickers especiales: se usa el mismo símbolo (las velas son las normales)
+for (const k of ['renko', 'kagi', 'linebreak', 'pointfigure', 'inherit', 'standard']) def('ticker.' + k, ['symbol'], (a, c) => { if (k !== 'standard' && k !== 'inherit') warn(c.ctx, c.line, `ticker.${k}() usa las velas normales (no hay ${k} aquí)`, 'tk:' + k, 'fix'); return isna(a[0]) ? c.ctx.symbol : String(a[0]); }, {lenient: true});
+def('syminfo.ticker', ['symbol'], (a, c) => { const s = isna(a[0]) ? c.ctx.symbol : String(a[0]); return s.includes(':') ? s.split(':')[1] : s; });
+def('syminfo.prefix', ['symbol'], (a, c) => { const s = isna(a[0]) ? '' : String(a[0]); return s.includes(':') ? s.split(':')[0] : (SEC_NAME[c.ctx.exch] || 'BINANCE'); });
+CONSTS['timeframe.main_period'] = c => tfPeriod(c.interval);
+// arrays
+def('array.every', ['id'], (a, c) => arrOf(a[0], c.line).every(x => !isna(x) && truthy(x)));
+def('array.some', ['id'], (a, c) => arrOf(a[0], c.line).some(x => !isna(x) && truthy(x)));
+// chart.point / box con puntos
+def('chart.point.copy', ['id'], a => a[0] && a[0]._kind === 'point' ? Object.assign({}, a[0]) : null);
+def('box.set_top_left_point', ['id', 'point'], a => { const o = a[0], p = a[1]; if (o && o._kind === 'box' && p && p._kind === 'point') { o.l = p.i !== null ? p.i : p.t; o.t = p.p; } return null; });
+def('box.set_bottom_right_point', ['id', 'point'], a => { const o = a[0], p = a[1]; if (o && o._kind === 'box' && p && p._kind === 'point') { o.r = p.i !== null ? p.i : p.t; o.b = p.p; } return null; });
+for (const k of ['label.set_text_formatting', 'box.set_text_formatting', 'table.cell_set_text_formatting', 'label.set_text_font_family', 'table.cell_set_text_font_family']) def(k, null, () => null, {lenient: true});
+// ta.rci: índice de correlación por rangos (Spearman entre el orden del tiempo y el del precio), de -100 a 100
+def('ta.rci', S1, (a, c) => { const len = LEN(a[1]), b = pushV(c.st, c.ctx.bar, a[0]); if (b.length < len) return null; const w = b.slice(-len); if (w.some(isna)) return null;
+  const idx = w.map((v, i) => i), byP = [...idx].sort((x, y) => w[y] - w[x]), rank = new Array(len); byP.forEach((i, r) => { rank[i] = r + 1; });
+  let d = 0; for (let i = 0; i < len; i++) { const tr = len - i; d += (tr - rank[i]) ** 2; } return (1 - 6 * d / (len * (len * len - 1))) * 100; });
+// ta.pivot_point_levels(type, anchor, developing): niveles del periodo anterior → [P, R1, S1, R2, S2, R3, S3, R4, S4, R5, S5]
+def('ta.pivot_point_levels', ['type', 'anchor', 'developing'], (a, c) => {
+  const st = c.st, k = c.ctx.candles[c.ctx.bar], type = String(a[0] || 'Traditional').toLowerCase();
+  if (st.bar !== c.ctx.bar) { st.bar = c.ctx.bar;
+    if (truthy(a[1]) && st.h != null) { st.prev = {h: st.h, l: st.l, c: st.c, o: st.o}; st.h = null; }
+    if (st.h == null) { st.h = k.h; st.l = k.l; st.o = k.o; } else { st.h = Math.max(st.h, k.h); st.l = Math.min(st.l, k.l); } st.c = k.c; }
+  const p = truthy(a[2]) ? {h: st.h, l: st.l, c: st.c, o: st.o} : st.prev; if (!p) return new Array(11).fill(null);
+  const {h, l} = p, cl = p.c, r = h - l; let P = (h + l + cl) / 3, L = [];
+  switch (type) {
+    case 'fibonacci': L = [P + .382 * r, P - .382 * r, P + .618 * r, P - .618 * r, P + r, P - r, null, null, null, null]; break;
+    case 'woodie': P = (h + l + 2 * cl) / 4; L = [2 * P - l, 2 * P - h, P + r, P - r, h + 2 * (P - l), l - 2 * (h - P), null, null, null, null]; L[6] = L[4] + r; L[7] = L[5] - r; break;
+    case 'classic': L = [2 * P - l, 2 * P - h, P + r, P - r, P + 2 * r, P - 2 * r, P + 3 * r, P - 3 * r, null, null]; break;
+    case 'dm': { const x = cl < p.o ? h + 2 * l + cl : cl > p.o ? 2 * h + l + cl : h + l + 2 * cl; P = x / 4; L = [x / 2 - l, x / 2 - h, null, null, null, null, null, null, null, null]; break; }
+    case 'camarilla': L = [cl + r * 1.1 / 12, cl - r * 1.1 / 12, cl + r * 1.1 / 6, cl - r * 1.1 / 6, cl + r * 1.1 / 4, cl - r * 1.1 / 4, cl + r * 1.1 / 2, cl - r * 1.1 / 2, null, null]; L[8] = (h / l) * cl; L[9] = cl - (L[8] - cl); break;
+    default: L = [2 * P - l, 2 * P - h, P + r, P - r, 2 * P + (h - 2 * l), 2 * P - (2 * h - l), 3 * P + (h - 3 * l), 3 * P - (3 * h - l), 4 * P + (h - 4 * l), 4 * P - (4 * h - l)];
+  }
+  return [P, ...L];
+});
+// matrix: más operaciones
+const mget = (m, i, j) => m.d[i][j];
+const mnew = (r, cc, f) => ({_kind: 'matrix', r, c: cc, d: Array.from({length: r}, (_, i) => Array.from({length: cc}, (_, j) => f(i, j)))});
+def('matrix.submatrix', ['id', 'from_row', 'to_row', 'from_column', 'to_column'], (a, c) => { const m = mx(a[0], c.line), r0 = a[1] | 0 || 0, r1 = isna(a[2]) ? m.r : a[2] | 0, c0 = a[3] | 0 || 0, c1 = isna(a[4]) ? m.c : a[4] | 0; return mnew(Math.max(0, r1 - r0), Math.max(0, c1 - c0), (i, j) => mget(m, r0 + i, c0 + j)); });
+def('matrix.reverse', ['id'], (a, c) => { const m = mx(a[0], c.line); m.d.reverse(); m.d.forEach(r => r.reverse()); return null; });
+def('matrix.trace', ['id'], (a, c) => { const m = mx(a[0], c.line); let t = 0; for (let i = 0; i < Math.min(m.r, m.c); i++) t += m.d[i][i] || 0; return t; });
+def('matrix.swap_columns', ['id', 'column1', 'column2'], (a, c) => { const m = mx(a[0], c.line); for (const r of m.d) { const t = r[a[1]]; r[a[1]] = r[a[2]]; r[a[2]] = t; } return null; });
+def('matrix.reshape', ['id', 'rows', 'columns'], (a, c) => { const m = mx(a[0], c.line), flat = m.d.flat(), r = a[1] | 0, cc = a[2] | 0; m.r = r; m.c = cc; m.d = Array.from({length: r}, (_, i) => flat.slice(i * cc, i * cc + cc)); return null; });
+def('matrix.concat', ['id1', 'id2'], (a, c) => { const m = mx(a[0], c.line), n = mx(a[1], c.line); for (const r of n.d) m.d.push(r.slice()); m.r = m.d.length; return m; });
+def('matrix.median', ['id'], (a, c) => { const v = mx(a[0], c.line).d.flat().filter(x => !isna(x)).sort((x, y) => x - y); if (!v.length) return null; const h = v.length >> 1; return v.length % 2 ? v[h] : (v[h - 1] + v[h]) / 2; });
+def('matrix.mode', ['id'], (a, c) => { const cnt = new Map(); for (const x of mx(a[0], c.line).d.flat()) if (!isna(x)) cnt.set(x, (cnt.get(x) || 0) + 1); let best = null, n = 0; for (const [k, v] of cnt) if (v > n || (v === n && k < best)) { best = k; n = v; } return best; });
+def('matrix.sort', ['id', 'column', 'order'], (a, c) => { const m = mx(a[0], c.line), col = a[1] | 0, desc = String(a[2] || '').includes('desc'); m.d.sort((x, y) => desc ? y[col] - x[col] : x[col] - y[col]); return null; });
+def('matrix.kron', ['id1', 'id2'], (a, c) => { const A = mx(a[0], c.line), Bm = mx(a[1], c.line); return mnew(A.r * Bm.r, A.c * Bm.c, (i, j) => A.d[Math.floor(i / Bm.r)][Math.floor(j / Bm.c)] * Bm.d[i % Bm.r][j % Bm.c]); });
+function matInv(m) { const n = m.r; if (n !== m.c) return null; const A = m.d.map((r, i) => [...r, ...Array.from({length: n}, (_, j) => +(i === j))]);
+  for (let i = 0; i < n; i++) { let p = i; for (let k = i + 1; k < n; k++) if (Math.abs(A[k][i]) > Math.abs(A[p][i])) p = k; if (Math.abs(A[p][i]) < 1e-12) return null; [A[i], A[p]] = [A[p], A[i]]; const d = A[i][i]; for (let j = 0; j < 2 * n; j++) A[i][j] /= d; for (let k = 0; k < n; k++) if (k !== i) { const f = A[k][i]; for (let j = 0; j < 2 * n; j++) A[k][j] -= f * A[i][j]; } }
+  return mnew(n, n, (i, j) => A[i][n + j]); }
+if (!B['matrix.inv']) def('matrix.inv', ['id'], (a, c) => matInv(mx(a[0], c.line)));
+def('matrix.pinv', ['id'], (a, c) => { const m = mx(a[0], c.line), T = mnew(m.c, m.r, (i, j) => m.d[j][i]), TT = mnew(m.c, m.c, (i, j) => { let s = 0; for (let k = 0; k < m.r; k++) s += m.d[k][i] * m.d[k][j]; return s; }), I = matInv(TT); if (!I) return null; return mnew(m.c, m.r, (i, j) => { let s = 0; for (let k = 0; k < m.c; k++) s += I.d[i][k] * T.d[k][j]; return s; }); });
+def('matrix.pow', ['id', 'power'], (a, c) => { let m = mx(a[0], c.line), r = mnew(m.r, m.c, (i, j) => +(i === j)); for (let p = 0; p < (a[1] | 0); p++) r = mnew(m.r, m.c, (i, j) => { let s = 0; for (let k = 0; k < m.c; k++) s += r.d[i][k] * m.d[k][j]; return s; }); return r; });
+def('matrix.rank', ['id'], (a, c) => { const m = mx(a[0], c.line), A = m.d.map(r => r.slice()); let rank = 0; const rows = m.r, cols = m.c;
+  for (let col = 0; col < cols && rank < rows; col++) { let p = rank; for (let k = rank + 1; k < rows; k++) if (Math.abs(A[k][col]) > Math.abs(A[p][col])) p = k; if (Math.abs(A[p][col]) < 1e-10) continue; [A[rank], A[p]] = [A[p], A[rank]]; for (let k = rank + 1; k < rows; k++) { const f = A[k][col] / A[rank][col]; for (let j = col; j < cols; j++) A[k][j] -= f * A[rank][j]; } rank++; } return rank; });
+const mIs = (nm, f) => def('matrix.' + nm, ['id'], (a, c) => { const m = mx(a[0], c.line); return f(m); });
+mIs('is_square', m => m.r === m.c); mIs('is_zero', m => m.d.every(r => r.every(x => x === 0))); mIs('is_binary', m => m.d.every(r => r.every(x => x === 0 || x === 1)));
+mIs('is_diagonal', m => m.r === m.c && m.d.every((r, i) => r.every((x, j) => i === j || x === 0))); mIs('is_antidiagonal', m => m.r === m.c && m.d.every((r, i) => r.every((x, j) => i + j === m.c - 1 || x === 0)));
+mIs('is_identity', m => m.r === m.c && m.d.every((r, i) => r.every((x, j) => x === +(i === j)))); mIs('is_symmetric', m => m.r === m.c && m.d.every((r, i) => r.every((x, j) => x === m.d[j][i])));
+mIs('is_antisymmetric', m => m.r === m.c && m.d.every((r, i) => r.every((x, j) => x === -m.d[j][i]))); mIs('is_triangular', m => m.r === m.c && (m.d.every((r, i) => r.every((x, j) => j <= i || x === 0)) || m.d.every((r, i) => r.every((x, j) => j >= i || x === 0))));
+mIs('is_stochastic', m => m.d.every(r => r.every(x => x >= 0) && Math.abs(r.reduce((s, x) => s + x, 0) - 1) < 1e-9));
+mIs('eigenvalues', m => { // simétricas (Jacobi); otras: aproximación con la parte simétrica
+  const n = m.r, A = m.d.map((r, i) => r.map((x, j) => (x + m.d[j][i]) / 2)); for (let it = 0; it < 60 * n * n; it++) { let p = 0, q = 1, mxv = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (Math.abs(A[i][j]) > mxv) { mxv = Math.abs(A[i][j]); p = i; q = j; } if (mxv < 1e-12) break;
+    const th = (A[q][q] - A[p][p]) / (2 * A[p][q]), t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)), cs = 1 / Math.sqrt(t * t + 1), sn = t * cs;
+    for (let k = 0; k < n; k++) { const akp = A[k][p], akq = A[k][q]; A[k][p] = cs * akp - sn * akq; A[k][q] = sn * akp + cs * akq; } for (let k = 0; k < n; k++) { const apk = A[p][k], aqk = A[q][k]; A[p][k] = cs * apk - sn * aqk; A[q][k] = sn * apk + cs * aqk; } }
+  return A.map((r, i) => r[i]); });
+// request.footprint (Pine v6): perfil de volumen de la vela, aproximado con la propia vela (compra = parte del volumen según dónde cerró)
+function fpBuild(ctx, ticks, va) {
+  const k = ctx.candles[ctx.bar], tick = (ctx.mintick || 0.01) * Math.max(1, ticks | 0 || 100), lo = Math.floor(k.l / tick) * tick, n = Math.max(1, Math.min(200, Math.ceil((k.h - lo) / tick) || 1)), rows = [];
+  const buyFrac = k.h > k.l ? (k.c - k.l) / (k.h - k.l) : 0.5;
+  for (let i = 0; i < n; i++) { const dn = lo + i * tick, up = dn + tick, mid = (dn + up) / 2, w = 1 / n, tv = k.v * w, bv = tv * (mid <= k.c ? Math.min(1, buyFrac + .25) : Math.max(0, buyFrac - .25)); rows.push({_kind: 'volume_row', up, dn, bv, sv: tv - bv}); }
+  let poc = rows[0]; for (const r of rows) if (r.bv + r.sv > poc.bv + poc.sv) poc = r;
+  const tot = rows.reduce((s, r) => s + r.bv + r.sv, 0), pi = rows.indexOf(poc); let lo2 = pi, hi2 = pi, acc = poc.bv + poc.sv;
+  while (acc < tot * (va || 70) / 100 && (lo2 > 0 || hi2 < rows.length - 1)) { const a2 = lo2 > 0 ? rows[lo2 - 1].bv + rows[lo2 - 1].sv : -1, b2 = hi2 < rows.length - 1 ? rows[hi2 + 1].bv + rows[hi2 + 1].sv : -1; if (b2 >= a2) { hi2++; acc += b2; } else { lo2--; acc += a2; } }
+  return {_kind: 'footprint', rows, poc, vah: rows[hi2], val: rows[lo2]};
+}
+def('request.footprint', ['ticks_per_row', 'va_percent', 'imbalance_percent'], (a, c) => { warn(c.ctx, c.line, 'request.footprint() se aproxima con la vela (sin datos tick a tick)', 'fp', 'fix'); return fpBuild(c.ctx, a[0], a[1]); });
+const fpOf = (a) => a[0] && a[0]._kind === 'footprint' ? a[0] : null;
+def('footprint.buy_volume', ['id'], a => { const f = fpOf(a); return f ? f.rows.reduce((s, r) => s + r.bv, 0) : null; });
+def('footprint.sell_volume', ['id'], a => { const f = fpOf(a); return f ? f.rows.reduce((s, r) => s + r.sv, 0) : null; });
+def('footprint.total_volume', ['id'], a => { const f = fpOf(a); return f ? f.rows.reduce((s, r) => s + r.bv + r.sv, 0) : null; });
+def('footprint.delta', ['id'], a => { const f = fpOf(a); return f ? f.rows.reduce((s, r) => s + r.bv - r.sv, 0) : null; });
+def('footprint.poc', ['id'], a => { const f = fpOf(a); return f ? f.poc : null; }); def('footprint.vah', ['id'], a => { const f = fpOf(a); return f ? f.vah : null; }); def('footprint.val', ['id'], a => { const f = fpOf(a); return f ? f.val : null; });
+def('footprint.rows', ['id'], a => { const f = fpOf(a); return f ? f.rows.slice() : []; });
+def('footprint.get_row_by_price', ['id', 'price'], a => { const f = fpOf(a); return f ? f.rows.find(r => a[1] >= r.dn && a[1] < r.up) || null : null; });
+const vrOf = a => a[0] && a[0]._kind === 'volume_row' ? a[0] : null;
+def('volume_row.up_price', ['id'], a => { const r = vrOf(a); return r ? r.up : null; }); def('volume_row.down_price', ['id'], a => { const r = vrOf(a); return r ? r.dn : null; });
+def('volume_row.buy_volume', ['id'], a => { const r = vrOf(a); return r ? r.bv : null; }); def('volume_row.sell_volume', ['id'], a => { const r = vrOf(a); return r ? r.sv : null; });
+def('volume_row.total_volume', ['id'], a => { const r = vrOf(a); return r ? r.bv + r.sv : null; }); def('volume_row.delta', ['id'], a => { const r = vrOf(a); return r ? r.bv - r.sv : null; });
+def('volume_row.has_buy_imbalance', ['id'], a => { const r = vrOf(a); return r ? r.bv > r.sv * 3 : null; }); def('volume_row.has_sell_imbalance', ['id'], a => { const r = vrOf(a); return r ? r.sv > r.bv * 3 : null; });
+
+/* Bibliotecas de TradingView incluidas en VORTEX, escritas en Pine (se cargan con «import Autor/Biblioteca/N as alias»).
+   Las funciones que ya existen en ta.* se resuelven solas; aquí van las que la biblioteca agrega. */
+const LIBS = Object.create(null);
+LIBS['TradingView/ta'] = `
+dema(float source, simple int length) =>
+    float e1 = ta.ema(source, length)
+    float e2 = ta.ema(e1, length)
+    2 * e1 - e2
+dema2(float source, int length) => LIB.dema(source, length)
+tema(float source, simple int length) =>
+    float e1 = ta.ema(source, length)
+    float e2 = ta.ema(e1, length)
+    float e3 = ta.ema(e2, length)
+    3 * e1 - 3 * e2 + e3
+tema2(float source, int length) => LIB.tema(source, length)
+ema2(float source, int length) => ta.ema(source, length)
+sma2(float source, int length) => ta.sma(source, length)
+rma2(float source, int length) => ta.rma(source, length)
+wma2(float source, int length) => ta.wma(source, length)
+atr2(int length) => ta.atr(length)
+rsi2(float source, int length) => ta.rsi(source, length)
+t3(float source, simple int length, float vf = 0.7) =>
+    float e1 = ta.ema(source, length)
+    float e2 = ta.ema(e1, length)
+    float e3 = ta.ema(e2, length)
+    float e4 = ta.ema(e3, length)
+    float e5 = ta.ema(e4, length)
+    float e6 = ta.ema(e5, length)
+    float c1 = -vf * vf * vf
+    float c2 = 3 * vf * vf + 3 * vf * vf * vf
+    float c3 = -6 * vf * vf - 3 * vf - 3 * vf * vf * vf
+    float c4 = 1 + 3 * vf + vf * vf * vf + 3 * vf * vf
+    c1 * e6 + c2 * e5 + c3 * e4 + c4 * e3
+t3Alt(float source, simple int length, float vf = 0.7) => LIB.t3(source, length, vf)
+trima(float source, simple int length) => ta.sma(ta.sma(source, math.ceil(length / 2)), math.floor(length / 2) + 1)
+trima2(float source, int length) => LIB.trima(source, length)
+frama(float source, simple int length) =>
+    int half = math.max(1, math.floor(length / 2))
+    float n3 = (ta.highest(high, length) - ta.lowest(low, length)) / length
+    float n2 = (ta.highest(high, half) - ta.lowest(low, half)) / half
+    float n1 = (ta.highest(high, half)[half] - ta.lowest(low, half)[half]) / half
+    float dimen = n1 > 0 and n2 > 0 and n3 > 0 ? (math.log(n1 + n2) - math.log(n3)) / math.log(2) : 0
+    float alpha = math.min(1.0, math.max(0.01, math.exp(-4.6 * (dimen - 1))))
+    var float result = na
+    result := na(result) ? source : alpha * source + (1 - alpha) * result
+    result
+aroon(simple int length) =>
+    float up = 100 * (ta.highestbars(high, length + 1) + length) / length
+    float dn = 100 * (ta.lowestbars(low, length + 1) + length) / length
+    [up, dn]
+cagr(int entryTime, float entryPrice, int exitTime, float exitPrice) =>
+    float years = (exitTime - entryTime) / (365.25 * 24 * 60 * 60 * 1000)
+    years > 0 and entryPrice > 0 ? (math.pow(exitPrice / entryPrice, 1 / years) - 1) * 100 : na
+changePercent(float newValue, float oldValue) => oldValue != 0 ? (newValue - oldValue) * 100 / math.abs(oldValue) : na
+coppock(float source, simple int length, simple int longRocLength, simple int shortRocLength) => ta.wma(ta.roc(source, longRocLength) + ta.roc(source, shortRocLength), length)
+kvo(simple int fastLen, simple int slowLen, simple int trigLen) =>
+    float sv = ta.change(hlc3) >= 0 ? volume : -volume
+    float k = ta.ema(sv, fastLen) - ta.ema(sv, slowLen)
+    [k, ta.ema(k, trigLen)]
+trix(float source, simple int length, simple int signalLength = 9, bool exponential = true) =>
+    float t = 10000 * ta.change(math.log(ta.ema(ta.ema(ta.ema(source, length), length), length)))
+    [t, exponential ? ta.ema(t, signalLength) : ta.sma(t, signalLength), t - (exponential ? ta.ema(t, signalLength) : ta.sma(t, signalLength))]
+uo(simple int fastLen, simple int midLen, simple int slowLen) =>
+    float bp = close - math.min(low, nz(close[1], close))
+    float tr = math.max(high, nz(close[1], close)) - math.min(low, nz(close[1], close))
+    float a1 = math.sum(bp, fastLen) / math.sum(tr, fastLen)
+    float a2 = math.sum(bp, midLen) / math.sum(tr, midLen)
+    float a3 = math.sum(bp, slowLen) / math.sum(tr, slowLen)
+    100 * (4 * a1 + 2 * a2 + a3) / 7
+szo(float source, simple int length) =>
+    float r = source > nz(source[1], source) ? 1.0 : -1.0
+    100 * LIB.tema(r, length)
+ft(float source, simple int length) =>
+    float hi = ta.highest(source, length)
+    float lo = ta.lowest(source, length)
+    var float value = 0.0
+    value := 0.66 * ((source - lo) / math.max(hi - lo, 0.001) - 0.5) + 0.67 * nz(value)
+    float v = value > 0.99 ? 0.999 : value < -0.99 ? -0.999 : value
+    var float fish = 0.0
+    fish := 0.5 * math.log((1 + v) / (1 - v)) + 0.5 * nz(fish)
+    fish
+ift(float source) => (math.exp(2 * source) - 1) / (math.exp(2 * source) + 1)
+ao(float source = hl2, simple int fastLength = 5, simple int slowLength = 34) => ta.sma(source, fastLength) - ta.sma(source, slowLength)
+wpo(simple int length) =>
+    float wl = ta.sma(close, length)
+    wl != 0 ? (close - wl) / wl * 100 : na
+relativeVolume(simple int length, simple string anchorTimeframe = "", simple bool isCumulative = true, simple bool adjustRealtime = false) =>
+    float past = ta.sma(volume, length)
+    [volume, past, past != 0 ? volume / past : na]
+requestUpAndDownVolume(simple string lowerTimeframe) =>
+    float up = close > open ? volume : close < open ? 0.0 : volume / 2
+    float dn = -(volume - up)
+    [up, dn, up + dn]
+requestVolumeDelta(simple string lowerTimeframe, simple string cumulativePeriod = "", simple bool isCumulative = false) =>
+    float up = close > open ? volume : close < open ? 0.0 : volume / 2
+    float d = up - (volume - up)
+    [0.0, math.max(d, 0.0), math.min(d, 0.0), d]
+vStop(float source, simple float atrFactor, simple int atrLength) =>
+    float atrM = nz(ta.atr(atrLength) * atrFactor, ta.tr)
+    var float stop = na
+    var bool trendUp = true
+    float mx = na
+    float mn = na
+    var float smax = source
+    var float smin = source
+    smax := math.max(smax, source)
+    smin := math.min(smin, source)
+    stop := nz(trendUp ? math.max(nz(stop, source - atrM), smax - atrM) : math.min(nz(stop, source + atrM), smin + atrM), source)
+    bool newUp = source - stop >= 0.0
+    if newUp != trendUp
+        smax := source
+        smin := source
+        stop := newUp ? smax - atrM : smin + atrM
+    trendUp := newUp
+    [stop, trendUp]
+`;
+const libCache = new Map();
+function libAst(name, alias) { const k = name + '|' + alias; if (!libCache.has(k)) libCache.set(k, parse(lex(LIBS[name].replace(/\bLIB\./g, alias + '.'))).filter(x => x.k === 'fn')); return libCache.get(k); }
+
 function analyze(ast, ctx) {
   const declared = new Set();
+  for (const st of ast) if (st.k === 'import') {
+    (ctx.libs || (ctx.libs = new Map())).set(st.alias, st.lib);
+    const src = LIBS[st.lib];
+    if (src) { const lib = libAst(st.lib, st.alias); for (const fn of lib) { const f = Object.assign({}, fn, {name: fn.method ? fn.name : st.alias + '.' + fn.name, line: st.line}); ast.push(f); } }
+    else warn(ctx, st.line, `La biblioteca «${st.lib}» no está incluida en VORTEX: sus funciones devuelven na (la IA puede reescribirlas dentro del script)`, 'lib:' + st.lib, 'unsupported');
+  }
   walk(ast, n => {
     if (n.k === 'decl') declared.add(n.name); else if (n.k === 'tdecl') n.names.forEach(x => declared.add(x));
     else if (n.k === 'for') declared.add(n.v); else if (n.k === 'forin') { declared.add(n.v); if (n.idx) declared.add(n.idx); }
@@ -1370,9 +1663,10 @@ function analyze(ast, ctx) {
     const parts = n.fn.k === 'id' ? [n.fn.name] : n.fn.k === 'mem' ? dotted(n.fn) : null;
     if (!parts || declared.has(parts[0])) return;
     const name = parts.join('.');
-    if ((parts.length === 1 && ctx.fns.has(name)) || B[name] || name.startsWith('array.new_') || (parts.length === 2 && parts[1] === 'new' && ctx.types.has(parts[0])) || (parts.length === 1 && ctx.methods.has(name))) return;
-    if (parts.length === 1 && (B['ta.' + name] || B['math.' + name] || B['str.' + name] || B[LEGACY[name]])) { const to = B['ta.' + name] ? 'ta.' + name : B['math.' + name] ? 'math.' + name : B['str.' + name] ? 'str.' + name : LEGACY[name]; if (to !== name) (ctx.legacyUsed || (ctx.legacyUsed = new Map())).set(name, to); return; }
+    if (ctx.fns.has(name) || B[name] || name.startsWith('array.new_') || /^array\.new[a-z]/.test(name) || (parts.length === 2 && parts[1] === 'new' && ctx.types.has(parts[0])) || (parts.length === 1 && ctx.methods.has(name))) return;
+    if (parts.length === 1 && (B['ta.' + name] || B['math.' + name] || B['str.' + name] || B[LEGACY[name]])) { const to = B['math.' + name] ? 'math.' + name : B['ta.' + name] ? 'ta.' + name : B['str.' + name] ? 'str.' + name : LEGACY[name]; if (to !== name) (ctx.legacyUsed || (ctx.legacyUsed = new Map())).set(name, to); return; }
     if (parts[0] === 'strategy') { warn(ctx, n.line, 'Las órdenes de «strategy.*» se ignoran: este script solo se muestra como indicador (el backtesting llega en la Fase 7)', 'strategy', 'unsupported'); return; }
+    if (ctx.libs && ctx.libs.has(parts[0]) && !LIBS[ctx.libs.get(parts[0])]) return;
     warn(ctx, n.line, `Función no soportada: ${name}() — devuelve na`, 'f:' + name, 'unsupported');
   });
 }
@@ -1620,9 +1914,29 @@ const SEC_PFX = {BINANCE: 'binance', BINANCEUS: 'binance', BYBIT: 'bybit', OKX: 
 const SEC_PERP = {binance: 'binancef', bybit: 'bybitf', okx: 'okxf', bingx: 'bingxf'}, SEC_NAME = {binance: 'BINANCE', binancef: 'BINANCE', bybit: 'BYBIT', bybitf: 'BYBIT', okx: 'OKX', okxf: 'OKX', bingx: 'BINGX', bingxf: 'BINGX', coinbase: 'COINBASE', kucoin: 'KUCOIN', gate: 'GATEIO', mexc: 'MEXC', bitget: 'BITGET', htx: 'HTX', kraken: 'KRAKEN'};
 const SEC_DASH = new Set(['okx', 'okxf', 'bingx', 'bingxf', 'kucoin', 'coinbase', 'kraken']);
 function secSplit(s) { for (const q of ['USDT', 'USDC', 'FDUSD', 'USD', 'BTC', 'EUR']) if (s.length > q.length && s.endsWith(q)) return [s.slice(0, -q.length), q]; return null; }
+/* Símbolos que no son de cripto (bolsa, índices, divisas, materias primas, dominancia) → velas del servidor de VORTEX (Yahoo) o de la dominancia */
+const YH_MAP = {DXY: 'DX-Y.NYB', VIX: '^VIX', VXN: '^VXN', SPX: '^GSPC', SPX500: '^GSPC', SPY: 'SPY', NDX: '^NDX', IXIC: '^IXIC', NAS100: '^NDX', US100: '^NDX', DJI: '^DJI', US30: '^DJI', RUT: '^RUT', US10Y: '^TNX', US30Y: '^TYX', US05Y: '^FVX', TNX: '^TNX',
+  GOLD: 'GC=F', XAUUSD: 'GC=F', SILVER: 'SI=F', XAGUSD: 'SI=F', USOIL: 'CL=F', WTI: 'CL=F', UKOIL: 'BZ=F', BRENT: 'BZ=F', NATGAS: 'NG=F', COPPER: 'HG=F', NI225: '^N225', DAX: '^GDAXI', DE40: '^GDAXI', UKX: '^FTSE', UK100: '^FTSE', HSI: '^HSI', CAC40: '^FCHI', FCHI: '^FCHI', STOXX50E: '^STOXX50E', SX5E: '^STOXX50E', NIFTY: '^NSEI', BANKNIFTY: '^NSEBANK', SENSEX: '^BSESN'};
+const YH_SFX = {NSE: '.NS', BSE: '.BO', TSX: '.TO', TSXV: '.V', LSE: '.L', XETR: '.DE', FWB: '.F', MOEX: '.ME', ASX: '.AX', HKEX: '.HK', TSE: '.T', BMV: '.MX', BMFBOVESPA: '.SA', EURONEXT: '.PA', MIL: '.MI', BME: '.MC', SIX: '.SW', KRX: '.KS', TWSE: '.TW', SGX: '.SI'};
+const YH_STOCK = new Set(['NASDAQ', 'NYSE', 'AMEX', 'NYSEARCA', 'ARCA', 'BATS', 'CBOE', 'OTC', 'NYSEAMERICAN', 'US']);
+const YH_FX = new Set(['FX', 'OANDA', 'FX_IDC', 'FOREXCOM', 'PEPPERSTONE', 'FXCM', 'SAXO', 'ICMARKETS', 'CAPITALCOM', 'EIGHTCAP', 'BLACKBULL', 'TVC']);
+function yhKey(pfx, s) {
+  if ((pfx === 'CRYPTOCAP' || !pfx) && /^(BTC|USDT)\.D$/.test(s)) return {key: s + '@dom', sym: s, src: 'dom'};
+  let y = null;
+  if (YH_MAP[s]) y = YH_MAP[s];
+  else if (/^([A-Z]{1,3})[12]!$/.test(s) && pfx !== 'BINANCE') y = /^([A-Z]{1,3})/.exec(s)[1] + '=F'; // futuros continuos: ES1!, NQ1!, GC1!, CL1!…
+  else if (pfx && YH_SFX[pfx] && /^[A-Z0-9.&_-]{1,15}$/.test(s)) y = (pfx === 'HKEX' ? s.padStart(4, '0') : s.replace(/_/g, '-')) + YH_SFX[pfx];
+  else if (pfx && YH_FX.has(pfx) && /^[A-Z]{6}$/.test(s)) y = s + '=X';
+  else if (pfx && YH_STOCK.has(pfx) && /^[A-Z][A-Z0-9.]{0,9}$/.test(s)) y = s.replace(/\./g, '-');
+  return y ? {key: y + '@yh', sym: y, src: 'yh'} : null;
+}
 function secKey(raw, exch) { // → {key, sym, src} o null
   let s = String(raw).trim().toUpperCase(), src = exch || 'binance';
-  const m = /^([A-Z0-9_]+):(.+)$/.exec(s); if (m) { const p = SEC_PFX[m[1]]; if (!p) return null; src = p; s = m[2]; }
+  { const mm = /^([A-Z0-9_]+):(.+)$/.exec(s), pfx = mm ? mm[1] : '', rest = mm ? mm[2] : s; if (!(pfx && SEC_PFX[pfx])) { const y = yhKey(pfx, rest); if (y) return y; } }
+  const m = /^([A-Z0-9_]+):(.+)$/.exec(s);
+  if (m) { const p = SEC_PFX[m[1]];
+    if (!p) { if (!/^[A-Z0-9]{2,15}[-_/]?(USDT|USDC|USD|BTC|ETH|EUR|PERP)(\.P)?$/.test(m[2])) return null; src = 'binance'; s = m[2].replace(/[-_/]/g, '').replace(/USD(\.P)?$/, 'USDT$1').replace(/PERP$/, 'USDT.P'); } // otro exchange de cripto (Bitfinex, Bitstamp, Coinbase USD…): el mismo par en Binance
+    else { src = p; s = m[2]; } }
   let perp = /\.P$|PERP$/.test(s); s = s.replace(/\.P$|PERP$/, '');
   if (m && perp && SEC_PERP[src]) src = SEC_PERP[src]; else if (!m && perp && SEC_PERP[src]) src = SEC_PERP[src];
   const glued = s.replace(/[-_/]/g, ''); if (!/^[A-Z0-9]{3,24}$/.test(glued)) return null;
@@ -1661,7 +1975,7 @@ function sliceForSecurity(ast) {
   if (sliceCache.has(ast)) return sliceCache.get(ast);
   const refsOf = (node, out) => { if (Array.isArray(node)) { for (const x of node) refsOf(x, out); } else if (node && typeof node === 'object') { if (typeof node.name === 'string') out.add(node.name); if (Array.isArray(node.names)) for (const q of node.names) out.add(q); for (const k in node) if (k !== 'line' && typeof node[k] === 'object') refsOf(node[k], out); } return out; };
   const defsOf = (node, out) => { if (Array.isArray(node)) { for (const x of node) defsOf(x, out); } else if (node && typeof node === 'object') { if ((node.k === 'decl' || node.k === 'assign' || node.k === 'fn') && typeof node.name === 'string') out.add(node.name); if (node.k === 'tdecl') for (const q of node.names) out.add(q); for (const k in node) if (k !== 'line' && typeof node[k] === 'object') defsOf(node[k], out); } return out; };
-  const hasSec = node => { if (Array.isArray(node)) return node.some(hasSec); if (!node || typeof node !== 'object') return false; if (node.k === 'call' && node.fn && node.fn.k === 'mem' && node.fn.prop === 'security' && node.fn.obj && node.fn.obj.name === 'request') return true; for (const k in node) if (k !== 'line' && typeof node[k] === 'object' && hasSec(node[k])) return true; return false; };
+  const hasSec = node => { if (Array.isArray(node)) return node.some(hasSec); if (!node || typeof node !== 'object') return false; if (node.k === 'call' && node.fn && node.fn.k === 'mem' && (node.fn.prop === 'security' || node.fn.prop === 'security_lower_tf') && node.fn.obj && node.fn.obj.name === 'request') return true; for (const k in node) if (k !== 'line' && typeof node[k] === 'object' && hasSec(node[k])) return true; return false; };
   const DROP = new Set(['expr', 'decl', 'tdecl', 'assign', 'if', 'for', 'forin', 'while', 'switch']);
   const info = ast.map(st => ({st, seed: hasSec(st), defs: defsOf(st, new Set()), refs: refsOf(st, new Set()), draw: st.k === 'expr' && st.e && st.e.k === 'call' && ((st.e.fn.k === 'id' && SLICE_DRAW.has(st.e.fn.name)) || (st.e.fn.k === 'mem' && st.e.fn.obj.k === 'id' && ['label', 'line', 'box', 'table', 'linefill', 'polyline', 'strategy'].includes(st.e.fn.obj.name)))}));
   const keep = new Array(ast.length).fill(false), N = new Set();
@@ -1672,9 +1986,39 @@ function sliceForSecurity(ast) {
   }
   const out = ast.filter((_, i) => keep[i]); sliceCache.set(ast, out); return out;
 }
+/* request.security_lower_tf: pide las velas menores (la app las descarga), corre la expresión en ellas y devuelve, en cada vela del gráfico,
+   el array con los valores de sus velas menores (tupla → una tupla de arrays). Sin velas menores para una vela vieja → array vacío, como en TradingView. */
+function evSecurityLTF(n, env) {
+  const ctx = env.ctx, A = {}, names = ['symbol', 'timeframe', 'expression', 'ignore_invalid_symbol', 'currency', 'ignore_invalid_timeframe', 'calc_bars_count']; let pos = 0;
+  for (const a of n.args) A[a.name || names[pos++]] = a;
+  if (!A.symbol || !A.timeframe || !A.expression) throw new PineError('request.security_lower_tf() necesita símbolo, temporalidad y expresión', n.line);
+  const tw = (e => { if (e.k === 'tup') return e.items.length; if (e.k === 'call' && e.fn.k === 'id' && ctx.fns.has(e.fn.name)) { const b = ctx.fns.get(e.fn.name).body, l = b[b.length - 1]; if (l && l.k === 'expr' && l.e.k === 'tup') return l.e.items.length; } return 0; })(A.expression.e);
+  const isTup = tw > 0, width = tw; // [a, b] = request.security_lower_tf(…, [x, y]) o (…, f()) donde f devuelve una tupla
+  const empty = () => isTup ? new Tup(Array.from({length: width}, () => [])) : [];
+  let sym = ev(A.symbol.e, env); const tf = ev(A.timeframe.e, env);
+  const sk = isna(sym) || sym === '' ? {key: ctx.symKey || ctx.symbol, sym: ctx.symbol, src: ctx.exch || 'binance'} : secKey(sym, ctx.exch), tfk = tfKey(tf, ctx);
+  const one = () => { const v = ev(A.expression.e, env); return v instanceof Tup ? new Tup(v.a.map(x => isna(x) ? [] : [x])) : isna(v) ? [] : [v]; };
+  if (!sk || !tfk) { if (!ctx.secondary) warn(ctx, n.line, `request.security_lower_tf(${sym}, ${tf}): símbolo o temporalidad no soportados; se usa la vela del gráfico`, 'sltf:' + sym + tf, 'fix'); return ctx.secondary ? null : one(); }
+  const key = sk.key + '|' + tfk, same = (sk.key === (ctx.symKey || ctx.symbol) || (sk.src === (ctx.exch || 'binance') && sk.sym.replace(/[-_]/g, '') === String(ctx.symbol).replace(/[-_]/g, ''))) && tfk === ctx.interval;
+  if (ctx.secondary) { if (!same) return null; const v = ev(A.expression.e, env); let r = ctx.rec.get(n); if (!r) ctx.rec.set(n, r = []); r[ctx.bar] = v; return empty(); }
+  if (same || tfms(tfk) >= ctx.ms) return one(); // misma temporalidad (o mayor): la vela del gráfico
+  const data = ctx.opts.sec && ctx.opts.sec[key];
+  if (!data) { (ctx.needs || (ctx.needs = new Map())).set(key, {symbol: sk.key, interval: tfk}); ctx.incomplete = true; return empty(); }
+  if (!data.length) { warn(ctx, n.line, `No se pudieron obtener velas de ${sk.key} en ${tfk}: arrays vacíos`, 'secfail:' + key, 'unsupported'); return empty(); }
+  let run = ctx.secRuns.get('ltf|' + key);
+  if (!run) { run = runSecondary(ctx, sk.key, tfk, key, data); const lo = new Int32Array(ctx.n), hi = new Int32Array(ctx.n); let j = 0;
+    for (let i = 0; i < ctx.n; i++) { const t0 = ctx.candles[i].t, t1 = t0 + ctx.ms; while (j < data.length && data[j].t < t0) j++; lo[i] = j; let k = j; while (k < data.length && data[k].t < t1) k++; hi[i] = k; }
+    run.lo = lo; run.hi = hi; ctx.secRuns.set('ltf|' + key, run); }
+  const rec = run.rec.get(n); if (!rec) return empty();
+  const a = run.lo[ctx.bar], b = run.hi[ctx.bar];
+  if (!isTup) { const out = []; for (let k = a; k < b; k++) if (rec[k] !== undefined && !isna(rec[k])) out.push(rec[k]); return out; }
+  const cols = Array.from({length: width}, () => []);
+  for (let k = a; k < b; k++) { const v = rec[k]; if (v instanceof Tup) v.a.forEach((x, q) => { if (q < width) cols[q].push(x); }); }
+  return new Tup(cols);
+}
 function runSecondary(parent, sym, tfk, key, data) {
   const c2 = {candles: data, n: data.length, bar: 0, steps: 0, deadline: parent.deadline, warnings: [], wkeys: new Set(), fns: parent.fns, types: parent.types, enums: parent.enums, methods: parent.methods, frames: new Map(), frameList: [], depth: 0, ctrl: null,
-    legacy: parent.legacy, incomplete: false, interval: tfk, symbol: String(sym).split('@')[0], exch: String(sym).split('@')[1] || 'binance', symKey: sym, mintick: parent.mintick, ms: tfms(tfk), opts: {inputs: parent.opts.inputs}, pal: new Map(), out: freshOut(), secondary: true, rec: new Map(), secRuns: new Map(), ast: parent.ast};
+    legacy: parent.legacy, v6: parent.v6, incomplete: false, interval: tfk, symbol: String(sym).split('@')[0], exch: String(sym).split('@')[1] || 'binance', symKey: sym, mintick: parent.mintick, ms: tfms(tfk), opts: {inputs: parent.opts.inputs}, pal: new Map(), out: freshOut(), secondary: true, rec: new Map(), secRuns: new Map(), ast: parent.ast};
   loopProgram(sliceForSecurity(parent.ast), c2);
   const j = new Int32Array(parent.n); let k = -1;
   for (let i = 0; i < parent.n; i++) { const t = parent.candles[i].t; while (k + 1 < data.length && data[k + 1].t <= t) k++; j[i] = k; }
@@ -1690,11 +2034,10 @@ function run(code, candles, opts) {
   const n = candles.length, vm = /\/\/\s*@version\s*=\s*(\d+)/.exec(code), version = vm ? +vm[1] : 5;
   const iv = opts.interval || '1h', ms = (TF_MIN[iv] || (n > 1 ? (candles[n - 1].t - candles[0].t) / (n - 1) / 60000 : 60)) * 60000;
   const ctx = {candles, n, bar: 0, steps: 0, deadline: t0 + (opts.timeLimitMs || 8000), warnings: [], wkeys: new Set(), fns: new Map(), types: new Map(), methods: new Map(), frames: new Map(), frameList: [], depth: 0, ctrl: null,
-    legacy: version < 5, incomplete: false, interval: iv, symbol: opts.symbol || 'BTCUSDT', exch: opts.exch || 'binance', symKey: opts.symKey || '', mintick: opts.mintick || 0.01, ms, opts, pal: new Map(),
+    legacy: version < 5, v6: version >= 6, incomplete: false, interval: iv, symbol: opts.symbol || 'BTCUSDT', exch: opts.exch || 'binance', symKey: opts.symKey || '', mintick: opts.mintick || 0.01, ms, opts, pal: new Map(),
     out: {meta: {kind: 'indicator', title: opts.name || 'Script', overlay: false}, plots: [], hlines: [], fills: [], bgcolors: [], barcolors: [], shapes: [], labels: [], lines: [], boxes: [], inputs: [], palette: [], _p: {}}};
   ctx.out.labels.__n = 'l'; ctx.out.lines.__n = 'n'; ctx.out.boxes.__n = 'b'; ctx.out.polylines = Object.assign([], {__n: 'p'}); ctx.out.tables = []; ctx.out.candles = []; ctx.out.linefills = [];
   for (const f of san.fixes) ctx.warnings.push({line: f.line, level: 'fix', msg: 'Reparado automáticamente: ' + f.msg});
-  if (version > 5) ctx.warnings.push({line: 0, level: 'info', msg: `Script de la versión ${version}: se interpreta con la sintaxis v5; si algo no coincide con TradingView, avísalo`});
   if (version < 5) ctx.warnings.push({line: 0, level: 'info', msg: `Script de la versión ${version}: se acepta la sintaxis antigua (study, sma, security…) sin prefijos; revisa el resultado`});
   analyze(ast, ctx);
   if (ctx.legacyUsed) ctx.warnings.push({line: 0, level: 'fix', msg: 'Convertido de sintaxis antigua: ' + [...ctx.legacyUsed].map(([a, b]) => `${a}() → ${b}()`).join(', ')});
