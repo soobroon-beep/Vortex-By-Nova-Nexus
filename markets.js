@@ -305,8 +305,44 @@
     if (opts.closedOnly !== false) { const ms = IVMS[tf], now = Date.now(); cs = ms && tf !== '1M' ? cs.filter(c => c.t + ms <= now) : cs.slice(0, -1); }
     cs = cs.slice(-limit); if (opts.meta) return {cs, src: used, sym: usym}; return cs;
   }
+  /* ───────── Historial hacia atrás (como en TradingView) ─────────
+     Velas ANTERIORES a «end» (ms) del mismo par y exchange, de la más vieja a la más nueva. El gráfico las pide en bloques mientras
+     te desplazas a la izquierda, hasta llegar a la primera vela que tiene el exchange (el listado de la moneda).
+     Regresa [] cuando ya no hay más historia. HTX y Kraken solo dan las velas recientes: ahí la historia termina en lo que entregan. */
+  async function klinesBefore(src, sym, tf, end, n = 1000) {
+    end = Math.floor(+end); if (!Number.isFinite(end) || end <= 0) return [];
+    const ms = IVMS[tf], e1 = end - 1, older = a => tidy(a).filter(c => c.t < end).slice(-n);
+    if (src === 'binance') { let er; for (const b of BN) { try { return older(bnRows(await raw(`${b}/klines?symbol=${norm(sym).replace(/USD$/, 'USDT')}&interval=${tf}&limit=${Math.min(1000, n)}&endTime=${e1}`))); } catch (x) { er = x; } } throw er || Error('Binance sin datos'); }
+    if (src === 'binancef') return older(bnRows(await get(`https://fapi.binance.com/fapi/v1/klines?symbol=${norm(sym)}&interval=${tf}&limit=${Math.min(1500, n)}&endTime=${e1}`)));
+    if (src === 'bybit' || src === 'bybitf') { const iv = BYB[tf]; if (!iv) return []; const j = await get(`https://api.bybit.com/v5/market/kline?category=${src === 'bybit' ? 'spot' : 'linear'}&symbol=${norm(sym)}&interval=${iv}&limit=${Math.min(1000, n)}&end=${e1}`); if (!j || (j.retCode != null && j.retCode !== 0)) throw Error('Bybit sin datos'); return older(arr(j.result && j.result.list).map(d => ({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}))); }
+    if (src === 'okx' || src === 'okxf') { // OKX: 100 velas por consulta, «after» = más viejas que ese tiempo
+      const bar = OKB[tf]; if (!bar) return []; const inst = dashSym(sym) + (src === 'okxf' ? '-SWAP' : ''), out = []; let cur = end;
+      for (let p = 0; p < Math.ceil(Math.min(n, 1000) / 100); p++) { const j = await get(`https://www.okx.com/api/v5/market/history-candles?instId=${inst}&bar=${bar}&limit=100&after=${cur}`); if (j && j.code && j.code !== '0') { if (out.length) break; throw Error('OKX sin datos'); } const d = arr(j && j.data); if (!d.length) break; out.push(...d); const t = +d[d.length - 1][0]; if (!(t < cur)) break; cur = t; }
+      return older(out.map(d => ({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})));
+    }
+    if (src === 'coinbase') { const g = CBG[tf]; if (!g) return []; const prod = dashSym(sym), out = []; let to = end - 1000;
+      for (let p = 0; p < Math.ceil(Math.min(n, 900) / 300); p++) { const st = to - 300 * g * 1000, rows = arr(await get(`https://api.exchange.coinbase.com/products/${prod}/candles?granularity=${g}&start=${new Date(st).toISOString()}&end=${new Date(to).toISOString()}`)); if (!rows.length) break; out.push(...rows); to = st; }
+      return older(out.map(x => ({t: x[0] * 1000, l: +x[1], h: +x[2], o: +x[3], c: +x[4], v: +x[5]})));
+    }
+    if (src === 'bingx' || src === 'bingxf') { if (!BX_IV[tf]) return [];
+      const u = src === 'bingx' ? `https://open-api.bingx.com/openApi/spot/v2/market/kline?symbol=${dashSym(sym)}&interval=${BX_IV[tf]}&limit=${Math.min(1000, n)}&endTime=${e1}` : `https://open-api.bingx.com/openApi/swap/v3/quote/klines?symbol=${dashSym(sym)}&interval=${BX_IV[tf]}&limit=${Math.min(1000, n)}&endTime=${e1}`;
+      const j = await get(u); if (j && j.code && j.code !== 0) throw Error('BingX sin datos');
+      return older(arr(j && j.data).map(x => Array.isArray(x) ? {t: +x[0], o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[5]} : {t: +x.openTime || +x.time, o: +x.open, h: +x.high, l: +x.low, c: +x.close, v: +x.volume}));
+    }
+    if (src === 'dom') { try { return older(await klinesDom(sym, tf, 1e9)); } catch { return []; } }
+    const iv = TF[src] && TF[src][tf]; if (!iv || !ms) return [];
+    const sec = Math.floor(e1 / 1000);
+    if (src === 'kucoin') { const j = await get(`https://api.kucoin.com/api/v1/market/candles?type=${iv}&symbol=${sym}&startAt=${sec - Math.round(1500 * ms / 1000)}&endAt=${sec}`); return older(arr(j && j.data).map(d => ({t: d[0] * 1000, o: +d[1], c: +d[2], h: +d[3], l: +d[4], v: +d[5]}))); }
+    if (src === 'gate') { const d = await get(`https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${sym}&interval=${iv}&from=${sec - Math.round(999 * ms / 1000)}&to=${sec}`); return older(arr(d).map(x => ({t: x[0] * 1000, c: +x[2], h: +x[3], l: +x[4], o: +x[5], v: +x[6]}))); }
+    if (src === 'mexc') { const d = await get(`https://api.mexc.com/api/v3/klines?symbol=${sym}&interval=${iv}&limit=${Math.min(1000, n)}&endTime=${e1}`); return older(arr(d).map(x => ({t: +x[0], o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[5]}))); }
+    if (src === 'bitget') { const out = []; let to = e1; // historial de Bitget: 200 por consulta
+      for (let p = 0; p < Math.ceil(Math.min(n, 1000) / 200); p++) { const j = await get(`https://api.bitget.com/api/v2/spot/market/history-candles?symbol=${sym}&granularity=${iv}&endTime=${to}&limit=200`); const d = arr(j && j.data).map(x => ({t: +x[0], o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[5]})).filter(c => c.t <= to); if (!d.length) break; out.push(...d); const t0 = Math.min(...d.map(c => c.t)); if (!(t0 < to)) break; to = t0 - 1; }
+      return older(out);
+    }
+    return []; // htx, kraken: sin historial más antiguo por API pública
+  }
   const LIVE_WS = ['binance', 'binancef', 'bybit', 'bybitf', 'okx', 'okxf']; // el resto se actualiza consultando cada pocos segundos
 
-  root.CCTMarkets = {DOM_NAMES, PERP, isPerp, klines, klinesAny, IVMS, dashSym, tfOk, TF, LIVE_WS, PROXY, klinesDom, EXCH, SHORT, ORDER, parse, symOf, srcOf, mk, norm, N, universe, loaded, search, tickers, klinesBingx, BX_IV, setFetcher, splitQ, symFor, fallbackChain, setStore, lastFallback, FALLBACK};
+  root.CCTMarkets = {DOM_NAMES, PERP, isPerp, klines, klinesAny, IVMS, dashSym, tfOk, TF, LIVE_WS, PROXY, klinesDom, EXCH, SHORT, ORDER, parse, symOf, srcOf, mk, norm, N, universe, loaded, search, tickers, klinesBingx, klinesBefore, BX_IV, setFetcher, splitQ, symFor, fallbackChain, setStore, lastFallback, FALLBACK};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTMarkets;
 })(typeof window !== 'undefined' ? window : globalThis);
