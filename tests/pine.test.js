@@ -307,3 +307,7 @@ test('ta.adx(len) es igual al ADX de ta.dmi (los modelos de IA lo usan mucho)', 
     for (const f of global.CCTFree) { const r = P2.run(f.code, cs2, {interval: '1h', symbol: 'BTCUSDT', sec: {'BTCUSDT|1d': d}}); assert.ok(r.ok, f.id + ': ' + (r.error && r.error.msg)); assert.equal(r.warnings.filter(w => w.level === 'unsupported').length, 0, f.id); }
   });
 }
+test('bucles con la variable tipada (for int i = 0 to n, for float x in arr, for [int i, float x] in arr)', () => {
+  const r = vals('a = array.from(1.0, 2.0, 3.0)\nfloat s = 0.0\nfor int i = 0 to 2\n    s += a.get(i)\nfor float x in a\n    s += x\nfor [int k, float x] in a\n    s += k\nplot(s)', closes([1, 2, 3]));
+  assert.equal(r.plots[0].values[2], 15);
+});

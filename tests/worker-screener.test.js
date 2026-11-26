@@ -25,11 +25,22 @@ test('ronda completa del screener: analiza, manda a Discord y al celular, y no r
     const {b64u} = W; const kp = await crypto.subtle.generateKey({name: 'ECDH', namedCurve: 'P-256'}, true, ['deriveBits']);
     const p256 = b64u(await crypto.subtle.exportKey('raw', kp.publicKey)), auth = b64u(crypto.getRandomValues(new Uint8Array(16)));
     await env.KV.put('devs', JSON.stringify(['dev1234567890abcdef'])); await env.KV.put('dev:dev1234567890abcdef', JSON.stringify({sub: {endpoint: 'https://push.example/x', keys: {p256dh: p256, auth}}, alerts: [], scr: {on: true, h1: true, h4: true}}));
-    const now = Math.floor(Date.now() / 36e5) * 36e5 + 3 * 6e4 + (Math.floor(Date.now() / 36e5) % 4 === 0 ? 36e5 : 0);
+    const now = Math.floor(Date.now() / 36e5) * 36e5 + 7 * 6e4 + (Math.floor(Date.now() / 36e5) % 4 === 0 ? 36e5 : 0);
     const r = await W.scrKick(env, now); console.log(JSON.stringify(r));
     assert.ok(r.ok, JSON.stringify(r)); assert.equal(r.of, 50); assert.equal(calls.kl, 50);
     if (r.n) { assert.equal(r.discord, true); assert.equal(calls.discord, 1); assert.equal(calls.push, 1); assert.equal(r.pushed, 1); }
     const st = await env.KV.get('scr', 'json'); assert.equal(st['1h'], Math.floor(now / 36e5)); assert.equal(st.lock, 0);
     assert.equal(await W.scrKick(env, now + 6e4), null); // misma franja: no se repite
   } finally { globalThis.fetch = real; }
+});
+
+test('el respaldo del servidor espera al Motor y no borra la franja 4h que el Motor ya anotó', async () => {
+  const W = await load(), env = {KV: kv()};
+  const base = Math.floor(Date.now() / 144e5) * 144e5;
+  assert.equal(await W.scrKick(env, base + 2 * 6e4), null); // minuto 2: le toca al Motor
+  // el Motor anota 1h y 4h mientras una ronda vieja del respaldo falla: al liberar ya no pisa lo anotado
+  await env.KV.put('scr', JSON.stringify({'1h': Math.floor(base / 36e5), '4h': Math.floor(base / 144e5), last: {'4h': {at: base + 110e3}}}));
+  const real = globalThis.fetch; globalThis.fetch = async () => { throw new Error('sin red'); };
+  try { assert.equal(await W.scrKick(env, base + 8 * 6e4), null); } finally { globalThis.fetch = real; } // nada pendiente
+  const st = await env.KV.get('scr', 'json'); assert.equal(st['4h'], Math.floor(base / 144e5)); assert.ok(st.last['4h'].at);
 });

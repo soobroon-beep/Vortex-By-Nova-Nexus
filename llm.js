@@ -67,7 +67,10 @@
       if (out.includes(a) && a.trim()) { out = out.replace(a, () => b); applied++; continue; }
       const lines = out.split('\n'), want = norm(a).filter((l, i, arr) => !(i === arr.length - 1 && l === '')), have = lines.map(l => l.trim()); let at = -1;
       for (let i = 0; i + want.length <= have.length && want.length; i++) { let ok = true; for (let j = 0; j < want.length; j++) if (have[i + j] !== want[j]) { ok = false; break; } if (ok) { at = i; break; } }
-      if (at >= 0) { lines.splice(at, want.length, ...b.split('\n')); out = lines.join('\n'); applied++; } else failed.push(a.split('\n')[0].slice(0, 80));
+      if (at >= 0) { // coincidió ignorando la sangría: se re-sangra el reemplazo con la sangría real del código (si no, Pine pierde el bloque)
+        const lead = l => (/^[ \t]*/.exec(l) || [''])[0], aFirst = a.split('\n').find(l => l.trim()) || '', aInd = lead(aFirst), oInd = lead(lines[at]);
+        const nb = b.split('\n').map(l => !l.trim() ? l : oInd + (aInd && l.startsWith(aInd) ? l.slice(aInd.length) : l.replace(/^[ \t]*/, m => m.length > aInd.length ? m.slice(aInd.length) : '')));
+        lines.splice(at, want.length, ...nb); out = lines.join('\n'); applied++; } else failed.push(a.split('\n')[0].slice(0, 80));
     }
     return {code: out, applied, failed, found, changed: out !== String(code)};
   }

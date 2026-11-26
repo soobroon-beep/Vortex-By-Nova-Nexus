@@ -206,6 +206,9 @@ async function main() {
   // salud del servidor: que el Motor siga vivo y que las velas de VORTEX estén al día
   try {
     const mo = (await db.doc('server/motor').get()).data() || {};
+    // Screener: si el Motor anotó la franja en su propio registro, sí salió (el del servidor de avisos se llegaba a pisar y daba falsas alarmas del 4h)
+    const SL = { '1h': [36e5, 2.5], '4h': [144e5, 6] }, ms = mo.scr || {};
+    for (const [tf, [len, lim]] of Object.entries(SL)) if ((+ms[tf] || 0) * len > now - lim * 3600e3) for (let i = uniq.length - 1; i >= 0; i--) if (uniq[i].sig === 'scr ' + tf) uniq.splice(i, 1);
     if (!mo.beat || now - mo.beat > 40 * 6e4) uniq.push({ area: 'Tareas automáticas', kind: 'motor', sev: 'alta', title: 'El Motor del servidor está detenido (alertas, bots y Screener)', sig: 'motor parado', ev: mo.beat ? `Último latido hace ${Math.round((now - mo.beat) / 6e4)} min` : 'Sin latido registrado', where: 'servidor', fix: 'Lanzar a mano «Motor del servidor» en GitHub Actions (Run workflow).' });
     const cd = (await db.doc('candles/BTCUSDT_1h').get()).data();
     if (!cd || now - (cd.at || 0) > 3 * 3600e3) uniq.push({ area: 'Datos de mercado', kind: 'candles', sev: 'media', title: 'Las velas de VORTEX no se están guardando', sig: 'velas propias', ev: cd ? `Última actualización hace ${((now - cd.at) / 3600e3).toFixed(1)} h (fuente ${cd.src})` : 'Aún no hay velas guardadas', where: 'servidor' });

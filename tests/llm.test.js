@@ -147,3 +147,8 @@ test('Nexus Pixel: un aviso de «no tienes créditos» nunca llega como respuest
   await assert.rejects(L.pixelChat([{role: 'user', content: 'hola'}], {json: true}), e => !/credit|cr[eé]dito/i.test(e.message));
   assert.ok(calls.every(c => /vortex-push/.test(c.url)) && !calls.some(c => /pollinations/.test(c.url)));
 });
+test('applyPatch conserva la sangría cuando el bloque SEARCH viene sin ella', () => {
+  const L = require('../llm.js'), A = L.applyPatch || (globalThis.CCTLLM && globalThis.CCTLLM.applyPatch);
+  const out = A('if x\n    for int i = 0 to n\n        a += 1\n', '<<<<<<< SEARCH\nfor int i = 0 to n\n=======\nfor i = 0 to n\n>>>>>>> REPLACE').code;
+  require('node:assert/strict').equal(out, 'if x\n    for i = 0 to n\n        a += 1\n');
+});
