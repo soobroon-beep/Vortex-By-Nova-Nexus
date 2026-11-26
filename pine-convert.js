@@ -16,6 +16,12 @@
   const fnCount = code => (code.match(/^\s*(?:export\s+)?(?:method\s+)?[A-Za-z_]\w*\s*\([^()\n]*\)\s*=>/gm) || []).length;
   const supported = () => { try { return window.CCTPine.supported().filter(x => /^(ta|math|str|array|matrix|map|color|input|label|line|box|table|polyline|linefill|plot|plotshape|plotchar|plotcandle|plotbar|hline|fill|bgcolor|barcolor|nz|na|fixnan|request\.security|timeframe|time|hour|minute|dayof|month|year)/.test(x)).join(', '); } catch { return ''; } };
 
+  // Guía para corregir (no para crear): conserva la versión y el estilo del autor; el motor entiende Pine v1–v6
+  const CONVERT_GUIDE = 'Eres un experto en Pine Script v4, v5 y v6 de TradingView. El motor de VORTEX ejecuta Pine v1 a v6: type/method/enum, map, matrix, arrays con índices negativos, '
+    + 'request.security a cripto (Binance, Bybit, OKX, BingX…), a bolsa/índices/divisas (NASDAQ:AAPL, TVC:DXY, CBOE:VIX, FX:EURUSD) y a la dominancia (CRYPTOCAP:BTC.D), request.security_lower_tf, request.footprint, '
+    + 'tablas, polylines, chart.point y la biblioteca «import TradingView/ta». REGLAS: conserva la línea //@version del script y su indicator(...) tal cual; no acortes el script; no cambies inputs, colores, textos ni cálculos que sí funcionan; '
+    + 'escribe código válido de la misma versión del script.';
+
   let job = null; // una conversión a la vez
   function el(html) { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; }
 
@@ -76,6 +82,7 @@
     if (job.v && job.v < 4) step('Pine antiguo (v' + job.v + ')', 'Se adapta automáticamente al formato actual', 'warn');
     let s = step('Compilando…'); s.key = 'Compilar'; await tick();
     let res = await A.run(job.code, job.name); if (job.cancel) return;
+    if (res && !res.ok && res.error && /tard/.test(res.error.msg)) { set(s, 'warn', 'Script pesado: se le da más tiempo…'); await tick(); res = await A.run(job.code, job.name, 45000); if (job.cancel) return; } // los indicadores grandes (perfiles, matrices…) necesitan más tiempo
     if (res && res.ok) { set(s, 'ok', 'Compilado'); }
     else if (res && res.error && /velas/.test(res.error.msg)) { return fail(res.error.msg); }
     else set(s, 'err', 'No compiló', res && res.error ? (res.error.line ? 'Línea ' + res.error.line + ': ' : '') + res.error.msg : '');
@@ -91,7 +98,7 @@
       if (job.cancel) return;
       if (!fixed || fixed === job.code) { set(sf, 'err', `Intento ${job.tries}: sin cambios útiles`); continue; }
       const sc = step('Compilando la versión corregida…'); await tick();
-      const r2 = await A.run(fixed, job.name); if (job.cancel) return;
+      const r2 = await A.run(fixed, job.name, 45000); if (job.cancel) return;
       const p2 = problems(r2);
       if (r2 && r2.ok && p2.length < probs.length + (res && res.ok ? 0 : 1)) { job.code = fixed; res = r2; probs = p2; showCode(fixed); set(sf, 'ok', `Corregido en el intento ${job.tries}`); set(sc, p2.length ? 'warn' : 'ok', p2.length ? `Compilado; quedan ${p2.length} parte(s) por corregir` : 'Compilado y ejecutado sin errores', p2[0] || ''); }
       else { set(sf, 'err', `Intento ${job.tries}: la corrección no funcionó`); set(sc, 'err', 'No compiló la versión corregida', p2[0] || ''); }
@@ -103,9 +110,9 @@
   async function aiFix(code, probs, res, L) {
     if (!L) throw new Error('La IA no está disponible');
     const big = code.split('\n').length > 220 || job.tries < MAX_TRIES, sup = supported(); // parches (solo lo que falla); el script completo solo en el último intento de un script corto
-    const sys = (L.PINE_GUIDE || '') + (sup ? '\nFUNCIONES DISPONIBLES EN EL MOTOR (usa SOLO estas): ' + sup : '')
+    const sys = CONVERT_GUIDE + (sup ? '\nFUNCIONES DISPONIBLES EN EL MOTOR (usa SOLO estas): ' + sup : '')
       + '\nTAREA: eres un convertidor experto de Pine Script. Te doy un script que funciona en TradingView pero en el motor de VORTEX falla en lo que se indica. Corrígelo para que funcione aquí SIN cambiar su lógica, sus cálculos, sus inputs, sus nombres ni sus colores. '
-      + 'Reemplaza solo lo que no existe por código equivalente (por ejemplo, funciones de librerías «import» se reescriben dentro del script con su misma fórmula; request.security con símbolos que no son de Binance se cambia por el símbolo del gráfico). No inventes funciones. NO toques las líneas que no tienen problema: no reordenes argumentos, no cambies comillas, formato ni comentarios.'
+      + 'Reemplaza solo lo que no existe por código equivalente: las funciones de una biblioteca «import» que no está incluida se escriben dentro del script como funciones propias con la misma fórmula de esa biblioteca (y se cambian sus llamadas «alias.funcion(» por «funcion(»; si la biblioteca ya no se usa, borra su línea import); un «Error en la vela N» (índice fuera del array, objeto na…) se corrige agregando la comprobación que falta (array.size() > i, not na(x)…) sin cambiar el cálculo. No inventes funciones. NO toques las líneas que no tienen problema: no reordenes argumentos, no cambies comillas, formato ni comentarios.'
       + (big ? '\nEl script es largo: NO lo reescribas completo. Responde SOLO con bloques de cambio con este formato EXACTO:\n<<<<<<< SEARCH\n(líneas exactas del código actual)\n=======\n(líneas nuevas)\n>>>>>>> REPLACE'
              : '\nResponde con 1 línea explicando el cambio y después el script COMPLETO corregido en un bloque ```pine.');
     const lines = code.split('\n'), ctxLines = new Set();

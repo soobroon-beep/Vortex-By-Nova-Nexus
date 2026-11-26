@@ -492,6 +492,36 @@ async function yahoo(sym) {
   }
   return null;
 }
+/* Velas de bolsa, índices, divisas y materias primas (Yahoo, datos públicos) para request.security de los scripts de Pine:
+   NASDAQ:AAPL, AMEX:SPY, TVC:DXY, CBOE:VIX, COMEX:GC1!… (la app traduce el símbolo de TradingView al de Yahoo). Con caché de 5 min. */
+const YH_TF = {'1m': ['1m', '7d', 1], '5m': ['5m', '60d', 1], '15m': ['15m', '60d', 1], '30m': ['30m', '60d', 1], '1h': ['60m', '730d', 1], '2h': ['60m', '730d', 2], '4h': ['60m', '730d', 4], '1d': ['1d', '10y', 1], '1w': ['1wk', '20y', 1], '1M': ['1mo', 'max', 1]};
+export async function yhCandles(sym, tf, fetchFn = fetch) {
+  const [iv, range, agg] = YH_TF[tf] || YH_TF['1d'];
+  for (const host of ['query1', 'query2']) {
+    try {
+      const r = await fetchFn(`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=${iv}`, {headers: {'user-agent': 'Mozilla/5.0 (VORTEX)', accept: 'application/json'}, cf: {cacheTtl: 300, cacheEverything: true}});
+      if (!r.ok) continue; const j = await r.json(), res = j && j.chart && j.chart.result && j.chart.result[0]; if (!res || !res.timestamp) continue;
+      const q = res.indicators.quote[0], t = res.timestamp, out = [], span = agg * 36e5;
+      for (let i = 0; i < t.length; i++) {
+        const o = q.open[i], h = q.high[i], l = q.low[i], c = q.close[i]; if (![o, h, l, c].every(Number.isFinite)) continue;
+        const ts = agg > 1 ? Math.floor(t[i] * 1000 / span) * span : t[i] * 1000, v = Number.isFinite(q.volume[i]) ? q.volume[i] : 0, last = out[out.length - 1];
+        if (last && last.t === ts) { last.h = Math.max(last.h, h); last.l = Math.min(last.l, l); last.c = c; last.v += v; } else out.push({t: ts, o, h, l, c, v});
+      }
+      if (out.length) return out.slice(-1500);
+    } catch {}
+  }
+  return null;
+}
+async function yhRoute(req, json, cors) {
+  const u = new URL(req.url), sym = String(u.searchParams.get('s') || ''), tf = String(u.searchParams.get('tf') || '1d');
+  if (!/^[\^A-Za-z0-9.=\-]{1,20}$/.test(sym) || !YH_TF[tf]) return json({error: 'Símbolo o temporalidad no válidos'}, 400);
+  const cache = caches.default, key = new Request(`https://vortex-cache.local/yh/${encodeURIComponent(sym)}/${tf}`);
+  const hit = await cache.match(key); if (hit) return new Response(await hit.text(), {headers: {...cors, 'content-type': 'application/json', 'x-cache': 'hit'}});
+  const cs = await yhCandles(sym, tf); if (!cs) return json({error: 'Sin datos para ' + sym}, 404);
+  const body = JSON.stringify({sym, tf, cs});
+  await cache.put(key, new Response(body, {headers: {'content-type': 'application/json', 'cache-control': 'public, max-age=300'}}));
+  return new Response(body, {headers: {...cors, 'content-type': 'application/json', 'x-cache': 'miss'}});
+}
 async function macroData() {
   const out = {at: Date.now()};
   await Promise.all([
@@ -540,6 +570,7 @@ export default {
     if (!ok) return json({error: 'Origen no permitido'}, 403);
     if (path === '/ai' || path.startsWith('/ai/')) return aiRoute(req, env, path, json, cors);
     if (req.method === 'GET' && path === '/macro') return macroRoute(env, json, cors);
+    if (req.method === 'GET' && path === '/yh') return yhRoute(req, json, cors); // velas de bolsa/índices/divisas para request.security de Pine
     if (req.method === 'GET' && path === '/mkt') { // datos PÚBLICOS de exchanges que bloquean CORS (BingX, KuCoin, MEXC…): solo GET, sin llaves, solo hosts permitidos
       let t; try { t = new URL(new URL(req.url).searchParams.get('u') || ''); } catch { return json({error: 'URL inválida'}, 400); }
       if (t.protocol !== 'https:' || !MKT_HOSTS.has(t.host)) return json({error: 'Exchange no permitido'}, 403);
