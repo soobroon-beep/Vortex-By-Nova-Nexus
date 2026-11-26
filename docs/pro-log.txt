@@ -1,7 +1,7 @@
-Fecha: Thu Nov 26 23:35:35 UTC 2026
-Clave de cifrado creada
+Fecha: Thu Nov 26 23:36:24 UTC 2026
+nova-sig: subido desde cifrado (349 líneas)
 nova-nexus: sin archivo en el repo (ya protegido)
 nova-osc: sin archivo en el repo (ya protegido)
 nova-sig: sin archivo en el repo (ya protegido)
 nova-scr: sin archivo en el repo (ya protegido)
-Subidos: 0 · en Firestore: 4 indicadores (nova-nexus, nova-osc, nova-scr, nova-sig) · cuenta del creador marcada Infinity: 1
+Subidos: 1 · en Firestore: 4 indicadores (nova-nexus, nova-osc, nova-scr, nova-sig) · cuenta del creador marcada Infinity: 1
