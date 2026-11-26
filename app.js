@@ -6124,7 +6124,7 @@ async function genPrev(x) {
   if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) ibRefresh();
   renderIndicators();
 }
-const prevImg = x => { if (x.id === 'cat:nova-lite') return novaLitePreviewSvg().replace('class="nova-prev"', 'class="pine-prev nl-prev"'); if (x.id === 'cat:nova-sig31') return novaSig31PreviewSvg().replace('class="nova-prev"', 'class="pine-prev nl-prev"'); const u = scriptPrev(x); return u && u !== 'err' ? `<img class="pine-prev" alt="Imagen de ${esc(x.name)}" src="${u}">` : `<div class="pine-prev ph">${u === 'err' ? 'Sin imagen: el script no se pudo calcular' : 'Generando imagen…'}</div>`; };
+const prevImg = x => { if (x.id === 'cat:nova-lite') return novaLitePreviewSvg().replace('class="nova-prev"', 'class="pine-prev nl-prev"'); const u = scriptPrev(x); return u && u !== 'err' ? `<img class="pine-prev" alt="Imagen de ${esc(x.name)}" src="${u}">` : `<div class="pine-prev ph">${u === 'err' ? 'Sin imagen: el script no se pudo calcular' : 'Generando imagen…'}</div>`; };
 window.__cctScripts = {addScript, store: () => prevStore}; // expuesto para pruebas
 const pineRetried = new Set(), pineHeavy = new Set(); // scripts que necesitan más de 12 s
 function schedulePine() {
@@ -6155,28 +6155,8 @@ function novaLitePreviewSvg() {
   [[4, 'LL', 1], [7, 'LH', 0], [10, 'HL', 1], [15, 'HH', 0], [18, 'HL', 1], [26, 'HH', 0]].forEach(([i, t, lo]) => { const k = cs[i]; c += `<text x="${X(i)}" y="${lo ? k[3] + 9 : k[2] - 4}" font-size="7" font-weight="800" fill="${lo ? '#4cd6b0' : '#ff8a95'}" text-anchor="middle" ${F}>${t}</text>`; });
   return `<svg class="nova-prev" viewBox="0 0 ${W} 120" role="img" aria-label="Vista previa de Nova LITE: estructura de mercado (LL, HL, HH), CHoCH, BOS, order block, FVG, barrida de liquidez y zonas premium y descuento"><defs><linearGradient id="nlBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0d1421"/><stop offset="1" stop-color="#111b2e"/></linearGradient></defs><rect width="${W}" height="120" rx="10" fill="url(#nlBg)"/>${c}</svg>`;
 }
-function novaSig31PreviewSvg() {
-  const W = 320, H = 120, F = 'font-family="Inter,system-ui,sans-serif"', X = i => 14 + i * 9.2;
-  // historia: sube a un techo (▼) → cae a un piso (▲ +) → rebota hasta TP3 y los niveles se borran
-  const path = [66, 61, 55, 50, 45, 40, 37, 39, 44, 50, 56, 62, 68, 74, 80, 85, 89, 92, 90, 86, 80, 73, 66, 60, 53, 47, 41, 36];
-  let v = 64, c = ''; const cs = path.map((t, i) => { const o = v, cl = t + (i % 2 ? 1.5 : -1.5); v = cl; return [o, cl, Math.min(o, cl) - 2 - (i % 3), Math.max(o, cl) + 2 + ((i + 1) % 3)]; });
-  const tag = (x, y, t, f, up) => `<rect x="${x - (t.length * 4.6 + 8) / 2}" y="${y}" width="${t.length * 4.6 + 8}" height="12" rx="3" fill="${f}"/><text x="${x}" y="${y + 9}" font-size="8" font-weight="800" fill="#fff" text-anchor="middle" ${F}>${t}</text>`;
-  // nube/EMA 100 suave
-  c += `<path d="${cs.map((k, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${(62 + Math.sin(i / 6) * 6 + i * 0.25).toFixed(1)}`).join('')}" fill="none" stroke="#8a97b3" stroke-width="1.3" opacity=".45"/>`;
-  // niveles de la señal ▼ (ya terminada: tocó SL y se borró → solo un rastro corto)
-  const lv = (x1, x2, y, col, dash, op) => `<line x1="${x1}" x2="${x2}" y1="${y}" y2="${y}" stroke="${col}" stroke-width="1" ${dash ? 'stroke-dasharray="3 2"' : ''} opacity="${op}"/>`;
-  const si = 18, ent = cs[si][1], ti = cs.length - 1, e2 = X(si), end = X(ti) + 4, sl = ent + 13, t1 = ent - 18, t2 = ent - 33, t3 = ent - 50;
-  c += `<rect x="${e2}" y="${ent}" width="${end - e2}" height="${sl - ent}" fill="#ff4444" opacity=".07"/><rect x="${e2}" y="${t3}" width="${end - e2}" height="${ent - t3}" fill="#11cf77" opacity=".06"/>`;
-  c += lv(e2, end, ent, '#8796ab', 1, .8) + lv(e2, end, sl, '#ff4444', 0, .9) + lv(e2, end, t1, '#11cf77', 1, .9) + lv(e2, end, t2, '#00aaff', 1, .9) + lv(e2, end, t3, '#ff9900', 1, .9);
-  [[sl, 'SL', '#ff4444'], [t1, 'TP1', '#11cf77'], [t2, 'TP2', '#00aaff'], [t3, 'TP3', '#ff9900']].forEach(([y, t, col]) => c += `<rect x="${end + 3}" y="${y - 5}" width="21" height="10" rx="2" fill="${col}" opacity=".9"/><text x="${end + 13.5}" y="${y + 3.2}" font-size="6.6" font-weight="700" fill="#fff" text-anchor="middle" ${F}>${t}</text>`);
-  c += `<text x="${end + 28}" y="${t3 + 3}" font-size="7.2" font-weight="800" fill="#ffb74d" ${F}>✓</text>`;
-  cs.forEach((k, i) => { const up = k[1] <= k[0], col = up ? '#12b886' : '#f23645'; c += `<line x1="${X(i)}" x2="${X(i)}" y1="${k[2]}" y2="${k[3]}" stroke="${col}" stroke-width="1"/><rect x="${X(i) - 2.6}" y="${Math.min(k[0], k[1])}" width="5.2" height="${Math.max(1.5, Math.abs(k[0] - k[1]))}" rx=".6" fill="${col}"/>`; });
-  c += tag(X(6), cs[6][2] - 15, '▼', '#d11645') + tag(X(si), cs[si][3] + 4, '▲ +', '#11cf77');
-  return `<svg class="nova-prev" viewBox="0 0 ${W} ${H}" role="img" aria-label="Vista previa de Nova Nexus Señales iA 3.1: señales ▼ y ▲ + anticipadas sobre las velas, EMA de tendencia y niveles SL, TP1, TP2 y TP3 que se borran solos al terminar la operación"><defs><linearGradient id="s31Bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0d1421"/><stop offset="1" stop-color="#111b2e"/></linearGradient></defs><rect width="${W}" height="${H}" rx="10" fill="url(#s31Bg)"/>${c}</svg>`;
-}
 function catPreviewSvg(id) {
   if (id === 'nova-nexus') return novaPreviewSvg();
-  if (id === 'nova-sig31') return novaSig31PreviewSvg();
   if (id === 'nova-lite') return novaLitePreviewSvg(); // ilustración propia, con el mismo estilo que Nova Nexus
   const bg = '<rect width="300" height="130" fill="#0b0e14"/>';
   if (id === 'nova-osc') {
