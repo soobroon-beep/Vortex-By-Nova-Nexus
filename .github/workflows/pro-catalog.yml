@@ -4,7 +4,7 @@ name: Proteger código Nova Nexus
 on:
   push:
     branches: [main]
-    paths: ['scripts/pro-catalog.js', '.github/workflows/pro-catalog.yml']
+    paths: ['scripts/pro-catalog.js', '.github/workflows/pro-catalog.yml', 'catalog/*.pine.enc']
   workflow_dispatch:
 permissions:
   contents: write
@@ -26,5 +26,5 @@ jobs:
       - name: Guardar el resultado
         run: |
           git config user.name "vortex-bot"; git config user.email "actions@users.noreply.github.com"
-          git add docs/pro-log.txt; git commit -m "pro: resultado de la protección" || exit 0
+          git add docs/pro-log.txt docs/pro-pubkey.pem; git commit -m "pro: resultado de la protección" || exit 0
           for i in 1 2 3; do git pull --rebase -q && git push -q && break; sleep 5; done
