@@ -391,11 +391,14 @@ let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null
 let currentView = 'watchView', sheetMode = 'select', editMode = false;
 let pineLastMs = 0, pineRes = {}, pineBusy = {}, pineDirty = {}, pineLast = 0, pineTimer = 0, pineKey = '', pineDraft = {name: '', code: ''}, pineSetSid = null, pineWorker = null, pineNoWorker = false, pineSeq = 0;
 const PINE_MAX = 6;
+const VIS_MAX = 2000; // velas visibles al alejar el gráfico al máximo (antes 400)
+const HIST_MAX = 120000; // tope de velas guardadas en memoria al ir hacia atrás en el historial
 let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null, multi = [];
 let paneMan = {}, paneHit = []; // escala vertical manual por panel (oscilador, RSI…) y su zona táctil; se llena al dibujar
 let dPanes = [], drawPaneKey = null; // paneles donde se puede DIBUJAR (oscilador, RSI, MACD, scripts…) con su escala · el panel del dibujo que estás haciendo
 let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
 let lastBfTop = '';
+let hist = {key: '', busy: false, done: false, failAt: 0, fails: 0}; // historial hacia atrás (ver loadOlder)
 let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0, wsPing = 0, dataSrc = 'binance', dataSym = '';
 const lastShown = {};
 
@@ -1492,7 +1495,11 @@ async function loadCandles(silent = false) {
   try {
     const r = await fetchKlinesAny(sym, tf, fetchCtl.signal);
     if (sym !== state.symbol || tf !== state.interval) return;
-    candles = r.cs; dataSrc = r.src === 'vortex' ? 'binance' : r.src; dataSym = r.sym || '';
+    const nsrc = r.src === 'vortex' ? 'binance' : r.src, hk = `${sym}|${tf}|${nsrc}|${r.sym || ''}`;
+    // Refresco silencioso (VORTEX, volver a la app, reconexión): se conserva la historia vieja que ya cargaste hacia atrás
+    let keep = []; if (silent && hist.key === hk && candles.length && r.cs.length) { const t0 = r.cs[0].t; keep = candles.filter(c => c.t < t0); if (liveGlide) liveGlideStop(); }
+    if (!keep.length) hist = {key: hk, busy: false, done: false, failAt: 0, fails: 0};
+    candles = keep.length ? keep.concat(r.cs) : r.cs; dataSrc = nsrc; dataSym = r.sym || '';
     if (r.fallback && !silent) toast(`${SOURCES[srcOf(sym)] || 'Binance'} no respondió: el gráfico usa ${r.src === 'vortex' ? 'las velas guardadas de VORTEX' : SOURCES[r.src] || r.src} mientras tanto`);
     recalc(); setTimeout(() => dvRefresh(), 0);
     if (!silent) { stopMotion(); visible = defaultVisible(); pan = 0; const ca = $('#chartArea'); if (ca) { ca.classList.remove('swap-in'); void ca.offsetWidth; ca.classList.add('swap-in'); } }
@@ -1505,6 +1512,47 @@ async function loadCandles(silent = false) {
     if (!silent) { setFeedback(`No se pudieron cargar las velas de ${SOURCES[srcOf(sym)] || 'Binance'}${srcOf(sym) !== 'binance' ? ' ni de Binance Spot' : ''}. No se muestran datos simulados.`); render(); }
     if (!CONN.live) connShow('off');
   }
+}
+/* ───────── Historial completo hacia atrás (como en TradingView) ─────────
+   Al abrir se bajan las últimas 1000 velas. Cuando te acercas al inicio de lo cargado (desplazando o alejando el gráfico), se piden en
+   segundo plano las 1000 anteriores al mismo exchange, y así bloque tras bloque hasta la primera vela de la moneda. Lo que estás viendo
+   no se mueve al llegar las velas viejas; los indicadores Pine siguen dibujados en su lugar mientras se recalculan. */
+const HIST_AHEAD = 2; // se piden más velas cuando quedan menos de 2 pantallas (o 400 velas) de historia a la izquierda: llegan antes de que veas el borde
+function histNeed(start, count) { return !hist.done && !hist.busy && !replay && candles.length && start < Math.max(count * HIST_AHEAD, 400); }
+async function loadOlder() {
+  if (hist.busy || hist.done || replay || !candles.length || !window.CCTMarkets || !CCTMarkets.klinesBefore) return;
+  if (candles.length >= HIST_MAX) { hist.done = true; return; }
+  if (hist.failAt && Date.now() - hist.failAt < Math.min(30000, 1500 * 2 ** hist.fails)) return; // el exchange falló: se reintenta con calma
+  const h = hist, sym0 = state.symbol, tf = state.interval, src = dataSrc || srcOf(sym0), sym = (dataSym && src !== srcOf(sym0) ? dataSym : '') || symOf(sym0), end = candles[0].t;
+  h.busy = true;
+  try {
+    let cs = await CCTMarkets.klinesBefore(src, sym, tf, end, 1000);
+    if (h !== hist || sym0 !== state.symbol || tf !== state.interval || !candles.length || candles[0].t !== end || replay) return;
+    cs = (cs || []).filter(c => c.t < end && Number.isFinite(c.o) && Number.isFinite(c.h) && Number.isFinite(c.l) && Number.isFinite(c.c));
+    if (!cs.length) { h.done = true; return; } // primera vela del exchange: ya no hay más historia
+    h.fails = 0; h.failAt = 0;
+    const room = HIST_MAX - candles.length; if (cs.length > room) { cs = cs.slice(-room); h.done = true; }
+    const oldKey = `${state.symbol}|${state.interval}|${end}`;
+    candles = cs.concat(candles); // «pan» se cuenta desde la derecha: la vista no se mueve
+    try { if (pinch && Number.isFinite(pinch.idx)) pinch.idx += cs.length; if (rz && Number.isFinite(rz.iA)) rz.iA += cs.length; } catch {} // zoom en curso: su vela de referencia también se recorre
+    pineShiftAll(oldKey, cs.length);
+    recalc(); if (typeof dvRefresh === 'function') setTimeout(() => dvRefresh(), 0);
+  } catch (e) { h.fails++; h.failAt = Date.now(); }
+  finally { h.busy = false; if (h === hist && currentView === 'chartView') scheduleRender(); }
+}
+const pineShift = (res, k) => (window.CCTPineDraw && CCTPineDraw.shift ? CCTPineDraw.shift(res, k) : res); // (pine-draw.js)
+function pineShiftAll(oldKey, k) {
+  if (!candles.length) return; const nk = `${state.symbol}|${state.interval}|${candles[0].t}`;
+  for (const sid of Object.keys(pineRes)) { const r = pineRes[sid]; if (r && r.ok && r._key === oldKey) { const s2 = pineShift(r, k); s2._key = nk; pineRes[sid] = s2; } }
+}
+/* Ventana de velas para cada script Pine: con poca historia corre sobre todo; con mucha, sobre las más recientes que alcance a calcular
+   en ~6 s en este dispositivo (nunca menos de 1000, lo mismo de siempre). Las velas más viejas quedan sin ese indicador, como en TradingView. */
+const pineRate = {}; // ms por vela que tardó cada script la última vez
+const PINE_WIN = () => (isDesktop() ? 20000 : 8000);
+function pineWindow(sid, n) {
+  let w = PINE_WIN(); const r = pineRate[sid];
+  if (r > 0) w = Math.min(w, Math.floor(6000 / r)); if (pineHeavy.has(sid)) w = Math.min(w, 1000);
+  return Math.min(n, Math.max(1000, w));
 }
 /* ───────── Repetición de mercado (replay): eliges un punto del pasado y las velas avanzan una a una, como en vivo ───────── */
 let replay = null, replayPick = false;
@@ -3947,13 +3995,14 @@ function renderCore() {
     if (dirty) { try { localStorage.setItem('cct_ahead', JSON.stringify(mem)); } catch {} }
     return m;
   })();
-  const plotW0 = w - left - right, count0 = clamp(visible, 15, 400);
+  const plotW0 = w - left - right, count0 = clamp(visible, 15, VIS_MAX);
   const pineG = aheadEff ? clamp(Math.round(plotW0 * aheadEff / (count0 + aheadEff)) + 8, 0, Math.round(plotW0 * .5)) : 0;
   const vpOn = !!(state.indicators.nnVP && ind.vp), gutter = vpOn ? clamp(Math.round((w - left - right) * .4), 110, 300) : pineG; // margen derecho para el perfil
   const plotH = Math.max(80, h - axisH - rsiH - volH - extraH - plotTop), plotW = w - left - right - gutter;
-  const count = clamp(visible, 15, 400);
+  const count = clamp(visible, 15, VIS_MAX);
   pan = clamp(pan, -Math.floor(count * .4), Math.max(0, n - Math.ceil(count * .3)));
   const end = n - pan, start = end - count, step = plotW / count;
+  if (histNeed(start, count)) setTimeout(loadOlder, 0); // cerca del inicio de lo cargado: se piden las velas más viejas (bloques de 1000)
   // Al mover el gráfico hacia atrás, las últimas velas pasan al margen derecho (el que se reserva para el perfil de volumen): se siguen dibujando ahí, por debajo del perfil,
   // en vez de desaparecer (antes se cortaban justo donde empezaba el margen y parecía que un cuadro negro las tapaba).
   const lo = Math.max(0, Math.floor(start)), hi = Math.min(n, Math.ceil(end) + (gutter > 0 ? Math.ceil(gutter / step) + 1 : 0));
@@ -4327,6 +4376,10 @@ function renderCore() {
     const chg = (shown.c - shown.o) / shown.o * 100;
     const sgAt = cross && nn && state.indicators.nnIa ? nn.bySignal[clamp(Math.round(IDX(cross.x)), 0, n - 1)] : null;
     { const oe = $('#ohlcText'), col = shown.c >= shown.o ? up : down; setTxt(oe, `O ${fmt(shown.o)}  H ${fmt(shown.h)}  L ${fmt(shown.l)}  C ${fmt(shown.c)}  ${pct(chg)}` + (sgAt ? `\n${NovaNexus.tooltip(sgAt)}` : '')); if (oe._c !== col) { oe._c = col; oe.style.color = col; } }
+  }
+  if (hist.busy && start < count * .6) { // aviso discreto mientras llegan (no tapa el gráfico)
+    g.save(); g.font = '11px system-ui, sans-serif'; const tx = 'Cargando historial…', tw = g.measureText(tx).width, x0 = clamp(X(0) - tw - 16, left + 6, Math.max(left + 6, w - right - tw - 20)), y0 = plotTop + plotH / 2;
+    g.globalAlpha = .55; g.fillStyle = text; g.fillText(tx, x0, y0); g.restore();
   }
 }
 /* ───────── Paneles inferiores: MACD · Estocástico · ATR · OBV ───────── */
@@ -5253,7 +5306,7 @@ area.addEventListener('pointermove', e => {
     paneMan[q.key] = {min: c - half, max: c + half}; scheduleRender();
   }
   else if (gest.mode === 'scaleX') { // derecha = más grande · izquierda = más chico
-    const f = clamp(Math.exp((e.clientX - gest.x0) / 180), .1, 12); visible = clamp(gest.vis0 / f, 15, 400); scheduleRender();
+    const f = clamp(Math.exp((e.clientX - gest.x0) / 180), .1, 12); visible = clamp(gest.vis0 / f, 15, VIS_MAX); scheduleRender();
   }
   else if (gest.mode === 'pan') {
     if (gest.inPane) { const q = gest.inPane, dy = (e.clientY - gest.y0) / q.H * (q.max0 - q.min0); paneMan[q.key] = {min: q.min0 + dy, max: q.max0 + dy}; gest.paneMoved = q.key; scheduleRender(); return; } // dentro del oscilador: solo se mueve el oscilador (sube/baja su rango), las velas se quedan quietas
@@ -5333,7 +5386,7 @@ function rzPaint() {
 }
 function rzApply() {
   const n = candles.length; if (!n || !geo) return;
-  const V = clamp(rz.vis0 / rz.fx, 15, 400), step = geo.plotW / V, start = rz.iA + .5 - (rz.ax - geo.left) / step;
+  const V = clamp(rz.vis0 / rz.fx, 15, VIS_MAX), step = geo.plotW / V, start = rz.iA + .5 - (rz.ax - geo.left) / step;
   visible = V; pan = n - (start + V);
   if (rz.yUsed) { const range = (rz.pr0.max - rz.pr0.min) / rz.fy, u = (rz.ay - geo.plotTop) / geo.plotH, max = rz.pA + u * range; priceMan = {min: max - range, max}; updateAutoBtn(); }
   render(); rzPaint();
@@ -5391,7 +5444,7 @@ function startPinch() {
 function doPinch() {
   const [a, b] = [...ptrs.values()], r = $('#priceCanvas').getBoundingClientRect(), cx = (a.x + b.x) / 2 - r.left;
   const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-  visible = clamp(pinch.v0 * pinch.d0 / d, 15, 400);
+  visible = clamp(pinch.v0 * pinch.d0 / d, 15, VIS_MAX);
   const step = geo.plotW / visible, start = pinch.idx + .5 - (cx - geo.left) / step;
   pan = candles.length - (start + visible); scheduleRender();
 }
@@ -5405,12 +5458,12 @@ area.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !p
 area.addEventListener('wheel', e => { // zoom proporcional al giro: la rueda del ratón da el mismo paso de siempre y el trackpad (muchos pasos pequeños) ya no salta ni se acelera
   e.preventDefault(); cancelAnimationFrame(inertiaRaf); const base = glideT && glideT.visible != null ? glideT.visible : visible;
   const px = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1), f = Math.exp(clamp(px, -240, 240) * (e.ctrlKey ? .01 : .00113)); // ctrlKey = pellizco en el trackpad
-  glide({visible: clamp(base * f, 15, 400)}); }, {passive: false});
+  glide({visible: clamp(base * f, 15, VIS_MAX)}); }, {passive: false});
 function fit() { priceMan = null; updateAutoBtn(); glide({visible: defaultVisible(), pan: 0}); }
 function updateAutoBtn() { const b = $('#autoScale'); if (b) b.hidden = !priceMan; }
 $('#autoScale').onclick = () => { priceMan = null; updateAutoBtn(); render(); };
-$('#zoomIn').onclick = () => glide({visible: clamp((glideT && glideT.visible != null ? glideT.visible : visible) / 1.3, 15, 400)});
-$('#zoomOut').onclick = () => glide({visible: clamp((glideT && glideT.visible != null ? glideT.visible : visible) * 1.3, 15, 400)});
+$('#zoomIn').onclick = () => glide({visible: clamp((glideT && glideT.visible != null ? glideT.visible : visible) / 1.3, 15, VIS_MAX)});
+$('#zoomOut').onclick = () => glide({visible: clamp((glideT && glideT.visible != null ? glideT.visible : visible) * 1.3, 15, VIS_MAX)});
 
 /* Clic derecho sobre el gráfico (como en TradingView): Restablecer gráfico = vuelve el zoom, el desplazamiento, la escala de precio y las alturas de los paneles a su tamaño original */
 function resetChart() {
@@ -6062,9 +6115,13 @@ async function pineRunFull(code, opts) {
 async function pineRunOne(p) {
   if (pineBusy[p.sid]) { pineDirty[p.sid] = true; return; }
   const code = (scripts.find(x => x.id === p.sid) || {}).code; if (!code || !candles.length) return;
-  const key = `${state.symbol}|${state.interval}|${candles[0].t}`; pineBusy[p.sid] = true;
-  const res = await pineRunFull(code, {inputs: p.inputs, interval: state.interval, symbol: symOf(state.symbol), name: pineName(p.sid), timeLimitMs: pineHeavy.has(p.sid) ? 40000 : 12000}); // un script pesado se recalcula con más tiempo
-  pineBusy[p.sid] = false; res._key = key; pineRes[p.sid] = res;
+  const key = `${state.symbol}|${state.interval}|${candles[0].t}`, N0 = candles.length, win = pineWindow(p.sid, N0), cs = win < N0 ? candles.slice(N0 - win) : null; pineBusy[p.sid] = true;
+  let res = await pineRunFull(code, {cs: cs || undefined, inputs: p.inputs, interval: state.interval, symbol: symOf(state.symbol), name: pineName(p.sid), timeLimitMs: pineHeavy.has(p.sid) ? 40000 : 12000}); // un script pesado se recalcula con más tiempo
+  if (res && res.ok && res.stats && res.stats.bars > 0) pineRate[p.sid] = res.stats.ms / res.stats.bars;
+  if (cs && res && res.ok) res = pineShift(res, N0 - win); // con mucha historia: el script corrió sobre las últimas velas y se acomoda en su lugar del gráfico
+  pineBusy[p.sid] = false;
+  { const t0 = +key.split('|').pop(); if (res && res.ok && candles.length && candles[0].t !== t0 && key === `${state.symbol}|${state.interval}|${t0}`) { const j = Math.round(idxOfTime(t0)); if (j > 0 && candles[j] && candles[j].t === t0) { res = pineShift(res, j); res._key = `${state.symbol}|${state.interval}|${candles[0].t}`; } else res._key = key; } else res._key = key; } // llegaron velas viejas mientras corría: se acomoda igual
+  pineRes[p.sid] = res;
   if (!res.ok && /tard/.test((res.error && res.error.msg) || '') && !pineRetried.has(p.sid)) { pineRetried.add(p.sid); pineHeavy.add(p.sid); setTimeout(() => { pineKey = ''; schedulePine(); }, 3000); } else if (res.ok) pineRetried.delete(p.sid); if (res.stats) pineLastMs = Math.max(pineLastMs * .5, res.stats.ms); // los scripts pesados se recalculan con menos frecuencia
   if (pineDirty[p.sid]) { pineDirty[p.sid] = false; pineKey = ''; schedulePine(); }
   if ((sheetMode === 'indicators' && $('#sheet').classList.contains('open'))) { renderIndicators(); if (sheetMode === 'indicators') ibRefresh(); }
@@ -6126,6 +6183,7 @@ async function genPrev(x) {
 }
 const prevImg = x => { if (x.id === 'cat:nova-lite') return novaLitePreviewSvg().replace('class="nova-prev"', 'class="pine-prev nl-prev"'); const u = scriptPrev(x); return u && u !== 'err' ? `<img class="pine-prev" alt="Imagen de ${esc(x.name)}" src="${u}">` : `<div class="pine-prev ph">${u === 'err' ? 'Sin imagen: el script no se pudo calcular' : 'Generando imagen…'}</div>`; };
 window.__cctScripts = {addScript, store: () => prevStore}; // expuesto para pruebas
+window.__cctHist = {state: () => ({n: candles.length, first: candles.length ? candles[0].t : 0, last: candles.length ? candles[candles.length - 1].t : 0, pan, visible, done: hist.done, busy: hist.busy, mid: geo && candles.length ? candles[clamp(Math.round((geo.start + geo.end) / 2), 0, candles.length - 1)].t : 0, gaps: (() => { let g = 0, iv = IV_MS[state.interval]; for (let i = 1; i < candles.length; i++) if (candles[i].t - candles[i - 1].t !== iv) g++; return g; })()}), refresh: () => loadCandles(true)}; // historial (pruebas)
 const pineRetried = new Set(), pineHeavy = new Set(); // scripts que necesitan más de 12 s
 function schedulePine() {
   if (!candles.length || !activePine().length) return;

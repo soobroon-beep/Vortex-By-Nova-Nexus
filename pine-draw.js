@@ -269,5 +269,26 @@
     }
     g.fillStyle = fg || '#fff'; g.textAlign = 'left'; lines.forEach((t, k) => g.fillText(stripE(t), bx + pad, by + pad + fs - 2 + k * (fs + 2)));
   }
-  root.CCTPineDraw = {draw, range, drawTrades, contrib, legend, fmtV};
+  /* Resultados de Pine corridos un número de velas a la derecha (llegaron velas más viejas al inicio): así no parpadean mientras se recalculan */
+  function shift(res, k) {
+    if (!res || !res.ok || !(k > 0)) return res;
+    const pad = a => Array.isArray(a) ? new Array(k).fill(null).concat(a) : a, sx = v => (typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e9 ? v + k : v);
+    const pts = e => Object.assign({}, e, {pts: (e.pts || []).map(q => [sx(q[0])].concat(q.slice(1)))});
+    const r = Object.assign({}, res);
+    r.plots = (res.plots || []).map(p => Object.assign({}, p, {values: pad(p.values)}, Array.isArray(p.ci) ? {ci: pad(p.ci)} : {}));
+    r.fills = (res.fills || []).map(f => Array.isArray(f.ci) ? Object.assign({}, f, {ci: pad(f.ci)}) : f);
+    r.candles = (res.candles || []).map(c => Object.assign({}, c, {o: pad(c.o), h: pad(c.h), l: pad(c.l), c: pad(c.c), ci: pad(c.ci), wci: pad(c.wci), bci: pad(c.bci)}));
+    r.bgcolors = (res.bgcolors || []).map(pts); r.barcolors = (res.barcolors || []).map(pts); r.shapes = (res.shapes || []).map(pts);
+    r.labels = (res.labels || []).map(l => Object.assign({}, l, {x: sx(l.x)}));
+    r.lines = (res.lines || []).map(l => Object.assign({}, l, {x1: sx(l.x1), x2: sx(l.x2)}));
+    r.boxes = (res.boxes || []).map(b => Object.assign({}, b, {l: sx(b.l), r: sx(b.r)}));
+    r.polylines = (res.polylines || []).map(q => Object.assign({}, q, {pts: (q.pts || []).map(pt => [sx(pt[0]), pt[1]])}));
+    r.linefills = (res.linefills || []).map(f => Object.assign({}, f, {a: [sx(f.a[0]), f.a[1], sx(f.a[2]), f.a[3]], b: [sx(f.b[0]), f.b[1], sx(f.b[2]), f.b[3]]}));
+    r.alerts = (res.alerts || []).map(a => Object.assign({}, a, {bars: (a.bars || []).map(sx), msgs: Object.fromEntries(Object.entries(a.msgs || {}).map(([b, m]) => [String(sx(+b)), m]))}));
+    if (Array.isArray(res.labelLog)) r.labelLog = res.labelLog.map(q => [sx(q[0])].concat(q.slice(1)));
+    if (res.strategy) { const S = res.strategy; r.strategy = Object.assign({}, S, {equity: pad(S.equity), trades: (S.trades || []).map(t => { const u = t.slice(); u[4] = sx(u[4]); u[6] = sx(u[6]); return u; }), open: (S.open || []).map(t => { const u = t.slice(); u[4] = sx(u[4]); return u; }), marks: (S.marks || []).map(m => Object.assign({}, m, {bar: sx(m.bar)}))}); }
+    r.stats = Object.assign({}, res.stats, {bars: ((res.stats && res.stats.bars) || 0) + k});
+    return r;
+  }
+  root.CCTPineDraw = {draw, range, drawTrades, contrib, legend, fmtV, shift};
 })(typeof self !== 'undefined' ? self : this);
