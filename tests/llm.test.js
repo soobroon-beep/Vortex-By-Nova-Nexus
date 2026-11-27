@@ -142,10 +142,30 @@ test('Nexus Pixel: si la IA gratis está ocupada (502) lo reintenta una vez en t
   const r = await L.pixelChat([{role: 'user', content: 'hola'}], {json: true});
   assert.match(r.text, /listo/); assert.equal(calls.length, 2); assert.ok(calls.every(c => /vortex-push.*\/ai$/.test(c.url)));
 });
-test('Nexus Pixel: un aviso de «no tienes créditos» nunca llega como respuesta ni manda a rutas de pago', async () => {
+test('Nexus Pixel: un aviso de «no tienes créditos» nunca llega como respuesta ni usa rutas de pago ni claves', async () => {
   const calls = mockFetch(() => mkRes(reply("The account behind this API key doesn't have enough credits. Please top up")));
   await assert.rejects(L.pixelChat([{role: 'user', content: 'hola'}], {json: true}), e => !/credit|cr[eé]dito/i.test(e.message));
-  assert.ok(calls.every(c => /vortex-push/.test(c.url)) && !calls.some(c => /pollinations/.test(c.url)));
+  assert.ok(!calls.some(c => /gen\.pollinations/.test(c.url)), 'nunca la API de pago');
+  assert.ok(calls.every(c => !(c.o && c.o.headers && c.o.headers.authorization)), 'nunca manda claves');
+});
+test('Nexus Pixel: si tu servidor no responde, contesta con la IA gratis SIN clave (desde el navegador)', async () => {
+  const calls = mockFetch(u => /vortex-push/.test(u) ? mkRes({error: 'La IA gratis no respondió'}, false, 502) : /text\.pollinations\.ai\/openai/.test(u) ? mkRes(reply('{"reply":"Te marco el canal","actions":[{"do":"channel"}]}')) : mkRes({}, false, 404));
+  const r = await L.pixelChat([{role: 'system', content: 's'}, {role: 'user', content: 'dibuja el canal'}], {json: true});
+  assert.match(r.text, /canal/); assert.match(r.model, /sin clave/);
+  const anon = calls.find(c => /text\.pollinations/.test(c.url)); assert.ok(anon && !(anon.o.headers || {}).authorization);
+});
+test('Nexus Pixel: servidor caído por red → igual responde por la ruta gratis sin clave', async () => {
+  mockFetch(u => { if (/vortex-push/.test(u)) throw new TypeError('Failed to fetch'); return mkRes(reply('hola, aquí sigo')); });
+  const r = await L.pixelChat([{role: 'user', content: 'hola'}], {}); assert.equal(r.text, 'hola, aquí sigo');
+});
+test('Nexus Pixel: límite momentáneo del servicio sin clave → espera y reintenta', async () => {
+  let anon = 0; mockFetch(u => { if (/vortex-push/.test(u)) return mkRes({error: 'x'}, false, 502); anon++; return anon === 1 ? mkRes('Free limit reached. Retry after 1s', false, 429, 'text/plain') : mkRes(reply('listo')); });
+  const r = await L.pixelChat([{role: 'user', content: 'hola'}], {}); assert.equal(r.text, 'listo'); assert.equal(anon, 2);
+});
+test('Nexus Pixel: los «ojos» (captura) no usan la ruta sin clave (no tiene visión)', async () => {
+  const calls = mockFetch(() => mkRes({error: 'x'}, false, 502));
+  await assert.rejects(L.pixelChat([L.imageMessage('mira', 'data:image/png;base64,AA')], {task: 'see'}));
+  assert.ok(!calls.some(c => /pollinations/.test(c.url)));
 });
 test('applyPatch conserva la sangría cuando el bloque SEARCH viene sin ella', () => {
   const L = require('../llm.js'), A = L.applyPatch || (globalThis.CCTLLM && globalThis.CCTLLM.applyPatch);

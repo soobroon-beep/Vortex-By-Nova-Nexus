@@ -264,7 +264,7 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
     const r = await Promise.race([call, sleep(90000).then(() => { throw new Error('La IA tardó demasiado'); })]);
     const pr = BR ? BR.parseReply(r && r.text) : {reply: String(r && r.text || ''), actions: []};
     let actions = cleanActs(pr.actions); if (!it.draw && !it.edit) actions = actions.filter(a => ['style', 'remove', 'move', 'clear'].includes(a.do) || APP_ACTS.includes(a.do)); // solo preguntaste: no dibuja, pero sí aplica lo que pediste cambiar // solo preguntaste: no te llena el gráfico de dibujos
-    const reply = (pr.reply || '').slice(0, 1400);
+    const reply = tidyReply(pr.reply || '', text).slice(0, 1400);
     hist.push({role: 'user', content: text}, {role: 'assistant', content: reply + (actions.length ? '\n[dibujé: ' + actions.map(a => a.shape || a.do).join(', ') + ']' : '')}); if (hist.length > 12) hist.splice(0, hist.length - 12);
     try { status(String(r && r.model || 'IA gratis').replace(/ · .*$/, '').slice(0, 26)); } catch {}
     return {reply, actions, data};
@@ -420,6 +420,16 @@ Los niveles los calcula la app con las velas reales: no inventes precios. Si no 
   }
   function setChipsCustom(list) { bub.querySelector('.px-chips').innerHTML = list.map(([t, q]) => `<button type="button" data-q="${esc(q)}">${esc(t)}</button>`).join(''); }
 
+  /* Pixel nunca te sale con «tu API no tiene créditos», «conecta tu BingX», claves o la APK si tú no preguntaste por eso:
+     esas frases se quitan de la respuesta (si no queda nada útil, se usa el respaldo). Es lo que pasaba cuando la IA repetía
+     textos del panel abierto o avisos de otras partes de la app en vez de hacer lo que le pediste. */
+  const OFFTOPIC = /cr[eé]dito|sin saldo|saldo insuficiente|pollen|top ?up|insufficient|quota|cuota|\bapi\b|\bapk\b|api ?key|secret ?key|clave (de )?(api|la ia)|tu ia\b|conect\w* (tu |el |la |una? )?(cuenta|exchange|bingx|api)|(api|cuenta|llaves?|claves?) (de |del )?(tu )?bingx|vincul\w* (tu |el )?(exchange|cuenta)/i;
+  function tidyReply(t, asked) {
+    t = String(t || '').trim(); if (!t) return '';
+    if (OFFTOPIC.test(nrm(asked || ''))) return t; // sí preguntaste por eso
+    const parts = t.split(/(?<=[.!?¡¿\n])\s+|\n+/); const keep = parts.filter(p => !OFFTOPIC.test(p));
+    return keep.length === parts.length ? t : keep.join(' ').replace(/\s{2,}/g, ' ').trim();
+  }
   /* ── IA con el contexto de la sección ── */
   const SYS_APP = `Eres NEXUS PIXEL, el copiloto de VORTEX (by Nova Nexus), una terminal de trading cripto profesional. Vives en toda la app; eres experto en trading y conoces la app de memoria.
 QUÉ HAY EN VORTEX: Gráfico (velas, indicadores, Nova Nexus, dibujos; tú puedes dibujar), caja Long/Short con botón «Caja inteligente» (sugiere stop y objetivo y mueve el stop a tu favor), mapa de calor de liquidaciones, Radar del mercado (mapa de cuadros de criptos), Mi seguimiento, Noticias + Calendario económico, Macro (miedo y codicia, dominancia), Screener (señales LONG/SHORT de Nova Nexus; «edad» = velas desde la señal), Alertas, IA (Analizar gráfico, Briefing, Laboratorio de indicadores), Nexus Lens (cuenta del exchange: estadísticas, diario de cada operación y Coach), Nova Bot Lab (bots, backtest, paper trading), Repetición, Calculadora de riesgo.
@@ -431,10 +441,12 @@ REGLAS:
 - Si pregunta algo de trading general (conceptos, gestión de riesgo, psicología), responde como un trader experto con ejemplos prácticos.
 - Si no queda claro, haz UNA pregunta concreta con 2-3 opciones.
 - No prometas ganancias; si das una opinión de mercado, al final una nota muy breve de que no es asesoría financiera.`;
-  async function llmText(sys, user, maxTokens = 650) {
-    const L = LLM(); if (!L || !L.chat) throw new Error('sin IA');
-    const r = await Promise.race([L.chat([{role: 'system', content: sys + profile() + VOZ()}, ...hist.slice(-4), {role: 'user', content: user}], {purpose: 'text', maxTokens, noOwn: true}), sleep(60000).then(() => { throw new Error('tarde'); })]);
-    const t = String(r && r.text || '').replace(/```[\s\S]*?```/g, '').trim(); hist.push({role: 'user', content: user.slice(0, 300)}, {role: 'assistant', content: t.slice(0, 600)}); if (hist.length > 12) hist.splice(0, hist.length - 12); return t;
+  async function llmText(sys, user, maxTokens = 650) { // SIEMPRE la IA propia de Pixel (pixelChat), nunca «Tu IA» ni rutas de pago
+    const L = LLM(); if (!L || !(L.pixelChat || L.chat)) throw new Error('sin IA');
+    const msgs = [{role: 'system', content: sys + profile() + VOZ()}, ...hist.slice(-4), {role: 'user', content: user}];
+    const r = await Promise.race([L.pixelChat ? L.pixelChat(msgs, {maxTokens}) : L.chat(msgs, {purpose: 'text', maxTokens, noOwn: true}), sleep(90000).then(() => { throw new Error('tarde'); })]);
+    const t = tidyReply(String(r && r.text || '').replace(/```[\s\S]*?```/g, '').replace(/^\s*\{\s*"reply"\s*:\s*"([\s\S]*?)"\s*(,\s*"actions"[\s\S]*)?\}\s*$/, (m, x) => { try { return JSON.parse('"' + x + '"'); } catch { return x; } }).trim(), user);
+    if (!t) throw new Error('respuesta vacía'); hist.push({role: 'user', content: user.slice(0, 300)}, {role: 'assistant', content: t.slice(0, 600)}); if (hist.length > 12) hist.splice(0, hist.length - 12); return t;
   }
   const big = on => { bub.classList.toggle('long', !!on); if (!bub.hidden) placeBubble(); };
 
@@ -526,7 +538,8 @@ REGLAS:
     if ((sec === 'screenerView' && (desk ? /(screener|mejor(es)? (entrada|senal)|confluencia)/ : /(mejor|entrada|long|short|confluencia|senal|cual|analiza)/).test(q)) || /screener/.test(q)) { await skillScreener(text); return true; }
     if (/\bbots?\b|estrategia automat|bot lab/.test(q) && !/screener/.test(q)) { await skillBot(text); return true; }
     const lensQ = /nexus lens|api key|secret key|conectar (mi |el |tu )?(exchange|cuenta)|mis (trades|operaciones|posiciones)|mi (cuenta|saldo|equity|win ?rate|historial)|como (voy|me va) (en|con) (mis|el) trad/.test(q);
-    if (lensQ || (sec === 'lensView' && !D.parse(text).length && !aboutChart && SIDE_KW.lensView.test(q))) { await skillLens(text); return true; }
+    const exOn = !!(window.CCTExchange && CCTExchange.connected && CCTExchange.connected()), lensAsk = /nexus lens|api key|secret key|conectar (mi |el |tu )?(exchange|cuenta)|coach/.test(q);
+    if (lensAsk || (lensQ && exOn) || (sec === 'lensView' && !D.parse(text).length && !aboutChart && SIDE_KW.lensView.test(q))) { await skillLens(text); return true; } // sin exchange conectado, «mis posiciones» lo contesta con tu gráfico (y tu cuenta demo), sin pedirte conectar nada
     if (sec !== 'chartView' && !aboutChart && !D.parse(text).length && (!desk || (SIDE_KW[sec] && SIDE_KW[sec].test(q) && !/grafic|vela|indicador|\bema\b|rsi|soporte|resistencia|tendencia|dibuj|canal|fibo|linea|color/.test(q)))) { await skillGeneral(text); return true; }
     return false;
   }
@@ -561,7 +574,7 @@ REGLAS:
     let ctx = null; try { ctx = window.CCT_getAIContext && window.CCT_getAIContext(); } catch {} const R = W.read(ctx); if (!R) return null;
     watchAt = now; watchKey = key; if (!force && R.sig === watchSig && now - watchSaid < 60 * 6e4) return null; // nada cambió: no repite lo mismo (como mucho, un recordatorio por hora)
     watchBusy = true; let text = '';
-    try { const L = LLM(); if (L && L.chat) { const r = await Promise.race([L.chat([{role: 'system', content: W.SYS + profile()}, {role: 'user', content: W.prompt(R, coin, h.interval(), ctx)}], {purpose: 'text', maxTokens: 150, noOwn: true}), sleep(25000).then(() => { throw new Error('tarde'); })]); text = W.clean(r && r.text); } } catch {}
+    try { const L = LLM(); if (L && (L.pixelChat || L.chat)) { const wm = [{role: 'system', content: W.SYS + profile()}, {role: 'user', content: W.prompt(R, coin, h.interval(), ctx)}]; const r = await Promise.race([L.pixelChat ? L.pixelChat(wm, {maxTokens: 150, timeout: 30000}) : L.chat(wm, {purpose: 'text', maxTokens: 150, noOwn: true}), sleep(32000).then(() => { throw new Error('tarde'); })]); text = W.clean(tidyReply(r && r.text, '')); } } catch {}
     watchBusy = false; if (!text) text = W.local(R, coin, h.interval(), c);
     if (h.symbol() + '|' + h.interval() !== key || (busy && !force)) return null; // cambiaste de gráfico mientras pensaba
     watchSig = R.sig; watchSaid = Date.now(); showWatch(text); return text;

@@ -4,7 +4,7 @@
 // · La app le manda tus alertas y la suscripción de tu celular a /sync (solo alertas de PRECIO; las de indicador siguen en la app).
 // · Las claves VAPID se crean solas la primera vez y se guardan en el KV: no hay secretos que configurar.
 // · Solo escribe en el KV cuando algo cambia (el plan gratis permite 1000 escrituras al día).
-// Se publica solo con .github/workflows/deploy-push-worker.yml (configuración en worker/wrangler-push.toml). Secretos opcionales: BINGX_AGENT_KEY / BINGX_AGENT_SECRET (plan Infinity), GROQ_KEY (IA gratis) y GEMINI_KEY / MISTRAL_KEY / OPENROUTER_KEY (IA gratis extra para Nexus Pixel).
+// Se publica solo con .github/workflows/deploy-push-worker.yml (configuración en worker/wrangler-push.toml). Secretos opcionales: BINGX_AGENT_KEY / BINGX_AGENT_SECRET (plan Infinity), GROQ_KEY (IA gratis) y GEMINI_KEY / MISTRAL_KEY / OPENROUTER_KEY (IA gratis extra para Nexus Pixel) y PIXEL_GROQ_KEY / CEREBRAS_KEY (IA EXCLUSIVA de Nexus Pixel).
 
 import {memRoute} from './memoria.mjs'; // Memoria compartida entre Claude, ChatGPT y Gemini (/mem/<llave>/…)
 import {storeOf, MAX_PER_UID, MAX_NEW_PER_IP_DAY} from './devstore.mjs'; // celulares registrados: base D1 (miles) o KV de respaldo
@@ -361,8 +361,10 @@ export const OPEN_AI = {
      luego Gemini 2.5 Flash / Mistral / OpenRouter gratis si pusiste su clave (GEMINI_KEY, MISTRAL_KEY, OPENROUTER_KEY), y al final Cloudflare.
      Los nombres de Groq se buscan solos en su lista de modelos, así un cambio de versión ya no la rompe.
      «see» = sus ojos: un modelo con visión describe la captura del gráfico y luego el modelo que razona decide. */
-  pixel: {groq: [/^qwen\/qwen3/, 'qwen/qwen3.8-27b', 'openai/gpt-oss-120b', /kimi-k2/, 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b'], gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'], mistral: ['mistral-medium-latest', 'mistral-small-latest'], openrouter: ['openai/gpt-oss-120b:free', 'deepseek/deepseek-chat-v3.1:free', 'qwen/qwen3-235b-a22b:free'], wai: ['@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', '@cf/google/gemma-4-26b-a4b-it'], json: true, cap: 30000, budget: 75000},
-  see: {gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'], mistral: ['mistral-small-latest'], groq: [/^qwen\/qwen3/], wai: ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/google/gemma-4-26b-a4b-it', '@cf/mistralai/mistral-small-3.1-24b-instruct'], order: ['Gemini', 'Mistral', 'Cloudflare', 'Groq'], cap: 22000, budget: 32000}
+  /* Noviembre 2026: Pixel ya tiene IA EXCLUSIVA. PIXEL_GROQ_KEY y CEREBRAS_KEY (cuentas gratis) solo las usa Pixel; ninguna otra
+     herramienta de VORTEX las toca, así su cupo diario es solo suyo. Al final de todo, el servicio público sin clave de Pollinations. */
+  pixel: {order: ['PixelGroq', 'Cerebras', 'Groq', 'Gemini', 'Mistral', 'OpenRouter', 'Cloudflare', 'Anon'], pixelgroq: [/^qwen\/qwen3/, 'openai/gpt-oss-120b', /kimi-k2/, 'llama-3.3-70b-versatile'], cerebras: [/^gpt-oss-120b$/, 'gpt-oss-120b', /^qwen-3-235b.*instruct/, /^qwen-3/, /^llama-3\.3-70b$/, 'llama-3.3-70b', /^llama/], anon: ['openai'], groq: [/^qwen\/qwen3/, 'qwen/qwen3.8-27b', 'openai/gpt-oss-120b', /kimi-k2/, 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b'], gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'], mistral: ['mistral-medium-latest', 'mistral-small-latest'], openrouter: ['openai/gpt-oss-120b:free', 'deepseek/deepseek-chat-v3.1:free', 'qwen/qwen3-235b-a22b:free'], wai: ['@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', '@cf/google/gemma-4-26b-a4b-it'], json: true, cap: 25000, budget: 50000},
+  see: {gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'], mistral: ['mistral-small-latest'], groq: [/^qwen\/qwen3/], wai: ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/google/gemma-4-26b-a4b-it', '@cf/mistralai/mistral-small-3.1-24b-instruct'], pixelgroq: [/llama-4-(scout|maverick)/], order: ['Gemini', 'PixelGroq', 'Mistral', 'Cloudflare', 'Groq'], cap: 22000, budget: 32000}
 };
 export const AI_TASKS = Object.keys(OPEN_AI);
 const OPEN_NAME = m => m.replace(/^@cf\/[^/]+\//, '').replace(/^(openai|meta-llama|qwen)\//, '');
@@ -384,13 +386,20 @@ export function groqExtra(m, task) {
   return {};
 }
 /* Lista real de modelos de Groq (se guarda 6 h): los nombres cambian con cada versión y uno viejo daba error 404 */
-let groqList = null;
+let groqList = null; const modelLists = {};
 export async function groqModels(env, fetchFn = fetch) {
   if (groqList && Date.now() - groqList.t < 6 * 3600e3) return groqList.ids;
   try { const r = await fetchFn('https://api.groq.com/openai/v1/models', {headers: {authorization: 'Bearer ' + env.GROQ_KEY}, signal: AbortSignal.timeout(5000)}); if (r.ok) { const j = await r.json(), ids = (j.data || []).map(x => x && x.id).filter(Boolean); if (ids.length) { groqList = {t: Date.now(), ids}; return ids; } } } catch {}
   return groqList ? groqList.ids : null;
 }
-export const resetGroqList = () => { groqList = null; };
+/* Lista de modelos de las cuentas EXCLUSIVAS de Pixel (Groq de Pixel, Cerebras): igual que Groq, se guarda 6 h */
+export async function providerModels(who, env, fetchFn = fetch) {
+  if (who === 'Groq') return groqModels(env, fetchFn);
+  const P = OAI[who], c = modelLists[who]; if (!P || !P.models) return null; if (c && Date.now() - c.t < 6 * 3600e3) return c.ids;
+  try { const r = await fetchFn(P.models, {headers: {authorization: 'Bearer ' + P.key(env)}, signal: AbortSignal.timeout(5000)}); if (r.ok) { const j = await r.json(), ids = (j.data || j.models || []).map(x => x && (x.id || x.name)).filter(Boolean); if (ids.length) { modelLists[who] = {t: Date.now(), ids}; return ids; } } } catch {}
+  return c ? c.ids : null;
+}
+export const resetGroqList = () => { groqList = null; for (const k of Object.keys(modelLists)) delete modelLists[k]; };
 /* Preferencias (texto exacto o patrón) → nombres que de verdad existen. Sin lista: solo los nombres exactos. */
 export function resolveModels(prefs, ids) {
   const out = [];
@@ -403,12 +412,15 @@ export function resolveModels(prefs, ids) {
 /* Proveedores gratis compatibles con OpenAI (cada uno solo si existe su clave) */
 const OAI = {
   Groq: {url: 'https://api.groq.com/openai/v1/chat/completions', key: e => e.GROQ_KEY},
+  PixelGroq: {url: 'https://api.groq.com/openai/v1/chat/completions', models: 'https://api.groq.com/openai/v1/models', key: e => e.PIXEL_GROQ_KEY}, // SOLO Nexus Pixel
+  Cerebras: {url: 'https://api.cerebras.ai/v1/chat/completions', models: 'https://api.cerebras.ai/v1/models', key: e => e.CEREBRAS_KEY}, // SOLO Nexus Pixel (plan gratis)
   Gemini: {url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', key: e => e.GEMINI_KEY},
   Mistral: {url: 'https://api.mistral.ai/v1/chat/completions', key: e => e.MISTRAL_KEY},
   OpenRouter: {url: 'https://openrouter.ai/api/v1/chat/completions', key: e => e.OPENROUTER_KEY}
 };
 export function providerExtra(who, m, task) {
-  if (who === 'Groq') return groqExtra(m, task);
+  if (who === 'Groq' || who === 'PixelGroq') return groqExtra(m, task);
+  if (who === 'Cerebras') return /gpt-oss/.test(m) ? {reasoning_effort: 'medium'} : {};
   if (who === 'Gemini' && /2\.5/.test(m)) return {reasoning_effort: task === 'pixel' ? 'low' : 'none'}; // piensa un poco (Pixel) sin comerse los tokens
   return {};
 }
@@ -425,11 +437,16 @@ export async function openChain(env, task, messages, opts = {}, fetchFn = fetch)
   };
   const viaWai = async (m, msgs) => clean(aiText(await withTimeout(env.AI.run(m, {messages: msgs, max_tokens, temperature}), cap(55000))));
   const routes = []; const add = (who, list, fn) => { for (const m of list || []) routes.push([who, m, fn]); };
+  const viaAnon = async (m, msgs) => { // servicio público SIN CLAVE (no usa créditos): último recurso de Pixel
+    const r = await fetchFn(ANON_URL, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({model: m, messages: noImg(msgs), max_tokens, temperature, private: true, referrer: 'vortex-nexus'}), signal: AbortSignal.timeout(cap(40000))});
+    if (!r.ok) throw new Error('anon ' + r.status); const raw = await r.text(); let t = raw; try { t = aiText(JSON.parse(raw)); } catch {} t = clean(t); if (/free limit reached|per ip|retry after \d+s/i.test(t.slice(0, 300))) throw new Error('anon límite'); return t;
+  };
   for (const who of T.order || ['Groq', 'Gemini', 'Mistral', 'OpenRouter', 'Cloudflare']) { // Groq primero si tienes clave: es el más rápido
     if (who === 'Cloudflare') { if (env.AI) add('Cloudflare', T.wai, viaWai); continue; }
-    if (!OAI[who].key(env) || !(T[who.toLowerCase()] || []).length) continue;
-    const list = T[who.toLowerCase()], ids = who === 'Groq' && list.some(p => typeof p !== 'string') ? await groqModels(env, fetchFn) : null;
-    add(who, who === 'Groq' ? resolveModels(list, ids) : list, viaOai(who));
+    if (who === 'Anon') { add('sin clave', T.anon, viaAnon); continue; }
+    if (!OAI[who] || !OAI[who].key(env) || !(T[who.toLowerCase()] || []).length) continue;
+    const list = T[who.toLowerCase()], pat = list.some(p => typeof p !== 'string'), ids = pat && (who === 'Groq' || OAI[who].models) ? await providerModels(who, env, fetchFn) : null;
+    add(who, pat ? resolveModels(list, ids) : list, viaOai(who));
   }
   for (const [who, m, fn] of routes) {
     if (left() < 4000) break;
@@ -439,6 +456,7 @@ export async function openChain(env, task, messages, opts = {}, fetchFn = fetch)
   if ((task === 'vision' || task === 'pixel') && hasImg(messages) && left() > 6000) { const r = await openChain(env, task === 'pixel' ? 'pixel' : 'chat', noImg(messages), opts, fetchFn); if (r) return Object.assign(r, {image: false}); } // sin visión disponible: analiza con los datos
   return null;
 }
+const ANON_URL = 'https://text.pollinations.ai/openai';
 const NO_CREDIT = /enough credits|top up|paid pollen|insufficient (balance|credits|funds|quota)|requires? (a )?paid|out of credits|quota exceeded|exceeded your (current )?quota/i;
 async function aiKey(env) { return env.POLLEN_KEY || (await env.KV.get('ai:pollen')) || POLLEN_KEY; }
 async function aiRoute(req, env, path, json, cors) {
@@ -448,7 +466,7 @@ async function aiRoute(req, env, path, json, cors) {
     const k = String(b.key || '').trim(); if (!/^sk_[\w-]{10,}$/.test(k) || await sha256(k) !== AI_KEY_HASH) return json({error: 'Esa no es la clave autorizada para este servidor'}, 403);
     await env.KV.put('ai:pollen', k); return json({ok: true, ready: true});
   }
-  const freeAI = !!(env.AI || env.GROQ_KEY || env.GEMINI_KEY || env.MISTRAL_KEY || env.OPENROUTER_KEY);
+  const freeAI = !!(env.AI || env.PIXEL_GROQ_KEY || env.CEREBRAS_KEY || env.GROQ_KEY || env.GEMINI_KEY || env.MISTRAL_KEY || env.OPENROUTER_KEY);
   const key = await aiKey(env); if (!key && !freeAI) return json({error: 'El servidor aún no tiene la clave de IA', kind: 'nokey'}, 503);
   if (!aiAllowed(req.headers.get('cf-connecting-ip') || 'x')) return json({error: 'Demasiadas consultas seguidas; espera un minuto'}, 429);
   if (path === '/ai/models') { const r = await fetch(AI_MODELS, {headers: {authorization: 'Bearer ' + key}}); return new Response(r.body, {status: r.status, headers: {...cors, 'content-type': 'application/json', 'cache-control': 'max-age=1800'}}); }

@@ -2520,3 +2520,33 @@ body:not(.signed-in) #settingsView .sg:not(:has(.sg-row:not(.needs-login))){disp
 .ec-pop{animation:fromPill .26s cubic-bezier(.2,.9,.25,1) both;transform-origin:bottom left}
 .light .chart-status .st-econ{background:linear-gradient(100deg,color-mix(in srgb,var(--ec) 14%,#fff),rgba(255,255,255,.7) 60%)!important}
 .light .ec-cc{color:#1c2440}
+
+/* ───────── Nexus Pixel · ventana nueva (nov 2026): liquid glass oscuro, translúcido y plano (sin reflejos fuertes) ─────────
+   Solo cambia la ventana de conversación; el avatar 3D queda igual. */
+.px-bub{gap:10px;padding:12px 12px 12px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.09);background:linear-gradient(180deg,rgba(18,20,36,.58),rgba(9,11,22,.5));-webkit-backdrop-filter:blur(22px) saturate(165%);backdrop-filter:blur(22px) saturate(165%);box-shadow:0 18px 48px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.05);animation:pxIn .34s cubic-bezier(.2,.9,.25,1.15) both;overflow:hidden;isolation:isolate}
+.px-bub::before{content:'';position:absolute;left:14px;right:14px;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(180,140,255,.55),rgba(120,200,255,.45),transparent);opacity:.55;pointer-events:none}
+.px-bub.working::before{height:2px;opacity:1;background:linear-gradient(90deg,transparent,#a78bfa,#60c8ff,transparent) 0 0/50% 100% no-repeat;animation:pxScan 1.15s linear infinite}
+.px-hd{gap:8px}.px-hd b{font-size:13px;font-weight:700;letter-spacing:.2px}
+.px-st{font-size:10px;font-weight:600;color:rgba(214,204,255,.72);padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.px-dot{width:8px;height:8px;background:#7ef0b4;box-shadow:0 0 0 3px rgba(126,240,180,.14)}
+.px-bub.working .px-dot{background:#a78bfa;box-shadow:0 0 0 3px rgba(167,139,250,.18)}
+.px-x{width:26px;height:26px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);transition:background .15s,color .15s,transform .15s}.px-x:hover{transform:scale(1.06)}
+.px-msg{font-size:13.2px;line-height:1.55;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.05);max-height:170px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent;animation:pxMsg .28s ease both}
+.px-msg:empty{display:none}
+.px-chips{gap:6px}
+.px-chips button{border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#e4defa;font-size:11.2px;font-weight:600;padding:6px 11px;border-radius:999px;transition:background .15s,border-color .15s,transform .15s}
+.px-chips button:hover{background:rgba(167,139,250,.16);border-color:rgba(167,139,250,.4);transform:translateY(-1px)}
+.px-in{gap:6px;padding:4px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);transition:border-color .15s,background .15s}
+.px-in:focus-within{border-color:rgba(167,139,250,.55);background:rgba(255,255,255,.06)}
+.px-in input,.px-in input:focus{height:32px;border:0;background:transparent;border-radius:999px;padding:0 10px;font-size:13px}
+.px-in button,.px-in .px-mic{width:32px;height:32px;flex:0 0 32px;border-radius:50%}
+.px-in button[type=submit]{background:linear-gradient(135deg,#7c5cff,#5ab4ff);box-shadow:0 4px 14px rgba(110,120,255,.35);transition:transform .15s}.px-in button[type=submit]:hover{transform:scale(1.07)}
+.px-in .px-mic{border:0;background:rgba(255,255,255,.06)}
+.px-bub.long .px-msg{max-height:min(340px,48vh)}
+.light .px-bub{background:linear-gradient(180deg,rgba(255,255,255,.72),rgba(246,244,255,.66));border-color:rgba(20,20,60,.08);box-shadow:0 18px 44px rgba(30,20,80,.16)}
+.light .px-msg,.light .px-in,.light .px-chips button,.light .px-st{background:rgba(20,20,60,.04);border-color:rgba(20,20,60,.07)}.light .px-st{color:#5b4bb5}.light .px-in input{background:transparent}
+@keyframes pxIn{from{opacity:0;translate:0 6px;scale:.96}to{opacity:1;translate:0 0;scale:1}}
+@keyframes pxMsg{from{opacity:.2;transform:translateY(3px)}to{opacity:1;transform:none}}
+@keyframes pxScan{from{background-position:-50% 0}to{background-position:150% 0}}
+@media(max-width:1023px){.px-msg{font-size:12.8px;max-height:130px}}
+@media(prefers-reduced-motion:reduce){.px-bub,.px-msg,.px-bub.working::before{animation:none}}

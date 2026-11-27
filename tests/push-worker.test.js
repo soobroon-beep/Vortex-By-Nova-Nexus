@@ -204,6 +204,27 @@ test('IA open source: cada uso con su modelo, Groq primero si hay clave, Cloudfl
   assert.ok(W.AI_TASKS.includes('pixel') && W.AI_TASKS.includes('see')); assert.equal(W.aiText({output: [{type: 'message', content: [{text: 'y'}]}]}), 'y');
 });
 
+test('Nexus Pixel tiene IA EXCLUSIVA: su Groq y Cerebras van primero; los bots (chat) nunca las usan; sin clave al final', async () => {
+  const W = await import('../worker/push-alerts.mjs'); W.resetGroqList();
+  const auths = [], urls = [];
+  const fx = async (u, init) => { urls.push(u); auths.push((init && init.headers && init.headers.authorization) || '');
+    if (/\/models$/.test(u)) return {ok: true, json: async () => ({data: /cerebras/.test(u) ? [{id: 'gpt-oss-120b'}, {id: 'llama-3.3-70b'}] : [{id: 'qwen/qwen3.8-27b'}, {id: 'openai/gpt-oss-120b'}]})};
+    return {ok: true, json: async () => ({choices: [{message: {content: '{"reply":"desde ' + u + '"}'}}]})}; };
+  const env = {PIXEL_GROQ_KEY: 'pxg', CEREBRAS_KEY: 'cb', GROQ_KEY: 'shared'};
+  const px = await W.openChain(env, 'pixel', [{role: 'user', content: 'hola'}], {json: true}, fx);
+  assert.match(px.model, /PixelGroq/); assert.equal(auths[auths.length - 1], 'Bearer pxg');
+  urls.length = 0; auths.length = 0;
+  const bot = await W.openChain(env, 'chat', [{role: 'user', content: 'hola'}], {}, fx);
+  assert.match(bot.model, /Groq/); assert.ok(!auths.includes('Bearer pxg') && !auths.includes('Bearer cb'), 'los bots nunca usan la IA de Pixel');
+  W.resetGroqList();
+  const cb = await W.openChain({CEREBRAS_KEY: 'cb'}, 'pixel', [{role: 'user', content: 'hola'}], {json: true}, async (u, init) => /\/models$/.test(u) ? {ok: true, json: async () => ({data: [{id: 'gpt-oss-120b'}]})} : /cerebras/.test(u) ? {ok: true, json: async () => ({choices: [{message: {content: '{"reply":"cerebras"}'}}]})} : {ok: false, status: 500, json: async () => ({})});
+  assert.match(cb.model, /gpt-oss-120b · Cerebras/);
+  const anon = await W.openChain({}, 'pixel', [{role: 'user', content: 'hola'}], {}, async (u, init) => { assert.match(u, /text\.pollinations\.ai\/openai/); assert.ok(!init.headers.authorization); return {ok: true, text: async () => JSON.stringify({choices: [{message: {content: 'hola sin clave'}}]})}; });
+  assert.equal(anon.text, 'hola sin clave'); assert.match(anon.model, /sin clave/);
+  const lim = await W.openChain({}, 'pixel', [{role: 'user', content: 'hola'}], {}, async () => ({ok: true, text: async () => 'Free limit reached. Retry after 9s'}));
+  assert.equal(lim, null);
+});
+
 test('ronda programada: sigue tus trades abiertos con la app cerrada', async () => {
   const w = await W(), KV = memKV(), env = {KV}, f = await fakeBrowserSub(w.b64u), ID = 'dev_tttttttttttttttttttt';
   const call = body => w.default.fetch(new Request('https://x.workers.dev/sync', {method: 'POST', headers: {origin: 'https://soobroon-beep.github.io'}, body: JSON.stringify(body)}), env);
