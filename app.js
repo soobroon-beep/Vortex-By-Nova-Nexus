@@ -3213,8 +3213,8 @@ function syncRail() {
   rail.querySelectorAll('[data-opt]').forEach(b => { const k = b.dataset.opt; if (k === 'tree') { b.classList.toggle('on', !!document.getElementById('objTree')); return; } if (k === 'clear') return; b.classList.toggle('on', !!DOPT[k]); if (k === 'hide') { const want = DOPT.hide ? IC.eyeoff : IC.eye; if (b.dataset.ic !== (DOPT.hide ? '1' : '0')) { b.dataset.ic = DOPT.hide ? '1' : '0'; b.querySelector('svg').outerHTML = SV(want); } } });
 }
 function closeFly() { const f = $('#railFly'); if (f) uxOut(f); }
-function openFly(id, btn) {
-  const old = $('#railFly'); if (old) { const same = old.dataset.g === id; if (same) { uxOut(old); return; } old.remove(); }
+function openFly(id, btn, hv) {
+  const old = $('#railFly'); if (old) { const same = old.dataset.g === id; if (same) { if (!hv) uxOut(old); return; } old.remove(); }
   const gr = TOOL_GROUPS.find(x => x.id === id); if (!gr) return;
   const f = document.createElement('div'); f.id = 'railFly'; f.className = 'rail-fly'; f.dataset.g = id;
   f.innerHTML = `<h4>${esc(gr.name)}</h4>` + gr.tools.map(([k, t, d, ic]) => `<button data-rtool="${k}" title="${esc(d)}" class="${drawTool === k ? 'on' : ''}"><span class="ti">${SV(ic, 20)}</span><span class="tn">${esc(t)}</span>${starBtn(k)}</button>`).join('');
@@ -3235,8 +3235,8 @@ function syncCursorMode(m) { // aplica el tipo de cursor al gráfico (clases CSS
   const b = document.querySelector('#toolRail [data-rail="cursor"]'); if (b) { const old = b.querySelector('svg'); if (old) old.outerHTML = SV(CURSOR_IC[m]); b.title = `Cursor: ${CURSOR_TXT[m][0]} (Esc)`; }
 }
 function setCursorMode(m) { if (!CURSOR_MODES.includes(m)) return; state.chartStyle = sanChartStyle(Object.assign({}, state.chartStyle || {}, {cursor: m})); save(); cancelTool(); curModeShown = ''; syncCursorMode(m); scheduleRender(); try { renderCustom(); } catch {} toast(`Cursor: ${CURSOR_TXT[m][0]}`); } // se guarda aunque sea «Cruz»: así en el estilo Espacial también puedes cambiar la estrella
-function openCurFly(btn) {
-  const old = $('#railFly'); if (old) { const same = old.dataset.g === 'cursor'; if (same) { uxOut(old); return; } old.remove(); }
+function openCurFly(btn, hv) {
+  const old = $('#railFly'); if (old) { const same = old.dataset.g === 'cursor'; if (same) { if (!hv) uxOut(old); return; } old.remove(); }
   const cur = effCursor(), f = document.createElement('div'); f.id = 'railFly'; f.className = 'rail-fly'; f.dataset.g = 'cursor';
   f.innerHTML = `<h4>Cursor</h4>` + CURSOR_MODES.map(k => `<button data-cur="${k}" title="${esc(CURSOR_TXT[k][1])}" class="${cur === k ? 'on' : ''}"><span class="ti">${SV(CURSOR_IC[k], 20)}</span><span class="tn">${esc(CURSOR_TXT[k][0])}<small class="cur-sub">${esc(CURSOR_TXT[k][1])}</small></span></button>`).join('');
   document.body.appendChild(f);
@@ -3372,8 +3372,8 @@ function toggleOpt(k) {
   rail.addEventListener('click', e => {
     const fav = e.target.closest('[data-ftool]'); if (fav) { closeFly(); pickTool(fav.dataset.ftool); return; }
     const cav = e.target.closest('[data-fly]'), grp = e.target.closest('[data-group]'), opt = e.target.closest('[data-opt]');
-    if (e.target.closest('[data-curfly]')) { openCurFly(e.target.closest('.rail-btn')); return; }
-    if (cav) { openFly(cav.dataset.fly, cav.closest('.rail-btn')); return; }
+    if (e.target.closest('[data-curfly]')) { openCurFly(e.target.closest('.rail-btn'), hoverOK()); return; } // con ratón el menú ya está abierto por el hover: el clic en la flechita no lo cierra
+    if (cav) { openFly(cav.dataset.fly, cav.closest('.rail-btn'), hoverOK()); return; }
     closeFly();
     if (grp) { pickTool(grp.dataset.last); return; }
     if (opt && opt.dataset.opt === 'tree') { toggleObjTree(opt); return; }
@@ -3389,6 +3389,23 @@ function toggleOpt(k) {
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFly(); });
   window.addEventListener('resize', closeFly);
+  /* PC con ratón: los menús de cada grupo de herramientas se despliegan con solo pasar el cursor por encima (sin clic).
+     Se quedan abiertos mientras el cursor va del botón al menú y se cierran solos al salir. En el celular sigue igual (toque). */
+  const hoverOK = () => window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
+  let flyOpenT = 0, flyCloseT = 0;
+  const keepFly = () => clearTimeout(flyCloseT), dropFly = (ms = 240) => { clearTimeout(flyCloseT); flyCloseT = setTimeout(closeFly, ms); };
+  rail.addEventListener('pointerover', e => {
+    if (e.pointerType !== 'mouse' || !hoverOK()) return;
+    const b = e.target.closest('[data-group],[data-rail="cursor"]'); clearTimeout(flyOpenT);
+    if (!b) { if ($('#railFly')) dropFly(); return; }
+    keepFly(); const id = b.dataset.group || 'cursor', cur = $('#railFly'); if (cur && cur.dataset.g === id) return;
+    flyOpenT = setTimeout(() => { if (!b.matches(':hover')) return; if (id === 'cursor') openCurFly(b, true); else openFly(id, b, true); }, cur ? 30 : 90); // si ya hay un menú abierto, el siguiente sale casi al instante
+  });
+  rail.addEventListener('pointerleave', e => { if (e.pointerType !== 'mouse') return; clearTimeout(flyOpenT); if ($('#railFly')) dropFly(); });
+  document.addEventListener('pointerover', e => {
+    if (e.pointerType !== 'mouse' || !hoverOK() || !$('#railFly')) return;
+    if (e.target.closest('#railFly')) keepFly(); else if (!e.target.closest('#toolRail')) dropFly();
+  });
 })();
 
 /* ───────── Árbol de objetos (barra izquierda, junto al imán/candado/ojo) ─────────
@@ -3692,14 +3709,37 @@ function inertia(v) { // v en velas/ms; se frena con fricción
   inertiaRaf = requestAnimationFrame(step);
 }
 function scheduleRender() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
-let g = null;
+let g = null, DPX = 1, DPY = 1;
+/* Autoescala suave: al hacer zoom o desplazar, el rango de precios entra y sale de golpe con cada vela y la escala «brincaba» en cada cuadro
+   (las velas parecían parpadear). Ahora el rango se acerca al nuevo con una curva suave y muy rápida (~70 ms), igual que en las plataformas profesionales. */
+let asSm = null;
+function autoSmooth(mn, mx) {
+  const k = state.symbol + '|' + state.interval + '|' + (state.ctype || ''), now = performance.now();
+  if (REDUCED || !asSm || asSm.k !== k || !(asSm.max > asSm.min) || !(mx > mn)) { asSm = {k, min: mn, max: mx, t: now}; return [mn, mx]; }
+  const r0 = mx - mn; if (Math.abs(asSm.max - asSm.min - r0) > r0 * 8 || asSm.max < mn - r0 * 4 || asSm.min > mx + r0 * 4) { asSm = {k, min: mn, max: mx, t: now}; return [mn, mx]; } // salto enorme (otra fuente de datos, recarga): sin animación
+  const dt = Math.max(1, Math.min(48, now - asSm.t)); asSm.t = now; const a = 1 - Math.exp(-dt / 70);
+  asSm.min += (mn - asSm.min) * a; asSm.max += (mx - asSm.max) * a;
+  const tol = r0 * .0008;
+  if (Math.abs(asSm.min - mn) < tol && Math.abs(asSm.max - mx) < tol) { asSm.min = mn; asSm.max = mx; } else scheduleRender();
+  return [asSm.min, asSm.max];
+}
+/* Velas en píxeles reales: cuerpo y mecha alineados a la rejilla física de la pantalla (como TradingView), con grosores enteros y mecha centrada.
+   Se agrupan por color en un solo trazo (Path2D): menos trabajo por cuadro y más fluido con cientos de velas. */
+function candleBoxes(step) {
+  const sp = step * DPX, wk = Math.max(1, Math.floor(DPX)); // mecha: 1 px de pantalla (2 en pantallas Retina/4K)
+  let bw = Math.round(sp * .8); if (sp - bw < 1 && sp >= 3) bw = Math.floor(sp) - 1; // velas más juntas, pero siempre con un píxel de aire entre ellas
+  bw = Math.max(1, Math.min(bw, Math.round(56 * DPX)));
+  if (bw > wk && (bw - wk) % 2) bw -= 1; // misma paridad que la mecha: queda exactamente al centro
+  return {wk: Math.min(wk, bw), bw};
+}
 function setupCanvas() {
   const el = $('#priceCanvas'), b = el.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 3);
   // tamaño real del diseño (sin animaciones): con getBoundingClientRect una animación de escala lo medía más chico y el gráfico «brincaba»
   const r = el.clientWidth && el.clientHeight ? {width: el.clientWidth, height: el.clientHeight} : b;
   const W = Math.round(r.width * d), H = Math.round(r.height * d);
   if (el.width !== W || el.height !== H) { el.width = W; el.height = H; }
-  g = el.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0);
+  DPX = W / r.width || d; DPY = H / r.height || d; // escala exacta lienzo/CSS: con ella cada vela cae justo sobre los píxeles reales de la pantalla (nítida, sin bordes borrosos)
+  g = el.getContext('2d', {alpha: true}); g.setTransform(DPX, 0, 0, DPY, 0, 0); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
   return {w: r.width, h: r.height};
 }
 function timeLabel(t, prev) { return CCTPrefs.axisLabel(t, prev, state.interval, PR); }
@@ -4033,8 +4073,8 @@ function renderCore() {
   const nn = ind.nn;
   if (nn && state.indicators.nnEma) for (let i = lo; i < hi; i++) { const a = nn.emaTop[i], b = nn.emaBot[i]; if (Number.isFinite(a) && a > max) max = a; if (Number.isFinite(b) && b < min) min = b; }
   if (stdOn('patterns') && ind.pat) for (const q of ind.pat.list) { for (const t of q.pts) if (t.i >= lo && t.i < hi) { if (t.p < min) min = t.p; if (t.p > max) max = t.p; } if (q.prz && q.pts.length && q.pts[q.pts.length - 1].i >= lo) { min = Math.min(min, q.prz.lo); max = Math.max(max, q.prz.hi); } }
-  const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * (stdOn('patterns') && ind.pat && ind.pat.list.length ? .15 : .08); // con patrones, más aire arriba y abajo para las etiquetas min -= pad; max += pad;
-  if (priceMan) { min = priceMan.min; max = priceMan.max; }
+  const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * (stdOn('patterns') && ind.pat && ind.pat.list.length ? .15 : .08); min -= pad; max += pad; // con patrones, más aire arriba y abajo para las etiquetas
+  if (priceMan) { min = priceMan.min; max = priceMan.max; asSm = null; } else { const sm = autoSmooth(min, max); min = sm[0]; max = sm[1]; }
   { const lb = document.querySelector('.chart-label'); if (lb) lb.style.top = (topH + 8) + 'px'; } // la leyenda del precio baja si hay paneles arriba
   // Orden de los paneles: los de abajo (RSI + resto) y los de arriba se apilan según lo que el usuario arrastró; sin orden guardado, queda el de siempre
   const hMap = {}; if (rsiH) hMap.rsi = rsiH; panelKeys.forEach((k, i) => { hMap[k] = hBot[i]; }); pTop.forEach((x, i) => { hMap['pine:' + x.p.sid] = hTop[i]; });
@@ -4052,18 +4092,21 @@ function renderCore() {
   panelKeys.forEach((k, i) => grips.push({key: k, y: botY[k], dir: 'up', h: hBot[i]}));
   pTop.forEach((x, i) => grips.push({key: 'pine:' + x.p.sid, y: topY['pine:' + x.p.sid] + hTop[i], dir: 'down', h: hTop[i]}));
   // cuadrícula y escala de precios
-  g.font = '10px system-ui'; g.textAlign = 'left'; g.lineWidth = .6;
-  for (let i = 0; i <= 4; i++) {
-    const yy = plotTop + i * plotH / 4, pr = max - (max - min) * i / 4;
-    if (CS.gridH) { g.strokeStyle = gridCol; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right + 2, yy); g.stroke(); }
-    g.fillStyle = text; g.fillText(fmt(pr), w - right + 6, yy + 3);
+  g.font = '10px system-ui'; g.textAlign = 'left'; g.lineWidth = 1 / DPY;
+  const crispY = v => (Math.round(v * DPY) + .5) / DPY, crispX = v => (Math.round(v * DPX) + .5) / DPX;
+  { const rg = max - min, raw = rg / Math.max(3, Math.round(plotH / 64)), p10 = Math.pow(10, Math.floor(Math.log10(raw || 1))), m = raw / p10, st = (m < 1.5 ? 1 : m < 2.25 ? 2 : m < 3.5 ? 2.5 : m < 7.5 ? 5 : 10) * p10;
+    if (CS.gridH) { g.strokeStyle = gridCol; g.beginPath(); }
+    const labs = [];
+    for (let j = Math.ceil(min / st), jn = Math.floor(max / st); j <= jn && labs.length < 40; j++) { const v = j * st, yy = Y(v); if (yy < plotTop + 4 || yy > plotTop + plotH - 4) continue; if (CS.gridH) { const cy = crispY(yy); g.moveTo(left, cy); g.lineTo(w - right + 2, cy); } labs.push([v, yy]); }
+    if (CS.gridH) g.stroke();
+    g.fillStyle = text; for (const [v, yy] of labs) g.fillText(fmt(v), w - right + 6, yy + 3);
   }
   // eje de tiempo
-  const stride = Math.max(1, Math.ceil(70 / step));
+  const stride = Math.max(1, Math.pow(2, Math.ceil(Math.log2(Math.max(1, 74 / step)))));
   g.fillStyle = text; g.textAlign = 'center';
   for (let i = Math.ceil(lo / stride) * stride; i < hi; i += stride) {
     const xx = X(i); if (xx < left + 14 || xx > w - right - 14) continue;
-    if (CS.gridV) { g.strokeStyle = gridCol; g.beginPath(); g.moveTo(xx, top0 - CBH); g.lineTo(xx, plotTop + plotH + volH + rsiH + extraH); g.stroke(); }
+    if (CS.gridV) { const cx = crispX(xx); g.strokeStyle = gridCol; g.beginPath(); g.moveTo(cx, top0 - CBH); g.lineTo(cx, plotTop + plotH + volH + rsiH + extraH); g.stroke(); }
     g.fillText(timeLabel(candles[i].t, i > 0 ? candles[i - 1].t : null), xx, h - 7);
   }
   g.textAlign = 'left';
@@ -4087,11 +4130,11 @@ function renderCore() {
   if (vpvr) drawVPVR(vpvr); // detrás de las velas, como en TradingView
   if (!DOPT.hide) for (const d of getDrawings()) if (d.bk && !d.pane) drawShape(d, d.id === selectedId, drawCol, text); // dibujos enviados «detrás de las velas» desde el árbol de objetos
   // velas
-  const barW = clamp(step * .66, 1.5, 16), limeBars = !!(state.indicators.nnLiq && state.indicators.nnLiqBars && ind.liq);
+  const CB = candleBoxes(step), barW = CB.bw / DPX, limeBars = !!(state.indicators.nnLiq && state.indicators.nnLiqBars && ind.liq);
   if (stdOn('volume') && candles.length) { // volumen en el mismo panel de las velas: barras al fondo (detrás de las velas), ocupan el ~18 % inferior
     const vBot = plotTop + plotH, vH = Math.round(plotH * .18); let maxV = 1;
     for (let i = lo; i < hi; i++) if (candles[i]) maxV = Math.max(maxV, candles[i].v);
-    for (let i = lo; i < hi; i++) { const d = candles[i]; if (!d) continue; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#089981aa' ? up + '55' : sp('volume', 'up')) : (sp('volume', 'down') === '#f23645aa' ? down + '55' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * vH); g.fillRect(X(i) - clamp(step * .66, 1.5, 16) / 2, vBot - bh, clamp(step * .66, 1.5, 16), bh); }
+    for (let i = lo; i < hi; i++) { const d = candles[i]; if (!d) continue; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#089981aa' ? up + '55' : sp('volume', 'up')) : (sp('volume', 'down') === '#f23645aa' ? down + '55' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * vH), x0 = Math.round(X(i) * DPX - CB.bw / 2) / DPX, yb = Math.round(vBot * DPY) / DPY, yt = Math.round((vBot - bh) * DPY) / DPY; g.fillRect(x0, Math.min(yt, yb - 1 / DPY), CB.bw / DPX, Math.max(1 / DPY, yb - yt)); }
   }
   const pineBar = {};
   for (const {r} of pr) for (const e of r.barcolors) for (const [bar, ci] of e.pts) pineBar[bar + (e.offset || 0)] = r.palette[ci];
@@ -4104,6 +4147,7 @@ function renderCore() {
     g.restore();
   } else {
     const src = ct === 'ha' ? haSeries() : candles, hollowT = ct === 'hollow' || CS.hollow;
+    const cWk = new Map(), cBody = new Map(), cIn = new Map(), cHol = new Map(), cPath = (m, c) => { let p = m.get(c); if (!p) m.set(c, p = new Path2D()); return p; };
     for (let i = lo; i < hi; i++) {
       const d = src[i], xx = X(i), pc = pineBar[i], lcol = limeBars && candles[i].t > ind.liq.after, col = pc || (lcol ? '#00e676' : d.c >= d.o ? up : down), yo = Y(d.o), yc = Y(d.c);
       const isUp = d.c >= d.o, custom = !pc && !lcol, wk = custom ? (isUp ? CS.upWick : CS.downWick) || col : col, bd = custom ? (isUp ? CS.upBorder : CS.downBorder) || col : col;
@@ -4111,10 +4155,20 @@ function renderCore() {
         const tk = Math.max(2, Math.min(7, barW / 2)); g.strokeStyle = col; g.lineWidth = Math.max(1, Math.min(2, barW / 5)); g.beginPath(); g.moveTo(xx, Y(d.h)); g.lineTo(xx, Y(d.l));
         if (ct === 'bars') { g.moveTo(xx - tk, yo); g.lineTo(xx, yo); } g.moveTo(xx, yc); g.lineTo(xx + tk, yc); g.stroke(); continue;
       }
-      g.lineWidth = 1; g.strokeStyle = wk; g.beginPath(); g.moveTo(xx, Y(d.h)); g.lineTo(xx, Y(d.l)); g.stroke();
-      if (custom && hollowT && isUp) { g.strokeStyle = bd; g.strokeRect(xx - barW / 2 + .5, Math.min(yo, yc) + .5, Math.max(1, barW - 1), Math.max(1, Math.abs(yo - yc) - 1)); }
-      else { g.fillStyle = col; g.fillRect(xx - barW / 2, Math.min(yo, yc), barW, Math.max(1, Math.abs(yo - yc))); if (custom && bd !== col) { g.strokeStyle = bd; g.strokeRect(xx - barW / 2 + .5, Math.min(yo, yc) + .5, Math.max(1, barW - 1), Math.max(1, Math.abs(yo - yc) - 1)); } }
+      // en píxeles reales de la pantalla: x de la mecha, cuerpo centrado y alturas redondeadas
+      const wx = Math.round(xx * DPX - CB.wk / 2), bx = wx - (CB.bw - CB.wk) / 2, yH = Math.round(Y(d.h) * DPY), yL = Math.round(Y(d.l) * DPY);
+      let yT = Math.round(Math.min(yo, yc) * DPY), yB = Math.round(Math.max(yo, yc) * DPY); const minH = Math.max(1, Math.round(DPY)); if (yB - yT < minH) yB = yT + minH;
+      cPath(cWk, wk).rect(wx, Math.min(yH, yT), CB.wk, Math.max(yL, yB) - Math.min(yH, yT));
+      if (custom && hollowT && isUp) { const bb = Math.max(1, Math.floor(DPX)), p = cPath(cHol, bd); p.rect(bx, yT, CB.bw, yB - yT); if (CB.bw > bb * 2 && yB - yT > bb * 2) p.rect(bx + bb, yT + bb, CB.bw - bb * 2, yB - yT - bb * 2); }
+      else if (custom && bd !== col && CB.bw > 2 * Math.max(1, Math.floor(DPX)) + 1 && yB - yT > 2) { const bb = Math.max(1, Math.floor(DPX)); cPath(cBody, bd).rect(bx, yT, CB.bw, yB - yT); cPath(cIn, col).rect(bx + bb, yT + bb, CB.bw - bb * 2, Math.max(0, yB - yT - bb * 2)); }
+      else cPath(cBody, col).rect(bx, yT, CB.bw, yB - yT);
     }
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); // se pinta en píxeles físicos: bordes 100 % nítidos (HD/4K)
+    for (const [c, p] of cWk) { g.fillStyle = c; g.fill(p); }
+    for (const [c, p] of cBody) { g.fillStyle = c; g.fill(p); }
+    for (const [c, p] of cIn) { g.fillStyle = c; g.fill(p); }
+    for (const [c, p] of cHol) { g.fillStyle = c; g.fill(p, 'evenodd'); }
+    g.restore();
   }
   // medias y bandas
   if (stdOn('bollinger') && ind.bbU && sp('bollinger', 'fill') !== '#748bab00') fillBetween(ind.bbU, ind.bbL, lo, hi, sp('bollinger', 'fill'), 1);
@@ -4332,7 +4386,7 @@ function renderCore() {
     for (let i = lo; i < hi; i++) maxV = Math.max(maxV, candles[i].v);
     g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.volTop); g.lineTo(w - right + 2, geo.volTop); g.stroke();
     g.fillStyle = text; legLabel('VOL', left + 4, top + 16, {t: 'std', key: 'volume'});
-    for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#089981aa' ? up + 'aa' : sp('volume', 'up')) : (sp('volume', 'down') === '#f23645aa' ? down + 'aa' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * height); g.fillRect(X(i) - barW / 2, top + height - bh, barW, bh); }
+    for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#089981aa' ? up + 'aa' : sp('volume', 'up')) : (sp('volume', 'down') === '#f23645aa' ? down + 'aa' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * height), x0 = Math.round(X(i) * DPX - CB.bw / 2) / DPX; g.fillRect(x0, top + height - bh, barW, bh); }
   }
   // RSI
   if (rsiH) {
