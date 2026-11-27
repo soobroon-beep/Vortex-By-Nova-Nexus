@@ -253,14 +253,17 @@
   async function pixelAnon(messages, o, left) { // sin clave, sin créditos, sin cuenta: el límite es por persona
     const msgs = (hasImage(messages) ? stripImages(messages) : messages).map(m => ({role: m.role, content: typeof m.content === 'string' ? m.content.slice(0, 14000) : m.content}));
     const body = JSON.stringify({model: 'openai', messages: msgs, temperature: o.temperature == null ? .3 : o.temperature, max_tokens: o.maxTokens || 1800, private: true, referrer: 'vortex-nexus'});
+    const t0 = Date.now();
     for (let i = 0; i < 2; i++) {
-      const r = await fetchT(PIXEL_ANON, {method: 'POST', headers: {'content-type': 'application/json'}, body}, Math.max(6000, left - i * 3000), o.signal);
+      const r = await fetchT(PIXEL_ANON, {method: 'POST', headers: {'content-type': 'application/json'}, body}, Math.max(6000, Math.min(40000, left - (Date.now() - t0))), o.signal);
       let raw = ''; try { raw = await r.text(); } catch {}
       let text = raw; try { text = textOf(JSON.parse(raw)) || ''; } catch {}
       text = String(text || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-      const wait = /retry after (\d+)/i.exec(raw), limited = r.status === 429 || freeLimit(raw);
+      const wait = /retry after (\d+)/i.exec(raw), limited = r.status === 429 || r.status === 402 || /free_limit|free limit reached|per ip/i.test(raw.slice(0, 600));
       if (r.ok && !pixelBad(text)) return {text, model: 'IA gratis · sin clave', image: false};
-      if (limited && i === 0) { const s = Math.min(+(wait && wait[1]) || 4, 8); try { o.onProgress && o.onProgress({text: 'Un segundo, la IA gratis está ocupada…'}); } catch {} await sleep(s * 1000); continue; }
+      /* Este servicio da 1 respuesta cada ~45 s por persona: si toca esperar y aún hay tiempo, espera (mejor tardar que no responder) */
+      const s = Math.max(2, (+(wait && wait[1]) || 6) + 1), room = left - (Date.now() - t0) - 12000;
+      if (limited && i === 0 && s * 1000 <= room) { try { o.onProgress && o.onProgress({text: 'Dame unos segundos, estoy pensando…'}); } catch {} await sleep(s * 1000); continue; }
       break;
     }
     throw new LLMError('La IA gratis sin clave no respondió', 'busy');

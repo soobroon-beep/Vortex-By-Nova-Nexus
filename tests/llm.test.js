@@ -162,6 +162,10 @@ test('Nexus Pixel: límite momentáneo del servicio sin clave → espera y reint
   let anon = 0; mockFetch(u => { if (/vortex-push/.test(u)) return mkRes({error: 'x'}, false, 502); anon++; return anon === 1 ? mkRes('Free limit reached. Retry after 1s', false, 429, 'text/plain') : mkRes(reply('listo')); });
   const r = await L.pixelChat([{role: 'user', content: 'hola'}], {}); assert.equal(r.text, 'listo'); assert.equal(anon, 2);
 });
+test('Nexus Pixel: «1 respuesta cada 45 s» (402 FREE_LIMIT) del servicio sin clave → espera lo que pide y responde', async () => {
+  let anon = 0; const msgs = []; mockFetch(u => { if (/vortex-push/.test(u)) throw new TypeError('Failed to fetch'); anon++; return anon === 1 ? mkRes({status: 402, success: false, error: {code: 'FREE_LIMIT', message: 'Free limit reached: 1 reply every 45 seconds per IP. Retry after 1s, or get unlimited replies with a Pollinations API key'}}, false, 402) : mkRes(reply('ya te respondo')); });
+  const r = await L.pixelChat([{role: 'user', content: 'hola'}], {onProgress: p => msgs.push(p.text)}); assert.equal(r.text, 'ya te respondo'); assert.equal(anon, 2); assert.ok(msgs.every(m => !/api|key|clave|cr[eé]dito/i.test(m)));
+});
 test('Nexus Pixel: los «ojos» (captura) no usan la ruta sin clave (no tiene visión)', async () => {
   const calls = mockFetch(() => mkRes({error: 'x'}, false, 502));
   await assert.rejects(L.pixelChat([L.imageMessage('mira', 'data:image/png;base64,AA')], {task: 'see'}));
