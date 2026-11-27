@@ -32,7 +32,13 @@
   var sw = Math.min(screen.width || 0, screen.height || 0), touch = (navigator.maxTouchPoints || 0) > 0 && mm('(pointer: coarse)') && !mm('(hover: hover)');
   var ipad = /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
   var tab = q ? q[1] === '1' : (touch || ipad) && sw >= 600 && sw <= 1400;
-  if (tab) document.documentElement.classList.add('vx-tab');
+  if (!tab) return; document.documentElement.classList.add('vx-tab');
+  /* «Como celular en grande»: la tablet usa el diseño del celular (gráfico casi a pantalla completa y barra de navegación abajo), escalado a su pantalla.
+     Para eso el ancho de trabajo se fija en 1000 px (el diseño de celular llega hasta 1023 px) y la pantalla lo agranda. */
+  var vp = document.querySelector('meta[name=viewport]'), base = 'initial-scale=1,viewport-fit=cover,user-scalable=no';
+  function fit() { var land = mm('(orientation: landscape)'), w = land ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    if (vp) vp.setAttribute('content', w >= 1000 ? 'width=1000,viewport-fit=cover,user-scalable=no' : 'width=device-width,' + base); }
+  fit(); addEventListener('orientationchange', function () { setTimeout(fit, 60); }); addEventListener('resize', function () { clearTimeout(fit.t); fit.t = setTimeout(fit, 120); });
 })();</script>
 <script>/* Alto real de la pantalla: al abrir/recargar la app en el celular el navegador a veces calcula un alto mayor al visible y la barra de abajo queda fuera. Se mide y se corrige. */
 (function () {
@@ -345,6 +351,8 @@
     <button data-view="aiView"><span><svg class="ai-ic" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><defs><linearGradient id="aiG2" x1="2" y1="22" x2="22" y2="2" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#22d3ee"/><stop offset=".5" stop-color="#6d7cff"/><stop offset="1" stop-color="#d946ef"/></linearGradient></defs><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 4.6H6.4a3.4 3.4 0 0 0-3.4 3.4v9.6a3.4 3.4 0 0 0 3.4 3.4H16a3.4 3.4 0 0 0 3.4-3.4v-6.2"/><path d="M6.6 17.4 9 10.2l2.4 7.2M7.5 15h3"/><path d="M14.6 10.2v7.2"/></g><path fill="currentColor" stroke="none" d="M19.4 1.2c.45 2.05 1.35 2.95 3.4 3.4-2.05.45-2.95 1.35-3.4 3.4-.45-2.05-1.35-2.95-3.4-3.4 2.05-.45 2.95-1.35 3.4-3.4z"/></svg></span><small>IA</small></button>
     <button data-view="screenerView"><span><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M7 15l3-4 3 2 4-5"/></svg></span><small>Screener</small></button>
     <button data-view="lensView"><span><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7.4"/><path d="m15.4 15.4 5.4 5.4"/><path d="M7 8.8v5M10 6.8v5.4M13 5.4v4.8" stroke-width="1.1"/><path d="M7 10.2v2.4M10 8.2v2.4M13 6.6v2.2" stroke-width="2.6" stroke-linecap="butt"/></svg></span><small>Lens</small></button>
+    <button data-view="botLabView" class="tab-only" aria-label="Nova Bot Lab"><span><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 8V5M10 13h.01M14 13h.01M9.5 16h5"/><circle cx="12" cy="4" r="1"/></svg></span><small>Bots</small></button>
+    <button data-view="mapView" class="tab-only" aria-label="Radar del mercado"><span><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/><rect x="14.5" y="3.5" width="6" height="5" rx="1.2"/><rect x="14.5" y="10.5" width="6" height="10" rx="1.2"/><rect x="3.5" y="14.5" width="9" height="6" rx="1.2"/></svg></span><small>Radar</small></button>
   </nav>
 
   <div class="sheet-backdrop" id="sheetBackdrop"></div>
