@@ -2467,3 +2467,35 @@ body:not(.signed-in) #settingsView .sg:not(:has(.sg-row:not(.needs-login))){disp
 .sm-modal-b{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 .sm-modal-b button{border:1px solid rgba(255,255,255,.14);background:transparent;color:var(--text);border-radius:12px;padding:9px 16px;font:inherit;font-weight:700;font-size:13px}
 .sm-modal-b .sm-ok{background:#548fff;border-color:#548fff;color:#fff}
+
+/* ── Minimizar la caja del precio (triangulito): solo queda la moneda y el precio, para ver más gráfico (PC, tablet y celular) ── */
+.chart-symhead .sym-min{flex:0 0 auto;align-self:center;display:grid;place-items:center;width:22px;height:22px;margin:0 -6px 0 -4px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;opacity:.7;transition:opacity .2s,background .2s,color .2s}
+.chart-symhead .sym-min svg{transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+@media(hover:hover){.chart-symhead .sym-min:hover{opacity:1;color:var(--text);background:rgba(255,255,255,.08)}}
+.chart-symhead.sym-min-on .sym-min svg{transform:rotate(180deg)}
+.chart-symhead.sym-min-on{gap:9px;padding:4px 12px 4px 10px}
+.chart-symhead.sym-min-on .coin-icon,.chart-symhead.sym-min-on #srcLabel,.chart-symhead.sym-min-on #dayChange,.chart-symhead.sym-min-on .dv-chips{display:none!important}
+.chart-symhead.sym-min-on .symbol-button strong{font-size:13.5px}
+.chart-symhead.sym-min-on .priceblock strong{font-size:15px}
+.chart-symhead.sym-anim{animation:symMinPop .32s cubic-bezier(.2,.8,.2,1)}
+@keyframes symMinPop{from{opacity:.55;transform:scale(.96);transform-origin:left center}to{opacity:1;transform:none}}
+@media(max-width:760px){.chart-symhead{flex-wrap:nowrap;max-width:calc(100% - 56px)}.chart-symhead .sym-min{margin-left:-6px}.chart-symhead.sym-min-on{padding:3px 10px 3px 8px}.chart-symhead.sym-min-on .priceblock strong{font-size:14px}.chart-symhead .sym-min{width:26px;height:26px}}
+.light .chart-symhead .sym-min:hover{background:rgba(0,0,0,.06)}
+
+/* ── Expandir panel: botón discreto en la esquina de arriba a la derecha de cada panel (sale al pasar el ratón / al tocar) ── */
+.pane-max-btn{position:absolute;z-index:7;display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:9px;cursor:pointer;color:var(--text);
+  background:color-mix(in srgb,var(--bg) 42%,transparent);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);
+  opacity:0;pointer-events:none;transform:translateY(-4px) scale(.86);transition:opacity .22s ease,transform .3s cubic-bezier(.2,.8,.2,1),background .2s,color .2s}
+.pane-max-btn.show,.pane-max-btn.keep{opacity:.82;pointer-events:auto;transform:none}
+.pane-max-btn.keep:not(.show){opacity:.5}
+@media(hover:hover){.pane-max-btn:hover{opacity:1;background:color-mix(in srgb,var(--accent) 26%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 55%,transparent)}}
+.pane-max-btn.on{color:var(--accent)}
+.pane-max-btn.pm-pop svg{animation:pmIcon .42s cubic-bezier(.2,.8,.2,1)}
+@keyframes pmIcon{0%{transform:scale(.55) rotate(-90deg);opacity:.2}100%{transform:none;opacity:1}}
+#priceCanvas.pm-grow{animation:pmGrow .46s cubic-bezier(.2,.8,.2,1);transform-origin:50% var(--pm-oy,50%)}
+#priceCanvas.pm-back{animation:pmBack .42s cubic-bezier(.2,.8,.2,1);transform-origin:50% var(--pm-oy,50%)}
+@keyframes pmGrow{0%{opacity:.15;transform:scaleY(.35)}60%{opacity:1}100%{transform:none}}
+@keyframes pmBack{0%{opacity:.2;transform:scaleY(1.12)}100%{opacity:1;transform:none}}
+@media(max-width:760px){.pane-max-btn{width:30px;height:30px}}
+@media (prefers-reduced-motion:reduce){#priceCanvas.pm-grow,#priceCanvas.pm-back,.pane-max-btn.pm-pop svg{animation:none}}
+.light .pane-max-btn{box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
