@@ -3817,20 +3817,34 @@ function pmPlace() {
 }
 function syncPaneMax() { const ca = $('#chartArea'); if (ca) ca.classList.toggle('pane-maxed', !!paneMax); pmPlace(); }
 function setPaneMax(k) {
-  if ((k || null) === paneMax) return; const prev = paneMax; paneMax = k || null; pmHover = null;
+  if ((k || null) === paneMax || setPaneMax.busy) return; const prev = paneMax;
   const cv = $('#priceCanvas'), ca = $('#chartArea');
-  if (cv && ca && geo && !REDUCED) { // animación fluida: una «foto» del gráfico anterior se desvanece encima del nuevo (sin parpadeo)
+  const apply = () => { paneMax = k || null; pmHover = null; if (ca) ca.classList.toggle('pane-maxed', !!paneMax); legSig = ''; legStruct = ''; render(); pmPlace();
+    if (paneMax) toast(paneMax === 'price' ? 'Solo el gráfico de precio · Esc para regresar' : 'Panel expandido · Esc para regresar'); };
+  // Animación tipo «zoom» sin parpadeo: 1) fotos del gráfico actual en una capa encima (se dejan pintar 2 cuadros mientras el gráfico real sigue igual);
+  // 2) se cambia el diseño debajo; 3) el panel elegido crece (o se encoge) hasta su nuevo tamaño y la imagen nueva aparece con un fundido.
+  const rectOf = key => { if (!geo) return null; if (key === 'price') { const t = Math.max(0, geo.plotTop), b = Math.min(geo.h - geo.axisH, geo.extraTop); return b - t > 10 ? {y: t, h: b - t} : null; } const q = dPanes.find(z => z.key === key); return q ? {y: q.top0, h: q.H} : null; };
+  const fk = k || prev, r0 = cv && ca && !REDUCED ? rectOf(fk) : null;
+  if (!r0) { apply(); return; }
+  const dpr = cv.width / (cv.offsetWidth || 1), W = cv.offsetWidth, H = cv.offsetHeight;
+  const shot = (y, h) => { const c = document.createElement('canvas'); c.width = cv.width; c.height = Math.max(1, Math.round(h * dpr)); c.getContext('2d').drawImage(cv, 0, Math.round(y * dpr), cv.width, c.height, 0, 0, cv.width, c.height); c.style.cssText = `position:absolute;left:0;top:${y}px;width:${W}px;height:${h}px;transform-origin:0 0`; return c; };
+  let wrap; try { const o = $('#pmSnap'); if (o) o.remove(); wrap = document.createElement('div'); wrap.id = 'pmSnap'; Object.assign(wrap.style, {left: cv.offsetLeft + 'px', top: cv.offsetTop + 'px', width: W + 'px', height: H + 'px'});
+    wrap.append(shot(0, H), shot(r0.y, r0.h)); cv.after(wrap); } catch { apply(); return; }
+  setPaneMax.busy = true;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    setPaneMax.busy = false;
     try {
-      const old = $('#pmSnap'); if (old) old.remove();
-      const sn = document.createElement('canvas'); sn.id = 'pmSnap'; sn.width = cv.width; sn.height = cv.height; sn.getContext('2d').drawImage(cv, 0, 0);
-      const q = dPanes.find(z => z.key === (k || prev)), y0 = q ? q.top0 + q.H / 2 : geo.plotTop + geo.plotH / 2;
-      Object.assign(sn.style, {left: cv.offsetLeft + 'px', top: cv.offsetTop + 'px', width: cv.offsetWidth + 'px', height: cv.offsetHeight + 'px', transformOrigin: `50% ${Math.round(y0)}px`});
-      cv.after(sn); requestAnimationFrame(() => requestAnimationFrame(() => sn.classList.add('go')));
-      setTimeout(() => sn.remove(), 420);
-    } catch {}
-  }
-  if (ca) ca.classList.toggle('pane-maxed', !!paneMax); legSig = ''; legStruct = ''; render(); pmPlace();
-  if (paneMax) toast(paneMax === 'price' ? 'Solo el gráfico de precio · Esc para regresar' : 'Panel expandido · Esc para regresar');
+      const [oldAll, strip] = wrap.children; wrap.style.background = getComputedStyle(document.body).getPropertyValue('--bg') || '#05070c';
+      apply(); const r1 = rectOf(fk); if (!r1) { wrap.remove(); return; }
+      const newAll = shot(0, H); newAll.style.opacity = '0'; wrap.insertBefore(newAll, strip);
+      const D = 440, ease = 'cubic-bezier(.22,.8,.24,1)', sy = r1.h / r0.h, dy = r1.y - r0.y, grow = !!k;
+      oldAll.animate([{opacity: 1}, {opacity: 0}], {duration: D * .45, easing: 'ease-out', fill: 'forwards'});
+      strip.animate([{transform: 'none', opacity: 1}, {transform: `translateY(${dy}px) scaleY(${sy})`, opacity: 1, offset: .78}, {transform: `translateY(${dy}px) scaleY(${sy})`, opacity: 0}], {duration: D, easing: ease, fill: 'forwards'});
+      newAll.animate(grow ? [{opacity: 0}, {opacity: 0, offset: .4}, {opacity: 1, offset: .82}, {opacity: 1}] : [{opacity: 0}, {opacity: 0, offset: .05}, {opacity: 1, offset: .6}, {opacity: 1}], {duration: D, easing: 'ease-out', fill: 'forwards'});
+      setTimeout(() => wrap.animate([{opacity: 1}, {opacity: 0}], {duration: 90, fill: 'forwards'}).onfinish = () => wrap.remove(), D);
+      setTimeout(() => wrap.remove(), D + 400);
+    } catch { wrap.remove(); if (paneMax !== (k || null)) apply(); }
+  }));
 }
 (() => {
   const ca = $('#chartArea'); if (!ca) return; let raf2 = 0, last = null;
