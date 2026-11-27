@@ -62,3 +62,30 @@ html.vx-tab body :is(#watchView,#newsView,#alertsView,#screenerView,#notifView,#
 /* arriba solo queda el logo y la campana: cuenta, tema y ajustes ya están en el dock */
 html.vx-tab .topbar :is(#accountBtn,#settingsBtn,#themeBtn){display:none!important}
 html.vx-tab .topbar{min-height:54px}
+
+/* ── Celular: la barra de abajo con el mismo estilo del dock de la tablet (mismos botones de siempre):
+      cápsula de cristal flotante y burbuja azul-violeta que se desliza a la sección abierta mostrando icono y nombre ── */
+@media(max-width:1023px){
+  html:not(.vx-tab) body:not(.pane) .bottom-nav.vx-dock{display:flex!important;align-items:center;justify-content:center;gap:2px;height:56px!important;min-height:0!important;
+    margin:4px 10px calc(8px + env(safe-area-inset-bottom))!important;padding:5px!important;border-radius:22px!important;border:1px solid rgba(255,255,255,.09)!important;
+    background:rgba(10,13,22,.72)!important;-webkit-backdrop-filter:blur(24px) saturate(1.5)!important;backdrop-filter:blur(24px) saturate(1.5)!important;
+    box-shadow:0 16px 40px -14px rgba(0,0,0,.75),inset 0 1px 0 rgba(255,255,255,.05)!important}
+  html:not(.vx-tab) .bottom-nav.vx-dock::before,html:not(.vx-tab) .bottom-nav.vx-dock button.tab-only{display:none!important}
+  html:not(.vx-tab) .bottom-nav.vx-dock .td-bub{position:absolute;left:0;top:5px;height:calc(100% - 10px);width:0;border-radius:17px;pointer-events:none;opacity:0;z-index:0;
+    background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 34%,transparent),color-mix(in srgb,#8b6bff 26%,transparent));
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 50%,transparent),0 6px 22px -6px color-mix(in srgb,var(--accent) 70%,transparent);
+    transition:transform .46s cubic-bezier(.32,1.25,.5,1),width .46s cubic-bezier(.32,1.25,.5,1),opacity .2s}
+  html:not(.vx-tab) .bottom-nav.vx-dock button{flex:0 0 auto;display:flex!important;flex-direction:row!important;align-items:center;justify-content:flex-start;gap:0!important;
+    height:44px;min-height:0;padding:0 11px!important;margin:0!important;border:0!important;border-radius:16px;background:transparent!important;box-shadow:none!important;color:var(--muted);transition:color .3s}
+  html:not(.vx-tab) .bottom-nav.vx-dock button span{display:grid;place-items:center;width:20px;height:20px;flex:none;transform:none!important;filter:none!important;transition:transform .35s cubic-bezier(.34,1.5,.5,1)!important}
+  html:not(.vx-tab) .bottom-nav.vx-dock button span svg{width:20px;height:20px}
+  html:not(.vx-tab) .bottom-nav.vx-dock button small{display:block!important;max-width:0;margin:0!important;overflow:hidden;white-space:nowrap;opacity:0;font-size:12.5px!important;font-weight:650;letter-spacing:.1px;line-height:1;
+    transition:max-width .46s cubic-bezier(.32,1.25,.5,1),margin-left .46s cubic-bezier(.32,1.25,.5,1),opacity .28s}
+  html:not(.vx-tab) .bottom-nav.vx-dock button.on{color:#fff!important}
+  html:not(.vx-tab) .bottom-nav.vx-dock button.on small{max-width:120px;margin-left:6px!important;opacity:1;transition-delay:0s,0s,.08s}
+  html:not(.vx-tab) .bottom-nav.vx-dock button.on span{transform:scale(1.06)!important}
+  html:not(.vx-tab) .bottom-nav.vx-dock button:active span{transform:scale(.82)!important}
+  html:not(.vx-tab) body.light .bottom-nav.vx-dock{background:rgba(255,255,255,.82)!important;border-color:rgba(0,0,0,.08)!important}
+  html:not(.vx-tab) body.light .bottom-nav.vx-dock button.on{color:#0d1424!important}
+}
+@media (prefers-reduced-motion:reduce){.bottom-nav.vx-dock *{transition:none!important}}

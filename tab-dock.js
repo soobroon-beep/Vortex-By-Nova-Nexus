@@ -4,8 +4,24 @@
    Tocar otra vez la sección abierta regresa al gráfico (como en la PC). */
 (function () {
   const root = document.documentElement;
-  if (!root.classList.contains('vx-tab')) return;
   const $ = s => document.querySelector(s);
+  /* Celular: la misma burbuja deslizante en su barra de abajo (mismos botones de siempre, solo cambia el estilo) */
+  if (!root.classList.contains('vx-tab')) {
+    const ready = () => {
+      const nav = $('.bottom-nav'); if (!nav || nav.querySelector('.td-bub')) return;
+      nav.classList.add('vx-dock'); const b = document.createElement('i'); b.className = 'td-bub'; b.setAttribute('aria-hidden', 'true'); nav.prepend(b);
+      const markP = (view, instant) => {
+        if (getComputedStyle(nav).display === 'none') return;
+        const btns = [...nav.querySelectorAll('button')].filter(x => getComputedStyle(x).display !== 'none'), act = btns.find(x => x.dataset.view === view);
+        btns.forEach(x => x.classList.toggle('on', x === act)); placeBub(nav, b, btns, act, x => x.querySelector('span'), x => x.querySelector('small'), instant);
+      };
+      document.addEventListener('vx:view', e => markP(e.detail, false));
+      addEventListener('resize', () => markP(window.CCT_view ? CCT_view() : '', true));
+      markP(window.CCT_view ? CCT_view() : ((nav.querySelector('button.active') || {}).dataset || {}).view, true);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(ready, 0)); else setTimeout(ready, 0);
+    return;
+  }
   const svgOf = sel => { const e = $(sel); const sv = e && e.querySelector('svg, img'); return sv ? sv.outerHTML : ''; };
   const ITEMS = [
     {v: 'chartView', t: 'Gráfico', ic: () => svgOf('.bottom-nav [data-view="chartView"]')},
@@ -61,20 +77,25 @@
     const btns = [...dock.querySelectorAll('.td-btn')], act = btns.find(b => b.dataset.v === key) || null;
     btns.forEach(b => b.classList.toggle('on', b === act));
     if (!act) { bub.style.opacity = '0'; return; }
-    const cs = getComputedStyle(dock), padL = parseFloat(cs.paddingLeft) || 0, gap = parseFloat(cs.columnGap || cs.gap) || 0;
-    let x = padL, left = 0, width = 0;
-    [...dock.children].forEach(el => {
-      if (el === bub || el.hidden || getComputedStyle(el).display === 'none') return;
-      let w;
-      if (el.classList.contains('td-btn')) { const lb = el.querySelector('.td-lb'), base = el.querySelector('.td-ic').offsetWidth + 2 * 11; w = base + (el === act ? 6 + lb.scrollWidth : 0); }
-      else { const m = getComputedStyle(el); w = el.offsetWidth + (parseFloat(m.marginLeft) || 0) + (parseFloat(m.marginRight) || 0); }
-      if (el === act) { left = x; width = w; }
-      x += w + gap;
+    placeBub(dock, bub, btns, act, el => el.querySelector('.td-ic'), el => el.querySelector('.td-lb'), instant);
+  }
+  document.addEventListener('vx:view', e => mark(e.detail, false));
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(build, 0)); else setTimeout(build, 0);
+  /* Coloca la burbuja en el botón activo. El ancho final de cada botón se calcula antes de animar (icono + nombre solo en el activo),
+     así la burbuja y el nombre crecen juntos, en el mismo tiempo, sin saltos. Los botones van centrados en la barra. */
+  function placeBub(box, bub, btns, act, icOf, lbOf, instant) {
+    if (!act) { bub.style.opacity = '0'; return; }
+    const cs = getComputedStyle(box), padL = parseFloat(cs.paddingLeft) || 0, padR = parseFloat(cs.paddingRight) || 0, gap = parseFloat(cs.columnGap || cs.gap) || 0;
+    const items = [...box.children].filter(el => el !== bub && !el.hidden && getComputedStyle(el).display !== 'none' && getComputedStyle(el).position !== 'absolute');
+    const W = items.map(el => {
+      if (btns.includes(el)) { const ic = icOf(el), lb = lbOf(el), bs = getComputedStyle(el); return (ic ? ic.offsetWidth : 20) + (parseFloat(bs.paddingLeft) || 0) + (parseFloat(bs.paddingRight) || 0) + (el === act && lb ? 6 + lb.scrollWidth : 0); }
+      const m = getComputedStyle(el); return el.offsetWidth + (parseFloat(m.marginLeft) || 0) + (parseFloat(m.marginRight) || 0);
     });
+    const total = W.reduce((a, b) => a + b, 0) + gap * Math.max(0, W.length - 1), inner = box.clientWidth - padL - padR;
+    let x = padL + (cs.justifyContent === 'center' ? Math.max(0, (inner - total) / 2) : 0), left = 0, width = 0;
+    items.forEach((el, i) => { if (el === act) { left = x; width = W[i]; } x += W[i] + gap; });
     bub.style.transition = instant ? 'none' : '';
     bub.style.opacity = '1'; bub.style.width = width + 'px'; bub.style.transform = `translateX(${left}px)`;
     if (instant) { void bub.offsetWidth; bub.style.transition = ''; }
   }
-  document.addEventListener('vx:view', e => mark(e.detail, false));
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(build, 0)); else setTimeout(build, 0);
 })();
