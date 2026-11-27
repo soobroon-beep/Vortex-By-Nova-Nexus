@@ -14,22 +14,9 @@ jobs:
         with: {node-version: 22}
       - name: Prueba en vivo de la IA de Nexus Pixel (llm.js real contra los servidores reales)
         run: |
-          cat > /tmp/live.js <<'JS'
-          const L = require(process.cwd() + '/llm.js');
-          const realFetch = global.fetch;
-          const sys = {role: 'system', content: 'Eres NEXUS PIXEL, copiloto de trading. Responde SOLO JSON {"reply":"...","actions":[]} en español.'};
-          const q = t => [sys, {role: 'user', content: t + '\nDATOS: BTCUSDT 1h, último 94471, EMA200 92000, RSI 58, tendencia alcista.'}];
-          (async () => {
-            let fails = 0; const run = async (name, fn) => { const t = Date.now(); try { const r = await fn(); console.log('OK   ', name, '|', r.model, '|', (Date.now() - t) + 'ms |', String(r.text).replace(/\s+/g, ' ').slice(0, 160)); } catch (e) { fails++; console.log('FALLA', name, '|', e.kind, e.message); } };
-            await run('servidor VORTEX (task pixel, JSON)', () => L.pixelChat(q('¿Long o short?'), {json: true}));
-            await run('servidor VORTEX texto (noticias/screener)', () => L.pixelChat([{role: 'user', content: 'Resume en 1 frase: BTC sube 2% por entradas a ETF.'}], {maxTokens: 120}));
-            global.fetch = (u, o) => /vortex-push/.test(String(u)) ? Promise.reject(new TypeError('Failed to fetch')) : realFetch(u, o);
-            await run('servidor CAÍDO → IA gratis sin clave', () => L.pixelChat(q('¿Qué ves en la estructura?'), {json: true}));
-            global.fetch = (u, o) => /vortex-push/.test(String(u)) ? Promise.resolve(new Response(JSON.stringify({error: 'busy'}), {status: 502})) : realFetch(u, o);
-            await run('servidor OCUPADO (502) → IA gratis sin clave', () => L.pixelChat(q('Dame tu lectura rápida'), {json: true}));
-            global.fetch = realFetch;
-            for (let i = 1; i <= 5; i++) await run('ráfaga ' + i + ' (servidor real)', () => L.pixelChat(q('pregunta ' + i + ': ¿dónde pondrías el stop?'), {json: true}));
-            process.exitCode = fails ? 1 : 0;
-          })();
-          JS
-          node /tmp/live.js
+          cat > /tmp/raw.sh <<'SH'
+          M='[{"role":"user","content":"Responde solo: hola"}]'
+          for i in 1 2 3 4; do curl -s -m 40 -D /tmp/h -o /tmp/b -w "anon $i HTTP %{http_code} %{time_total}s\n" -X POST https://text.pollinations.ai/openai -H 'content-type: application/json' -d "{\"model\":\"openai\",\"messages\":$M}"; grep -i "retry\|ratelimit\|x-" /tmp/h | head -5; head -c 300 /tmp/b; echo; sleep 2; done
+          echo "== sin origin al worker"; curl -s -m 30 -w ' [HTTP %{http_code}]' -X POST https://vortex-push.soobroon.workers.dev/ai -H 'content-type: application/json' -d "{\"model\":\"openai\",\"task\":\"pixel\",\"messages\":$M,\"max_tokens\":40}" | head -c 300; echo
+          SH
+          bash /tmp/raw.sh
