@@ -415,6 +415,7 @@ function setSide(id) {
   $$('.right-rail [data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === (id === 'customView' || id === 'notifView' ? 'settingsView' : id)));
 }
 /* Tablet en horizontal: Seguimiento, Noticias, IA, Bots… se abren en una columna a la derecha y el gráfico sigue a la vista (pantalla dividida) */
+function chartOn() { return currentView === 'chartView' || document.body.classList.contains('tab-split'); } // el gráfico está a la vista (también en la pantalla dividida de la tablet)
 const tabSplitOk = () => document.documentElement.classList.contains('vx-tab') && innerWidth >= 960 && innerWidth > innerHeight;
 addEventListener('resize', () => { const sp = tabSplitOk() && currentView !== 'chartView'; if (document.body.classList.contains('tab-split') !== sp) { document.body.classList.toggle('tab-split', sp); requestAnimationFrame(() => render()); } });
 function switchView(id) {
@@ -438,6 +439,7 @@ function switchView(id) {
   if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); if (window.CCTRadar) CCTRadar.paint(); }
   if (isDesktop()) renderWatch();
   syncFullscreenLabel();
+  try { document.dispatchEvent(new CustomEvent('vx:view', {detail: id})); } catch {} // dock de la tablet
 }
 $$('.bottom-nav button').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
 $('#settingsBtn').onclick = () => switchView('settingsView');
@@ -1543,7 +1545,7 @@ async function loadOlder() {
     pineShiftAll(oldKey, cs.length);
     recalc(); if (typeof dvRefresh === 'function') setTimeout(() => dvRefresh(), 0);
   } catch (e) { h.fails++; h.failAt = Date.now(); }
-  finally { h.busy = false; if (h === hist && currentView === 'chartView') scheduleRender(); }
+  finally { h.busy = false; if (h === hist && chartOn()) scheduleRender(); }
 }
 const pineShift = (res, k) => (window.CCTPineDraw && CCTPineDraw.shift ? CCTPineDraw.shift(res, k) : res); // (pine-draw.js)
 function pineShiftAll(oldKey, k) {
@@ -1718,7 +1720,7 @@ function recalcSoon(force) {
    En modo Ligero (o con «reducir movimiento») el precio salta directo como siempre. Las alertas usan siempre el dato real. */
 function liveGlideStop() { if (!liveGlide) return; cancelAnimationFrame(liveGlide.raf); const n = candles.length, L = liveGlide; liveGlide = null; if (n && candles[n - 1].t === L.t) candles[n - 1] = L.k; }
 function liveGlideStart(k, last) {
-  if (REDUCED || document.hidden || currentView !== 'chartView' || !Number.isFinite(last.c) || last.c === k.c) { liveGlideStop(); return false; }
+  if (REDUCED || document.hidden || !chartOn() || !Number.isFinite(last.c) || last.c === k.c) { liveGlideStop(); return false; }
   const from = last.c; if (liveGlide) cancelAnimationFrame(liveGlide.raf);
   const L = liveGlide = {t: k.t, k, from, to: k.c, t0: performance.now(), raf: 0}, D = 170;
   candles[candles.length - 1] = {...k, c: from};
@@ -1737,25 +1739,25 @@ function applyKline(k) {
   else if (k.t > last.t) { liveGlideStop(); candles.push(k); if (pan > 0) pan += 1; isNew = true; }
   else return;
   recalcSoon(isNew); updateChartHeader(); checkAlerts(state.symbol, k.c); if (window.CCTTrade) CCTTrade.tick(state.symbol, k.c); smartTick(isNew);
-  if (currentView === 'chartView') scheduleRender();
+  if (chartOn()) scheduleRender();
 }
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   fetchTicker();
-  if (currentView === 'chartView' && candles.length) { wsReloadAt = Date.now(); loadCandles(true); }
+  if (chartOn() && candles.length) { wsReloadAt = Date.now(); loadCandles(true); }
 });
 /* Vigilante del tiempo real: si la conexión se queda «colgada» sin avisar (la compu durmió, cambió la red, el exchange la soltó),
    a los 20 s sin datos se bajan las velas recientes y se reconecta solo. Así el gráfico abierto nunca se queda congelado. */
-function liveKick(why) { if (document.hidden || replay || !candles.length || currentView !== 'chartView') return; wsReloadAt = Date.now(); fetchTicker(); loadCandles(true); }
+function liveKick(why) { if (document.hidden || replay || !candles.length || !chartOn()) return; wsReloadAt = Date.now(); fetchTicker(); loadCandles(true); }
 setInterval(() => {
-  if (document.hidden || replay || !candles.length || currentView !== 'chartView' || !ws) return; // (las fuentes sin WebSocket ya se consultan solas cada pocos segundos)
+  if (document.hidden || replay || !candles.length || !chartOn() || !ws) return; // (las fuentes sin WebSocket ya se consultan solas cada pocos segundos)
   const now = Date.now(); if (now - wsLast > 12000 && now - wsReloadAt > 12000) liveKick('sin datos');
 }, 3000);
 /* Respaldo: si el tiempo real lleva más de 4 s callado, la última vela se pide directo al exchange cada 2 s mientras se reconecta.
    La vela se sigue moviendo aunque la conexión en vivo falle. */
 let restBusy = false;
 setInterval(async () => {
-  if (document.hidden || replay || !candles.length || currentView !== 'chartView' || !ws || restBusy || Date.now() - wsLast < 4000) return;
+  if (document.hidden || replay || !candles.length || !chartOn() || !ws || restBusy || Date.now() - wsLast < 4000) return;
   const sym = state.symbol, tf = state.interval, gen = wsGen; restBusy = true;
   try { const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 5000), r = await fetchKlinesAny(sym, tf, ctl.signal, 3); clearTimeout(to); if (gen === wsGen && sym === state.symbol && tf === state.interval && r.src === (dataSrc || 'binance')) r.cs.forEach(applyKline); } catch {}
   restBusy = false;
@@ -2471,7 +2473,7 @@ $$('[data-panel]').forEach(b => b.onclick = () => openSheet(b.dataset.panel === 
 $('#goChart').onclick = () => switchView('chartView');
 function selectSymbol(s) {
   state.symbol = s; save(); closeSheet(); clearTransient(); closeWS(); candles = []; ind = {};
-  updateChartHeader(); switchView('chartView'); loadCandles(); if (window.CCTTrade) CCTTrade.symChanged(); if (window.CCTBook) CCTBook.symChanged(); dvClose(); dvFs = ''; setTimeout(() => dvRefresh(true), 50);
+  updateChartHeader(); if (!document.body.classList.contains('tab-split')) switchView('chartView'); loadCandles(); // tablet dividida: la lista se queda abierta y el gráfico cambia al lado if (window.CCTTrade) CCTTrade.symChanged(); if (window.CCTBook) CCTBook.symChanged(); dvClose(); dvFs = ''; setTimeout(() => dvRefresh(true), 50);
 }
 
 /* ───────── Pestañas de gráficos: varios gráficos abiertos, cada uno con su moneda, temporalidad y tipo de vela ───────── */
@@ -3193,7 +3195,7 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => { const i = e.target.closest('#selPop input[type=color]'); if (!i) return; if (window.CCTColors && CCTColors.add(i.value) === true) selPopMineRefresh(); /* «Otro color» se suma solo a Mis colores: así sale en todas las paletas */ if (i.hasAttribute('data-pc-in')) sbSetColor(i.value); else if (i.hasAttribute('data-ptc-in')) patchD({tc: i.value}); else if (i.hasAttribute('data-pgc-in')) patchD({gc: i.value}); else if (i.hasAttribute('data-prc-in')) patchD({rc: i.value}); else if (i.hasAttribute('data-opc-in')) dApplyCol(i.value); });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'sbTxt') { e.preventDefault(); sbEditText(e.target.value); } else if (e.key === 'Enter' && e.target.id === 'sbPrice') { e.preventDefault(); document.querySelector('#selPop [data-sb="priceok"]').click(); } });
 document.addEventListener('keydown', e => { // atajos de escritorio: copiar / pegar / clonar
-  if (!(e.ctrlKey || e.metaKey) || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || currentView !== 'chartView') return;
+  if (!(e.ctrlKey || e.metaKey) || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || !chartOn()) return;
   const k = e.key.toLowerCase();
   if (k === 'c' && curDraw()) { e.preventDefault(); sbCopy(); } else if (k === 'v' && drawClip) { e.preventDefault(); sbPaste(); } else if (k === 'd' && curDraw()) { e.preventDefault(); sbClone(); }
 });
@@ -4094,7 +4096,7 @@ function haSeries() { // Heikin Ashi: velas suavizadas; se recalcula solo si cam
   haCache = {n, t: candles[0].t, c: l.c, h: l.h, l: l.l, arr: a}; return a;
 }
 function renderCore() {
-  if (currentView !== 'chartView') return;
+  if (!chartOn()) return;
   const el = $('#priceCanvas'); if (!el.getBoundingClientRect().width) return;
   const {w, h} = setupCanvas();
   const css = cssVars(); // colores del tema (en caché: leerlos en cada cuadro forzaba a recalcular los estilos de toda la página)
@@ -6020,7 +6022,7 @@ function renderGenPrefs() {
 /* ───────── Ajustes nuevos: pantalla encendida y precio en la pestaña ───────── */
 let wakeLk = null;
 async function wakeSync() {
-  const want = PR.wake === 'on' && !document.hidden && currentView === 'chartView';
+  const want = PR.wake === 'on' && !document.hidden && chartOn();
   try { if (want && !wakeLk && navigator.wakeLock) { wakeLk = await navigator.wakeLock.request('screen'); wakeLk.addEventListener('release', () => { wakeLk = null; }); } else if (!want && wakeLk) { await wakeLk.release(); wakeLk = null; } } catch { wakeLk = null; }
 }
 document.addEventListener('visibilitychange', () => wakeSync());
@@ -6738,7 +6740,7 @@ async function dvRefresh(force) {
   const fs = dvSym(); if (!fs) { dvRender(); return; }
   if (fs !== dvFs) { dvFs = fs; dvRender(); }
   if (!state.indicators.derivs && !DV_PANES.some(k => state.indicators[k])) return;
-  if (document.hidden || currentView !== 'chartView') return;
+  if (document.hidden || !chartOn()) return;
   const S = CCTDerivs.summary(fs); if (force || !S || Date.now() - S.at > 25e3) await CCTDerivs.loadSummary(fs);
   dvRender(); const p = $('#dvPop'); if (p) dvFill(p);
 }
@@ -6866,6 +6868,7 @@ function placeAcctMenu() {
   if (!acctMenu || !acctAnchor) return; const r = acctAnchor.getBoundingClientRect(), w = acctMenu.offsetWidth, h = acctMenu.offsetHeight;
   let x = r.left < innerWidth / 2 ? r.right + 10 : r.left - w - 10, y = r.top; // PC: al lado del botón; celular: debajo
   if (r.top < 80) { x = r.right - w; y = r.bottom + 8; }
+  else if (r.bottom > innerHeight - 110) { x = r.left + r.width / 2 - w / 2; y = r.top - h - 12; } // botón abajo (dock de la tablet): el menú sale hacia arriba
   acctMenu.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + 'px'; acctMenu.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + 'px';
 }
 function closeAcctMenu() { if (!acctMenu) return; acctMenu.remove(); acctMenu = null; document.removeEventListener('pointerdown', acctAway, true); document.removeEventListener('keydown', acctKey, true); }
@@ -6879,6 +6882,8 @@ function toggleAcctMenu(anchor) {
 }
 $('#accountBtn').onclick = () => { if (fbUser) toggleAcctMenu($('#accountBtn')); else signIn(); };
 { const r = $('#rrAccount'); if (r) r.onclick = () => { if (fbUser) toggleAcctMenu(r); else signIn(); }; }
+window.CCT_acct = anchor => { if (fbUser) toggleAcctMenu(anchor); else signIn(); }; // cuenta desde otro botón (dock de la tablet)
+window.CCT_view = () => currentView;
 window.addEventListener('resize', () => placeAcctMenu());
 async function signIn() {
   if (!auth) { toast('El servicio de cuentas no está disponible'); return; }
@@ -7319,7 +7324,7 @@ window.CCT_getMarketSnapshot = async function (n) {
 /* ───────── Contexto para la IA: lo que el usuario ve en el gráfico ───────── */
 /* ───────── Puente para NEXUS PIXEL (pixel.js): leer las velas en pantalla, convertir tiempo/precio a píxeles y dibujar en el gráfico ───────── */
 window.CCT_pixel = {
-  ready: () => !!(geo && candles.length && currentView === 'chartView'),
+  ready: () => !!(geo && candles.length && chartOn()),
   visible() { if (!geo || !candles.length) return []; const a = Math.max(0, Math.floor(geo.start)), b = Math.min(candles.length - 1, Math.ceil(geo.end)); return candles.slice(a, b + 1); },
   offset() { const cv = $('#priceCanvas'), ar = $('#chartArea'); if (!cv || !ar) return {x: 0, y: 0}; const r1 = cv.getBoundingClientRect(), r2 = ar.getBoundingClientRect(); return {x: r1.left - r2.left, y: r1.top - r2.top}; },
   toScreen(pt) { if (!geo) return null; const o = this.offset(), q = px(pt); return {x: q.x + o.x, y: q.y + o.y}; }, // en píxeles de #chartArea
@@ -7331,7 +7336,7 @@ window.CCT_pixel = {
     clearMine() { const a = getDrawings(), keep = a.filter(d => !d.pix); if (keep.length === a.length) return 0; snapDraw(); setDrawings(keep); selectedId = null; updateDrawUI(); render(); return a.length - keep.length; },
   candles: () => candles.slice(-600).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), exchange: () => exName(state.symbol), // Nexus Pixel lee todas las velas cargadas (no solo las de la pantalla)
   symbol: () => symOf(state.symbol), interval: () => state.interval, last: () => candles.length ? candles[candles.length - 1].c : null, fmt: v => fmt(v),
-  onChart: () => currentView === 'chartView',
+  onChart: () => chartOn(),
   /* Pixel en TODA la app: en qué sección estás, ir a otra, buscar herramientas, abrir monedas y crear alertas */
   view: () => currentView, desktop: () => isDesktop(), side: () => document.body.dataset.side || 'watchView',
   go(v) { if (isDesktop()) { if (v === 'chartView') return; const b = document.querySelector(`.right-rail [data-side="${v}"]`); if (b) b.click(); else setSide(v); } else { const b = document.querySelector(`.bottom-nav [data-view="${v}"]`); if (b) b.click(); else switchView(v); } },
@@ -7559,5 +7564,5 @@ setInterval(fetchTicker, 30000);
 setInterval(() => { if (!document.hidden && !PANE) refreshPop(); }, 120000);
 setInterval(() => checkAlertsPoll(), 10000); // sigue revisando con la app minimizada (el navegador lo hace más lento, pero a tiempo)
 setInterval(movePoll, 15000); setTimeout(movePoll, 3000);
-setInterval(() => { if (currentView === 'chartView' && !wsOpen && candles.length && !document.hidden) loadCandles(true); }, 20000);
+setInterval(() => { if (chartOn() && !wsOpen && candles.length && !document.hidden) loadCandles(true); }, 20000);
 })();

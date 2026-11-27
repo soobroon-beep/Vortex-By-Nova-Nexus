@@ -7,14 +7,37 @@ html.vx-tab #app{max-width:none!important;margin:0!important;border-left:0!impor
 html.vx-tab #botLabView.active,html.vx-tab #mapView.active{display:block!important;grid-area:auto}
 html.vx-tab #blSettingRow{display:flex!important}
 
-/* ── Barra de navegación: dock flotante, compacto y centrado (no de lado a lado como en el celular) ── */
-html.vx-tab .bottom-nav{grid-template-columns:repeat(8,minmax(0,1fr))!important;width:min(720px,calc(100% - 28px));margin:0 auto calc(8px + env(safe-area-inset-bottom));
-  height:58px!important;min-height:58px!important;padding:4px!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:20px;
-  background:rgba(10,13,21,.72)!important;-webkit-backdrop-filter:blur(22px) saturate(1.4);backdrop-filter:blur(22px) saturate(1.4);box-shadow:0 14px 40px -12px rgba(0,0,0,.7)}
-html.vx-tab .bottom-nav button{gap:3px;border-radius:14px;min-width:0}
-html.vx-tab .bottom-nav button svg{width:20px;height:20px}
-html.vx-tab .bottom-nav button small{font-size:10px;letter-spacing:.1px;white-space:nowrap}
-html.vx-tab.light .bottom-nav,html.vx-tab body.light .bottom-nav{background:rgba(255,255,255,.78)!important;border-color:rgba(0,0,0,.08)!important}
+/* ── Dock de la tablet (tab-dock.js): mismo orden que la barra derecha de la PC, con divisiones y una burbuja de cristal que se desliza
+      hasta la sección abierta mostrando su icono y su nombre ── */
+html.vx-tab .bottom-nav{display:none!important}
+#tabDock{display:none}
+html.vx-tab #tabDock{position:relative;display:flex;align-items:center;gap:2px;flex:none;align-self:center;max-width:calc(100% - 20px);margin:0 auto calc(8px + env(safe-area-inset-bottom));
+  padding:5px;border-radius:22px;border:1px solid rgba(255,255,255,.09);background:rgba(10,13,22,.7);-webkit-backdrop-filter:blur(24px) saturate(1.5);backdrop-filter:blur(24px) saturate(1.5);
+  box-shadow:0 18px 44px -14px rgba(0,0,0,.75),inset 0 1px 0 rgba(255,255,255,.05);z-index:6}
+html.vx-tab #tabDock .td-bub{position:absolute;left:0;top:5px;height:calc(100% - 10px);width:0;border-radius:17px;pointer-events:none;opacity:0;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 34%,transparent),color-mix(in srgb,#8b6bff 26%,transparent));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 50%,transparent),0 6px 22px -6px color-mix(in srgb,var(--accent) 70%,transparent);
+  transition:transform .46s cubic-bezier(.32,1.25,.5,1),width .46s cubic-bezier(.32,1.25,.5,1),opacity .2s}
+html.vx-tab #tabDock .td-btn{position:relative;z-index:1;display:flex;align-items:center;height:44px;padding:0 11px;border:0;border-radius:16px;background:transparent;color:var(--muted);cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:color .3s}
+html.vx-tab #tabDock .td-btn[hidden]{display:none}
+html.vx-tab #tabDock .td-ic{display:grid;place-items:center;width:20px;height:20px;flex:none;transition:transform .35s cubic-bezier(.34,1.5,.5,1)}
+html.vx-tab #tabDock .td-ic svg{width:20px;height:20px}
+html.vx-tab #tabDock .td-ic img{width:22px;height:22px;border-radius:50%;object-fit:cover}
+html.vx-tab #tabDock .td-lb{display:block;max-width:0;margin-left:0;overflow:hidden;white-space:nowrap;opacity:0;font-size:12.5px;font-weight:650;letter-spacing:.1px;
+  transition:max-width .46s cubic-bezier(.32,1.25,.5,1),margin-left .46s cubic-bezier(.32,1.25,.5,1),opacity .28s}
+html.vx-tab #tabDock .td-btn.on{color:#fff}
+html.vx-tab #tabDock .td-btn.on .td-lb{max-width:120px;margin-left:6px;opacity:1;transition-delay:0s,0s,.08s}
+html.vx-tab #tabDock .td-btn.on .td-ic{transform:scale(1.06)}
+html.vx-tab #tabDock .td-btn.td-tap .td-ic{animation:tdTap .38s cubic-bezier(.34,1.5,.5,1)}
+@keyframes tdTap{40%{transform:scale(.82)}100%{transform:scale(1)}}
+html.vx-tab #tabDock .td-sep{flex:none;width:1px;height:24px;margin:0 6px;background:linear-gradient(transparent,rgba(255,255,255,.2),transparent)}
+html.vx-tab #tabDock .td-dev .td-ic{color:#c9b8ff}
+html.vx-tab.light #tabDock,html.vx-tab body.light #tabDock{background:rgba(255,255,255,.8);border-color:rgba(0,0,0,.08)}
+html.vx-tab body.light #tabDock .td-btn.on{color:#0d1424}
+html.vx-tab body.light #tabDock .td-sep{background:linear-gradient(transparent,rgba(0,0,0,.18),transparent)}
+html.vx-tab #devView.active{display:block!important}
+@media (prefers-reduced-motion:reduce){html.vx-tab #tabDock *{transition:none!important;animation:none!important}}
 
 /* ── Contenido de las pestañas: ancho cómodo y centrado (no estirado a toda la pantalla) ── */
 html.vx-tab body:not(.tab-split) :is(#watchView,#newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView).active>*{max-width:760px;margin-left:auto;margin-right:auto}
@@ -29,3 +52,13 @@ html.vx-tab body.tab-split main>#mapView.active{display:flex!important;flex-dire
 html.vx-tab body.tab-split .topbar{display:none!important}
 @keyframes vxTabCol{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){html.vx-tab body.tab-split main>.view.active{animation:none}}
+html.vx-tab #tabDock .td-ic svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+html.vx-tab #tabDock .td-dev .td-ic svg{stroke:#d9ccff}
+html.vx-tab main{flex:1 1 0!important;height:auto!important;min-height:0!important}
+/* el dock no tapa nada: el contenido termina justo arriba de él (en el celular la barra flota encima del contenido) */
+html.vx-tab body main{margin-bottom:0!important}
+html.vx-tab body:not(.pane) main>.view{height:100%!important}
+html.vx-tab body :is(#watchView,#newsView,#alertsView,#screenerView,#notifView,#customView,#settingsView,#discordView){padding-bottom:24px!important}
+/* arriba solo queda el logo y la campana: cuenta, tema y ajustes ya están en el dock */
+html.vx-tab .topbar :is(#accountBtn,#settingsBtn,#themeBtn){display:none!important}
+html.vx-tab .topbar{min-height:54px}
