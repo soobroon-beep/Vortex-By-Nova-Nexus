@@ -3712,24 +3712,24 @@ function scheduleRender() { if (!raf) raf = requestAnimationFrame(() => { raf = 
 let g = null, DPX = 1, DPY = 1;
 /* Autoescala suave: al hacer zoom o desplazar, el rango de precios entra y sale de golpe con cada vela y la escala «brincaba» en cada cuadro
    (las velas parecían parpadear). Ahora el rango se acerca al nuevo con una curva suave y muy rápida (~70 ms), igual que en las plataformas profesionales. */
-let asSm = null;
-function autoSmooth(mn, mx) {
-  const k = state.symbol + '|' + state.interval + '|' + (state.ctype || ''), now = performance.now();
-  if (REDUCED || !asSm || asSm.k !== k || !(asSm.max > asSm.min) || !(mx > mn)) { asSm = {k, min: mn, max: mx, t: now}; return [mn, mx]; }
-  const r0 = mx - mn; if (Math.abs(asSm.max - asSm.min - r0) > r0 * 8 || asSm.max < mn - r0 * 4 || asSm.min > mx + r0 * 4) { asSm = {k, min: mn, max: mx, t: now}; return [mn, mx]; } // salto enorme (otra fuente de datos, recarga): sin animación
-  const dt = Math.max(1, Math.min(48, now - asSm.t)); asSm.t = now; const a = 1 - Math.exp(-dt / 70);
-  asSm.min += (mn - asSm.min) * a; asSm.max += (mx - asSm.max) * a;
-  const tol = r0 * .0008;
-  if (Math.abs(asSm.min - mn) < tol && Math.abs(asSm.max - mx) < tol) { asSm.min = mn; asSm.max = mx; } else scheduleRender();
-  return [asSm.min, asSm.max];
+const SMR = new Map(); // rangos suavizados por nombre: precio, volumen y cada panel (RSI, MACD, osciladores de Pine…)
+function smoothRange(name, mn, mx) {
+  const k = state.symbol + '|' + state.interval + '|' + (state.ctype || ''), now = performance.now(); let s = SMR.get(name);
+  if (REDUCED || !s || s.k !== k || !(s.max > s.min) || !(mx > mn)) { SMR.set(name, {k, min: mn, max: mx, t: now}); return [mn, mx]; }
+  const r0 = mx - mn; if (Math.abs(s.max - s.min - r0) > r0 * 8 || s.max < mn - r0 * 4 || s.min > mx + r0 * 4) { SMR.set(name, {k, min: mn, max: mx, t: now}); return [mn, mx]; } // salto enorme (otra fuente, recarga): sin animación
+  const dt = Math.max(1, Math.min(40, now - s.t)); s.t = now; const a = 1 - Math.exp(-dt / 85);
+  s.min += (mn - s.min) * a; s.max += (mx - s.max) * a;
+  const tol = r0 * .0006;
+  if (Math.abs(s.min - mn) < tol && Math.abs(s.max - mx) < tol) { s.min = mn; s.max = mx; } else scheduleRender();
+  return [s.min, s.max];
 }
+const autoSmooth = (mn, mx) => smoothRange('price', mn, mx);
 /* Velas en píxeles reales: cuerpo y mecha alineados a la rejilla física de la pantalla (como TradingView), con grosores enteros y mecha centrada.
    Se agrupan por color en un solo trazo (Path2D): menos trabajo por cuadro y más fluido con cientos de velas. */
 function candleBoxes(step) {
   const sp = step * DPX, wk = Math.max(1, Math.floor(DPX)); // mecha: 1 px de pantalla (2 en pantallas Retina/4K)
   let bw = Math.round(sp * .8); if (sp - bw < 1 && sp >= 3) bw = Math.floor(sp) - 1; // velas más juntas, pero siempre con un píxel de aire entre ellas
   bw = Math.max(1, Math.min(bw, Math.round(56 * DPX)));
-  if (bw > wk && (bw - wk) % 2) bw -= 1; // misma paridad que la mecha: queda exactamente al centro
   return {wk: Math.min(wk, bw), bw};
 }
 function setupCanvas() {
@@ -4074,7 +4074,7 @@ function renderCore() {
   if (nn && state.indicators.nnEma) for (let i = lo; i < hi; i++) { const a = nn.emaTop[i], b = nn.emaBot[i]; if (Number.isFinite(a) && a > max) max = a; if (Number.isFinite(b) && b < min) min = b; }
   if (stdOn('patterns') && ind.pat) for (const q of ind.pat.list) { for (const t of q.pts) if (t.i >= lo && t.i < hi) { if (t.p < min) min = t.p; if (t.p > max) max = t.p; } if (q.prz && q.pts.length && q.pts[q.pts.length - 1].i >= lo) { min = Math.min(min, q.prz.lo); max = Math.max(max, q.prz.hi); } }
   const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * (stdOn('patterns') && ind.pat && ind.pat.list.length ? .15 : .08); min -= pad; max += pad; // con patrones, más aire arriba y abajo para las etiquetas
-  if (priceMan) { min = priceMan.min; max = priceMan.max; asSm = null; } else { const sm = autoSmooth(min, max); min = sm[0]; max = sm[1]; }
+  if (priceMan) { min = priceMan.min; max = priceMan.max; SMR.delete('price'); } else { const sm = autoSmooth(min, max); min = sm[0]; max = sm[1]; }
   { const lb = document.querySelector('.chart-label'); if (lb) lb.style.top = (topH + 8) + 'px'; } // la leyenda del precio baja si hay paneles arriba
   // Orden de los paneles: los de abajo (RSI + resto) y los de arriba se apilan según lo que el usuario arrastró; sin orden guardado, queda el de siempre
   const hMap = {}; if (rsiH) hMap.rsi = rsiH; panelKeys.forEach((k, i) => { hMap[k] = hBot[i]; }); pTop.forEach((x, i) => { hMap['pine:' + x.p.sid] = hTop[i]; });
@@ -4104,12 +4104,14 @@ function renderCore() {
   // eje de tiempo
   const stride = Math.max(1, Math.pow(2, Math.ceil(Math.log2(Math.max(1, 74 / step)))));
   g.fillStyle = text; g.textAlign = 'center';
+  const tFade = clamp((step * stride - 74) / 38, 0, 1); // 0 = recién aparecen, 1 = ya visibles del todo
   for (let i = Math.ceil(lo / stride) * stride; i < hi; i += stride) {
     const xx = X(i); if (xx < left + 14 || xx > w - right - 14) continue;
+    const al = i % (stride * 2) === 0 ? 1 : tFade; if (al <= .02) continue; g.globalAlpha = al;
     if (CS.gridV) { const cx = crispX(xx); g.strokeStyle = gridCol; g.beginPath(); g.moveTo(cx, top0 - CBH); g.lineTo(cx, plotTop + plotH + volH + rsiH + extraH); g.stroke(); }
     g.fillText(timeLabel(candles[i].t, i > 0 ? candles[i - 1].t : null), xx, h - 7);
   }
-  g.textAlign = 'left';
+  g.globalAlpha = 1; g.textAlign = 'left';
 
   g.save(); g.beginPath(); { const ex = topH ? 0 : CBH; g.rect(left, plotTop - ex, plotW + 2 + (vpOn ? 0 : pineG), plotH + ex); } g.clip(); // sin paneles arriba, las velas también se ven bajo la franja de cristal
   // Nova Nexus · EMA Cloud (detrás de las velas)
@@ -4134,7 +4136,8 @@ function renderCore() {
   if (stdOn('volume') && candles.length) { // volumen en el mismo panel de las velas: barras al fondo (detrás de las velas), ocupan el ~18 % inferior
     const vBot = plotTop + plotH, vH = Math.round(plotH * .18); let maxV = 1;
     for (let i = lo; i < hi; i++) if (candles[i]) maxV = Math.max(maxV, candles[i].v);
-    for (let i = lo; i < hi; i++) { const d = candles[i]; if (!d) continue; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#089981aa' ? up + '55' : sp('volume', 'up')) : (sp('volume', 'down') === '#f23645aa' ? down + '55' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * vH), x0 = Math.round(X(i) * DPX - CB.bw / 2) / DPX, yb = Math.round(vBot * DPY) / DPY, yt = Math.round((vBot - bh) * DPY) / DPY; g.fillRect(x0, Math.min(yt, yb - 1 / DPY), CB.bw / DPX, Math.max(1 / DPY, yb - yt)); }
+    maxV = smoothRange('vol', 0, maxV)[1]; // la altura de las barras ya no salta cuando entra o sale una vela de mucho volumen
+    for (let i = lo; i < hi; i++) { const d = candles[i]; if (!d) continue; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#089981aa' ? up + '55' : sp('volume', 'up')) : (sp('volume', 'down') === '#f23645aa' ? down + '55' : sp('volume', 'down')); const bh = Math.max(1, Math.min(vH * 1.2, d.v / maxV * vH)), x0 = Math.round(X(i) * DPX - CB.bw / 2) / DPX, yb = Math.round(vBot * DPY) / DPY, yt = Math.round((vBot - bh) * DPY) / DPY; g.fillRect(x0, Math.min(yt, yb - 1 / DPY), CB.bw / DPX, Math.max(1 / DPY, yb - yt)); }
   }
   const pineBar = {};
   for (const {r} of pr) for (const e of r.barcolors) for (const [bar, ci] of e.pts) pineBar[bar + (e.offset || 0)] = r.palette[ci];
@@ -4156,7 +4159,7 @@ function renderCore() {
         if (ct === 'bars') { g.moveTo(xx - tk, yo); g.lineTo(xx, yo); } g.moveTo(xx, yc); g.lineTo(xx + tk, yc); g.stroke(); continue;
       }
       // en píxeles reales de la pantalla: x de la mecha, cuerpo centrado y alturas redondeadas
-      const wx = Math.round(xx * DPX - CB.wk / 2), bx = wx - (CB.bw - CB.wk) / 2, yH = Math.round(Y(d.h) * DPY), yL = Math.round(Y(d.l) * DPY);
+      const bx = Math.round(xx * DPX - CB.bw / 2), wx = bx + ((CB.bw - CB.wk) >> 1), yH = Math.round(Y(d.h) * DPY), yL = Math.round(Y(d.l) * DPY);
       let yT = Math.round(Math.min(yo, yc) * DPY), yB = Math.round(Math.max(yo, yc) * DPY); const minH = Math.max(1, Math.round(DPY)); if (yB - yT < minH) yB = yT + minH;
       cPath(cWk, wk).rect(wx, Math.min(yH, yT), CB.wk, Math.max(yL, yB) - Math.min(yH, yT));
       if (custom && hollowT && isUp) { const bb = Math.max(1, Math.floor(DPX)), p = cPath(cHol, bd); p.rect(bx, yT, CB.bw, yB - yT); if (CB.bw > bb * 2 && yB - yT > bb * 2) p.rect(bx + bb, yT + bb, CB.bw - bb * 2, yB - yT - bb * 2); }
@@ -4384,9 +4387,10 @@ function renderCore() {
   if (volH) {
     const top = geo.volTop + 4, height = volH - 8; let maxV = 1;
     for (let i = lo; i < hi; i++) maxV = Math.max(maxV, candles[i].v);
+    maxV = smoothRange('volp', 0, maxV)[1];
     g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.volTop); g.lineTo(w - right + 2, geo.volTop); g.stroke();
     g.fillStyle = text; legLabel('VOL', left + 4, top + 16, {t: 'std', key: 'volume'});
-    for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#089981aa' ? up + 'aa' : sp('volume', 'up')) : (sp('volume', 'down') === '#f23645aa' ? down + 'aa' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * height), x0 = Math.round(X(i) * DPX - CB.bw / 2) / DPX; g.fillRect(x0, top + height - bh, barW, bh); }
+    for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#089981aa' ? up + 'aa' : sp('volume', 'up')) : (sp('volume', 'down') === '#f23645aa' ? down + 'aa' : sp('volume', 'down')); const bh = Math.max(1, Math.min(height, d.v / maxV * height)), x0 = Math.round(X(i) * DPX - CB.bw / 2) / DPX; g.fillRect(x0, top + height - bh, barW, bh); }
   }
   // RSI
   if (rsiH) {
@@ -4464,6 +4468,7 @@ function drawSubPanel(key, top0, H, lo, hi, o) {
   if (key === 'macd') { const m = Math.max(Math.abs(mn), Math.abs(mx)) || 1; mn = -m; mx = m; } // el cero queda al centro
   if (mx === mn) { mx += 1; mn -= 1; }
   const pad = key === 'stoch' || (PD && PD.range) ? 0 : (mx - mn) * .08; mn -= pad; mx += pad;
+  if (!paneMan[key]) [mn, mx] = smoothRange('p:' + key, mn, mx); // escala del panel suave al hacer zoom
   { const pm = paneMan[key]; if (pm) { mn = pm.min; mx = pm.max; } paneHit.push({key, top0, H, mn, mx}); dPanes.push({key, top0, H, top: top0 + 4, h: H - 10, mn, mx}); }
   const Yp = v => top + (mx - v) / (mx - mn) * height;
   g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip(); // incluye el eje derecho para que se vean los niveles y la escala
@@ -6492,7 +6497,7 @@ function drawPinePane(x, top0, H, lo, hi, o) {
   if (!x) return; const {left, w, right, line, text, step, plotW} = o, r = x.r, top = top0 + 4, height = H - 10;
   const rg = CCTPineDraw.range(r, lo, hi); let mn = rg ? rg.min : 0, mx = rg ? rg.max : 1;
   if (mx === mn) { mx += 1; mn -= 1; } let pad = (mx - mn) * .08; mn -= pad; mx += pad;
-  const pkey = 'pine:' + x.p.sid, pm = paneMan[pkey]; if (pm) { mn = pm.min; mx = pm.max; pad = 0; }
+  const pkey = 'pine:' + x.p.sid, pm = paneMan[pkey]; if (pm) { mn = pm.min; mx = pm.max; pad = 0; } else [mn, mx] = smoothRange('p:' + pkey, mn, mx);
   paneHit.push({key: pkey, top0, H, mn, mx}); dPanes.push({key: pkey, top0, H, top: top0 + 4, h: H - 10, mn, mx});
   const Yp = v => top + (mx - v) / (mx - mn) * height;
   g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip();
