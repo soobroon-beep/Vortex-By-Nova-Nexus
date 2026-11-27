@@ -1,0 +1,20 @@
+name: Diagnóstico Nexus Pixel (temporal, sin secretos)
+on:
+  push:
+    branches: [pixel-diag]
+permissions: {contents: read}
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Probar endpoints públicos de IA
+        run: |
+          W=https://vortex-push.soobroon.workers.dev
+          O='origin: https://vortex-nexus.pages.dev'
+          M='[{"role":"user","content":"Responde solo: hola"}]'
+          echo "== worker status"; curl -s -m 20 -H "$O" $W/ai/status; echo
+          for t in pixel chat; do echo "== worker task=$t"; curl -s -m 90 -w ' [HTTP %{http_code} %{time_total}s]' -X POST $W/ai -H "$O" -H 'content-type: application/json' -d "{\"model\":\"openai\",\"task\":\"$t\",\"messages\":$M,\"max_tokens\":60}" | head -c 600; echo; done
+          echo "== pollinations anon POST"; curl -s -m 60 -w ' [HTTP %{http_code}]' -X POST https://text.pollinations.ai/openai -H 'content-type: application/json' -d "{\"model\":\"openai\",\"messages\":$M}" | head -c 600; echo
+          echo "== pollinations anon GET"; curl -s -m 60 -w ' [HTTP %{http_code}]' "https://text.pollinations.ai/Responde%20solo%20hola?model=openai" | head -c 300; echo
+          echo "== pollinations models"; curl -s -m 20 https://text.pollinations.ai/models | head -c 2000; echo
