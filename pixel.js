@@ -15,7 +15,7 @@
   const CFG = () => { try { return (window.CCT_pixel && window.CCT_pixel.cfg && window.CCT_pixel.cfg()) || {}; } catch { return {}; } }; // tu personalización (tarjeta de Pixel en la IA)
   const KEY = 'cct_pixel_v1', ls = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } })(), store = () => { try { localStorage.setItem(KEY, JSON.stringify(ls)); } catch {} };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-  const sleep = ms => new Promise(r => setTimeout(r, ms)), clamp = (v, a, b) => Math.max(a, Math.min(b, v)), mobile = () => innerWidth < 1024;
+  const sleep = ms => new Promise(r => setTimeout(r, ms)), clamp = (v, a, b) => Math.max(a, Math.min(b, v)), mobile = () => innerWidth < 1024 || document.documentElement.classList.contains('vx-tab');
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* Cabeza de Nexus Pixel en SVG (ligera, sin 3D): se usa asomándose en el gráfico y en el botón de la IA */
