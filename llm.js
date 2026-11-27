@@ -234,22 +234,52 @@
      Gemini / Mistral / OpenRouter gratis si tienen clave, y Cloudflare) y, para «ver» la captura, un modelo con visión (task «see»).
      Antes, si el servidor no contestaba, Pixel caía en la ruta de Pollinations (que ya cobra) y respondía «no tienes créditos suficientes».
      Ahora nunca toca rutas de pago: si la IA gratis está ocupada lo vuelve a intentar una vez y, si no, Pixel usa su motor local. */
+  /* ───────── Nexus Pixel: SU PROPIA IA, gratis y sin créditos (noviembre 2026) ─────────
+     1) Tu servidor VORTEX, task «pixel»: primero sus claves EXCLUSIVAS (PIXEL_GROQ_KEY, CEREBRAS_KEY: nada más en VORTEX las usa,
+        así los bots, el Vigía y las salas nunca le acaban el cupo), luego Groq/Gemini/Mistral/OpenRouter gratis y Cloudflare.
+     2) Si tu servidor no contesta: el servicio público SIN CLAVE de Pollinations directo desde el navegador de cada persona
+        (no usa créditos ni la clave de la app; su límite es por persona, no compartido).
+     3) Si todo falla, Pixel usa su motor local (pixel.js). Nunca usa «Tu IA» ni rutas de pago, y nunca muestra avisos de créditos. */
   const PIXEL_CREDIT = /credit|cr[eé]dito|pollen|top ?up|insufficient|saldo|balance|quota|cuota|billing|payment|paid|402/i;
+  const PIXEL_ANON = 'https://text.pollinations.ai/openai';
+  const pixelBad = t => !t || looksBad(t) || freeLimit(t) || (t.length < 600 && PIXEL_CREDIT.test(t) && !/"reply"/.test(t));
+  async function pixelServer(body, left, o) {
+    const r = await fetchT(VX + '/ai', {method: 'POST', headers: {'content-type': 'application/json'}, body}, left, o.signal);
+    if (!r.ok) { let m = ''; try { const j = await r.json(); m = j.error || ''; } catch {} throw new LLMError(PIXEL_CREDIT.test(m) ? 'La IA gratis está ocupada' : String(m || 'Error ' + r.status), r.status === 502 ? 'busy' : kindOf(r.status), r.status); }
+    const j = await r.json(), text = String(textOf(j) || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    if (pixelBad(text)) throw new LLMError('La IA gratis no devolvió una respuesta', 'busy');
+    return {text, model: String(j.model || 'IA gratis'), image: !!j.image};
+  }
+  async function pixelAnon(messages, o, left) { // sin clave, sin créditos, sin cuenta: el límite es por persona
+    const msgs = (hasImage(messages) ? stripImages(messages) : messages).map(m => ({role: m.role, content: typeof m.content === 'string' ? m.content.slice(0, 14000) : m.content}));
+    const body = JSON.stringify({model: 'openai', messages: msgs, temperature: o.temperature == null ? .3 : o.temperature, max_tokens: o.maxTokens || 1800, private: true, referrer: 'vortex-nexus'});
+    const t0 = Date.now();
+    for (let i = 0; i < 2; i++) {
+      const r = await fetchT(PIXEL_ANON, {method: 'POST', headers: {'content-type': 'application/json'}, body}, Math.max(6000, Math.min(40000, left - (Date.now() - t0))), o.signal);
+      let raw = ''; try { raw = await r.text(); } catch {}
+      let text = raw; try { text = textOf(JSON.parse(raw)) || ''; } catch {}
+      text = String(text || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      const wait = /retry after (\d+)/i.exec(raw), limited = r.status === 429 || r.status === 402 || /free_limit|free limit reached|per ip/i.test(raw.slice(0, 600));
+      if (r.ok && !pixelBad(text)) return {text, model: 'IA gratis · sin clave', image: false};
+      /* Este servicio da 1 respuesta cada ~45 s por persona: si toca esperar y aún hay tiempo, espera (mejor tardar que no responder) */
+      const s = Math.max(2, (+(wait && wait[1]) || 6) + 1), room = left - (Date.now() - t0) - 12000;
+      if (limited && i === 0 && s * 1000 <= room) { try { o.onProgress && o.onProgress({text: 'Dame unos segundos, estoy pensando…'}); } catch {} await sleep(s * 1000); continue; }
+      break;
+    }
+    throw new LLMError('La IA gratis sin clave no respondió', 'busy');
+  }
   async function pixelChat(messages, o) {
-    o = o || {}; const task = o.task === 'see' ? 'see' : 'pixel', tm = o.timeout || (task === 'see' ? 34000 : 80000), t0 = Date.now();
+    o = o || {}; const task = o.task === 'see' ? 'see' : 'pixel', tm = o.timeout || (task === 'see' ? 34000 : 85000), t0 = Date.now(), left = () => tm - (Date.now() - t0);
     const body = JSON.stringify({model: 'openai', task, messages, temperature: o.temperature == null ? .3 : o.temperature, max_tokens: o.maxTokens || (task === 'see' ? 500 : 1800), json: !!o.json});
     let last;
-    for (let i = 0; i < 2; i++) {
-      const left = tm - (Date.now() - t0); if (left < 12000 || (o.signal && o.signal.aborted)) break;
-      if (i) { try { o.onProgress && o.onProgress({text: 'La IA gratis está ocupada, lo intento otra vez…'}); } catch {} await sleep(2500); }
-      try {
-        const r = await fetchT(VX + '/ai', {method: 'POST', headers: {'content-type': 'application/json'}, body}, left, o.signal);
-        if (!r.ok) { let m = ''; try { const j = await r.json(); m = j.error || ''; } catch {} throw new LLMError(PIXEL_CREDIT.test(m) ? 'La IA gratis está ocupada' : String(m || 'Error ' + r.status), r.status === 502 ? 'busy' : kindOf(r.status), r.status); }
-        const j = await r.json(), text = String(textOf(j) || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-        if (!text || looksBad(text) || (text.length < 600 && PIXEL_CREDIT.test(text) && !/"reply"/.test(text))) throw new LLMError('La IA gratis no devolvió una respuesta', 'busy');
-        return {text, model: String(j.model || 'IA gratis'), image: !!j.image};
-      } catch (e) { last = e; if ((o.signal && o.signal.aborted) || task === 'see' || e.kind === 'network' || e.kind === 'auth') break; }
+    for (let i = 0; i < 2; i++) { // 1) tu servidor (una vez más si estaba ocupado)
+      if (left() < 15000 || (o.signal && o.signal.aborted)) break;
+      if (i) { try { o.onProgress && o.onProgress({text: 'La IA gratis está ocupada, lo intento otra vez…'}); } catch {} await sleep(1500); }
+      try { return await pixelServer(body, Math.min(left() - (task === 'see' ? 0 : 15000), task === 'see' ? 30000 : 55000), o); }
+      catch (e) { last = e; if ((o.signal && o.signal.aborted) || task === 'see' || e.kind !== 'busy') break; }
     }
+    if (task === 'see' || (o.signal && o.signal.aborted)) throw last instanceof LLMError ? last : new LLMError('La IA gratis no respondió', 'busy'); // los «ojos» necesitan visión: sin ella Pixel lee los datos numéricos
+    if (left() > 6000) { try { return await pixelAnon(messages, o, left()); } catch (e) { last = e; } } // 2) servicio público sin clave
     throw last instanceof LLMError ? last : new LLMError('La IA gratis no respondió', 'busy');
   }
   async function serverStatus() { try { const r = await fetchT(VX + '/ai/status', {}, 7000); return r.ok ? await r.json() : {ready: false}; } catch { return {ready: false, offline: true}; } }
