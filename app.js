@@ -3799,7 +3799,7 @@ function pmKeyAt(pt) { // qué panel está bajo el puntero: un panel de abajo/ar
 function pmPlace() {
   const w = pmWrap(), cv = $('#priceCanvas'); if (!w || !geo || !cv) return;
   const tg = paneMax ? [{key: paneMax, top: (dPanes.find(z => z.key === paneMax) || {top0: geo.plotTop}).top0}]
-    : dPanes.length ? [{key: 'price', top: geo.plotTop}, ...dPanes.filter(q => q.H >= 34).map(q => ({key: q.key, top: q.top0}))] : [];
+    : dPanes.length && legOpen ? [{key: 'price', top: geo.plotTop}, ...dPanes.filter(q => q.H >= 34).map(q => ({key: q.key, top: q.top0}))] : []; // solo con la leyenda de indicadores desplegada
   const have = new Map([...w.children].map(b => [b.dataset.k, b]));
   tg.forEach(t => {
     let b = have.get(t.key); have.delete(t.key);
@@ -3813,16 +3813,21 @@ function pmPlace() {
   });
   have.forEach(b => b.remove());
   const c = $('#paneMaxCtl'); if (c) { const on = !!paneMax, ic = on ? 'min' : 'max'; c.classList.toggle('on', on); if (c.dataset.ic !== ic) { c.dataset.ic = ic; c.innerHTML = pmSvg(14, ic); }
-    c.title = on ? 'Restaurar todos los paneles (Esc)' : dPanes.length ? 'Expandir: solo el gráfico de precio' : 'Expandir panel (agrega un oscilador para usarlo)'; c.classList.toggle('dim', !on && !dPanes.length); }
+    c.title = on ? 'Restaurar todos los paneles (Esc)' : dPanes.length ? 'Expandir: solo el gráfico de precio' : 'Expandir panel (agrega un oscilador para usarlo)'; c.classList.toggle('dim', !on && !dPanes.length); c.hidden = !on && !legOpen; }
 }
 function syncPaneMax() { const ca = $('#chartArea'); if (ca) ca.classList.toggle('pane-maxed', !!paneMax); pmPlace(); }
 function setPaneMax(k) {
   if ((k || null) === paneMax) return; const prev = paneMax; paneMax = k || null; pmHover = null;
   const cv = $('#priceCanvas'), ca = $('#chartArea');
-  if (cv && geo) { // animación: el panel elegido «crece» desde su sitio (o regresa a él)
-    const q = dPanes.find(z => z.key === (k || prev)), y0 = q ? q.top0 + q.H / 2 : geo.plotTop + geo.plotH / 2;
-    cv.style.setProperty('--pm-oy', Math.round(y0) + 'px'); cv.classList.remove('pm-grow', 'pm-back'); void cv.offsetWidth; cv.classList.add(k ? 'pm-grow' : 'pm-back');
-    clearTimeout(setPaneMax.t); setPaneMax.t = setTimeout(() => cv.classList.remove('pm-grow', 'pm-back'), 520);
+  if (cv && ca && geo && !REDUCED) { // animación fluida: una «foto» del gráfico anterior se desvanece encima del nuevo (sin parpadeo)
+    try {
+      const old = $('#pmSnap'); if (old) old.remove();
+      const sn = document.createElement('canvas'); sn.id = 'pmSnap'; sn.width = cv.width; sn.height = cv.height; sn.getContext('2d').drawImage(cv, 0, 0);
+      const q = dPanes.find(z => z.key === (k || prev)), y0 = q ? q.top0 + q.H / 2 : geo.plotTop + geo.plotH / 2;
+      Object.assign(sn.style, {left: cv.offsetLeft + 'px', top: cv.offsetTop + 'px', width: cv.offsetWidth + 'px', height: cv.offsetHeight + 'px', transformOrigin: `50% ${Math.round(y0)}px`});
+      cv.after(sn); requestAnimationFrame(() => requestAnimationFrame(() => sn.classList.add('go')));
+      setTimeout(() => sn.remove(), 420);
+    } catch {}
   }
   if (ca) ca.classList.toggle('pane-maxed', !!paneMax); legSig = ''; legStruct = ''; render(); pmPlace();
   if (paneMax) toast(paneMax === 'price' ? 'Solo el gráfico de precio · Esc para regresar' : 'Panel expandido · Esc para regresar');
@@ -3888,7 +3893,7 @@ function legAt(text, x, y, act, dim) {
 /* Leyenda de indicadores plegable: cerrada solo se ve «N indicadores»; abierta muestra nombres, valores y botones (ocultar, ajustes, eliminar) */
 let legOpen = lsGet('cct_legOpen_v1') === '1', legN = 0;
 function legLabel(text, x, y, act, dim) {
-  legN++; treeInds.push({text: String(text), act, dim: !!dim}); if (!legOpen || y < 0 || y > g.canvas.clientHeight + 8) return; // fuera de la vista (p. ej. con un panel expandido): sin fila const f = g.font; g.font = LEG_FONT;
+  legN++; treeInds.push({text: String(text), act, dim: !!dim}); if (!legOpen || y < 0 || y > g.canvas.clientHeight + 8) return; /* fuera de la vista (p. ej. con un panel expandido): sin fila */ const f = g.font; g.font = LEG_FONT;
   const css = getComputedStyle(document.documentElement), muted = css.getPropertyValue('--muted').trim().toLowerCase(), fg = css.getPropertyValue('--text').trim();
   if (fg) { // nombres más legibles: activos casi blancos (los que traen su propio color no se tocan) y ocultos atenuados pero claros
     if (dim) { g.fillStyle = muted; g.globalAlpha = .5; }
@@ -7137,10 +7142,6 @@ async function initCloud() {
   };
   bind('splitR', 'side');
   window.CCT_sideShow = () => { if (L.sideOff) { L.sideOff = false; store(); apply(); } }; // botones fuera de la barra derecha (Discord, abajo) también muestran el panel
-  // Tablet: el panel derecho flota encima del gráfico (cajón). Al abrir la app empieza cerrado (el gráfico primero) y se cierra al tocar el gráfico.
-  const isTab = () => document.documentElement.classList.contains('vx-tab') && isDesktop() && !PANE;
-  if (isTab()) L.sideOff = true;
-  { const ca = document.getElementById('chartArea'); if (ca) ca.addEventListener('pointerdown', () => { if (isTab() && !L.sideOff) { L.sideOff = true; apply(); } }, true); }
   // al cambiar de panel derecho (indicadores / alertas / ajustes) se mantiene el ancho; si estaba oculto, se muestra al elegir una pestaña
   document.querySelectorAll('.right-rail [data-side]').forEach(b => b.addEventListener('click', () => { if (L.sideOff) L.sideOff = false; else if (prevSide === b.dataset.side) L.sideOff = true; else return; store(); apply(); })); // si estaba oculto se muestra; tocar el icono del panel abierto lo oculta
   window.addEventListener('resize', () => { if (isDesktop()) apply(); });

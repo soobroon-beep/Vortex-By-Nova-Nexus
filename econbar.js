@@ -156,7 +156,13 @@
   }
   function start() {
     const btn = $('#stEcon'); if (!btn) return;
-    btn.addEventListener('click', e => { e.stopPropagation(); pop ? hide() : show(); });
+    let pinned = false, hovT = 0; // al pasar el ratón se abre (como los horarios de la bolsa); con clic se queda fija hasta cerrarla
+    btn.addEventListener('click', e => { e.stopPropagation(); if (pop && !pinned) { pinned = true; return; } if (pop) { hide(); pinned = false; } else { show(); pinned = true; } });
+    if (window.matchMedia && matchMedia('(hover: hover)').matches) {
+      const leave = () => { clearTimeout(hovT); hovT = setTimeout(() => { if (!pinned && pop && !pop.matches(':hover') && !btn.matches(':hover')) hide(); }, 260); };
+      btn.addEventListener('mouseenter', () => { clearTimeout(hovT); if (!pop) { hovT = setTimeout(() => { if (!pop && btn.matches(':hover')) { show(); pinned = false; if (pop) { pop.addEventListener('mouseenter', () => clearTimeout(hovT)); pop.addEventListener('mouseleave', leave); } } }, 120); } });
+      btn.addEventListener('mouseleave', leave);
+    }
     document.addEventListener('pointerdown', e => { if (pop && !e.target.closest('#stEcon, .ec-pop')) hide(); }, true);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
     document.addEventListener('click', e => { if (!e.target.closest('#ecOpen')) return; hide(); const n = document.querySelector('[data-view="newsView"]'); if (n) { n.click(); setTimeout(() => { const c = document.querySelector('[data-nw-tab="cal"]'); if (c) c.click(); }, 120); } });

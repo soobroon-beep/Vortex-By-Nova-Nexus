@@ -2495,10 +2495,29 @@ body:not(.signed-in) #settingsView .sg:not(:has(.sg-row:not(.needs-login))){disp
 .chart-controls .pm-ctl{display:grid;place-items:center}
 .chart-controls .pm-ctl.on{color:var(--accent)}
 .chart-controls .pm-ctl.dim{opacity:.5}
-#priceCanvas.pm-grow{animation:pmGrow .46s cubic-bezier(.2,.8,.2,1);transform-origin:50% var(--pm-oy,50%)}
-#priceCanvas.pm-back{animation:pmBack .42s cubic-bezier(.2,.8,.2,1);transform-origin:50% var(--pm-oy,50%)}
-@keyframes pmGrow{0%{opacity:.15;transform:scaleY(.35)}60%{opacity:1}100%{transform:none}}
-@keyframes pmBack{0%{opacity:.2;transform:scaleY(1.12)}100%{opacity:1;transform:none}}
+#pmSnap{position:absolute;z-index:2;pointer-events:none;opacity:1;transition:opacity .34s cubic-bezier(.4,0,.2,1),transform .34s cubic-bezier(.2,.8,.2,1);will-change:opacity,transform}
+#pmSnap.go{opacity:0;transform:scale(1.015)}
 @media(max-width:760px){.pane-max-btn{width:28px;height:28px;opacity:.42}}
-@media (prefers-reduced-motion:reduce){#priceCanvas.pm-grow,#priceCanvas.pm-back,.pane-max-btn.pm-pop svg{animation:none}}
+@media (prefers-reduced-motion:reduce){.pane-max-btn.pm-pop svg{animation:none}}
 .light .pane-max-btn{box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+.chart-controls .pm-ctl[hidden]{display:none}
+
+/* ── Widget del próximo evento económico (barra de abajo): colores de VORTEX (azul/violeta y cristal oscuro) en vez de gris con amarillo ── */
+.st-econ,.ec-hero{--ec:#7c9bff}
+.st-econ[data-lv=soon],.ec-hero:not(.far):not(.urgent):not(.live):not(.idle){--ec:#a08bff}
+.st-econ[data-lv=urgent],.ec-hero.urgent{--ec:#ff6f91}
+.st-econ.live,.ec-hero.live{--ec:#2fd3b0}
+.ec-hero.far,.ec-hero.idle{--ec:#7c9bff}
+.chart-status .st-econ{background:linear-gradient(100deg,color-mix(in srgb,var(--ec) 13%,transparent),rgba(255,255,255,.035) 55%)!important;border-color:color-mix(in srgb,var(--ec) 28%,rgba(255,255,255,.08))!important}
+.chart-status .st-econ:hover,.chart-status .st-econ[aria-expanded=true]{background:linear-gradient(100deg,color-mix(in srgb,var(--ec) 22%,transparent),rgba(255,255,255,.06) 60%)!important;border-color:color-mix(in srgb,var(--ec) 50%,transparent)!important}
+.chart-status .st-econ[data-lv=soon]{border-color:color-mix(in srgb,var(--ec) 45%,transparent)!important;box-shadow:0 0 14px color-mix(in srgb,var(--ec) 22%,transparent)!important}
+.chart-status .st-econ[data-lv=urgent]{border-color:color-mix(in srgb,var(--ec) 55%,transparent)!important}
+@keyframes ecGlow{50%{box-shadow:0 0 22px color-mix(in srgb,var(--ec) 40%,transparent)}}
+.st-econ .ec-dot{background:var(--ec)}
+.ec-imp.i2 i,.ec-imp.i1 i:nth-child(-n+2){background:var(--ec,#7c9bff)}
+.ec-live{background:#a08bff}.ec-wait{color:#a08bff}
+.ec-cc{background:color-mix(in srgb,var(--ec) 18%,rgba(255,255,255,.04));color:#e8edff}
+.ec-cd{background:color-mix(in srgb,var(--ec) 18%,transparent);color:color-mix(in srgb,var(--ec) 80%,#fff)}
+.ec-pop{animation:fromPill .26s cubic-bezier(.2,.9,.25,1) both;transform-origin:bottom left}
+.light .chart-status .st-econ{background:linear-gradient(100deg,color-mix(in srgb,var(--ec) 14%,#fff),rgba(255,255,255,.7) 60%)!important}
+.light .ec-cc{color:#1c2440}
