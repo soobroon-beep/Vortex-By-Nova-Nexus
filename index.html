@@ -12,6 +12,22 @@
 <script src="pwa-icons.js"></script>
 <noscript><link rel="manifest" href="manifests/i01.webmanifest"><link rel="apple-touch-icon" href="icons/i01-180.png"></noscript>
 <title>VORTEX · Powered by Nova Nexus</title>
+<script>/* Tablet (iPad, Galaxy Tab…): pantalla táctil grande. Se marca con la clase vx-tab: diseño de PC (todas las opciones) pero con el gráfico como prioridad.
+   Forzar para probar: ?tablet=1 · desactivar: ?tablet=0 */
+(function () {
+  var q = /[?&]tablet=([01])/.exec(location.search), mm = function (m) { return !!(window.matchMedia && matchMedia(m).matches); };
+  var sw = Math.min(screen.width || 0, screen.height || 0), touch = (navigator.maxTouchPoints || 0) > 0 && mm('(pointer: coarse)') && !mm('(hover: hover)');
+  var ipad = /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+  var tab = q ? q[1] === '1' : (touch || ipad) && sw >= 600 && sw <= 1400;
+  if (!tab) return; document.documentElement.classList.add('vx-tab');
+  /* Tablet: estructura del celular (gráfico primero, barra de navegación abajo) pero a TAMAÑO REAL, sin agrandar nada.
+     El diseño de celular está escrito para «hasta 1023 px»; en la tablet esas reglas se aplican a cualquier ancho y las de PC («desde 1024 px») no. */
+  var fix = function (q) { return String(q).replace(/max-width:\s*1023(\.\d+)?px/g, 'max-width: 99999px').replace(/min-width:\s*1024px/g, 'min-width: 99999px'); };
+  var mmo = window.matchMedia && window.matchMedia.bind(window); if (mmo) window.matchMedia = function (q) { return mmo(fix(q)); };
+  window.__vxTabCss = function (sheet) { try { (function walk(rules) { for (var i = 0; i < rules.length; i++) { var r = rules[i];
+      if (r.media && r.media.mediaText && /(1023|1024)px/.test(r.media.mediaText)) { var t = fix(r.media.mediaText); if (t !== r.media.mediaText) r.media.mediaText = t; }
+      if (r.cssRules) walk(r.cssRules); } })(sheet.cssRules); } catch (e) {} };
+})();</script>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="glass.css">
 <link rel="stylesheet" href="pwa.css">
@@ -25,21 +41,10 @@
 <link rel="stylesheet" href="vx-space.css">
 <link rel="stylesheet" href="vx-motion.css">
 <link rel="stylesheet" href="vx-tablet.css">
-<script>/* Tablet (iPad, Galaxy Tab…): pantalla táctil grande. Se marca con la clase vx-tab: diseño de PC (todas las opciones) pero con el gráfico como prioridad.
-   Forzar para probar: ?tablet=1 · desactivar: ?tablet=0 */
-(function () {
-  var q = /[?&]tablet=([01])/.exec(location.search), mm = function (m) { return !!(window.matchMedia && matchMedia(m).matches); };
-  var sw = Math.min(screen.width || 0, screen.height || 0), touch = (navigator.maxTouchPoints || 0) > 0 && mm('(pointer: coarse)') && !mm('(hover: hover)');
-  var ipad = /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
-  var tab = q ? q[1] === '1' : (touch || ipad) && sw >= 600 && sw <= 1400;
-  if (!tab) return; document.documentElement.classList.add('vx-tab');
-  /* «Como celular en grande»: la tablet usa el diseño del celular (gráfico casi a pantalla completa y barra de navegación abajo), escalado a su pantalla.
-     Para eso el ancho de trabajo se fija en 1000 px (el diseño de celular llega hasta 1023 px) y la pantalla lo agranda. */
-  var vp = document.querySelector('meta[name=viewport]'), base = 'initial-scale=1,viewport-fit=cover,user-scalable=no';
-  function fit() { var land = mm('(orientation: landscape)'), w = land ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-    if (vp) vp.setAttribute('content', w >= 1000 ? 'width=1000,viewport-fit=cover,user-scalable=no' : 'width=device-width,' + base); }
-  fit(); addEventListener('orientationchange', function () { setTimeout(fit, 60); }); addEventListener('resize', function () { clearTimeout(fit.t); fit.t = setTimeout(fit, 120); });
-})();</script>
+<script>/* Tablet: aplica el diseño de celular a tamaño real (ver arriba); también a las hojas que se carguen después */
+if (window.__vxTabCss) { for (var i = 0; i < document.styleSheets.length; i++) __vxTabCss(document.styleSheets[i]);
+  new MutationObserver(function (ms) { ms.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.tagName === 'LINK' || n.tagName === 'STYLE') { var go = function () { if (n.sheet) __vxTabCss(n.sheet); }; go(); n.addEventListener('load', go); } }); }); }).observe(document.documentElement, {childList: true, subtree: true}); }
+</script>
 <script>/* Alto real de la pantalla: al abrir/recargar la app en el celular el navegador a veces calcula un alto mayor al visible y la barra de abajo queda fuera. Se mide y se corrige. */
 (function () {
   var r = document.documentElement, vv = window.visualViewport;

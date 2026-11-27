@@ -414,6 +414,9 @@ function setSide(id) {
   if (id === 'mapView' && window.CCTMap) CCTMap.open(); // Radar del mercado (market-map.js)
   $$('.right-rail [data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === (id === 'customView' || id === 'notifView' ? 'settingsView' : id)));
 }
+/* Tablet en horizontal: Seguimiento, Noticias, IA, Bots… se abren en una columna a la derecha y el gráfico sigue a la vista (pantalla dividida) */
+const tabSplitOk = () => document.documentElement.classList.contains('vx-tab') && innerWidth >= 960 && innerWidth > innerHeight;
+addEventListener('resize', () => { const sp = tabSplitOk() && currentView !== 'chartView'; if (document.body.classList.contains('tab-split') !== sp) { document.body.classList.toggle('tab-split', sp); requestAnimationFrame(() => render()); } });
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
     if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'mapView' || id === 'discordView' || id === 'botLabView' || id === 'customView' || id === 'notifView' || id === 'devView') { setSide(id); if (id === 'customView') renderCustom(); if (id === 'notifView') { renderPrefs(); if (window.VortexPush) VortexPush.render(); } if (id === 'watchView') { wlOpenSym = null; renderWatch(); } if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
@@ -427,6 +430,7 @@ function switchView(id) {
   $$('.bottom-nav button').forEach(x => x.classList.toggle('active', x.dataset.view === id));
   { const ta = $('#topAlertsBtn'); if (ta) ta.classList.toggle('active', id === 'alertsView'); } // celular: Alertas vive arriba, junto a Notificaciones
   document.body.classList.toggle('chart-mode', id === 'chartView');
+  { const sp = tabSplitOk() && id !== 'chartView'; if (document.body.classList.contains('tab-split') !== sp) { document.body.classList.toggle('tab-split', sp); requestAnimationFrame(() => { if (typeof resize === 'function') resize(); render(); }); } } // tablet horizontal: gráfico + panel lado a lado
   if (id === 'chartView' && typeof dvRefresh === 'function') setTimeout(() => dvRefresh(), 0);
   if (id !== 'chartView') document.body.classList.remove('expanded');
   if (id === 'chartView') requestAnimationFrame(() => { if (!candles.length) loadCandles(); render(); });
