@@ -31,6 +31,8 @@ jobs:
           GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
           MISTRAL_KEY: ${{ secrets.MISTRAL_KEY }}
           OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
+          PIXEL_GROQ_KEY: ${{ secrets.PIXEL_GROQ_KEY }}
+          CEREBRAS_KEY: ${{ secrets.CEREBRAS_KEY }}
           BINGX_AGENT_SECRET: ${{ secrets.BINGX_AGENT_SECRET }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
@@ -56,6 +58,9 @@ jobs:
           if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then printf '%s' "$FIREBASE_SERVICE_ACCOUNT" | npx --yes wrangler@4 secret put FB_SA --config worker/wrangler-push.toml; fi
           if [ -n "$GROQ_KEY" ]; then printf '%s' "$GROQ_KEY" | npx --yes wrangler@4 secret put GROQ_KEY --config worker/wrangler-push.toml; fi
           # IA gratis EXTRA solo para Nexus Pixel (cada una opcional, sin tarjeta): Google AI Studio, Mistral (plan Experiment) y OpenRouter
+          # IA EXCLUSIVA de Nexus Pixel (nada más en VORTEX la usa): cuenta gratis de Groq aparte y/o Cerebras (plan gratis)
+          if [ -n "$PIXEL_GROQ_KEY" ]; then printf '%s' "$PIXEL_GROQ_KEY" | npx --yes wrangler@4 secret put PIXEL_GROQ_KEY --config worker/wrangler-push.toml; fi
+          if [ -n "$CEREBRAS_KEY" ]; then printf '%s' "$CEREBRAS_KEY" | npx --yes wrangler@4 secret put CEREBRAS_KEY --config worker/wrangler-push.toml; fi
           if [ -n "$GEMINI_KEY" ]; then printf '%s' "$GEMINI_KEY" | npx --yes wrangler@4 secret put GEMINI_KEY --config worker/wrangler-push.toml; fi
           if [ -n "$MISTRAL_KEY" ]; then printf '%s' "$MISTRAL_KEY" | npx --yes wrangler@4 secret put MISTRAL_KEY --config worker/wrangler-push.toml; fi
           if [ -n "$OPENROUTER_KEY" ]; then printf '%s' "$OPENROUTER_KEY" | npx --yes wrangler@4 secret put OPENROUTER_KEY --config worker/wrangler-push.toml; fi
