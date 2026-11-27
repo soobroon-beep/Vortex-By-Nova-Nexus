@@ -24,7 +24,7 @@ const ok = (c, m) => { console.log((c ? 'OK    · ' : 'FALLA · ') + m); if (!c)
   const cv = await page.$eval('#priceCanvas', c => { const r = c.getBoundingClientRect(); return {x: r.left, y: r.top, w: r.width, h: r.height}; });
   const shot = n => page.screenshot({path: out + n, clip: {x: cv.x, y: cv.y, width: cv.w, height: cv.h}});
   // desplazar a la izquierda: la hora que está en el centro no debe cambiar cuando llegan las velas viejas
-  const drag = async () => { await page.mouse.move(cv.x + cv.w * .2, cv.y + cv.h * .4); await page.mouse.down(); await page.mouse.move(cv.x + cv.w * .85, cv.y + cv.h * .4, {steps: 10}); await page.mouse.up(); await page.waitForTimeout(350); };
+  const drag = async () => { await page.mouse.move(cv.x + cv.w * .2, cv.y + cv.h * .4); await page.mouse.down(); await page.mouse.move(cv.x + cv.w * .85, cv.y + cv.h * .4, {steps: 10}); await page.waitForTimeout(150); await page.mouse.up(); /* pausa antes de soltar: sin inercia, así cualquier movimiento sería un salto real */ await page.waitForTimeout(350); };
   const midT = async () => (await st()).mid;
   let jumps = 0;
   for (let k = 0; k < 80 && !(await st()).done; k++) { const before = (await st()).n; const m0 = await midT(); await page.waitForTimeout(250); const after = (await st()).n; if (after !== before) { const m1 = await midT(); if (Math.abs(m1 - m0) > 2 * H) jumps++; } await drag(); }
