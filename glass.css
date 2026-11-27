@@ -2495,8 +2495,7 @@ body:not(.signed-in) #settingsView .sg:not(:has(.sg-row:not(.needs-login))){disp
 .chart-controls .pm-ctl{display:grid;place-items:center}
 .chart-controls .pm-ctl.on{color:var(--accent)}
 .chart-controls .pm-ctl.dim{opacity:.5}
-#pmSnap{position:absolute;z-index:2;pointer-events:none;opacity:1;transition:opacity .34s cubic-bezier(.4,0,.2,1),transform .34s cubic-bezier(.2,.8,.2,1);will-change:opacity,transform}
-#pmSnap.go{opacity:0;transform:scale(1.015)}
+#pmSnap{position:absolute;z-index:2;pointer-events:none;overflow:hidden}
 @media(max-width:760px){.pane-max-btn{width:28px;height:28px;opacity:.42}}
 @media (prefers-reduced-motion:reduce){.pane-max-btn.pm-pop svg{animation:none}}
 .light .pane-max-btn{box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
