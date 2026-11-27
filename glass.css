@@ -2482,20 +2482,23 @@ body:not(.signed-in) #settingsView .sg:not(:has(.sg-row:not(.needs-login))){disp
 @media(max-width:760px){.chart-symhead{flex-wrap:nowrap;max-width:calc(100% - 56px)}.chart-symhead .sym-min{margin-left:-6px}.chart-symhead.sym-min-on{padding:3px 10px 3px 8px}.chart-symhead.sym-min-on .priceblock strong{font-size:14px}.chart-symhead .sym-min{width:26px;height:26px}}
 .light .chart-symhead .sym-min:hover{background:rgba(0,0,0,.06)}
 
-/* ── Expandir panel: botón discreto en la esquina de arriba a la derecha de cada panel (sale al pasar el ratón / al tocar) ── */
-.pane-max-btn{position:absolute;z-index:7;display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:9px;cursor:pointer;color:var(--text);
-  background:color-mix(in srgb,var(--bg) 42%,transparent);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);
-  opacity:0;pointer-events:none;transform:translateY(-4px) scale(.86);transition:opacity .22s ease,transform .3s cubic-bezier(.2,.8,.2,1),background .2s,color .2s}
-.pane-max-btn.show,.pane-max-btn.keep{opacity:.82;pointer-events:auto;transform:none}
-.pane-max-btn.keep:not(.show){opacity:.5}
-@media(hover:hover){.pane-max-btn:hover{opacity:1;background:color-mix(in srgb,var(--accent) 26%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 55%,transparent)}}
-.pane-max-btn.on{color:var(--accent)}
+/* ── Expandir panel: botón tenue en la esquina de arriba a la derecha de cada panel (siempre a la vista; se ilumina al pasar el ratón o al tocar el panel) + botón junto al − / + ── */
+#paneMaxWrap{position:absolute;inset:0;pointer-events:none;z-index:7}
+.pane-max-btn{position:absolute;display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:9px;cursor:pointer;color:var(--text);pointer-events:auto;
+  background:color-mix(in srgb,var(--bg) 30%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);
+  opacity:.34;transition:opacity .25s ease,transform .3s cubic-bezier(.2,.8,.2,1),background .2s,color .2s,box-shadow .2s}
+.pane-max-btn.hot{opacity:.85;transform:scale(1.06)}
+.pane-max-btn.on{opacity:.7;color:var(--accent)}
+@media(hover:hover){.pane-max-btn:hover{opacity:1;transform:scale(1.1);background:color-mix(in srgb,var(--accent) 26%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 55%,transparent)}}
 .pane-max-btn.pm-pop svg{animation:pmIcon .42s cubic-bezier(.2,.8,.2,1)}
 @keyframes pmIcon{0%{transform:scale(.55) rotate(-90deg);opacity:.2}100%{transform:none;opacity:1}}
+.chart-controls .pm-ctl{display:grid;place-items:center}
+.chart-controls .pm-ctl.on{color:var(--accent)}
+.chart-controls .pm-ctl.dim{opacity:.5}
 #priceCanvas.pm-grow{animation:pmGrow .46s cubic-bezier(.2,.8,.2,1);transform-origin:50% var(--pm-oy,50%)}
 #priceCanvas.pm-back{animation:pmBack .42s cubic-bezier(.2,.8,.2,1);transform-origin:50% var(--pm-oy,50%)}
 @keyframes pmGrow{0%{opacity:.15;transform:scaleY(.35)}60%{opacity:1}100%{transform:none}}
 @keyframes pmBack{0%{opacity:.2;transform:scaleY(1.12)}100%{opacity:1;transform:none}}
-@media(max-width:760px){.pane-max-btn{width:30px;height:30px}}
+@media(max-width:760px){.pane-max-btn{width:28px;height:28px;opacity:.42}}
 @media (prefers-reduced-motion:reduce){#priceCanvas.pm-grow,#priceCanvas.pm-back,.pane-max-btn.pm-pop svg{animation:none}}
 .light .pane-max-btn{box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}

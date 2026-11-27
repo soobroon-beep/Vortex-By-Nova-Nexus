@@ -2157,6 +2157,8 @@ const IC = {
   daterange: '<path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3M4 5v14M20 5v14"/>',
   brush: '<path d="m4 20 1-4L16 5l3 3L8 19zM14 7l3 3"/>',
   highlighter: '<path d="m5 17 3-1 9-9-2-2-9 9zM13 5l6 6M4 21h8"/>',
+  ghost: '<path d="M4 17c2.5-5 5-1.5 8-5.5s4.5-5.5 8-6"/><path d="M4 21h2.5M9.5 21h2M15 21h1.2M19 21h.6" opacity=".55"/><path d="M18.5 3.2l.45 1.35 1.35.45-1.35.45-.45 1.35-.45-1.35-1.35-.45 1.35-.45z" fill="currentColor" stroke="none"/>',
+  ruler: '<rect x="2.5" y="7.5" width="19" height="9" rx="2"/><path d="M6.5 7.5v3M10 7.5v4.5M13.5 7.5v3M17 7.5v4.5"/>',
   rect: '<rect x="4" y="6" width="16" height="12" rx="1"/>',
   ellipse: '<ellipse cx="12" cy="12" rx="9" ry="6"/>',
   triangle: '<path d="M12 4 21 19H3z"/>',
@@ -2232,13 +2234,13 @@ const TOOL_GROUPS = [
   {id: 'proj', name: 'Proyección y medición', tools: [
     ['long', 'Posición Long', 'Entrada y objetivo arriba (stop a 2:1)', IC.long],
     ['short', 'Posición Short', 'Entrada y objetivo abajo (stop a 2:1)', IC.short],
-    ['measure', 'Medición', 'Precio, % y velas entre dos puntos', IC.measure],
     ['pricerange', 'Rango de precio', 'Diferencia de precio entre dos puntos', IC.pricerange],
     ['daterange', 'Rango de fechas', 'Velas y tiempo entre dos puntos', IC.daterange]
   ]},
   {id: 'shapes', name: 'Pincel y formas', tools: [
     ['brush', 'Pincel', 'Dibuja a mano alzada sobre el gráfico', IC.brush],
     ['highlighter', 'Resaltador', 'Trazo ancho y translúcido', IC.highlighter],
+    ['ghost', 'Pincel fugaz', 'Para explicar: el trazo se desvanece solo y se borra al dibujar otro', IC.ghost],
     ['rect', 'Rectángulo', 'Dos esquinas', IC.rect],
     ['ellipse', 'Elipse', 'Dos esquinas del recuadro', IC.ellipse],
     ['triangle', 'Triángulo', 'Tres puntos', IC.triangle],
@@ -2261,6 +2263,9 @@ const TOOL_GROUPS = [
     ['star', 'Estrella', 'Toca un punto', IC.star],
     ['arrowleft', 'Flecha izquierda', 'Toca un punto', IC.arrowleft],
     ['arrowright', 'Flecha derecha', 'Toca un punto', IC.arrowright]
+  ]},
+  {id: 'measure', name: 'Medir', tools: [
+    ['measure', 'Medir', 'Arrastra entre dos puntos: velas, tiempo, precio, % y volumen', IC.ruler]
   ]}
 ];
 /* Favoritos: la estrella de cada herramienta la sube a la sección «Favoritos» (arriba de la barra y de la hoja del celular) */
@@ -2294,7 +2299,7 @@ const starBtn = k => `<span class="star${FAVS.includes(k) ? ' on' : ''}" data-st
 const DOPT_KEY = 'cct_dopts_v1';
 const DOPT = Object.assign({magnet: true, stay: false, lock: false, hide: false}, (() => { try { return JSON.parse(lsGet(DOPT_KEY) || '{}') || {}; } catch { return {}; } })());
 const saveDopt = () => { try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} if (typeof syncUi === 'function') syncUi(); };
-const isBrushTool = t => t === 'brush' || t === 'highlighter';
+const isBrushTool = t => t === 'brush' || t === 'highlighter' || t === 'ghost';
 function renderSheet() {
   const list = $('#sheetList');
   if (sheetMode === 'indicators') { list.innerHTML = indicatorRows(); return; }
@@ -2683,6 +2688,7 @@ const HINTS = {
 const TWO = two('Arrastra o toca el primer punto', 'Toca el segundo punto');
 Object.assign(HINTS, {
   highlighter: () => 'Resaltador: dibuja con el dedo o el ratón',
+  ghost: () => 'Pincel fugaz: explica dibujando · el trazo se borra solo',
   info: TWO, extended: TWO, angle: TWO, fibtime: TWO, fibfan: TWO, fibcircle: TWO, pricerange: TWO, daterange: TWO, ellipse: TWO,
   hray: () => 'Toca el punto donde empieza el rayo', crossline: () => 'Toca el punto donde se cruzan las líneas', note: () => 'Toca dónde va la nota',
   label: () => 'Toca el punto a etiquetar', arrowup: () => 'Toca el punto al que apunta la flecha', arrowdown: () => 'Toca el punto al que apunta la flecha',
@@ -3208,7 +3214,7 @@ function buildRail() {
   const onBar = railFavOnBar(); rail.dataset.favbar = onBar ? '1' : '0'; // con la barra flotante de favoritos visible, los favoritos NO se repiten en la barra izquierda
   rail.innerHTML = `<button class="rail-btn grp" data-rail="cursor" title="Cursor (Esc)" aria-label="Cursor">${SV(CURSOR_IC[effCursor()] || CURSOR_IC.Cruz)}<i class="caret" data-curfly="1" title="Elegir cursor: cruz, flecha o estrella"></i></button><div class="rail-sep"></div>`
     + (FAVS.length && !onBar ? favTools().map(t => `<button class="rail-btn fav" data-ftool="${t[0]}" title="${esc(t[1])} (favorito)" aria-label="${esc(t[1])}">${SV(t[3])}</button>`).join('') + `<div class="rail-sep"></div>` : '')
-    + TOOL_GROUPS.map(gr => { const t = toolOf(lastOf(gr)); return `<button class="rail-btn grp" data-group="${gr.id}" data-last="${t[0]}" title="${esc(t[1])}" aria-label="${esc(gr.name)}">${SV(t[3])}<i class="caret" data-fly="${gr.id}" title="${esc(gr.name)}: ver todas"></i></button>`; }).join('')
+    + TOOL_GROUPS.map(gr => { const t = toolOf(lastOf(gr)); return `<button class="rail-btn grp" data-group="${gr.id}" data-last="${t[0]}" title="${esc(t[1])}" aria-label="${esc(gr.name)}">${SV(t[3])}${gr.tools.length > 1 ? `<i class="caret" data-fly="${gr.id}" title="${esc(gr.name)}: ver todas"></i>` : ''}</button>`; }).join('')
     + `<div class="rail-spacer"></div><div class="rail-sep"></div>`
     + RAIL_OPTS.map(([k, t, ic]) => `<button class="rail-btn" data-opt="${k}" title="${esc(t)}" aria-label="${esc(t)}">${SV(ic)}</button>`).join('');
   syncRail();
@@ -3688,6 +3694,16 @@ function commitMulti() {
   selectedId = DOPT.stay ? null : d.id; if (!DOPT.stay) drawTool = ''; multi = []; pending = null; preview = null; updateDrawUI(); render();
 }
 const dBrushO = () => { const st = (state.lastStyle || {})[drawTool === 'highlighter' ? 'highlighter' : 'brush']; return st && st.o ? {o: st.o} : {}; }; // opacidad usada la última vez
+/* Pincel fugaz: trazos para explicar. No se guardan; cada trazo se queda unos segundos y se desvanece, y al empezar otro el anterior se borra */
+const GHOST = [], GHOST_HOLD = 4200, GHOST_FADE = 1100;
+let ghostRaf = 0;
+const MEAS_T0 = new Map(); // cuándo apareció cada medición (para la animación de entrada)
+const ghostAlpha = (s, now) => { const a = s.out ? 1 - (now - s.out) / 260 : 1 - Math.max(0, now - s.t0 - GHOST_HOLD) / GHOST_FADE; return Math.max(0, Math.min(1, a)); };
+function ghostTick() { if (ghostRaf) return; const step = () => { ghostRaf = 0; const now = performance.now(); for (let i = GHOST.length - 1; i >= 0; i--) if (ghostAlpha(GHOST[i], now) <= 0) GHOST.splice(i, 1); scheduleRender(); if (GHOST.length) ghostRaf = requestAnimationFrame(step); }; ghostRaf = requestAnimationFrame(step); }
+function ghostClearPrev() { const now = performance.now(); GHOST.forEach(s => { if (!s.out) s.out = now; }); if (GHOST.length) ghostTick(); }
+function drawGhost(pts, col, w, a) { // trazo con brillo suave (tipo puntero láser)
+  if (a <= 0 || pts.length < 2) return; g.save(); g.globalAlpha = a; g.shadowColor = col; g.shadowBlur = 12; drawBrush({type: 'brush', pts, col, w}, false, col); g.shadowBlur = 0; g.globalAlpha = a * .9; drawBrush({type: 'brush', pts, col: 'rgba(255,255,255,.85)', w: Math.max(1, w * .35)}, false, '#fff'); g.restore();
+}
 function commitBrush(live, pk) {
   if (!live || live.length < 2 || !geo) return;
   if (pk && !commitBrush._in) { if (!dPaneOf(pk)) return; commitBrush._in = true; try { return withPane(pk, () => commitBrush(live, pk)); } finally { commitBrush._in = false; } } // pincel sobre un panel: mismos pasos con la escala del panel
@@ -3695,6 +3711,7 @@ function commitBrush(live, pk) {
   let eps = 1.1, out = rdp(P, eps); while (out.length > 300 && eps < 20) out = rdp(P, eps *= 1.5);
   if (out.length < 2) return;
   const pts = out.map(o => [Math.round(o.q[0]), +(+o.q[1].toPrecision(8))]);
+  if (drawTool === 'ghost') { GHOST.push({pts, pane: pk || null, col: state.brush.c, w: state.brush.w + 1, t0: performance.now()}); ghostTick(); return; } // pincel fugaz: no se guarda, se desvanece solo
   const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: 'brush', pts, a: {t: pts[0][0], p: pts[0][1]}, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, ...(drawTool === 'highlighter' ? {hl: true} : {}), ...(pk ? {pane: pk} : {}), ...dBrushO()};
   snapDraw(); setDrawings([...getDrawings(), d]); selectedId = d.id; updateDrawUI();
 }
@@ -3767,34 +3784,36 @@ let paneOrder = (() => { try { const o = JSON.parse(localStorage.getItem('cct_pa
    el de precio solo (sin osciladores) o solo el oscilador/RSI/MACD/script elegido. Otro clic (o Esc) regresa todo como estaba. */
 let paneMax = null, pmHover = null, pmHideT = 0;
 const PM_IC = {max: '<path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/>', min: '<path d="M20 10h-6V4M4 14h6v6M14 10l6.5-6.5M10 14l-6.5 6.5"/>'};
-function pmBtn() {
-  let b = $('#paneMaxBtn'); if (b) return b; const ca = $('#chartArea'); if (!ca) return null;
-  b = document.createElement('button'); b.type = 'button'; b.id = 'paneMaxBtn'; b.className = 'pane-max-btn';
-  b.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PM_IC.max}</svg>`;
-  b.addEventListener('pointerdown', e => e.stopPropagation());
-  b.addEventListener('pointerenter', () => { clearTimeout(pmHideT); b.classList.add('show'); });
-  b.addEventListener('click', e => { e.stopPropagation(); const k = paneMax ? null : (b.dataset.k || null); setPaneMax(k); });
-  ca.appendChild(b); return b;
-}
+const pmSvg = (w, ic) => `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PM_IC[ic]}</svg>`;
 const pmName = k => k === 'price' ? 'el gráfico de precio' : k === 'rsi' ? 'el RSI' : k.startsWith('pine:') ? 'este panel' : 'este indicador';
+function pmWrap() { let w = $('#paneMaxWrap'); if (w) return w; const ca = $('#chartArea'); if (!ca) return null; w = document.createElement('div'); w.id = 'paneMaxWrap'; ca.appendChild(w);
+  w.addEventListener('pointerdown', e => { if (e.target.closest('.pane-max-btn')) e.stopPropagation(); });
+  w.addEventListener('click', e => { const b = e.target.closest('.pane-max-btn'); if (!b) return; e.stopPropagation(); setPaneMax(paneMax ? null : b.dataset.k); }); return w; }
 function pmKeyAt(pt) { // qué panel está bajo el puntero: un panel de abajo/arriba (oscilador, RSI…) o el de precio
   if (!geo || pt.x < geo.left || pt.x > geo.w - 2 || pt.y > geo.h - geo.axisH) return null;
-  const q = dPanes.find(z => pt.y >= z.top0 && pt.y < z.top0 + z.H); if (q) return {key: q.key, top: q.top0};
-  if (paneMax && paneMax !== 'price') return null;
-  if (pt.y >= geo.plotTop && pt.y < geo.plotTop + geo.plotH + 40) return {key: 'price', top: geo.plotTop};
+  const q = dPanes.find(z => pt.y >= z.top0 && pt.y < z.top0 + z.H); if (q) return {key: q.key};
+  if (pt.y >= geo.plotTop && pt.y < geo.plotTop + geo.plotH + 40) return {key: 'price'};
   return null;
 }
-function pmPlace() { // coloca el botón en la esquina de arriba a la derecha del panel (junto a la escala de precios)
-  const b = $('#paneMaxBtn'); if (!b || !geo) return; const cv = $('#priceCanvas'), ca = $('#chartArea'); if (!cv || !ca) return;
-  let k = paneMax || (pmHover && pmHover.key), top = null;
-  if (paneMax) { const q = dPanes.find(z => z.key === paneMax); top = q ? q.top0 : geo.plotTop; }
-  else if (pmHover) { const q = dPanes.find(z => z.key === pmHover.key); top = q ? q.top0 : pmHover.key === 'price' ? geo.plotTop : null; }
-  const multi = dPanes.length > 0 || !!paneMax; // con un solo panel no hay nada que expandir
-  if (!k || top == null || !multi) { b.classList.remove('show', 'keep'); return; }
-  b.style.left = Math.round(cv.offsetLeft + geo.w - geo.right - 34) + 'px'; b.style.top = Math.round(cv.offsetTop + top + 6) + 'px'; // offset (no getBoundingClientRect): no se mueve durante la animación del lienzo
-  b.dataset.k = k; b.classList.toggle('on', !!paneMax); b.classList.toggle('keep', !!paneMax);
-  const t = paneMax ? 'Restaurar todos los paneles (Esc)' : `Expandir ${pmName(k)}`; if (b.title !== t) { b.title = t; b.setAttribute('aria-label', t); }
-  const want = paneMax ? 'min' : 'max'; if (b.dataset.ic !== want) { b.dataset.ic = want; b.querySelector('svg').innerHTML = PM_IC[want]; }
+/* Un botón tenue en la esquina de arriba a la derecha de CADA panel (siempre a la vista, más visible al pasar el ratón o al tocar el panel) */
+function pmPlace() {
+  const w = pmWrap(), cv = $('#priceCanvas'); if (!w || !geo || !cv) return;
+  const tg = paneMax ? [{key: paneMax, top: (dPanes.find(z => z.key === paneMax) || {top0: geo.plotTop}).top0}]
+    : dPanes.length ? [{key: 'price', top: geo.plotTop}, ...dPanes.filter(q => q.H >= 34).map(q => ({key: q.key, top: q.top0}))] : [];
+  const have = new Map([...w.children].map(b => [b.dataset.k, b]));
+  tg.forEach(t => {
+    let b = have.get(t.key); have.delete(t.key);
+    if (!b) { b = document.createElement('button'); b.type = 'button'; b.className = 'pane-max-btn'; b.dataset.k = t.key; w.appendChild(b); }
+    const ic = paneMax ? 'min' : 'max'; if (b.dataset.ic !== ic) { b.dataset.ic = ic; b.innerHTML = pmSvg(15, ic); b.classList.remove('pm-pop'); void b.offsetWidth; b.classList.add('pm-pop'); }
+    const lx = Math.round(cv.offsetLeft + geo.w - geo.right - 34); let ty = Math.round(cv.offsetTop + t.top + 6);
+    { const sh = $('#chartSymHead'); if (sh && sh.offsetParent && sh.offsetLeft + sh.offsetWidth > lx - 4 && ty < sh.offsetTop + sh.offsetHeight + 4 && ty + 26 > sh.offsetTop) ty = sh.offsetTop + sh.offsetHeight + 6; } // no tapar la caja del precio (celular)
+    const L = lx + 'px', T = ty + 'px'; if (b.style.left !== L) b.style.left = L; if (b.style.top !== T) b.style.top = T;
+    b.classList.toggle('on', !!paneMax); b.classList.toggle('hot', !!pmHover && pmHover.key === t.key);
+    const tt = paneMax ? 'Restaurar todos los paneles (Esc)' : `Expandir ${pmName(t.key)}`; if (b.title !== tt) { b.title = tt; b.setAttribute('aria-label', tt); }
+  });
+  have.forEach(b => b.remove());
+  const c = $('#paneMaxCtl'); if (c) { const on = !!paneMax, ic = on ? 'min' : 'max'; c.classList.toggle('on', on); if (c.dataset.ic !== ic) { c.dataset.ic = ic; c.innerHTML = pmSvg(14, ic); }
+    c.title = on ? 'Restaurar todos los paneles (Esc)' : dPanes.length ? 'Expandir: solo el gráfico de precio' : 'Expandir panel (agrega un oscilador para usarlo)'; c.classList.toggle('dim', !on && !dPanes.length); }
 }
 function syncPaneMax() { const ca = $('#chartArea'); if (ca) ca.classList.toggle('pane-maxed', !!paneMax); pmPlace(); }
 function setPaneMax(k) {
@@ -3805,22 +3824,22 @@ function setPaneMax(k) {
     cv.style.setProperty('--pm-oy', Math.round(y0) + 'px'); cv.classList.remove('pm-grow', 'pm-back'); void cv.offsetWidth; cv.classList.add(k ? 'pm-grow' : 'pm-back');
     clearTimeout(setPaneMax.t); setPaneMax.t = setTimeout(() => cv.classList.remove('pm-grow', 'pm-back'), 520);
   }
-  const b = pmBtn(); if (b) { b.classList.remove('pm-pop'); void b.offsetWidth; b.classList.add('pm-pop'); }
   if (ca) ca.classList.toggle('pane-maxed', !!paneMax); legSig = ''; legStruct = ''; render(); pmPlace();
   if (paneMax) toast(paneMax === 'price' ? 'Solo el gráfico de precio · Esc para regresar' : 'Panel expandido · Esc para regresar');
 }
 (() => {
   const ca = $('#chartArea'); if (!ca) return; let raf2 = 0, last = null;
+  const ctl = $('#paneMaxCtl'); if (ctl) ctl.addEventListener('click', e => { e.stopPropagation(); if (paneMax) setPaneMax(null); else if (dPanes.length) setPaneMax('price'); else toast('Agrega un oscilador o RSI para expandir paneles'); });
   const at = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
+  const hot = h => { const k = h ? h.key : null; if ((pmHover && pmHover.key) === k) return; pmHover = h; pmPlace(); };
   ca.addEventListener('pointermove', e => {
     if (e.pointerType !== 'mouse' || e.buttons) return; last = e; if (raf2) return;
-    raf2 = requestAnimationFrame(() => { raf2 = 0; if (!last || !geo) return; const b = pmBtn(); if (!b) return; const h = pmKeyAt(at(last)); pmHover = h;
-      if (h || paneMax) { clearTimeout(pmHideT); pmPlace(); if (h) b.classList.add('show'); } else { clearTimeout(pmHideT); pmHideT = setTimeout(() => b.classList.remove('show'), 260); } });
+    raf2 = requestAnimationFrame(() => { raf2 = 0; if (last && geo) hot(pmKeyAt(at(last))); });
   }, {passive: true});
-  ca.addEventListener('pointerleave', e => { if (e.pointerType !== 'mouse') return; const b = $('#paneMaxBtn'); clearTimeout(pmHideT); pmHideT = setTimeout(() => { if (b && !b.matches(':hover')) b.classList.remove('show'); pmHover = null; }, 300); });
-  ca.addEventListener('pointerdown', e => { // celular/tablet: al tocar un panel aparece unos segundos
-    if (e.pointerType === 'mouse' || e.target.closest('#paneMaxBtn') || !geo) return; const b = pmBtn(); if (!b) return; const h = pmKeyAt(at(e)); if (!h) return;
-    pmHover = h; pmPlace(); b.classList.add('show'); clearTimeout(pmHideT); pmHideT = setTimeout(() => { b.classList.remove('show'); pmHover = null; }, 2600);
+  ca.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hot(null); });
+  ca.addEventListener('pointerdown', e => { // celular/tablet: al tocar un panel su botón se resalta unos segundos
+    if (e.pointerType === 'mouse' || e.target.closest('.pane-max-btn') || !geo) return; const h = pmKeyAt(at(e)); if (!h) return;
+    hot(h); clearTimeout(pmHideT); pmHideT = setTimeout(() => hot(null), 2600);
   }, {passive: true});
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && paneMax && !drawTool && !/input|textarea|select/i.test(e.target.tagName || '')) setPaneMax(null); });
 })();
@@ -3953,7 +3972,7 @@ function cssVars() {
   const c = getComputedStyle(document.body), v = n => c.getPropertyValue(n).trim();
   return (cssCache = {k, text: v('--muted'), line: v('--line'), bg: v('--bg'), draw: v('--draw') || '#e9c36e', fg: v('--text'), getPropertyValue: n => c.getPropertyValue(n)});
 }
-function render() { if (raf) { cancelAnimationFrame(raf); raf = 0; } /* un solo dibujo por cuadro */ let mv = !!(glideRaf || inertiaRaf); try { mv = mv || !!(gest || pinch); } catch {} if (mv && window.VXTheme && VXTheme.busy) VXTheme.busy(); /* mientras mueves el gráfico, el fondo animado espera */ syncUpDown(); renderCore(); syncLegend(); syncLegToggle(); if (paneMax || pmHover) pmPlace(); if (objTreeOn) objTreeSync(); if (candles.length && window.CCT_splashDone) CCT_splashDone(); } // ya hay velas: termina la animación de apertura
+function render() { if (raf) { cancelAnimationFrame(raf); raf = 0; } /* un solo dibujo por cuadro */ let mv = !!(glideRaf || inertiaRaf); try { mv = mv || !!(gest || pinch); } catch {} if (mv && window.VXTheme && VXTheme.busy) VXTheme.busy(); /* mientras mueves el gráfico, el fondo animado espera */ syncUpDown(); renderCore(); syncLegend(); syncLegToggle(); pmPlace(); if (objTreeOn) objTreeSync(); if (candles.length && window.CCT_splashDone) CCT_splashDone(); } // ya hay velas: termina la animación de apertura
 /* Reordenar paneles: mantén pulsado el NOMBRE de un indicador (RSI, MACD, un script en panel…) y arrástralo hacia arriba o abajo; al soltar queda guardado.
    Solo se mueve el nombre/panel elegido; los botones y el resto de la leyenda no cambian. */
 (() => {
@@ -4304,7 +4323,9 @@ function renderCore() {
   const drawPreview = () => {
   if (pending2) drawShape({id: '_', type: 'trend', a: pending2.a, b: pending2.b, col: dPre.col, lw: dPre.lw, ds: dPre.ds}, false, drawCol, text);
   if (preview) drawShape({...dPre, a: preview.a, b: preview.b, c: preview.c}, false, drawCol, text);
-  if (brushLive && brushLive.length > 1 && !brushPK) drawBrush({type: 'brush', ...dBrushO(), pts: brushLive, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, hl: drawTool === 'highlighter'}, false, drawCol);
+  if (GHOST.length) { const now = performance.now(); GHOST.forEach(s => { if (!s.pane) drawGhost(s.pts, s.col, s.w, ghostAlpha(s, now)); }); }
+  if (brushLive && brushLive.length > 1 && !brushPK && drawTool === 'ghost') drawGhost(brushLive, state.brush.c, state.brush.w + 1, 1);
+  else if (brushLive && brushLive.length > 1 && !brushPK) drawBrush({type: 'brush', ...dBrushO(), pts: brushLive, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, hl: drawTool === 'highlighter'}, false, drawCol);
   if (multi.length && MULTI[drawTool]) {
     const live = cross ? snapPoint(cross) : null, pts = multi.concat(live && multi.length < MULTI[drawTool].n ? [live] : []);
     drawShape({...dPre, a: pts[0], pts}, false, drawCol, text);
@@ -4498,7 +4519,9 @@ function renderCore() {
   if (dPanes.length) { const one = (q, fn) => { g.save(); g.beginPath(); g.rect(left, q.top0, plotW, q.H); g.clip(); try { fn(); } finally { g.restore(); } };
     if (!DOPT.hide) for (const d of getDrawings()) if (d.pane && !d.hide) inPaneCtx(d, q => one(q, () => drawShape(d, d.id === selectedId, drawCol, text)));
     if (paneDraw) withPane(drawPaneKey, q => one(q, drawPreview));
-    if (brushPK && brushLive && brushLive.length > 1 && dPaneOf(brushPK)) withPane(brushPK, q => one(q, () => drawBrush({type: 'brush', ...dBrushO(), pts: brushLive, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, hl: drawTool === 'highlighter'}, false, drawCol))); } // trazo del pincel en curso sobre un panel
+    if (GHOST.length) { const now = performance.now(); GHOST.forEach(s => { if (s.pane && dPaneOf(s.pane)) withPane(s.pane, q => one(q, () => drawGhost(s.pts, s.col, s.w, ghostAlpha(s, now)))); }); }
+    if (brushPK && brushLive && brushLive.length > 1 && dPaneOf(brushPK) && drawTool === 'ghost') withPane(brushPK, q => one(q, () => drawGhost(brushLive, state.brush.c, state.brush.w + 1, 1)));
+    else if (brushPK && brushLive && brushLive.length > 1 && dPaneOf(brushPK)) withPane(brushPK, q => one(q, () => drawBrush({type: 'brush', ...dBrushO(), pts: brushLive, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, hl: drawTool === 'highlighter'}, false, drawCol))); } // trazo del pincel en curso sobre un panel
   if (pTop.length) { g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, plotTop); g.lineTo(w - right + 2, plotTop); g.stroke(); }
   if (vpOn) drawNovaVP(ind.vp, fg);
   if (state.indicators.nnLiq && ind.liq) drawNovaLiqTable(fg);
@@ -5114,14 +5137,41 @@ function drawShapeExtra(d, a, b, rightX, col) {
     if (dOpt(d, 'ml')) { g.setLineDash([5, 4]); g.beginPath(); g.moveTo((p1.x + p2.x) / 2, (p1.y + p2.y) / 2); g.lineTo((q1.x + q2.x) / 2, (q1.y + q2.y) / 2); g.stroke(); g.setLineDash([]); }
     if (dOpt(d, 'fl')) { g.globalAlpha = dOpt(d, 'fo') / 100; g.fillStyle = dOpt(d, 'fc') || col; g.beginPath(); g.moveTo(p1.x, p1.y); g.lineTo(q1.x, q1.y); g.lineTo(q2.x, q2.y); g.lineTo(p2.x, p2.y); g.closePath(); g.fill(); g.globalAlpha = 1; g.fillStyle = col; }
   }
-  else if (t === 'measure') {
-    const dp = d.b.p - d.a.p, up = dp >= 0, mc = up ? dOpt(d, 'uc') : dOpt(d, 'dc'), bars = Math.round(idxOfTime(d.b.t) - idxOfTime(d.a.t));
-    const x1 = Math.min(a.x, b.x), y1 = Math.min(a.y, b.y), w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
-    g.fillStyle = mc; g.strokeStyle = mc; if (dOpt(d, 'fl')) { g.globalAlpha = dOpt(d, 'fo') / 100; g.fillRect(x1, y1, w, h); g.globalAlpha = 1; } g.setLineDash([4, 3]); g.strokeRect(x1, y1, w, h); g.setLineDash([]);
-    g.lineWidth = 1.5; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); arrowHead(a, b, 8);
-    const LL = [dOpt(d, 'vp') ? `${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)})` : '', dOpt(d, 'vb') ? `${Math.abs(bars)} velas · ${fmtDur(d.b.t - d.a.t)}` : ''].filter(Boolean);
-    if (LL.length) { g.font = 'bold 10px system-ui'; const tw = Math.max(...LL.map(x => g.measureText(x).width)) + 12, th = LL.length * 13 + 4, tx = clamp(x1 + w / 2 - tw / 2, geo.left, rightX - tw), ty = up ? Math.max(geo.plotTop + 2, y1 - th - 4) : Math.min(geo.plotTop + geo.plotH - th - 4, y1 + h + 4);
-      g.fillStyle = mc; roundRect(tx, ty, tw, th, 4); g.fill(); g.fillStyle = '#fff'; LL.forEach((x, i) => g.fillText(x, tx + 6, ty + 12 + i * 13)); }
+  else if (t === 'measure') { // Medir: caja con flechas de precio y tiempo + tarjeta de cristal (precio, %, velas, tiempo, volumen) que aparece con animación
+    const dp = d.b.p - d.a.p, up = dp >= 0, mc = up ? dOpt(d, 'uc') : dOpt(d, 'dc'), i1 = idxOfTime(d.a.t), i2 = idxOfTime(d.b.t), bars = Math.round(i2 - i1);
+    const x1 = Math.min(a.x, b.x), y1 = Math.min(a.y, b.y), w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y), cx = x1 + w / 2, cy = y1 + h / 2;
+    const now = performance.now(); let t0 = d.id === '_' ? 0 : MEAS_T0.get(d.id); if (t0 === undefined) { t0 = now; MEAS_T0.set(d.id, now); }
+    const k = t0 ? Math.min(1, (now - t0) / 420) : 1, e = 1 - Math.pow(1 - k, 3); if (k < 1) requestAnimationFrame(scheduleRender);
+    g.save();
+    if (dOpt(d, 'fl')) { const fo = dOpt(d, 'fo') / 100, gr = g.createLinearGradient(0, up ? y1 : y1 + h, 0, up ? y1 + h : y1); gr.addColorStop(0, mc); gr.addColorStop(1, 'transparent');
+      g.globalAlpha = Math.min(.5, fo * 1.6) * e; g.fillStyle = gr; g.fillRect(x1, y1, w, h); g.globalAlpha = fo * .55 * e; g.fillStyle = mc; g.fillRect(x1, y1, w, h); }
+    g.globalAlpha = .55; g.strokeStyle = mc; g.lineWidth = 1; g.setLineDash([3, 4]); g.strokeRect(x1 + .5, y1 + .5, w, h); g.setLineDash([]);
+    g.globalAlpha = 1; g.lineWidth = 1.6; g.strokeStyle = mc; g.fillStyle = mc;
+    if (h > 6) { g.beginPath(); g.moveTo(cx, a.y); g.lineTo(cx, b.y); g.stroke(); arrowHead({x: cx, y: a.y}, {x: cx, y: b.y}, 7); }
+    if (w > 6) { g.beginPath(); g.moveTo(a.x, cy); g.lineTo(b.x, cy); g.stroke(); arrowHead({x: a.x, y: cy}, {x: b.x, y: cy}, 7); }
+    [a, b].forEach(p => { g.beginPath(); g.arc(p.x, p.y, 3, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 1.5; g.strokeStyle = mc; g.stroke(); });
+    let vol = 0; { const lo = Math.max(0, Math.floor(Math.min(i1, i2))), hi = Math.min(candles.length - 1, Math.ceil(Math.max(i1, i2))); for (let i = lo; i <= hi; i++) vol += (candles[i] && candles[i].v) || 0; }
+    const main = dOpt(d, 'vp') ? `${dp >= 0 ? '+' : '−'}${fmt(Math.abs(dp))}` : '', pc = dOpt(d, 'vp') ? pct(dp / d.a.p * 100) : '';
+    const rows = dOpt(d, 'vb') ? [[`${Math.abs(bars)} ${Math.abs(bars) === 1 ? 'vela' : 'velas'}`, fmtDur(d.b.t - d.a.t)], ...(vol > 0 ? [['Volumen', fmtVolPine(vol)]] : [])] : [];
+    if (main || rows.length) {
+      const fBig = '600 13px system-ui', fPc = '700 11px system-ui', fSm = '500 10.5px system-ui', pad = 10;
+      g.font = fBig; const mw = main ? g.measureText(main).width : 0; g.font = fPc; const pw = pc ? g.measureText(pc).width + 14 : 0; g.font = fSm;
+      const rw = rows.length ? Math.max(...rows.map(r => g.measureText(r[0]).width + g.measureText(r[1]).width + 18)) : 0;
+      const tw = Math.max(mw + (pw ? pw + 8 : 0), rw) + pad * 2, th = (main ? 24 : 6) + rows.length * 16 + 6;
+      const tx = clamp(cx - tw / 2, geo.left + 2, rightX - tw - 2), ty0 = up ? y1 - th - 10 : y1 + h + 10, ty = clamp(ty0, geo.plotTop + 2, geo.plotTop + geo.plotH - th - 2);
+      const sc = .9 + .1 * e; g.translate(tx + tw / 2, ty + th / 2); g.scale(sc, sc); g.translate(-(tx + tw / 2), -(ty + th / 2)); g.globalAlpha = e;
+      g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = 18; g.shadowOffsetY = 6; g.fillStyle = 'rgba(12,16,26,.78)'; roundRect(tx, ty, tw, th, 11); g.fill(); g.shadowColor = 'transparent'; g.shadowBlur = 0; g.shadowOffsetY = 0;
+      const sh = g.createLinearGradient(0, ty, 0, ty + th); sh.addColorStop(0, 'rgba(255,255,255,.07)'); sh.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = sh; roundRect(tx, ty, tw, th, 11); g.fill();
+      g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,.12)'; roundRect(tx + .5, ty + .5, tw - 1, th - 1, 11); g.stroke();
+      g.fillStyle = mc; roundRect(tx + 4, ty + 7, 2.5, th - 14, 1.5); g.fill(); // acento de color (sube / baja)
+      let yy = ty + 6; g.textBaseline = 'middle'; g.textAlign = 'left';
+      if (main) { g.font = fBig; g.fillStyle = '#f4f7fb'; g.fillText(main, tx + pad + 2, yy + 9);
+        if (pc) { g.font = fPc; const px0 = tx + pad + 2 + mw + 8; g.globalAlpha = e * .22; g.fillStyle = mc; roundRect(px0, yy + 1, pw, 16, 8); g.fill(); g.globalAlpha = e; g.fillStyle = mc; g.fillText(pc, px0 + 7, yy + 9.5); }
+        yy += 22; }
+      g.font = fSm; rows.forEach(r => { g.fillStyle = 'rgba(214,222,235,.62)'; g.fillText(r[0], tx + pad + 2, yy + 8); g.fillStyle = '#e8edf5'; g.textAlign = 'right'; g.fillText(r[1], tx + tw - pad, yy + 8); g.textAlign = 'left'; yy += 16; });
+      g.textBaseline = 'alphabetic';
+    }
+    g.restore();
   }
   else if (t === 'fibext') {
     const tl = dOpt(d, 'tl'); g.setLineDash([4, 4]); g.lineWidth = 1;
@@ -5359,8 +5409,8 @@ area.addEventListener('pointerdown', e => { stopMotion();
     gest.mode = onPriceAxis ? 'scaleY' : 'scaleX'; gest.min0 = geo.min; gest.max0 = geo.max; gest.vis0 = visible; gest.pan1 = pan; cross = null;
   } else if (isBrushTool(drawTool) && (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH || pt.x < geo.left || pt.x > geo.left + geo.plotW)) { // fuera del precio: dentro de un panel (oscilador, RSI, MACD…) también se pinta
     const dp = dPaneAt(pt); if (!dp) { gest.mode = 'ignore'; toast('El pincel dibuja sobre el gráfico o sobre un panel'); }
-    else { gest.mode = 'brush'; brushPK = dp.key; selectedId = null; brushLive = withPane(dp.key, () => [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]); gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); } }
-  else if (isBrushTool(drawTool)) { gest.mode = 'brush'; brushPK = null; selectedId = null; brushLive = [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]; gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); }
+    else { if (drawTool === 'ghost') ghostClearPrev(); gest.mode = 'brush'; brushPK = dp.key; selectedId = null; brushLive = withPane(dp.key, () => [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]); gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); } }
+  else if (isBrushTool(drawTool)) { if (drawTool === 'ghost') ghostClearPrev(); gest.mode = 'brush'; brushPK = null; selectedId = null; brushLive = [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]; gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); }
   else if (drawTool) { if (!pending && !pending2 && !multi.length) { const dp = dPaneAt(pt); drawPaneKey = dp ? dp.key : null; } gest.start = snapPoint(pt); } // tocar dentro de un panel = dibujar sobre ese panel
   else if (selectedId && gest.mode === 'pending') {
     const d = getDrawings().find(x => x.id === selectedId);
