@@ -66,7 +66,7 @@
   const offline = document.createElement('div'); offline.id = 'pwaOffline'; offline.setAttribute('role', 'status');
   offline.textContent = 'Sin conexión · los precios y noticias no se están actualizando.';
   document.getElementById('app').prepend(offline);
-  const network = () => { offline.hidden = navigator.onLine; }; network();
+  let netT = 0; const network = () => { clearTimeout(netT); if (navigator.onLine) offline.hidden = true; else netT = setTimeout(() => { offline.hidden = navigator.onLine; }, 8000); }; offline.hidden = true; network(); // un corte breve de internet no muestra la franja: solo si dura más de 8 s
   window.addEventListener('online', network); window.addEventListener('offline', network);
   if ('serviceWorker' in navigator && window.isSecureContext) {
     // Versión nueva del service worker: ya NO se recarga sola. El código siempre se pide primero a internet (sw.js), así que la página

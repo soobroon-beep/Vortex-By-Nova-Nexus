@@ -210,6 +210,7 @@ function sanUi(u) {
   if (q.prefs && typeof q.prefs === 'object') o.prefs = CCTPrefs.sanitize(q.prefs);
   if (q.favBar && typeof q.favBar === 'object') { const f = q.favBar, c01 = v => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null; o.favBar = {show: f.show !== false, x: c01(f.x), y: c01(f.y), mx: c01(f.mx), my: c01(f.my), mode: f.mode === 'flotante' ? 'flotante' : 'fija'}; }
   if (Array.isArray(q.pillFavs)) o.pillFavs = q.pillFavs.filter(x => typeof x === 'string' && /^[A-Za-z0-9-]{2,40}$/.test(x)).slice(0, 5); // favoritos de la píldora del celular (se sincronizan con tu cuenta)
+  if (typeof q.symMin === 'boolean') o.symMin = q.symMin; // caja del precio minimizada (solo moneda y precio)
   if (Array.isArray(q.favs)) o.favs = q.favs.filter(x => typeof x === 'string' && /^[a-zA-Z0-9]{2,24}$/.test(x)).slice(0, 24);
   if (Array.isArray(q.myColors)) o.myColors = [...new Set(q.myColors.filter(x => typeof x === 'string' && /^#[0-9a-f]{6}$/i.test(x)).map(x => x.toLowerCase()))].slice(0, 20); // «Mis colores» de la paleta (se comparten en toda la app y en tu cuenta)
   return o;
@@ -269,7 +270,7 @@ function merge(s) {
     for (const k of Object.keys(o.drawings)) {
       const arr = Array.isArray(o.drawings[k]) ? o.drawings[k] : [];
       const clean = arr.filter(d => d && typeof d === 'object' && (d.type === 'brush' ? (Array.isArray(d.pts) && d.pts.length >= 2 && d.pts.length <= 400 && d.pts.every(okPt)) : (d.pts == null || (Array.isArray(d.pts) && d.pts.length >= 2 && d.pts.length <= 12 && d.pts.every(q => q && Number.isFinite(q.t) && Number.isFinite(q.p)))))).slice(-300)
-        .map(d => d.type === 'brush' ? {id: String(d.id || '').slice(0, 16), type: 'brush', pts: d.pts, a: {t: d.pts[0][0], p: d.pts[0][1]}, col: /^#[0-9a-f]{6}$/i.test(d.col) ? d.col : '#e9c36e', w: Math.max(1, Math.min(24, +d.w || 3)), ...(d.hl === true ? {hl: true} : {}), ...(d.lock === true ? {lock: true} : {}), ...(d.hide === true ? {hide: true} : {}), ...dSanO(d.o)} : sanDrawExtra(d));
+        .map(d => d.type === 'brush' ? {id: String(d.id || '').slice(0, 16), type: 'brush', pts: d.pts, a: {t: d.pts[0][0], p: d.pts[0][1]}, col: /^#[0-9a-f]{6}$/i.test(d.col) ? d.col : '#e9c36e', w: Math.max(1, Math.min(24, +d.w || 3)), ...(d.hl === true ? {hl: true} : {}), ...(d.lock === true ? {lock: true} : {}), ...(d.hide === true ? {hide: true} : {}), ...(typeof d.pane === 'string' && /^[A-Za-z0-9:_.-]{1,60}$/.test(d.pane) ? {pane: d.pane} : {}), ...dSanO(d.o)} : sanDrawExtra(d));
       if (clean.length) o.drawings[k] = clean; else delete o.drawings[k];
     }
     const bq = o.brush && typeof o.brush === 'object' ? o.brush : {};
@@ -1510,7 +1511,7 @@ async function loadCandles(silent = false) {
     if (e.name === 'AbortError') return false;
     if (!silent && srcOf(sym) === 'dom') { setFeedback(e.message || 'Sin datos de dominancia'); render(); return; }
     if (!silent) { setFeedback(`No se pudieron cargar las velas de ${SOURCES[srcOf(sym)] || 'Binance'}${srcOf(sym) !== 'binance' ? ' ni de Binance Spot' : ''}. No se muestran datos simulados.`); render(); }
-    if (!CONN.live) connShow('off');
+    if (!CONN.live) connLive(false); // el aviso de «sin conexión» espera su gracia (no sale al primer fallo)
   }
 }
 /* ───────── Historial completo hacia atrás (como en TradingView) ─────────
@@ -1617,13 +1618,15 @@ function replayBar() {
 }
 function setLive(on) { $('#liveDot').classList.toggle('on', !!on); connLive(!!on); }
 /* ───────── Aviso de conexión en vivo ─────────
-   Naranja «Conectando…» mientras todavía no llega el precio real; verde «En vivo» un momento cuando conecta (y se va);
-   rojo «Sin conexión» si no hay internet o el exchange no responde. Ya en vivo no se queda nada en pantalla. (Se puede apagar en Ajustes) */
-const CONN = {st: '', live: false, waitT: 0, offT: 0, hideT: 0, seen: false};
+   Solo sale en dos casos: al ABRIR la app («Conectando…» → «En vivo» un momento y se va) y cuando, ya conectado, pasan más de 8 s seguidos
+   sin precio en vivo («Sin conexión · reintentando»). Un corte corto del flujo (cambiar de moneda, volver a la app, un parpadeo del exchange
+   o del internet) ya no muestra nada: se reconecta en silencio. (Se puede apagar en Ajustes) */
+const CONN = {st: '', live: false, waitT: 0, offT: 0, hideT: 0, seen: false, ever: false}, CONN_GRACE = 8000;
 function connEl() {
   let el = $('#connPill'); if (el) return el; const ca = $('#chartArea'); if (!ca) return null;
   el = document.createElement('div'); el.id = 'connPill'; el.hidden = true; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); el.innerHTML = '<i></i><span></span>'; ca.appendChild(el); return el;
 }
+function connHide() { const el = $('#connPill'); clearTimeout(CONN.hideT); if (el) el.hidden = true; CONN.st = ''; }
 function connShow(st) {
   const el = connEl(); if (!el) return; clearTimeout(CONN.hideT); CONN.st = st;
   if (PR.conn === 'off') { el.hidden = true; return; }
@@ -1631,18 +1634,16 @@ function connShow(st) {
   el.className = st; el.querySelector('span').outerHTML = `<span>${txt}</span>`; el.hidden = false; CONN.seen = true;
   if (st === 'live') CONN.hideT = setTimeout(() => { el.hidden = true; CONN.st = ''; }, 1700);
 }
+function connArmOff() { clearTimeout(CONN.offT); CONN.offT = setTimeout(() => { if (!CONN.live) connShow('off'); }, CONN.ever ? CONN_GRACE : 14000); } // ya conectado antes: 8 s de gracia
 function connLive(on) {
-  clearTimeout(CONN.waitT); clearTimeout(CONN.offT);
-  if (on) { const was = CONN.live; CONN.live = true; if (!was && CONN.st && CONN.st !== 'live') connShow('live'); return; }
-  CONN.live = false;
-  if (navigator.onLine === false) { connShow('off'); return; }
-  CONN.waitT = setTimeout(() => { if (!CONN.live) connShow('wait'); }, CONN.seen ? 1500 : 0); // un parpadeo de la conexión no muestra nada
-  CONN.offT = setTimeout(() => { if (!CONN.live) connShow('off'); }, 14000);
+  clearTimeout(CONN.waitT);
+  if (on) { clearTimeout(CONN.offT); const was = CONN.live; CONN.live = true; const first = !CONN.ever; CONN.ever = true;
+    if (!was && (first || CONN.st === 'off' || CONN.st === 'wait')) connShow('live'); else if (CONN.st && CONN.st !== 'live') connHide(); return; } // «En vivo» solo al abrir o al volver tras el aviso de sin conexión
+  if (CONN.live || !CONN.offT) { CONN.live = false; if (!CONN.ever) CONN.waitT = setTimeout(() => { if (!CONN.live) connShow('wait'); }, 0); connArmOff(); } // al abrir: «Conectando…»; después: nada hasta 8 s sin datos
 }
 function connPaint() { const el = $('#connPill'); if (!el) return; if (PR.conn === 'off') el.hidden = true; else if (!CONN.live && CONN.st) connShow(CONN.st); }
-addEventListener('offline', () => { CONN.live = false; connShow('off'); });
-addEventListener('online', () => { if (!CONN.live) connShow('wait'); });
-document.addEventListener('visibilitychange', () => { if (!document.hidden && !CONN.live && CONN.st !== 'off') connShow('wait'); });
+addEventListener('offline', () => { if (!CONN.live && CONN.st === 'off') return; CONN.live = false; connArmOff(); }); // sin internet: también se espera la gracia
+addEventListener('online', () => { if (CONN.st === 'off' && !CONN.live) { /* sigue el aviso hasta que llegue el precio */ } });
 setTimeout(() => { if (!CONN.live && !CONN.st) connLive(false); }, 0); // al abrir la app: «Conectando…» hasta que llegue el primer precio real
 function closeWS(quiet) { wsGen++; wsOpen = false; clearInterval(wsPing); clearTimeout(wsQuietT); if (ws) { ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null; try { ws.close(); } catch {} } ws = null; wsFor = ''; if (!quiet) setLive(false); }
 /* Reconexión «silenciosa»: al cambiar de moneda o al refrescar, el aviso no pasa a «Conectando…» si el nuevo flujo llega en menos de 8 s
@@ -1682,7 +1683,7 @@ function connectWS() {
   ws.onclose = () => {
     if (gen !== wsGen) return;
     wsOpen = false; setLive(false);
-    setTimeout(() => { if (gen === wsGen && !document.hidden) connectWS(); }, Math.min(15000, 3000 * ++wsRetry));
+    setTimeout(() => { if (gen === wsGen && !document.hidden) connectWS(); }, ++wsRetry <= 10 ? Math.min(2, wsRetry) * 1000 : 15000); // reintentos rápidos (1 s y luego cada 2 s; tras 10 fallos, cada 15 s): un corte corto se recupera antes de los 8 s del aviso
   };
 }
 /* Operaciones en vivo (aggTrade / publicTrade): se juntan y se aplican a la última vela cada ~70 ms; entre medio el precio se desliza
@@ -2266,6 +2267,17 @@ const TOOL_GROUPS = [
 const FAV_KEY = 'cct_favtools_v1';
 let FAVS = ['brush']; try { const f = JSON.parse(lsGet(FAV_KEY) || 'null'); if (Array.isArray(f)) FAVS = f.filter(x => typeof x === 'string').slice(0, 24); } catch {}
 let FB = Object.assign({show: true, x: null, y: null, mx: null, my: null, mode: 'fija'}, (state.ui && state.ui.favBar) || {}); // (mx,my: posición del botón estrella en celular) barra flotante de favoritos: visible y posición (fracciones del gráfico)
+/* Caja del precio minimizable (triangulito): minimizada solo deja el nombre de la moneda y el precio (sin exchange, %, ni derivados) */
+let SYMMIN = !!((state.ui || {}).symMin); try { const v = localStorage.getItem('vx_symmin'); if (v != null && (state.ui || {}).symMin === undefined) SYMMIN = v === '1'; } catch {}
+function applySymMin(anim) {
+  const h = $('#chartSymHead'), b = $('#symMinBtn'); if (!h) return;
+  h.classList.toggle('sym-min-on', SYMMIN);
+  if (b) { b.setAttribute('aria-expanded', String(!SYMMIN)); b.title = SYMMIN ? 'Mostrar todo (exchange, %, derivados)' : 'Minimizar (solo moneda y precio)'; b.setAttribute('aria-label', SYMMIN ? 'Mostrar la caja del precio completa' : 'Minimizar la caja del precio'); }
+  if (anim) { h.classList.remove('sym-anim'); void h.offsetWidth; h.classList.add('sym-anim'); }
+  try { localStorage.setItem('vx_symmin', SYMMIN ? '1' : '0'); } catch {}
+  if (typeof scheduleRender === 'function') scheduleRender(); // la leyenda sube o baja según el alto de la caja
+}
+{ const b = $('#symMinBtn'); if (b) { b.addEventListener('pointerdown', e => e.stopPropagation()); b.addEventListener('click', e => { e.stopPropagation(); SYMMIN = !SYMMIN; applySymMin(true); syncUi(); }); } }
 if (state.ui && Array.isArray(state.ui.favs)) FAVS = state.ui.favs.slice(0, 24);
 let MYCOL = state.ui && Array.isArray(state.ui.myColors) ? state.ui.myColors.slice(0, 20) : []; // tus colores guardados (máx. 20)
 window.CCTColors = {pal: () => SB_PAL, get: () => MYCOL.slice(), has: c => MYCOL.includes(String(c).toLowerCase()), add(c) { c = String(c || '').toLowerCase(); if (!/^#[0-9a-f]{6}$/.test(c)) return false; if (MYCOL.includes(c)) return true; if (MYCOL.length >= 20) return 'full'; MYCOL = [...MYCOL, c]; syncUi(); return true; }, remove(c) { c = String(c || '').toLowerCase(); MYCOL = MYCOL.filter(x => x !== c); syncUi(); }};
@@ -3190,10 +3202,12 @@ const groupOf = k => TOOL_GROUPS.find(gr => gr.tools.some(t => t[0] === k));
 const toolOf = k => { for (const gr of TOOL_GROUPS) { const t = gr.tools.find(x => x[0] === k); if (t) return t; } return null; };
 const lastOf = gr => (railLast[gr.id] && gr.tools.some(t => t[0] === railLast[gr.id])) ? railLast[gr.id] : gr.tools[0][0];
 const RAIL_OPTS = [['tree', 'Árbol de objetos: dibujos e indicadores, adelante o atrás', IC.tree], ['magnet', 'Imán: ajusta a máximo, mínimo, apertura y cierre', IC.magnet], ['stay', 'Mantener la herramienta activa después de dibujar', IC.keep], ['lock', 'Bloquear dibujos (no se seleccionan ni se mueven)', IC.lock], ['hide', 'Ver u ocultar dibujos e indicadores', IC.eye], ['clear', 'Borrar dibujos o indicadores', IC.trash]];
+const railFavOnBar = () => deskMQ.matches && !PANE && !!FB.show; // ¿la barra flotante de favoritos está a la vista? (PC/tablet)
 function buildRail() {
   const rail = $('#toolRail'); if (!rail) return;
+  const onBar = railFavOnBar(); rail.dataset.favbar = onBar ? '1' : '0'; // con la barra flotante de favoritos visible, los favoritos NO se repiten en la barra izquierda
   rail.innerHTML = `<button class="rail-btn grp" data-rail="cursor" title="Cursor (Esc)" aria-label="Cursor">${SV(CURSOR_IC[effCursor()] || CURSOR_IC.Cruz)}<i class="caret" data-curfly="1" title="Elegir cursor: cruz, flecha o estrella"></i></button><div class="rail-sep"></div>`
-    + (FAVS.length ? favTools().map(t => `<button class="rail-btn fav" data-ftool="${t[0]}" title="${esc(t[1])} (favorito)" aria-label="${esc(t[1])}">${SV(t[3])}</button>`).join('') + `<div class="rail-sep"></div>` : '')
+    + (FAVS.length && !onBar ? favTools().map(t => `<button class="rail-btn fav" data-ftool="${t[0]}" title="${esc(t[1])} (favorito)" aria-label="${esc(t[1])}">${SV(t[3])}</button>`).join('') + `<div class="rail-sep"></div>` : '')
     + TOOL_GROUPS.map(gr => { const t = toolOf(lastOf(gr)); return `<button class="rail-btn grp" data-group="${gr.id}" data-last="${t[0]}" title="${esc(t[1])}" aria-label="${esc(gr.name)}">${SV(t[3])}<i class="caret" data-fly="${gr.id}" title="${esc(gr.name)}: ver todas"></i></button>`; }).join('')
     + `<div class="rail-spacer"></div><div class="rail-sep"></div>`
     + RAIL_OPTS.map(([k, t, ic]) => `<button class="rail-btn" data-opt="${k}" title="${esc(t)}" aria-label="${esc(t)}">${SV(ic)}</button>`).join('');
@@ -3310,6 +3324,7 @@ function wireFab(fab) { // mantener presionado = el botón se "agarra" y se pued
   fab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFbOpen(!fbOpen); placeFab(); } });
 }
 function renderFavBar() {
+  { const rail = $('#toolRail'); if (rail && rail.firstChild && rail.dataset.favbar !== (railFavOnBar() ? '1' : '0')) buildRail(); } // se activó/desactivó la barra: los favoritos pasan a la barra izquierda o salen de ella
   const ar = $('#chartArea'); if (!ar) return; let bar = $('#favBar'), fab = $('#favFab');
   const mob = !deskMQ.matches, on = !PANE && (FB.show || (mob && favStack()));
   window.__favMode = FB.mode || 'fija'; { const pb = $('#favPillBtn'); if (pb) pb.hidden = false; } // la estrella siempre vive en la cápsula
@@ -3673,13 +3688,14 @@ function commitMulti() {
   selectedId = DOPT.stay ? null : d.id; if (!DOPT.stay) drawTool = ''; multi = []; pending = null; preview = null; updateDrawUI(); render();
 }
 const dBrushO = () => { const st = (state.lastStyle || {})[drawTool === 'highlighter' ? 'highlighter' : 'brush']; return st && st.o ? {o: st.o} : {}; }; // opacidad usada la última vez
-function commitBrush(live) {
+function commitBrush(live, pk) {
   if (!live || live.length < 2 || !geo) return;
+  if (pk && !commitBrush._in) { if (!dPaneOf(pk)) return; commitBrush._in = true; try { return withPane(pk, () => commitBrush(live, pk)); } finally { commitBrush._in = false; } } // pincel sobre un panel: mismos pasos con la escala del panel
   const P = live.map(q => ({x: X(idxOfTime(q[0])), y: Y(q[1]), q}));
   let eps = 1.1, out = rdp(P, eps); while (out.length > 300 && eps < 20) out = rdp(P, eps *= 1.5);
   if (out.length < 2) return;
   const pts = out.map(o => [Math.round(o.q[0]), +(+o.q[1].toPrecision(8))]);
-  const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: 'brush', pts, a: {t: pts[0][0], p: pts[0][1]}, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, ...(drawTool === 'highlighter' ? {hl: true} : {}), ...dBrushO()};
+  const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: 'brush', pts, a: {t: pts[0][0], p: pts[0][1]}, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, ...(drawTool === 'highlighter' ? {hl: true} : {}), ...(pk ? {pane: pk} : {}), ...dBrushO()};
   snapDraw(); setDrawings([...getDrawings(), d]); selectedId = d.id; updateDrawUI();
 }
 
@@ -3746,6 +3762,68 @@ function timeLabel(t, prev) { return CCTPrefs.axisLabel(t, prev, state.interval,
 let legRows = [], legSig = '', legStruct = '', grips = [], gripDrag = false, treeInds = [];
 let paneH = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneH_v1') || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; } })();
 let paneOrder = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneOrder_v1') || '[]'); return Array.isArray(o) ? o.filter(k => typeof k === 'string').slice(0, 64) : []; } catch { return []; } })(); // orden elegido por el usuario para los paneles (RSI, MACD…)
+/* ───────── Expandir un panel (botón en su esquina de arriba a la derecha) ─────────
+   Sale solo al pasar el ratón por un panel (en el celular/tablet, al tocarlo, unos segundos). Al darle clic ese panel ocupa todo el gráfico:
+   el de precio solo (sin osciladores) o solo el oscilador/RSI/MACD/script elegido. Otro clic (o Esc) regresa todo como estaba. */
+let paneMax = null, pmHover = null, pmHideT = 0;
+const PM_IC = {max: '<path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/>', min: '<path d="M20 10h-6V4M4 14h6v6M14 10l6.5-6.5M10 14l-6.5 6.5"/>'};
+function pmBtn() {
+  let b = $('#paneMaxBtn'); if (b) return b; const ca = $('#chartArea'); if (!ca) return null;
+  b = document.createElement('button'); b.type = 'button'; b.id = 'paneMaxBtn'; b.className = 'pane-max-btn';
+  b.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PM_IC.max}</svg>`;
+  b.addEventListener('pointerdown', e => e.stopPropagation());
+  b.addEventListener('pointerenter', () => { clearTimeout(pmHideT); b.classList.add('show'); });
+  b.addEventListener('click', e => { e.stopPropagation(); const k = paneMax ? null : (b.dataset.k || null); setPaneMax(k); });
+  ca.appendChild(b); return b;
+}
+const pmName = k => k === 'price' ? 'el gráfico de precio' : k === 'rsi' ? 'el RSI' : k.startsWith('pine:') ? 'este panel' : 'este indicador';
+function pmKeyAt(pt) { // qué panel está bajo el puntero: un panel de abajo/arriba (oscilador, RSI…) o el de precio
+  if (!geo || pt.x < geo.left || pt.x > geo.w - 2 || pt.y > geo.h - geo.axisH) return null;
+  const q = dPanes.find(z => pt.y >= z.top0 && pt.y < z.top0 + z.H); if (q) return {key: q.key, top: q.top0};
+  if (paneMax && paneMax !== 'price') return null;
+  if (pt.y >= geo.plotTop && pt.y < geo.plotTop + geo.plotH + 40) return {key: 'price', top: geo.plotTop};
+  return null;
+}
+function pmPlace() { // coloca el botón en la esquina de arriba a la derecha del panel (junto a la escala de precios)
+  const b = $('#paneMaxBtn'); if (!b || !geo) return; const cv = $('#priceCanvas'), ca = $('#chartArea'); if (!cv || !ca) return;
+  let k = paneMax || (pmHover && pmHover.key), top = null;
+  if (paneMax) { const q = dPanes.find(z => z.key === paneMax); top = q ? q.top0 : geo.plotTop; }
+  else if (pmHover) { const q = dPanes.find(z => z.key === pmHover.key); top = q ? q.top0 : pmHover.key === 'price' ? geo.plotTop : null; }
+  const multi = dPanes.length > 0 || !!paneMax; // con un solo panel no hay nada que expandir
+  if (!k || top == null || !multi) { b.classList.remove('show', 'keep'); return; }
+  b.style.left = Math.round(cv.offsetLeft + geo.w - geo.right - 34) + 'px'; b.style.top = Math.round(cv.offsetTop + top + 6) + 'px'; // offset (no getBoundingClientRect): no se mueve durante la animación del lienzo
+  b.dataset.k = k; b.classList.toggle('on', !!paneMax); b.classList.toggle('keep', !!paneMax);
+  const t = paneMax ? 'Restaurar todos los paneles (Esc)' : `Expandir ${pmName(k)}`; if (b.title !== t) { b.title = t; b.setAttribute('aria-label', t); }
+  const want = paneMax ? 'min' : 'max'; if (b.dataset.ic !== want) { b.dataset.ic = want; b.querySelector('svg').innerHTML = PM_IC[want]; }
+}
+function syncPaneMax() { const ca = $('#chartArea'); if (ca) ca.classList.toggle('pane-maxed', !!paneMax); pmPlace(); }
+function setPaneMax(k) {
+  if ((k || null) === paneMax) return; const prev = paneMax; paneMax = k || null; pmHover = null;
+  const cv = $('#priceCanvas'), ca = $('#chartArea');
+  if (cv && geo) { // animación: el panel elegido «crece» desde su sitio (o regresa a él)
+    const q = dPanes.find(z => z.key === (k || prev)), y0 = q ? q.top0 + q.H / 2 : geo.plotTop + geo.plotH / 2;
+    cv.style.setProperty('--pm-oy', Math.round(y0) + 'px'); cv.classList.remove('pm-grow', 'pm-back'); void cv.offsetWidth; cv.classList.add(k ? 'pm-grow' : 'pm-back');
+    clearTimeout(setPaneMax.t); setPaneMax.t = setTimeout(() => cv.classList.remove('pm-grow', 'pm-back'), 520);
+  }
+  const b = pmBtn(); if (b) { b.classList.remove('pm-pop'); void b.offsetWidth; b.classList.add('pm-pop'); }
+  if (ca) ca.classList.toggle('pane-maxed', !!paneMax); legSig = ''; legStruct = ''; render(); pmPlace();
+  if (paneMax) toast(paneMax === 'price' ? 'Solo el gráfico de precio · Esc para regresar' : 'Panel expandido · Esc para regresar');
+}
+(() => {
+  const ca = $('#chartArea'); if (!ca) return; let raf2 = 0, last = null;
+  const at = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
+  ca.addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse' || e.buttons) return; last = e; if (raf2) return;
+    raf2 = requestAnimationFrame(() => { raf2 = 0; if (!last || !geo) return; const b = pmBtn(); if (!b) return; const h = pmKeyAt(at(last)); pmHover = h;
+      if (h || paneMax) { clearTimeout(pmHideT); pmPlace(); if (h) b.classList.add('show'); } else { clearTimeout(pmHideT); pmHideT = setTimeout(() => b.classList.remove('show'), 260); } });
+  }, {passive: true});
+  ca.addEventListener('pointerleave', e => { if (e.pointerType !== 'mouse') return; const b = $('#paneMaxBtn'); clearTimeout(pmHideT); pmHideT = setTimeout(() => { if (b && !b.matches(':hover')) b.classList.remove('show'); pmHover = null; }, 300); });
+  ca.addEventListener('pointerdown', e => { // celular/tablet: al tocar un panel aparece unos segundos
+    if (e.pointerType === 'mouse' || e.target.closest('#paneMaxBtn') || !geo) return; const b = pmBtn(); if (!b) return; const h = pmKeyAt(at(e)); if (!h) return;
+    pmHover = h; pmPlace(); b.classList.add('show'); clearTimeout(pmHideT); pmHideT = setTimeout(() => { b.classList.remove('show'); pmHover = null; }, 2600);
+  }, {passive: true});
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && paneMax && !drawTool && !/input|textarea|select/i.test(e.target.tagName || '')) setPaneMax(null); });
+})();
 let paneLayout = {bot: [], top: [], main: [], mainBase: 0}, mainCount = 0; // paneles de abajo y de arriba tal como se dibujaron: [{key, h}], para poder arrastrarlos
 const orderPanes = keys => { const ix = k => { const i = paneOrder.indexOf(k); return i < 0 ? 1e6 : i; }; return keys.map((k, i) => [k, i]).sort((a, b) => ix(a[0]) - ix(b[0]) || a[1] - b[1]).map(x => x[0]); };
 const savePaneOrder = () => { try { localStorage.setItem('cct_paneOrder_v1', JSON.stringify(paneOrder)); } catch {} if (typeof syncUi === 'function') syncUi(); };
@@ -3761,7 +3839,7 @@ let paneScale = paneScale0();
 const devClass = () => (window.matchMedia && matchMedia('(min-width: 1024px)').matches ? 'pc' : 'movil');
 function syncUi() { // vuelca las preferencias de interfaz al estado (que se guarda en el dispositivo y en la cuenta)
   const panes = Object.assign({}, (state.ui || {}).panes); panes[devClass()] = {paneH, paneScale, order: paneOrder, man: paneManKeep()}; // cada tipo de dispositivo guarda su propio tamaño
-  state.ui = sanUi({panes, dopt: DOPT, favBar: FB, favs: FAVS, myColors: MYCOL, pillFavs: window.CCT_pillFavs ? window.CCT_pillFavs() : (state.ui || {}).pillFavs, prefs: PR, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
+  state.ui = sanUi({panes, dopt: DOPT, favBar: FB, symMin: SYMMIN, favs: FAVS, myColors: MYCOL, pillFavs: window.CCT_pillFavs ? window.CCT_pillFavs() : (state.ui || {}).pillFavs, prefs: PR, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
 }
 function applyUi() { // al recibir el estado de la cuenta: aplica sus preferencias de interfaz en este dispositivo
   const u = state.ui || {};
@@ -3777,6 +3855,7 @@ function applyUi() { // al recibir el estado de la cuenta: aplica sus preferenci
   if (Array.isArray(u.favs)) { FAVS = u.favs.slice(0, 24); try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch {} if (typeof buildRail === 'function') buildRail(); }
   if (u.prefs) { PR = CCTPrefs.sanitize(u.prefs); if (typeof renderPrefs === 'function') renderPrefs(); }
   if (u.favBar) FB = Object.assign({show: true, x: null, y: null, mx: null, my: null, mode: 'fija'}, u.favBar);
+  if (typeof u.symMin === 'boolean' && u.symMin !== SYMMIN) { SYMMIN = u.symMin; applySymMin(false); }
   if (typeof renderFavBar === 'function') renderFavBar();
 }
 window.addEventListener('cct-theme', () => { const id = window.CCTAppIcons && window.CCTAppIcons.selected; if (id && (state.ui || {}).icon !== id && typeof save === 'function') syncUi(); });
@@ -3790,7 +3869,7 @@ function legAt(text, x, y, act, dim) {
 /* Leyenda de indicadores plegable: cerrada solo se ve «N indicadores»; abierta muestra nombres, valores y botones (ocultar, ajustes, eliminar) */
 let legOpen = lsGet('cct_legOpen_v1') === '1', legN = 0;
 function legLabel(text, x, y, act, dim) {
-  legN++; treeInds.push({text: String(text), act, dim: !!dim}); if (!legOpen) return; const f = g.font; g.font = LEG_FONT;
+  legN++; treeInds.push({text: String(text), act, dim: !!dim}); if (!legOpen || y < 0 || y > g.canvas.clientHeight + 8) return; // fuera de la vista (p. ej. con un panel expandido): sin fila const f = g.font; g.font = LEG_FONT;
   const css = getComputedStyle(document.documentElement), muted = css.getPropertyValue('--muted').trim().toLowerCase(), fg = css.getPropertyValue('--text').trim();
   if (fg) { // nombres más legibles: activos casi blancos (los que traen su propio color no se tocan) y ocultos atenuados pero claros
     if (dim) { g.fillStyle = muted; g.globalAlpha = .5; }
@@ -3874,7 +3953,7 @@ function cssVars() {
   const c = getComputedStyle(document.body), v = n => c.getPropertyValue(n).trim();
   return (cssCache = {k, text: v('--muted'), line: v('--line'), bg: v('--bg'), draw: v('--draw') || '#e9c36e', fg: v('--text'), getPropertyValue: n => c.getPropertyValue(n)});
 }
-function render() { if (raf) { cancelAnimationFrame(raf); raf = 0; } /* un solo dibujo por cuadro */ let mv = !!(glideRaf || inertiaRaf); try { mv = mv || !!(gest || pinch); } catch {} if (mv && window.VXTheme && VXTheme.busy) VXTheme.busy(); /* mientras mueves el gráfico, el fondo animado espera */ syncUpDown(); renderCore(); syncLegend(); syncLegToggle(); if (objTreeOn) objTreeSync(); if (candles.length && window.CCT_splashDone) CCT_splashDone(); } // ya hay velas: termina la animación de apertura
+function render() { if (raf) { cancelAnimationFrame(raf); raf = 0; } /* un solo dibujo por cuadro */ let mv = !!(glideRaf || inertiaRaf); try { mv = mv || !!(gest || pinch); } catch {} if (mv && window.VXTheme && VXTheme.busy) VXTheme.busy(); /* mientras mueves el gráfico, el fondo animado espera */ syncUpDown(); renderCore(); syncLegend(); syncLegToggle(); if (paneMax || pmHover) pmPlace(); if (objTreeOn) objTreeSync(); if (candles.length && window.CCT_splashDone) CCT_splashDone(); } // ya hay velas: termina la animación de apertura
 /* Reordenar paneles: mantén pulsado el NOMBRE de un indicador (RSI, MACD, un script en panel…) y arrástralo hacia arriba o abajo; al soltar queda guardado.
    Solo se mueve el nombre/panel elegido; los botones y el resto de la leyenda no cambian. */
 (() => {
@@ -3987,7 +4066,12 @@ function renderCore() {
   legRows = []; legN = 0; treeInds = [];
   const prAll = activePine().filter(p => pineVisibleOn(p, state.interval)).map(p => ({p, r: pineStyled(pineRes[p.sid], p)})).filter(x => x.r && x.r.ok && x.r._key === pineKeyNow), pr = prAll.filter(x => !x.p.hide), pHid = prAll.filter(x => x.p.hide);
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
-  const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
+  const pOver = pr.filter(x => paneOf(x) === 'main'); let pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
+  // Panel expandido (botón de la esquina): solo se dibuja ese panel ocupando todo el alto; «price» = solo el gráfico de precio
+  let PMX = paneMax;
+  if (PMX && PMX !== 'price') { const okK = PMX === 'rsi' ? stdOn('rsi') : PMX.startsWith('pine:') ? [...pSub, ...pTop].some(x => 'pine:' + x.p.sid === PMX) : (PANELS.includes(PMX) && stdOn(PMX) && !!ind[PMX]); if (!okK) { PMX = paneMax = null; queueMicrotask(syncPaneMax); } }
+  const PMXsub = !!PMX && PMX !== 'price';
+  if (PMX) { pSub = pSub.filter(x => 'pine:' + x.p.sid === PMX); pTop = pTop.filter(x => 'pine:' + x.p.sid === PMX); }
   const SH = symHeadH(); { const ca = document.getElementById('chartArea'); if (ca._sh !== SH) { ca._sh = SH; ca.style.setProperty('--sh', SH + 'px'); } } // la franja con el nombre y el precio de la moneda va arriba del gráfico
   const CBH = (() => { // PC: la franja de temporalidades y botones va encima del gráfico (cristal translúcido); el precio empieza debajo de ella
     const v = $('#chartView'), b = v && v.querySelector('.chart-bar'), tb = $('#chartTabs'), on = deskMQ.matches && !document.body.classList.contains('pane') && b && b.offsetParent !== null, hh = on ? b.offsetHeight + (tb && tb.offsetParent !== null ? tb.offsetHeight : 0) : 0; // también la franja de pestañas (cristal translúcido)
@@ -3998,10 +4082,10 @@ function renderCore() {
     for (const v of [lc, lc * 1.02, lc * .98]) mw = Math.max(mw, g.measureText(fmt(v)).width);
     right = Math.max(38, Math.min(64, Math.ceil(mw) + 11));
   }
-  const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH0 = stdOn('rsi') ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH0 = 0; // el volumen ya no tiene panel propio: se dibuja sobre las velas, abajo del gráfico
+  const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH0 = stdOn('rsi') && (!PMX || PMX === 'rsi') ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH0 = 0; // el volumen ya no tiene panel propio: se dibuja sobre las velas, abajo del gráfico
   paneRefH = Math.max(1, h - axisH - top0); const PHX = {}; for (const [k, v] of Object.entries(paneH)) PHX[k] = v > 0 && v <= 1 ? Math.round(v * paneRefH) : v; // alturas guardadas como proporción → mismo tamaño relativo en cualquier ventana
   const cap = Math.max(40, h - axisH - 80 - top0); let rsiH = rsiH0 && PHX.rsi ? clamp(PHX.rsi, 40, cap) : rsiH0, volH = volH0 && PHX.vol ? clamp(PHX.vol, 36, cap) : volH0;
-  const panelKeys = [...PANELS.filter(k => stdOn(k) && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
+  const panelKeys = [...PANELS.filter(k => stdOn(k) && ind[k] && (!PMX || k === PMX)), ...pSub.map(x => 'pine:' + x.p.sid)];
   const isC = k => PHX[k] > 0;
   const tblOnly = x => !!(x && x.r && x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length);
   const tblW = panelKeys.length + pTop.length > 3 ? 2 : 4, wBot = panelKeys.map(k => k.startsWith('pine:') && tblOnly(pr.find(x => 'pine:' + x.p.sid === k)) ? tblW : 1), wTop = pTop.map(x => tblOnly(x) ? tblW : 1), wSum = wBot.map((x, i) => isC(panelKeys[i]) ? 0 : x).concat(wTop.map((x, i) => isC('pine:' + pTop[i].p.sid) ? 0 : x)).reduce((a, b) => a + b, 0), nAuto = panelKeys.filter(k => !isC(k)).length + pTop.filter(x => !isC('pine:' + x.p.sid)).length, customSum = panelKeys.filter(isC).reduce((s2, k) => s2 + clamp(PHX[k], 40, cap), 0) + pTop.filter(x => isC('pine:' + x.p.sid)).reduce((s2, x) => s2 + clamp(PHX['pine:' + x.p.sid], 40, cap), 0);
@@ -4016,8 +4100,9 @@ function renderCore() {
       if (rsiH + volH + sum(hBot) + sum(hTop) > Math.max(room, h - axisH - top0 - 80)) { f = 24; rsiH = r0; volH = v0; hBot = b0; hTop = t0; apply(); } // muchos paneles: se reduce el mínimo antes de dejar que alguno desaparezca
     }
   }
+  if (PMXsub) { const full = Math.max(60, h - axisH - top0); if (PMX === 'rsi') rsiH = full; else if (hBot.length) hBot = [full]; else if (hTop.length) hTop = [full]; } // el panel expandido ocupa todo el alto
   const offOf = arr => arr.map((_, i) => arr.slice(0, i).reduce((a, b) => a + b, 0)), oBot = offOf(hBot), oTop = offOf(hTop);
-  const extraH = hBot.reduce((a, b) => a + b, 0), topH = hTop.reduce((a, b) => a + b, 0), plotTop = top0 + topH;
+  const extraH = hBot.reduce((a, b) => a + b, 0), topH = hTop.reduce((a, b) => a + b, 0); let plotTop = top0 + topH;
   // Espacio a la derecha de la última vela para lo que un script Pine dibuja en barras «futuras» (p. ej. el perfil de volumen del Nova Nexus,
   // que se coloca varias decenas de barras después de la última vela). Se mide con lo que el script realmente genera, así que no se reserva nada si no hay nada ahí.
   const aheadBars = (() => {
@@ -4039,8 +4124,9 @@ function renderCore() {
   const pineG = aheadEff ? clamp(Math.round(plotW0 * aheadEff / (count0 + aheadEff)) + 8, 0, Math.round(plotW0 * .5)) : 0;
   const vpOn = !!(state.indicators.nnVP && ind.vp), gutter = vpOn ? clamp(Math.round((w - left - right) * .4), 110, 300) : pineG; // margen derecho para el perfil
   const plotH = Math.max(80, h - axisH - rsiH - volH - extraH - plotTop), plotW = w - left - right - gutter;
+  if (PMXsub) plotTop = h + 60; // panel expandido: el precio queda fuera de la vista (abajo) y el panel empieza arriba
   const count = clamp(visible, 15, VIS_MAX);
-  pan = clamp(pan, -Math.floor(count * .4), Math.max(0, n - Math.ceil(count * .3)));
+  pan = clamp(pan, -Math.floor(count * .85), Math.max(0, n - Math.ceil(count * .3))); // hacia la izquierda: la última vela puede llegar casi al borde izquierdo (antes se quedaba a la mitad)
   const end = n - pan, start = end - count, step = plotW / count;
   if (histNeed(start, count)) setTimeout(loadOlder, 0); // cerca del inicio de lo cargado: se piden las velas más viejas (bloques de 1000)
   // Al mover el gráfico hacia atrás, las últimas velas pasan al margen derecho (el que se reserva para el perfil de volumen): se siguen dibujando ahí, por debajo del perfil,
@@ -4080,10 +4166,10 @@ function renderCore() {
   const hMap = {}; if (rsiH) hMap.rsi = rsiH; panelKeys.forEach((k, i) => { hMap[k] = hBot[i]; }); pTop.forEach((x, i) => { hMap['pine:' + x.p.sid] = hTop[i]; });
   const botOrd = orderPanes([...(rsiH ? ['rsi'] : []), ...panelKeys]), topOrd = orderPanes(pTop.map(x => 'pine:' + x.p.sid));
   const posOf = (ord, base) => { const m = {}; let yy = base; for (const k of ord) { m[k] = yy; yy += hMap[k]; } return m; };
-  const botY = posOf(botOrd, plotTop + plotH + volH), topY = posOf(topOrd, top0);
+  const botY = posOf(botOrd, PMXsub ? top0 : plotTop + plotH + volH), topY = posOf(topOrd, top0);
   paneLayout = {bot: botOrd.map(k => ({key: k, h: hMap[k]})), top: topOrd.map(k => ({key: k, h: hMap[k]}))};
   geo = {w, h, left, right, gutter, vpOn, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: rsiH ? botY.rsi : plotTop + plotH + volH, extraTop: plotTop + plotH + volH};
-  { const bf = document.querySelector('.brand-fab'); if (bf && volH > 0) { bf.style.bottom = 'auto'; bf.style.top = Math.max(plotTop, plotTop + plotH + volH - 40) + 'px'; } else if (bf) { bf.style.bottom = 'auto'; bf.style.top = (plotTop + plotH - 42) + 'px'; } if (bf && bf.style.top !== lastBfTop) { lastBfTop = bf.style.top; if (window.CCT_pillPos) CCT_pillPos(); if (typeof fbOpen !== 'undefined' && fbOpen) placeFab(); } } // logo abajo a la izquierda, a la altura del panel de volumen
+  { const bf = document.querySelector('.brand-fab'); if (bf && PMXsub) { bf.style.bottom = 'auto'; bf.style.top = (h - axisH - 48) + 'px'; } else if (bf && volH > 0) { bf.style.bottom = 'auto'; bf.style.top = Math.max(plotTop, plotTop + plotH + volH - 40) + 'px'; } else if (bf) { bf.style.bottom = 'auto'; bf.style.top = (plotTop + plotH - 42) + 'px'; } if (bf && bf.style.top !== lastBfTop) { lastBfTop = bf.style.top; if (window.CCT_pillPos) CCT_pillPos(); if (typeof fbOpen !== 'undefined' && fbOpen) placeFab(); } } // logo abajo a la izquierda, a la altura del panel de volumen
 
   // VPVR: perfil de volumen de las velas que se ven ahora mismo (índices cuyo centro cae dentro del área de precios); se recalcula en cada dibujo, así sigue al desplazar y al hacer zoom
   const vpvr = stdOn('vpvr') && window.CCTIndicators ? CCTIndicators.visibleRangeProfile(candles, Math.ceil(start - .5), Math.floor(end - .5 + (vpOn ? 0 : gutter) / step), {rows: sp('vpvr', 'rows'), valueArea: sp('vpvr', 'va')}) : null;
@@ -4091,6 +4177,7 @@ function renderCore() {
   if (rsiH) grips.push({key: 'rsi', y: geo.rsiTop, dir: 'up', h: rsiH});
   panelKeys.forEach((k, i) => grips.push({key: k, y: botY[k], dir: 'up', h: hBot[i]}));
   pTop.forEach((x, i) => grips.push({key: 'pine:' + x.p.sid, y: topY['pine:' + x.p.sid] + hTop[i], dir: 'down', h: hTop[i]}));
+  if (PMX) grips.length = 0; // con un panel expandido no se cambian alturas
   // cuadrícula y escala de precios
   g.font = '10px system-ui'; g.textAlign = 'left'; g.lineWidth = 1 / DPY;
   const crispY = v => (Math.round(v * DPY) + .5) / DPY, crispX = v => (Math.round(v * DPX) + .5) / DPX;
@@ -4217,7 +4304,7 @@ function renderCore() {
   const drawPreview = () => {
   if (pending2) drawShape({id: '_', type: 'trend', a: pending2.a, b: pending2.b, col: dPre.col, lw: dPre.lw, ds: dPre.ds}, false, drawCol, text);
   if (preview) drawShape({...dPre, a: preview.a, b: preview.b, c: preview.c}, false, drawCol, text);
-  if (brushLive && brushLive.length > 1) drawBrush({type: 'brush', ...dBrushO(), pts: brushLive, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, hl: drawTool === 'highlighter'}, false, drawCol);
+  if (brushLive && brushLive.length > 1 && !brushPK) drawBrush({type: 'brush', ...dBrushO(), pts: brushLive, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, hl: drawTool === 'highlighter'}, false, drawCol);
   if (multi.length && MULTI[drawTool]) {
     const live = cross ? snapPoint(cross) : null, pts = multi.concat(live && multi.length < MULTI[drawTool].n ? [live] : []);
     drawShape({...dPre, a: pts[0], pts}, false, drawCol, text);
@@ -4410,7 +4497,8 @@ function renderCore() {
   /* dibujos sobre los paneles (y la vista previa si estás dibujando en uno): cada uno con la escala y el recorte de su panel */
   if (dPanes.length) { const one = (q, fn) => { g.save(); g.beginPath(); g.rect(left, q.top0, plotW, q.H); g.clip(); try { fn(); } finally { g.restore(); } };
     if (!DOPT.hide) for (const d of getDrawings()) if (d.pane && !d.hide) inPaneCtx(d, q => one(q, () => drawShape(d, d.id === selectedId, drawCol, text)));
-    if (paneDraw) withPane(drawPaneKey, q => one(q, drawPreview)); }
+    if (paneDraw) withPane(drawPaneKey, q => one(q, drawPreview));
+    if (brushPK && brushLive && brushLive.length > 1 && dPaneOf(brushPK)) withPane(brushPK, q => one(q, () => drawBrush({type: 'brush', ...dBrushO(), pts: brushLive, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, hl: drawTool === 'highlighter'}, false, drawCol))); } // trazo del pincel en curso sobre un panel
   if (pTop.length) { g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, plotTop); g.lineTo(w - right + 2, plotTop); g.stroke(); }
   if (vpOn) drawNovaVP(ind.vp, fg);
   if (state.indicators.nnLiq && ind.liq) drawNovaLiqTable(fg);
@@ -5252,7 +5340,7 @@ function drawShape(d, selected, col, textCol) {
 
 /* ───────── Gestos: pan, pellizco, retícula, dibujo ───────── */
 const area = $('#chartArea'), ptrs = new Map();
-let gest = null, pinch = null, lastTap = null, brushLive = null, alHinted = false;
+let gest = null, pinch = null, lastTap = null, brushLive = null, brushPK = null, alHinted = false; // brushPK: panel (oscilador, RSI…) donde se está pintando con el pincel
 const local = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
 area.addEventListener('pointerdown', e => { stopMotion();
   if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.pbar,.pbar-pop,.pbar-hidden,.leg-toggle,.favbar,.fav-fab,.brand-fab,.wl-add-fab,.al-confirm')) return;
@@ -5269,8 +5357,10 @@ area.addEventListener('pointerdown', e => { stopMotion();
   if (paneAx) { gest.mode = 'scaleP'; gest.pane = {key: paneAx.key, min0: paneAx.mn, max0: paneAx.mx}; cross = null; } // barra derecha de un panel (oscilador, RSI…): arrastrar = agrandar/achicar su escala
   else if (onPriceAxis || onTimeAxis) { // arrastrar la barra derecha = escala de precio · barra inferior = escala de tiempo
     gest.mode = onPriceAxis ? 'scaleY' : 'scaleX'; gest.min0 = geo.min; gest.max0 = geo.max; gest.vis0 = visible; gest.pan1 = pan; cross = null;
-  } else if (isBrushTool(drawTool) && (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH || pt.x < geo.left || pt.x > geo.left + geo.plotW)) { gest.mode = 'ignore'; toast('El pincel dibuja sobre el gráfico de precio'); }
-  else if (isBrushTool(drawTool)) { gest.mode = 'brush'; selectedId = null; brushLive = [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]; gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); }
+  } else if (isBrushTool(drawTool) && (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH || pt.x < geo.left || pt.x > geo.left + geo.plotW)) { // fuera del precio: dentro de un panel (oscilador, RSI, MACD…) también se pinta
+    const dp = dPaneAt(pt); if (!dp) { gest.mode = 'ignore'; toast('El pincel dibuja sobre el gráfico o sobre un panel'); }
+    else { gest.mode = 'brush'; brushPK = dp.key; selectedId = null; brushLive = withPane(dp.key, () => [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]); gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); } }
+  else if (isBrushTool(drawTool)) { gest.mode = 'brush'; brushPK = null; selectedId = null; brushLive = [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]; gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); }
   else if (drawTool) { if (!pending && !pending2 && !multi.length) { const dp = dPaneAt(pt); drawPaneKey = dp ? dp.key : null; } gest.start = snapPoint(pt); } // tocar dentro de un panel = dibujar sobre ese panel
   else if (selectedId && gest.mode === 'pending') {
     const d = getDrawings().find(x => x.id === selectedId);
@@ -5338,7 +5428,8 @@ area.addEventListener('pointermove', e => {
   if (gest.mode === 'ignore') return;
   if (gest.mode === 'brush') { // los eventos agrupados del navegador dan trazos más suaves en pantallas táctiles de alta frecuencia
     const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-    for (const ev of (evs.length ? evs : [e])) { const q = local(ev); q.x = clamp(q.x, geo.left, geo.left + geo.plotW); q.y = clamp(q.y, geo.plotTop, geo.plotTop + geo.plotH); if (Math.hypot(q.x - gest.lx, q.y - gest.ly) < 2.5 || brushLive.length >= 1500) continue; gest.lx = q.x; gest.ly = q.y; brushLive.push([timeOfIdx(IDX(q.x)), PRICE(q.y)]); }
+    const addPts = () => { for (const ev of (evs.length ? evs : [e])) { const q = local(ev); q.x = clamp(q.x, geo.left, geo.left + geo.plotW); q.y = clamp(q.y, geo.plotTop, geo.plotTop + geo.plotH); if (Math.hypot(q.x - gest.lx, q.y - gest.ly) < 2.5 || brushLive.length >= 1500) continue; gest.lx = q.x; gest.ly = q.y; brushLive.push([timeOfIdx(IDX(q.x)), PRICE(q.y)]); } };
+    if (brushPK) { if (dPaneOf(brushPK)) withPane(brushPK, addPts); } else addPts(); // en un panel: con la escala del panel
     scheduleRender(); return;
   }
   if (gest.mode === 'cross') { cross = pt; scheduleRender(); }
@@ -5381,7 +5472,7 @@ function endPointer(e, cancelled) {
   if (!had || !gest || e.pointerId !== gest.id) return;
   const gs = gest; gest = null; clearTimeout(gs.timer);
   if (gs.mode === 'ignore') return;
-  if (gs.mode === 'brush') { const live = brushLive; brushLive = null; if (!cancelled) commitBrush(live); scheduleRender(); return; }
+  if (gs.mode === 'brush') { const live = brushLive, pk = brushPK; brushLive = null; brushPK = null; if (!cancelled) commitBrush(live, pk); scheduleRender(); return; }
   if (cancelled) { cross = null; preview = null; scheduleRender(); return; }
   if (gs.mode === 'cross') { cross = null; scheduleRender(); return; }
   if (gs.mode === 'trbtn') { const q = gs.tr; if (!gs.moved && window.CCTTrade) { if (q.act === 'more') { const k = q.id + '|' + q.kind; trOpen = trOpen === k ? '' : k; scheduleRender(); return; } trOpen = ''; if (q.act === 'x') CCTTrade.xLine(q.id, q.kind); else if (q.act === 'addtp') CCTTrade.addTpSl(q.id, 'tp'); else if (q.act === 'addsl') CCTTrade.addTpSl(q.id, 'sl'); } return; }
@@ -5496,7 +5587,7 @@ area.addEventListener('contextmenu', e => {
   if (performance.now() < rzSkipMenu) { e.preventDefault(); e.stopImmediatePropagation(); } // Windows: el menú llega al soltar; tras un zoom no sale
 }, true);
 function startPinch() {
-  if (gest) clearTimeout(gest.timer); gest = null; cross = null; preview = null; brushLive = null;
+  if (gest) clearTimeout(gest.timer); gest = null; cross = null; preview = null; brushLive = null; brushPK = null;
   const [a, b] = [...ptrs.values()], r = $('#priceCanvas').getBoundingClientRect(), cx = (a.x + b.x) / 2 - r.left;
   pinch = {d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, v0: visible, idx: IDX(cx)};
 }
@@ -6996,6 +7087,10 @@ async function initCloud() {
   };
   bind('splitR', 'side');
   window.CCT_sideShow = () => { if (L.sideOff) { L.sideOff = false; store(); apply(); } }; // botones fuera de la barra derecha (Discord, abajo) también muestran el panel
+  // Tablet: el panel derecho flota encima del gráfico (cajón). Al abrir la app empieza cerrado (el gráfico primero) y se cierra al tocar el gráfico.
+  const isTab = () => document.documentElement.classList.contains('vx-tab') && isDesktop() && !PANE;
+  if (isTab()) L.sideOff = true;
+  { const ca = document.getElementById('chartArea'); if (ca) ca.addEventListener('pointerdown', () => { if (isTab() && !L.sideOff) { L.sideOff = true; apply(); } }, true); }
   // al cambiar de panel derecho (indicadores / alertas / ajustes) se mantiene el ancho; si estaba oculto, se muestra al elegir una pestaña
   document.querySelectorAll('.right-rail [data-side]').forEach(b => b.addEventListener('click', () => { if (L.sideOff) L.sideOff = false; else if (prevSide === b.dataset.side) L.sideOff = true; else return; store(); apply(); })); // si estaba oculto se muestra; tocar el icono del panel abierto lo oculta
   window.addEventListener('resize', () => { if (isDesktop()) apply(); });
@@ -7003,7 +7098,7 @@ async function initCloud() {
 })();
 
 /* ───────── Arranque ───────── */
-renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); buildRail(); updateDrawUI(); renderFavBar(); renderTabs(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
+renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); buildRail(); updateDrawUI(); renderFavBar(); applySymMin(false); renderTabs(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
 if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud(); if (!PANE) refreshPop();
 

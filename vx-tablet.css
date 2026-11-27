@@ -1,0 +1,39 @@
+/* VORTEX · Versión tablet (html.vx-tab, la marca un script en index.html)
+   Igual que en PC (todas las opciones), pero el gráfico manda:
+   · el panel derecho (Mi seguimiento, Noticias, IA…) ya no le quita ancho al gráfico: se abre flotando encima, como un cajón de cristal,
+     y se cierra al tocar el gráfico;
+   · la barra de botones del gráfico es solo de iconos (una sola hilera junto a las temporalidades);
+   · barras laterales, pestañas y barra de abajo más compactas. */
+@media(min-width:1024px){
+  html.vx-tab body:not(.pane) main{--side-w:0px!important;--tab-side-w:min(360px,42vw)}
+  html.vx-tab body:not(.pane) #splitR{display:none!important}
+  html.vx-tab body:not(.pane) :is(#watchView,#newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView,#mapView){
+    position:absolute!important;top:8px;bottom:8px;right:calc(var(--rail-w) + 8px);left:auto;width:var(--tab-side-w)!important;max-width:none;z-index:45;
+    border:1px solid rgba(255,255,255,.08)!important;border-radius:18px!important;
+    background:color-mix(in srgb,var(--bg) 82%,transparent)!important;-webkit-backdrop-filter:blur(20px) saturate(1.3);backdrop-filter:blur(20px) saturate(1.3);
+    box-shadow:0 22px 60px -14px rgba(0,0,0,.7)!important;overflow-y:auto;overscroll-behavior:contain;animation:vxTabDrawer .34s cubic-bezier(.2,.8,.2,1)}
+  html.vx-tab.light body:not(.pane) :is(#watchView,#newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView,#mapView),
+  html.vx-tab body.light:not(.pane) :is(#watchView,#newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView,#mapView){border-color:rgba(0,0,0,.08)!important;box-shadow:0 22px 60px -18px rgba(0,0,0,.35)!important}
+  @keyframes vxTabDrawer{from{opacity:0;transform:translateX(26px) scale(.985)}to{opacity:1;transform:none}}
+
+  /* barra del gráfico: solo iconos (el nombre sale al mantener presionado / en el título) para que quepa en una hilera */
+  html.vx-tab .chart-bar{column-gap:6px}
+  html.vx-tab .chart-bar .chart-toolbar{gap:2px}
+  html.vx-tab .chart-bar .chart-toolbar > button:not([data-panel="indicators"]),html.vx-tab .chart-bar .chart-toolbar .more-group > button{font-size:0!important;padding:6px 8px!important;min-width:34px;min-height:32px}
+  html.vx-tab .chart-bar .chart-toolbar :is(.prem-lbl,.rp-lbl,.more-lbl){display:none!important}
+  html.vx-tab .chart-bar .chart-toolbar > button:not([data-panel="indicators"]) svg{width:18px;height:18px}
+  html.vx-tab .chart-bar .chart-toolbar [data-panel="indicators"]{font-size:12px;padding:6px 9px!important}
+  html.vx-tab .chart-bar .timeframes button{padding:7px 7px;font-size:12px}
+
+  /* barras laterales y pestañas un poco más compactas */
+  html.vx-tab main{--wl-w:46px!important;--rail-w:44px}
+  html.vx-tab .rail-btn{width:38px;height:38px}
+  html.vx-tab .right-rail{gap:4px}
+  html.vx-tab .right-rail .rr-btn{width:36px;height:36px}
+  html.vx-tab .chart-tabs{min-height:0}
+
+  /* caja del precio y leyenda un poco más chicas */
+  html.vx-tab .chart-symhead .priceblock strong{font-size:19px}
+  html.vx-tab .chart-symhead .symbol-button strong{font-size:14.5px}
+}
+@media (prefers-reduced-motion:reduce){html.vx-tab body :is(#watchView,#newsView,#aiView,#settingsView,#customView,#notifView,#alertsView,#screenerView,#lensView,#discordView,#botLabView,#devView,#mapView){animation:none!important}}

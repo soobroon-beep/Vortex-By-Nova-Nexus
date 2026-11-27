@@ -24,6 +24,16 @@
 <link rel="stylesheet" href="vx-min.css">
 <link rel="stylesheet" href="vx-space.css">
 <link rel="stylesheet" href="vx-motion.css">
+<link rel="stylesheet" href="vx-tablet.css">
+<script>/* Tablet (iPad, Galaxy Tab…): pantalla táctil grande. Se marca con la clase vx-tab: diseño de PC (todas las opciones) pero con el gráfico como prioridad.
+   Forzar para probar: ?tablet=1 · desactivar: ?tablet=0 */
+(function () {
+  var q = /[?&]tablet=([01])/.exec(location.search), mm = function (m) { return !!(window.matchMedia && matchMedia(m).matches); };
+  var sw = Math.min(screen.width || 0, screen.height || 0), touch = (navigator.maxTouchPoints || 0) > 0 && mm('(pointer: coarse)') && !mm('(hover: hover)');
+  var ipad = /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+  var tab = q ? q[1] === '1' : (touch || ipad) && sw >= 600 && sw <= 1400;
+  if (tab) document.documentElement.classList.add('vx-tab');
+})();</script>
 <script>/* Alto real de la pantalla: al abrir/recargar la app en el celular el navegador a veces calcula un alto mayor al visible y la barra de abajo queda fuera. Se mide y se corrige. */
 (function () {
   var r = document.documentElement, vv = window.visualViewport;
@@ -160,6 +170,7 @@
             <span><strong id="coinTitle">BTC / USDT</strong><small id="srcLabel" title="Cambiar fuente de velas">BINANCE SPOT ▾</small></span>
           </button>
           <div class="priceblock"><strong id="lastPrice">—</strong><small id="dayChange">—</small></div>
+          <button type="button" class="sym-min" id="symMinBtn" aria-expanded="true" aria-label="Minimizar la caja del precio" title="Minimizar (solo moneda y precio)"><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M8 2.2v7.6L2.6 6z" fill="currentColor"/></svg></button>
         </div>
         <button type="button" class="wl-add-fab" id="wlAddFab" hidden aria-label="Agregar a Mi seguimiento" title="Agregar a Mi seguimiento"><svg class="wa-plus" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><svg class="wa-ok" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
         <button type="button" class="brand-fab" id="forceSync" title="VORTEX · Powered by Nova Nexus" aria-label="VORTEX · Powered by Nova Nexus"><img src="icons/vortex-mark.png" alt="VORTEX" width="38" height="38"><i class="bf-star" aria-hidden="true"></i><span class="bf-tip"><b>VORTEX</b><small>Powered by Nova Nexus</small><em>Clic: guardar todo y actualizar</em></span></button>
