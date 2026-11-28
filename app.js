@@ -1511,7 +1511,8 @@ async function loadCandles(silent = false) {
     recalc(); setTimeout(() => dvRefresh(), 0);
     if (!silent) { stopMotion(); visible = defaultVisible(); pan = 0; const ca = $('#chartArea'); if (ca) { ca.classList.remove('swap-in'); void ca.offsetWidth; ca.classList.add('swap-in'); } }
     setFeedback(''); updateChartHeader(); render();
-    if (!(silent && ws && wsOpen && wsFor === state.symbol + '|' + state.interval + '|' + (dataSrc || 'binance') && Date.now() - wsLast < 10000)) connectWS(); // la conexión en vivo sigue sana: no se corta solo por refrescar velas
+    setLive(true); // velas reales y recientes recién llegadas: el gráfico SÍ está al día (antes el aviso seguía en «Conectando…» aunque la vela se movía)
+    if (!(silent && wsHealthy())) connectWS(); // la conexión en vivo sigue sana (o se está abriendo): no se corta solo por refrescar velas
     return true;
   } catch (e) {
     if (e.name === 'AbortError') return false;
@@ -1634,18 +1635,19 @@ function connEl() {
 }
 function connHide() { const el = $('#connPill'); clearTimeout(CONN.hideT); if (el) el.hidden = true; CONN.st = ''; }
 function connShow(st) {
+  if (document.hidden && st !== 'live') { CONN.pend = st; return; } // en segundo plano no se arma ningún aviso: al volver se decide de nuevo
   const el = connEl(); if (!el) return; clearTimeout(CONN.hideT); CONN.st = st;
   if (PR.conn === 'off') { el.hidden = true; return; }
   const txt = {wait: '<span class="cp-dots">Conectando</span>', live: 'En vivo', off: navigator.onLine === false ? 'Sin internet · reconectando' : 'Sin conexión · reintentando'}[st];
   el.className = st; el.querySelector('span').outerHTML = `<span>${txt}</span>`; el.hidden = false; CONN.seen = true;
   if (st === 'live') CONN.hideT = setTimeout(() => { el.hidden = true; CONN.st = ''; }, 1700);
 }
-function connArmOff() { clearTimeout(CONN.offT); CONN.offT = setTimeout(() => { if (!CONN.live) connShow('off'); }, CONN.ever ? CONN_GRACE : 14000); } // ya conectado antes: 8 s de gracia
+function connArmOff() { clearTimeout(CONN.offT); CONN.offT = setTimeout(() => { if (CONN.live) return; if (document.hidden) { CONN.offT = 0; return; } connShow('off'); }, CONN.ever ? CONN_GRACE : 14000); } // ya conectado antes: 8 s de gracia
 function connLive(on) {
   clearTimeout(CONN.waitT);
   if (on) { clearTimeout(CONN.offT); const was = CONN.live; CONN.live = true; const first = !CONN.ever; CONN.ever = true;
     if (!was && (first || CONN.st === 'off' || CONN.st === 'wait')) connShow('live'); else if (CONN.st && CONN.st !== 'live') connHide(); return; } // «En vivo» solo al abrir o al volver tras el aviso de sin conexión
-  if (CONN.live || !CONN.offT) { CONN.live = false; if (!CONN.ever) CONN.waitT = setTimeout(() => { if (!CONN.live) connShow('wait'); }, 0); connArmOff(); } // al abrir: «Conectando…»; después: nada hasta 8 s sin datos
+  if (CONN.live || !CONN.offT) { CONN.live = false; if (!CONN.ever) CONN.waitT = setTimeout(() => { if (!CONN.live) connShow('wait'); }, 1500); connArmOff(); } // al abrir: «Conectando…»; después: nada hasta 8 s sin datos
 }
 function connPaint() { const el = $('#connPill'); if (!el) return; if (PR.conn === 'off') el.hidden = true; else if (!CONN.live && CONN.st) connShow(CONN.st); }
 addEventListener('offline', () => { if (!CONN.live && CONN.st === 'off') return; CONN.live = false; connArmOff(); }); // sin internet: también se espera la gracia
@@ -1654,7 +1656,15 @@ setTimeout(() => { if (!CONN.live && !CONN.st) connLive(false); }, 0); // al abr
 function closeWS(quiet) { wsGen++; wsOpen = false; clearInterval(wsPing); clearTimeout(wsQuietT); if (ws) { ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null; try { ws.close(); } catch {} } ws = null; wsFor = ''; if (!quiet) setLive(false); }
 /* Reconexión «silenciosa»: al cambiar de moneda o al refrescar, el aviso no pasa a «Conectando…» si el nuevo flujo llega en menos de 8 s
    (antes cada vuelta a la app, cada recarga de respaldo y cada cambio de moneda cerraba la conexión y el aviso parpadeaba). */
-let wsQuietT = 0, wsFor = '';
+let wsQuietT = 0, wsFor = '', wsStartAt = 0;
+/* Binance Spot: el puerto 9443 lo bloquean muchas redes móviles y Wi-Fi públicas (el socket nunca abre y la app se quedaba «reintentando»).
+   Ahora se usa el 443 (el mismo de cualquier página web) y, si no abre, se prueba el servidor solo-datos de Binance y al final el 9443.
+   El que funcione se recuerda para la próxima vez que abras la app. */
+const BN_WS = ['wss://stream.binance.com:443', 'wss://data-stream.binance.vision', 'wss://stream.binance.com:9443'];
+let bnHost = (() => { try { const i = +localStorage.getItem('vx.bnws'); return i >= 0 && i < BN_WS.length ? i : 0; } catch { return 0; } })();
+function wsHealthy() { // hay un socket para esta moneda/temporalidad que está vivo o se acaba de abrir
+  return !!(ws && wsFor === state.symbol + '|' + state.interval + '|' + (dataSrc || 'binance') && (wsOpen ? Date.now() - wsLast < 10000 : Date.now() - wsStartAt < 6000));
+}
 let wsLast = 0, wsReloadAt = 0; // último dato en vivo recibido / última recarga del vigilante
 let tradeBuf = null, tradeT = 0, tradeLastT = 0, tradeLastP = 0;
 let liveGlide = null;
@@ -1668,11 +1678,13 @@ function connectWS() {
     setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH[src].get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 8000); return;
   }
   const by = (src === 'bybit' || src === 'bybitf') && BY_IV[tf], ok = (src === 'okx' || src === 'okxf') && OKX_BAR[tf];
-  const ls = sym.toLowerCase(), url = by ? `wss://stream.bybit.com/v5/public/${src === 'bybitf' ? 'linear' : 'spot'}` : ok ? 'wss://ws.okx.com:8443/ws/v5/business' : src === 'binancef' ? `wss://fstream.binance.com/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade` : `wss://stream.binance.com:9443/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade`; // vela + cada operación (aggTrade): el precio se mueve en vivo, no cada 2 s
+  const ls = sym.toLowerCase(), url = by ? `wss://stream.bybit.com/v5/public/${src === 'bybitf' ? 'linear' : 'spot'}` : ok ? 'wss://ws.okx.com:8443/ws/v5/business' : src === 'binancef' ? `wss://fstream.binance.com/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade` : `${BN_WS[bnHost]}/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade`; // vela + cada operación (aggTrade): el precio se mueve en vivo, no cada 2 s
   tradeBuf = null; tradeLastT = 0; tradeLastP = 0;
+  const spot = !by && !ok && src !== 'binancef';
   try { ws = new WebSocket(url); } catch { return; }
-  wsFor = state.symbol + '|' + tf + '|' + src;
-  ws.onopen = () => { if (gen === wsGen) { wsOpen = true; wsRetry = 0; $('#liveDot').classList.add('on');
+  wsFor = state.symbol + '|' + tf + '|' + src; wsStartAt = Date.now();
+  const sock = ws, openT = setTimeout(() => { if (gen === wsGen && !wsOpen && ws === sock) { if (spot) bnHost = (bnHost + 1) % BN_WS.length; try { sock.close(); } catch {} } }, 5000); // no abrió en 5 s: se prueba otro servidor
+  ws.onopen = () => { clearTimeout(openT); if (gen === wsGen) { wsOpen = true; wsRetry = 0; if (spot) try { localStorage.setItem('vx.bnws', bnHost); } catch {} $('#liveDot').classList.add('on');
     if (by) { ws.send(JSON.stringify({op: 'subscribe', args: [`kline.${BY_IV[tf]}.${sym}`, `publicTrade.${sym}`]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send(JSON.stringify({op: 'ping'})); } catch {} }, 20000); }
     if (ok) { ws.send(JSON.stringify({op: 'subscribe', args: [{channel: 'candle' + OKX_BAR[tf], instId: dashPair(sym) + (src === 'okxf' ? '-SWAP' : '')}]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send('ping'); } catch {} }, 20000); } } };
   ws.onmessage = e => {
@@ -1688,6 +1700,7 @@ function connectWS() {
   ws.onerror = () => { try { ws.close(); } catch {} };
   ws.onclose = () => {
     if (gen !== wsGen) return;
+    clearTimeout(openT); if (!wsOpen && spot && Date.now() - wsStartAt < 4900) bnHost = (bnHost + 1) % BN_WS.length; // ni siquiera abrió: otro servidor
     wsOpen = false; setLive(false);
     setTimeout(() => { if (gen === wsGen && !document.hidden) connectWS(); }, ++wsRetry <= 10 ? Math.min(2, wsRetry) * 1000 : 15000); // reintentos rápidos (1 s y luego cada 2 s; tras 10 fallos, cada 15 s): un corte corto se recupera antes de los 8 s del aviso
   };
@@ -1741,10 +1754,15 @@ function applyKline(k) {
   recalcSoon(isNew); updateChartHeader(); checkAlerts(state.symbol, k.c); if (window.CCTTrade) CCTTrade.tick(state.symbol, k.c); smartTick(isNew);
   if (chartOn()) scheduleRender();
 }
+/* Celular: al mandar la app a segundo plano el sistema congela o corta el socket. Antes, el aviso «Sin conexión · reintentando» se armaba
+   mientras la app estaba escondida y aparecía de golpe al volver, y la reconexión esperaba a que bajaran las velas. Ahora: en segundo plano
+   no se arma ningún aviso; al volver se reabre el tiempo real AL INSTANTE (en paralelo con las velas) y solo se avisa si de verdad no llega nada. */
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) return;
+  if (document.hidden) { clearTimeout(CONN.offT); clearTimeout(CONN.waitT); CONN.offT = 0; if (CONN.st && CONN.st !== 'live') connHide(); return; }
+  CONN.pend = ''; if (CONN.st === 'off') connHide();
+  if (!CONN.live) connArmOff(); // nueva gracia completa desde que vuelves
   fetchTicker();
-  if (chartOn() && candles.length) { wsReloadAt = Date.now(); loadCandles(true); }
+  if (chartOn() && candles.length && !replay) { if (!(wsOpen && Date.now() - wsLast < 5000)) connectWS(); wsReloadAt = Date.now(); loadCandles(true); }
 });
 /* Vigilante del tiempo real: si la conexión se queda «colgada» sin avisar (la compu durmió, cambió la red, el exchange la soltó),
    a los 20 s sin datos se bajan las velas recientes y se reconecta solo. Así el gráfico abierto nunca se queda congelado. */
@@ -1759,7 +1777,7 @@ let restBusy = false;
 setInterval(async () => {
   if (document.hidden || replay || !candles.length || !chartOn() || !ws || restBusy || Date.now() - wsLast < 4000) return;
   const sym = state.symbol, tf = state.interval, gen = wsGen; restBusy = true;
-  try { const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 5000), r = await fetchKlinesAny(sym, tf, ctl.signal, 3); clearTimeout(to); if (gen === wsGen && sym === state.symbol && tf === state.interval && r.src === (dataSrc || 'binance')) r.cs.forEach(applyKline); } catch {}
+  try { const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 5000), r = await fetchKlinesAny(sym, tf, ctl.signal, 3); clearTimeout(to); if (gen === wsGen && sym === state.symbol && tf === state.interval && r.src === (dataSrc || 'binance') && r.cs.length) { r.cs.forEach(applyKline); setLive(true); } } catch {} // la vela se movió por el respaldo: no se avisa «sin conexión»
   restBusy = false;
 }, 2000);
 window.addEventListener('online', () => liveKick('red'));
