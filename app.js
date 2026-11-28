@@ -767,7 +767,7 @@ async function tickerFallback(plain) {
     try {
       const keys = plain.map(k => CCTMarkets.mk(CCTMarkets.symFor(src, k), src)), m = await CCTMarkets.tickers(keys), out = [];
       plain.forEach((k, i) => { const t = m[keys[i]]; if (t && +t.lastPrice > 0) out.push(Object.assign({}, t, {symbol: k, via: src})); });
-      if (out.length >= Math.ceil(plain.length / 2)) { if (fetchTicker.via !== src) { fetchTicker.via = src; toast(`Binance no respondió: precios de ${SOURCES[src] || src} mientras tanto`); } return out; }
+      if (out.length >= Math.ceil(plain.length / 2)) { fetchTicker.via = src; return out; } // sin aviso: los precios salen del exchange de respaldo en silencio
     } catch {}
   }
   return [];
@@ -1498,7 +1498,7 @@ async function loadCandles(silent = false) {
   if (fetchCtl) fetchCtl.abort();
   fetchCtl = new AbortController();
   const sym = state.symbol, tf = state.interval;
-  if (!silent) { candles = []; ind = {}; setFeedback(`Cargando velas reales de ${SOURCES[srcOf(sym)] || 'Binance'}…`); render(); }
+  if (!silent) { candles = []; ind = {}; setFeedback(''); render(); } // sin aviso «Cargando velas de…»: solo se conecta
   try {
     const r = await fetchKlinesAny(sym, tf, fetchCtl.signal);
     if (sym !== state.symbol || tf !== state.interval) return;
@@ -1507,7 +1507,6 @@ async function loadCandles(silent = false) {
     let keep = []; if (silent && hist.key === hk && candles.length && r.cs.length) { const t0 = r.cs[0].t; keep = candles.filter(c => c.t < t0); if (liveGlide) liveGlideStop(); }
     if (!keep.length) hist = {key: hk, busy: false, done: false, failAt: 0, fails: 0};
     candles = keep.length ? keep.concat(r.cs) : r.cs; dataSrc = nsrc; dataSym = r.sym || '';
-    if (r.fallback && !silent) toast(`${SOURCES[srcOf(sym)] || 'Binance'} no respondió: el gráfico usa ${r.src === 'vortex' ? 'las velas guardadas de VORTEX' : SOURCES[r.src] || r.src} mientras tanto`);
     recalc(); setTimeout(() => dvRefresh(), 0);
     if (!silent) { stopMotion(); visible = defaultVisible(); pan = 0; const ca = $('#chartArea'); if (ca) { ca.classList.remove('swap-in'); void ca.offsetWidth; ca.classList.add('swap-in'); } }
     setFeedback(''); updateChartHeader(); render();
@@ -1668,11 +1667,30 @@ function wsHealthy() { // hay un socket para esta moneda/temporalidad que está 
 let wsLast = 0, wsReloadAt = 0; // último dato en vivo recibido / última recarga del vigilante
 let tradeBuf = null, tradeT = 0, tradeLastT = 0, tradeLastP = 0;
 let liveGlide = null;
+/* ───────── Tiempo real con respaldo automático ─────────
+   Si el tiempo real de Binance no abre o se queda callado 2 veces seguidas, el gráfico se pasa SOLO al tiempo real de Bybit (u OKX)
+   de la misma moneda, sin avisos. Los precios entre exchanges grandes casi no varían; el volumen de la vela se queda el de Binance.
+   Cada 10 min se vuelve a probar Binance en silencio: si ya responde, se queda ahí; si no, de regreso al respaldo. */
+const WS_ALT = {binance: ['bybit', 'okx'], binancef: ['bybitf', 'okxf']};
+let wsAlt = '', wsAltI = -1, wsAltT = 0, wsFails = 0;
+function wsAltOk(s, tf) { return /^bybit/.test(s) ? !!BY_IV[tf] : /^okx/.test(s) ? !!OKX_BAR[tf] : false; }
+function wsFailed(src0, tf) { // un intento sin datos: tras 2 seguidos se cambia de exchange
+  if (!WS_ALT[src0] || ++wsFails < 2) return; wsFails = 0;
+  const alts = WS_ALT[src0].filter(s => wsAltOk(s, tf)); if (!alts.length) return;
+  if (!wsAlt) wsAltI = -1; // venía de Binance: primer respaldo
+  wsAltI++; if (wsAltI >= alts.length) { wsAlt = ''; wsAltI = -1; clearTimeout(wsAltT); return; } // los respaldos también fallaron: de nuevo Binance
+  wsAlt = alts[wsAltI]; clearTimeout(wsAltT);
+  wsAltT = setTimeout(() => { wsAlt = ''; wsAltI = -1; wsFails = 0; if (!document.hidden && candles.length && !replay) connectWS(); }, 10 * 6e4);
+}
+function keepVol(k) { const L = candles[candles.length - 1]; return L && L.t === k.t ? Object.assign({}, k, {v: L.v}) : k; } // dato de otro exchange: el volumen no se mezcla
 function connectWS() {
   const wasLive = CONN.live; closeWS(wasLive); wsLast = Date.now();
   if (wasLive) { const g0 = wsGen; wsQuietT = setTimeout(() => { if (g0 === wsGen && Date.now() - wsLast > 7000) setLive(false); }, 8000); }
   if (typeof WebSocket === 'undefined') return;
-  const gen = wsGen, src = dataSrc || 'binance', sym = (dataSym && src !== srcOf(state.symbol) ? dataSym : '') || symOf(state.symbol), tf = state.interval;
+  const gen = wsGen, src0 = dataSrc || 'binance', sym = (dataSym && src0 !== srcOf(state.symbol) ? dataSym : '') || symOf(state.symbol), tf = state.interval;
+  if (wsAlt && !(WS_ALT[src0] || []).includes(wsAlt)) { wsAlt = ''; wsAltI = -1; } // cambiaste a otro exchange: el respaldo ya no aplica
+  const src = wsAlt && wsAltOk(wsAlt, tf) ? wsAlt : src0, foreign = src !== src0, canAlt = !!WS_ALT[src0];
+  const put = k => applyKline(foreign ? keepVol(k) : k);
   if (src === 'dom') { setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH.dom.get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 60000); return; }
   if (SRC_FETCH[src] && !(window.CCTMarkets ? CCTMarkets.LIVE_WS : ['binance', 'binancef', 'bybit', 'okx']).includes(src)) { // Coinbase, BingX, KuCoin, Gate, MEXC, Bitget, HTX, Kraken: sin WebSocket público sencillo, se consulta cada 8 s
     setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH[src].get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 8000); return;
@@ -1680,18 +1698,19 @@ function connectWS() {
   const by = (src === 'bybit' || src === 'bybitf') && BY_IV[tf], ok = (src === 'okx' || src === 'okxf') && OKX_BAR[tf];
   const ls = sym.toLowerCase(), url = by ? `wss://stream.bybit.com/v5/public/${src === 'bybitf' ? 'linear' : 'spot'}` : ok ? 'wss://ws.okx.com:8443/ws/v5/business' : src === 'binancef' ? `wss://fstream.binance.com/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade` : `${BN_WS[bnHost]}/stream?streams=${ls}@kline_${tf}/${ls}@aggTrade`; // vela + cada operación (aggTrade): el precio se mueve en vivo, no cada 2 s
   tradeBuf = null; tradeLastT = 0; tradeLastP = 0;
-  const spot = !by && !ok && src !== 'binancef';
+  const spot = src === 'binance';
   try { ws = new WebSocket(url); } catch { return; }
-  wsFor = state.symbol + '|' + tf + '|' + src; wsStartAt = Date.now();
+  wsFor = state.symbol + '|' + tf + '|' + src0; wsStartAt = Date.now(); let got = false, quietT = 0;
   const sock = ws, openT = setTimeout(() => { if (gen === wsGen && !wsOpen && ws === sock) { if (spot) bnHost = (bnHost + 1) % BN_WS.length; try { sock.close(); } catch {} } }, 5000); // no abrió en 5 s: se prueba otro servidor
   ws.onopen = () => { clearTimeout(openT); if (gen === wsGen) { wsOpen = true; wsRetry = 0; if (spot) try { localStorage.setItem('vx.bnws', bnHost); } catch {} $('#liveDot').classList.add('on');
     if (by) { ws.send(JSON.stringify({op: 'subscribe', args: [`kline.${BY_IV[tf]}.${sym}`, `publicTrade.${sym}`]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send(JSON.stringify({op: 'ping'})); } catch {} }, 20000); }
-    if (ok) { ws.send(JSON.stringify({op: 'subscribe', args: [{channel: 'candle' + OKX_BAR[tf], instId: dashPair(sym) + (src === 'okxf' ? '-SWAP' : '')}]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send('ping'); } catch {} }, 20000); } } };
+    if (ok) { ws.send(JSON.stringify({op: 'subscribe', args: [{channel: 'candle' + OKX_BAR[tf], instId: dashPair(sym) + (src === 'okxf' ? '-SWAP' : '')}]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send('ping'); } catch {} }, 20000); }
+    if (canAlt) quietT = setTimeout(() => { if (gen === wsGen && !got && ws === sock) try { sock.close(); } catch {} }, 10000); } }; // abrió pero no manda nada: cuenta como fallo
   ws.onmessage = e => {
-    if (gen !== wsGen) return; wsLast = Date.now(); if (!CONN.live) setLive(true); // llegó el primer precio real
+    if (gen !== wsGen) return; wsLast = Date.now(); if (!got) { got = true; clearTimeout(quietT); wsFails = 0; } if (!CONN.live) setLive(true); // llegó el primer precio real
     let m; try { m = JSON.parse(e.data); } catch { return; }
-    if (by) { if (m && typeof m.topic === 'string' && m.topic.startsWith('publicTrade.') && Array.isArray(m.data)) { for (const q of m.data) pushTrade(+q.p, +q.v, +q.T); return; } const d = m && typeof m.topic === 'string' && m.topic.startsWith('kline.') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d.start, o: +d.open, h: +d.high, l: +d.low, c: +d.close, v: +d.volume}); return; }
-    if (ok) { const d = m && m.arg && /^candle/.test(m.arg.channel || '') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}); return; }
+    if (by) { if (m && typeof m.topic === 'string' && m.topic.startsWith('publicTrade.') && Array.isArray(m.data)) { for (const q of m.data) pushTrade(+q.p, foreign ? 0 : +q.v, +q.T); return; } const d = m && typeof m.topic === 'string' && m.topic.startsWith('kline.') && Array.isArray(m.data) ? m.data[0] : null; if (d) put({t: +d.start, o: +d.open, h: +d.high, l: +d.low, c: +d.close, v: +d.volume}); return; }
+    if (ok) { const d = m && m.arg && /^candle/.test(m.arg.channel || '') && Array.isArray(m.data) ? m.data[0] : null; if (d) put({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}); return; }
     const dm = m && m.data && m.stream ? m.data : m; if (dm && dm.e === 'aggTrade') { pushTrade(+dm.p, +dm.q, +dm.T); return; }
     const k = dm && dm.k; if (k) { let c = +k.c, h = +k.h, l = +k.l; const n = candles.length, L = n ? (liveGlide ? liveGlide.k : candles[n - 1]) : null;
       if (L && L.t === k.t && tradeLastT > (+dm.E || 0) && tradeLastP > 0) { c = tradeLastP; h = Math.max(h, c); l = Math.min(l, c); } // la vela llega cada ~2 s: si ya hubo operaciones más nuevas, el precio no se regresa
@@ -1700,7 +1719,8 @@ function connectWS() {
   ws.onerror = () => { try { ws.close(); } catch {} };
   ws.onclose = () => {
     if (gen !== wsGen) return;
-    clearTimeout(openT); if (!wsOpen && spot && Date.now() - wsStartAt < 4900) bnHost = (bnHost + 1) % BN_WS.length; // ni siquiera abrió: otro servidor
+    clearTimeout(openT); clearTimeout(quietT); if (!wsOpen && spot && Date.now() - wsStartAt < 4900) bnHost = (bnHost + 1) % BN_WS.length; // ni siquiera abrió: otro servidor
+    if (!got) wsFailed(src0, tf); // no llegó ni un precio: tras 2 así, se pasa al respaldo
     wsOpen = false; setLive(false);
     setTimeout(() => { if (gen === wsGen && !document.hidden) connectWS(); }, ++wsRetry <= 10 ? Math.min(2, wsRetry) * 1000 : 15000); // reintentos rápidos (1 s y luego cada 2 s; tras 10 fallos, cada 15 s): un corte corto se recupera antes de los 8 s del aviso
   };
@@ -1777,7 +1797,7 @@ let restBusy = false;
 setInterval(async () => {
   if (document.hidden || replay || !candles.length || !chartOn() || !ws || restBusy || Date.now() - wsLast < 4000) return;
   const sym = state.symbol, tf = state.interval, gen = wsGen; restBusy = true;
-  try { const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 5000), r = await fetchKlinesAny(sym, tf, ctl.signal, 3); clearTimeout(to); if (gen === wsGen && sym === state.symbol && tf === state.interval && r.src === (dataSrc || 'binance') && r.cs.length) { r.cs.forEach(applyKline); setLive(true); } } catch {} // la vela se movió por el respaldo: no se avisa «sin conexión»
+  try { const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 5000), r = await fetchKlinesAny(sym, tf, ctl.signal, 3); clearTimeout(to); if (gen === wsGen && sym === state.symbol && tf === state.interval && r.cs.length) { const fx = r.src !== (dataSrc || 'binance'); r.cs.forEach(k => applyKline(fx ? keepVol(k) : k)); setLive(true); } } catch {} // de Binance o de cualquier exchange de respaldo: la vela nunca se queda parada // la vela se movió por el respaldo: no se avisa «sin conexión»
   restBusy = false;
 }, 2000);
 window.addEventListener('online', () => liveKick('red'));
